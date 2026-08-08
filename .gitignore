@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build / framework output
+.next/
+dist/
+out/
+.turbo/
+coverage/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# Prisma backup
+packages/db/prisma/migrations/**/migration_lock.toml.bak

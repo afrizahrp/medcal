@@ -1,0 +1,49 @@
+[
+  { "name": "Patient Monitor", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
+  { "name": "ECG", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
+  { "name": "Sphygmomanometer", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": true },
+  { "name": "Bed Side Monitor", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": true },
+  { "name": "Ambulatory ECG", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
+  { "name": "Electrocardiograph", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
+  { "name": "Pulse Oxymeter", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
+  { "name": "Oxymeter Monitor", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
+  { "name": "Cardiac Output Unit", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
+  { "name": "Tensimeter", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": true },
+
+  { "name": "Ventilator", "categorySlug": "respirasi", "categoryName": "Respirasi & Life Support", "accredited": false },
+  { "name": "Nebulizer Compressor", "categorySlug": "respirasi", "categoryName": "Respirasi & Life Support", "accredited": false },
+  { "name": "Oxygen Concentrator", "categorySlug": "respirasi", "categoryName": "Respirasi & Life Support", "accredited": false },
+  { "name": "Oxygen-Air Proportioner", "categorySlug": "respirasi", "categoryName": "Respirasi & Life Support", "accredited": false },
+  { "name": "Suction Pump", "categorySlug": "respirasi", "categoryName": "Respirasi & Life Support", "accredited": false },
+  { "name": "Aspirator", "categorySlug": "respirasi", "categoryName": "Respirasi & Life Support", "accredited": false },
+  { "name": "Resuscitator", "categorySlug": "respirasi", "categoryName": "Respirasi & Life Support", "accredited": false },
+  { "name": "Flow Meter Oksigen", "categorySlug": "respirasi", "categoryName": "Respirasi & Life Support", "accredited": false },
+
+  { "name": "Baby Incubator", "categorySlug": "neonatal-termal", "categoryName": "Neonatal & Termal", "accredited": false },
+  { "name": "Infant Warmer", "categorySlug": "neonatal-termal", "categoryName": "Neonatal & Termal", "accredited": false },
+  { "name": "Radiant Warmer", "categorySlug": "neonatal-termal", "categoryName": "Neonatal & Termal", "accredited": false },
+  { "name": "Timbangan Bayi", "categorySlug": "neonatal-termal", "categoryName": "Neonatal & Termal", "accredited": false },
+  { "name": "Paraffin Bath", "categorySlug": "neonatal-termal", "categoryName": "Neonatal & Termal", "accredited": false },
+  { "name": "Whirlpool Bath", "categorySlug": "neonatal-termal", "categoryName": "Neonatal & Termal", "accredited": false },
+
+  { "name": "Infuse Pump", "categorySlug": "infus-pompa-cairan", "categoryName": "Infus & Pompa Cairan", "accredited": false },
+  { "name": "Syringe Pump", "categorySlug": "infus-pompa-cairan", "categoryName": "Infus & Pompa Cairan", "accredited": false },
+  { "name": "Blood/Solution Warmer", "categorySlug": "infus-pompa-cairan", "categoryName": "Infus & Pompa Cairan", "accredited": false },
+  { "name": "Breast Pump", "categorySlug": "infus-pompa-cairan", "categoryName": "Infus & Pompa Cairan", "accredited": false },
+
+  { "name": "Blood Bank Refrigerator", "categorySlug": "cold-chain", "categoryName": "Cold Chain & Penyimpanan Suhu", "accredited": true },
+  { "name": "Kulkas Vaksin", "categorySlug": "cold-chain", "categoryName": "Cold Chain & Penyimpanan Suhu", "accredited": false },
+  { "name": "Medical Freezer", "categorySlug": "cold-chain", "categoryName": "Cold Chain & Penyimpanan Suhu", "accredited": false },
+  { "name": "Vaccine Refrigerator", "categorySlug": "cold-chain", "categoryName": "Cold Chain & Penyimpanan Suhu", "accredited": false },
+  { "name": "Oven", "categorySlug": "cold-chain", "categoryName": "Cold Chain & Penyimpanan Suhu", "accredited": false },
+
+  { "name": "Autoclave", "categorySlug": "sterilisasi", "categoryName": "Sterilisasi", "accredited": false },
+  { "name": "Sterilizer", "categorySlug": "sterilisasi", "categoryName": "Sterilisasi", "accredited": false },
+
+  { "name": "Centrifuge", "categorySlug": "laboratorium", "categoryName": "Laboratorium & Diagnostik", "accredited": false },
+  { "name": "Mikroskop", "categorySlug": "laboratorium", "categoryName": "Laboratorium & Diagnostik", "accredited": false },
+  { "name": "USG", "categorySlug": "laboratorium", "categoryName": "Laboratorium & Diagnostik", "accredited": false },
+
+  { "name": "Timbangan Dewasa", "categorySlug": "fasilitas-umum", "categoryName": "Fasilitas Umum RS", "accredited": false },
+  { "name": "Electric Bed", "categorySlug": "fasilitas-umum", "categoryName": "Fasilitas Umum RS", "accredited": false }
+]

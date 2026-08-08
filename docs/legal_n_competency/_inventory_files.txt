@@ -1,0 +1,192 @@
+﻿D:\medcal\docs\legal_n_competency\drive-download-20260807T073616Z-1-001.zip	.zip	151.448.580
+D:\medcal\docs\legal_n_competency\izin presisi\Akta PT PRESISI KALIBRASI MEDIKA.pdf	.pdf	7.586.620
+D:\medcal\docs\legal_n_competency\izin presisi\Company Profile PT. Presisi Kalibrasi Medika 1.pdf	.pdf	2.059.699
+D:\medcal\docs\legal_n_competency\izin presisi\Company Profile PT. Presisi Kalibrasi Medika 2026.pdf	.pdf	3.409.613
+D:\medcal\docs\legal_n_competency\izin presisi\Company Profile PT. Presisi Kalibrasi Medika 2026.pptx	.pptx	29.498.951
+D:\medcal\docs\legal_n_competency\izin presisi\KTP Direktur.jpg	.jpg	339.504
+D:\medcal\docs\legal_n_competency\izin presisi\NIB PT PRESISI KALIBRASI MEDIKA.pdf	.pdf	521.159
+D:\medcal\docs\legal_n_competency\izin presisi\NPWP PT. PRESISI KALIBRASI MEDIKA.pdf	.pdf	189.299
+D:\medcal\docs\legal_n_competency\izin presisi\SERTIFIKAT IZIN KABLIBRASI PT PRESISI KALIBRASI MEDIKA.pdf	.pdf	798.191
+D:\medcal\docs\legal_n_competency\izin presisi\SKB PT. PRESISI KALIBRASI MEDIKA 2025.pdf	.pdf	204.622
+D:\medcal\docs\legal_n_competency\izin presisi\SUKET PT. PRESISI KALIBRASI MEDIKA 2026.pdf	.pdf	191.998
+D:\medcal\docs\legal_n_competency\izin presisi\SURAT NON PKP.pdf	.pdf	186.662
+D:\medcal\docs\legal_n_competency\izin presisi\SURAT PERJANJIAN KONTRAK RUANG KANTOR BIS TH 2024.pdf	.pdf	697.030
+D:\medcal\docs\legal_n_competency\izin presisi\Thumbs.db	.db	46.080
+D:\medcal\docs\legal_n_competency\KAN\KAN U-01 Rev.2 Syarat dan Aturan Akreditasi.pdf	.pdf	620.165
+D:\medcal\docs\legal_n_competency\KAN\KAN U-03 Rev.2 Penggunaan Simbol Akreditasi KAN.pdf	.pdf	1.066.708
+D:\medcal\docs\legal_n_competency\KAN\KAN U-09 Rev.0 Ketentuan Pembayaran Iuran Tahunan.pdf	.pdf	1.448.814
+D:\medcal\docs\legal_n_competency\KAN\LK 521 IDN (L) 2026.pdf	.pdf	584.025
+D:\medcal\docs\legal_n_competency\KAN\LK 521 IDN (S) 2026.pdf	.pdf	832.340
+D:\medcal\docs\legal_n_competency\KAN\LK 521 IDN_AA_PT Presisi Kalibrasi Medika.pdf	.pdf	630.956
+D:\medcal\docs\legal_n_competency\KAN\Logo KAN - Master.png	.png	133.778
+D:\medcal\docs\legal_n_competency\KAN\Tata Cara Pembayaran Iuran Tahunan di Kanmis.pdf	.pdf	458.208
+D:\medcal\docs\legal_n_competency\KAN\Thumbs.db	.db	13.312
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Ambulatory ECG\ESA, vital sign simulator, thermohygro.jpeg	.jpeg	2.284.629
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Ambulatory ECG\ESA, vital sign simulator, thermohygro.pdf	.pdf	386.917
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Aspirators  (Surgical, Thoracic, and Uterine) Suction\ESA, digital pressure meter, thermohygro.jpeg	.jpeg	1.862.438
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Aspirators  (Surgical, Thoracic, and Uterine) Suction\ESA, digital pressure meter, thermohygro.pdf	.pdf	300.805
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Aspirators  (Surgical, Thoracic, and Uterine) Suction\Thumbs.db	.db	19.968
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Autoclave\Data logger,therm,ESA.pdf	.pdf	63.464
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Autoclave\IK Autoclave.pdf	.pdf	405.792
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Autoclave\LK Autoclave.pdf	.pdf	209.129
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Baby Incubator\IK Baby Incubator.pdf	.pdf	384.156
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Baby Incubator\incu analyzer,therm,ESA.pdf	.pdf	101.182
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Baby Incubator\LK Baby Incubator.pdf	.pdf	252.664
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Bed Side Monitor\ESA, vital sign simulator, thermohygro.jpeg	.jpeg	2.284.629
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Bed Side Monitor\ESA, vital sign simulator, thermohygro.pdf	.pdf	386.917
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Bed Side Monitor\IK BSM.pdf	.pdf	315.423
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Bed Side Monitor\LK Bed Side Monitor.pdf	.pdf	243.078
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Blood Bank Refrigerators\ESA, 12 channel, thermohygro.jpeg	.jpeg	1.942.877
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Blood Bank Refrigerators\ESA, 12 channel, thermohygro.pdf	.pdf	325.502
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Blood Bank Refrigerators\IK Blood Bank Refrigerator.pdf	.pdf	322.170
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Blood Bank Refrigerators\LK Blood Bank Refrigerator.pdf	.pdf	224.081
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Blood Bank Refrigerators\Thumbs.db	.db	20.480
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Blood Pressure Monitor\ESA, vital sign simulator, thermohygro.jpeg	.jpeg	2.284.629
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Blood Pressure Monitor\ESA, vital sign simulator, thermohygro.pdf	.pdf	386.917
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Blood Pressure Monitor\IK BPM.pdf	.pdf	357.191
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Blood Pressure Monitor\LK Blood Pressure Monitor.pdf	.pdf	191.967
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\BloodSolution Warmers\ESA, 12 channel, thermohygro.jpeg	.jpeg	1.942.877
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\BloodSolution Warmers\ESA, 12 channel, thermohygro.pdf	.pdf	325.502
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Breast Pumps (suction)\digital pressure meter, thermohygro.jpeg	.jpeg	2.297.270
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Breast Pumps (suction)\digital pressure meter, thermohygro.pdf	.pdf	398.967
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Breast Pumps (suction)\IK Suction Pump.pdf	.pdf	319.782
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Breast Pumps (suction)\LK Suction Pump.pdf	.pdf	223.497
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Breast Pumps (suction)\Thumbs.db	.db	22.528
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Cardiac Output Units  (heart rate)\ESA, vital sign simulator, thermohygro.jpeg	.jpeg	2.284.629
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Cardiac Output Units  (heart rate)\ESA, vital sign simulator, thermohygro.pdf	.pdf	386.917
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Cardiac Output Units  (heart rate)\Thumbs.db	.db	20.480
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Centrifuge\centrifuge.pdf	.pdf	250.416
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Centrifuge\IK Centrifuge.docx	.docx	678.989
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Centrifuge\IK Centrifuge.pdf	.pdf	328.095
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Centrifuge\LK Centrifuge.docx	.docx	116.979
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Centrifuge\LK Centrifuge.pdf	.pdf	177.083
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Coald Chain\ESA, 12 channel, thermohygro.jpeg	.jpeg	1.942.877
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Coald Chain\ESA, 12 channel, thermohygro.pdf	.pdf	325.502
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Coald Chain\IK Cold Chain, Vaccine Refrigerator.pdf	.pdf	277.391
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Coald Chain\LK Cold Chain, Vaccine Refrigerator.pdf	.pdf	226.641
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Electric Beds (kelistrikan)\ESA, thermohygro.jpeg	.jpeg	1.957.728
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Electric Beds (kelistrikan)\ESA, thermohygro.pdf	.pdf	320.133
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Electric Beds (kelistrikan)\IK Kelistrikan.pdf	.pdf	1.579.607
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Electric Beds (kelistrikan)\LK Kelistrikan.pdf	.pdf	199.202
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Electric Beds (kelistrikan)\Thumbs.db	.db	19.968
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Electrocardiographs\ESA, vital sign simulator, thermohygro.jpeg	.jpeg	2.284.629
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Electrocardiographs\ESA, vital sign simulator, thermohygro.pdf	.pdf	386.917
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Electrocardiographs\IK Electrocardiograph.pdf	.pdf	398.614
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Electrocardiographs\LK Electrocardiograph.pdf	.pdf	236.101
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Electrocardiographs\Thumbs.db	.db	20.480
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Flow meter\ESA, gas flow, thermohygro.jpeg	.jpeg	2.103.296
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Flow meter\ESA, gas flow, thermohygro.pdf	.pdf	351.164
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Flow meter\IK Flow Meter.pdf	.pdf	302.940
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Flow meter\LK Flow Meter.pdf	.pdf	156.099
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Flow meter\Thumbs.db	.db	14.848
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Humidifier\12 Channel, thermohygro.jpeg	.jpeg	2.092.994
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Humidifier\12 Channel, thermohygro.pdf	.pdf	349.324
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Humidifier\IK Humidifier.pdf	.pdf	268.844
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Humidifier\LK Humidifier.pdf	.pdf	177.928
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\HypoHypertermia\12 Channel, thermohygro.jpeg	.jpeg	2.092.994
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\HypoHypertermia\12 Channel, thermohygro.pdf	.pdf	349.324
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Infant Warmer\IK Infant Warmer.pdf	.pdf	408.926
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Infant Warmer\infant,therm,ESA.pdf	.pdf	89.824
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Infant Warmer\LK Infant Warmer.pdf	.pdf	315.563
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Infuse Pump\IK Infuse Pump.pdf	.pdf	346.778
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Infuse Pump\infuse device,therm,ESA.pdf	.pdf	137.862
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Infuse Pump\LK Infusion Pump.pdf	.pdf	185.680
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Kulkas Vaksin\ESA, 12 channel, thermohygro.jpeg	.jpeg	1.942.877
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Kulkas Vaksin\ESA, 12 channel, thermohygro.pdf	.pdf	325.502
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Kulkas Vaksin\IK Cold Chain, Vaccine Refrigerator.pdf	.pdf	277.391
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Kulkas Vaksin\LK Cold Chain, Vaccine Refrigerator.pdf	.pdf	226.641
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Medical freezer\ESA, 12 channel, thermohygro.jpeg	.jpeg	1.942.877
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Medical freezer\ESA, 12 channel, thermohygro.pdf	.pdf	325.502
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Medical freezer\IK Medical Freezer.pdf	.pdf	342.129
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Medical freezer\LK Medical Freezer.pdf	.pdf	248.827
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Medical Refrigerator\ESA, 12 channel, thermohygro.jpeg	.jpeg	1.942.877
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Medical Refrigerator\ESA, 12 channel, thermohygro.pdf	.pdf	325.502
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Medical Refrigerator\IK Medical Refrigerator.pdf	.pdf	280.939
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Medical Refrigerator\LK Medical Refrigerator.pdf	.pdf	224.966
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Medical Refrigerator\Thumbs.db	.db	20.480
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Mikroskop\IK Mikroskop Laboratorium.pdf	.pdf	230.880
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Mikroskop\LK Mikroskop Laboratorium.pdf	.pdf	200.833
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Mikroskop\mikroskop.pdf	.pdf	115.123
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Nebulizer Compressor\ESA, gas flow, thermohygro.jpeg	.jpeg	2.103.296
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Nebulizer Compressor\ESA, gas flow, thermohygro.pdf	.pdf	351.164
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Nebulizer Compressor\IK Nebulizer.pdf	.pdf	290.506
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Nebulizer Compressor\LK Nebulizer Compressor.pdf	.pdf	169.569
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oven\ESA, 12 channel, thermohygro.jpeg	.jpeg	1.942.877
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oven\ESA, 12 channel, thermohygro.pdf	.pdf	325.502
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oven\IK Oven.pdf	.pdf	317.622
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oven\LK Oven.pdf	.pdf	224.309
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oxygen Concentrators\ESA, gas flow, thermohygro.jpeg	.jpeg	2.103.296
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oxygen Concentrators\ESA, gas flow, thermohygro.pdf	.pdf	351.164
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oxygen Concentrators\IK Oxygen Concentrator.pdf	.pdf	311.339
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oxygen Concentrators\LK Oksigen Concentrator.pdf	.pdf	164.127
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oxygen-Air Proportioners\ESA, gas flow, thermohygro.jpeg	.jpeg	2.103.296
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oxygen-Air Proportioners\ESA, gas flow, thermohygro.pdf	.pdf	351.164
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oxygen-Air Proportioners\IK Flow Meter.pdf	.pdf	276.338
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oxymeter Monitor\IK Pulse Oxymeter.pdf	.pdf	339.859
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oxymeter Monitor\LK Pulse Oxymeter.pdf	.pdf	193.042
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oxymeter Monitor\vital sign simulator, thermohygro.jpeg	.jpeg	2.241.718
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Oxymeter Monitor\vital sign simulator, thermohygro.pdf	.pdf	383.248
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Paraffin Baths\ESA, 12 channel, thermohygro.jpeg	.jpeg	1.942.877
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Paraffin Baths\ESA, 12 channel, thermohygro.pdf	.pdf	325.502
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Patient Monitor\ESA, vital sign simulator, thermohygro.jpeg	.jpeg	2.284.629
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Patient Monitor\ESA, vital sign simulator, thermohygro.pdf	.pdf	386.917
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Patient Monitor\IK BSM.pdf	.pdf	315.423
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Patient Monitor\LK Bed Side Monitor.pdf	.pdf	243.078
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Pulse Oxymeter\IK Pulse Oxymeter.pdf	.pdf	339.859
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Pulse Oxymeter\LK Pulse Oxymeter.pdf	.pdf	193.042
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Pulse Oxymeter\vital sign simulator, thermohygro.jpeg	.jpeg	2.241.718
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Pulse Oxymeter\vital sign simulator, thermohygro.pdf	.pdf	383.248
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Radiant Warmer\IK Infant Warmer.pdf	.pdf	408.926
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Radiant Warmer\infant,therm,ESA.pdf	.pdf	89.824
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Radiant Warmer\LK Infant Warmer.pdf	.pdf	315.563
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Regulators (Air, O2, Suction [except tracheal])\ESA, gas flow, thermohygro.jpeg	.jpeg	2.103.296
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Regulators (Air, O2, Suction [except tracheal])\ESA, gas flow, thermohygro.pdf	.pdf	351.164
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Regulators (Air, O2, Suction [except tracheal])\IK Flow Meter.pdf	.pdf	276.338
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Regulators (Low-Volume Suction)\gas flow, thermohygro.jpeg	.jpeg	2.130.300
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Regulators (Low-Volume Suction)\gas flow, thermohygro.pdf	.pdf	373.016
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Regulators (Low-Volume Suction)\IK Suction Pump.pdf	.pdf	319.782
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Resuscitators(Cardiac)\ESA, digital pressure meter, thermohygro.jpeg	.jpeg	1.862.438
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Resuscitators(Cardiac)\ESA, digital pressure meter, thermohygro.pdf	.pdf	300.805
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Resuscitators(Cardiac)\IK resusitasi paru,neopuff.pdf	.pdf	283.783
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Resuscitators(Cardiac)\LK Resusitator Paru dan Neopuff.pdf	.pdf	183.147
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Resuscitators(Pulmonary)\ESA, digital pressure meter, thermohygro.jpeg	.jpeg	1.862.438
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Resuscitators(Pulmonary)\ESA, digital pressure meter, thermohygro.pdf	.pdf	300.805
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Resuscitators(Pulmonary)\IK resusitasi paru,neopuff.pdf	.pdf	283.783
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Resuscitators(Pulmonary)\LK Resusitator Paru dan Neopuff.pdf	.pdf	183.147
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Sphygmomanometers\IK Sphygmomanometer.pdf	.pdf	281.777
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Sphygmomanometers\LK Sphygmomanometer.pdf	.pdf	180.037
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Sphygmomanometers\manometer, stopwatch, thermohygrometerr.pdf	.pdf	94.732
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Sterillizer\ESA, 12 channel, thermohygro.jpeg	.jpeg	1.942.877
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Sterillizer\ESA, 12 channel, thermohygro.pdf	.pdf	325.502
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Sterillizer\IK Sterillisator.pdf	.pdf	340.319
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Sterillizer\LK Sterilisator.pdf	.pdf	224.257
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Sterillizer\Thumbs.db	.db	20.480
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Suction Pump\digital pressure,therm,ESA.pdf	.pdf	88.783
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Suction Pump\IK Medium Vacuum Suction.pdf	.pdf	359.055
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Suction Pump\LK Suction Pump.pdf	.pdf	223.497
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Syringe Pump\IK Syringe Pump.pdf	.pdf	339.958
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Syringe Pump\infuse device,therm,ESA.pdf	.pdf	137.862
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Syringe Pump\LK Syringe Pump.pdf	.pdf	185.987
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Timbangan Bayi\Anak timbangan, Therm.pdf	.pdf	107.078
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Timbangan Bayi\IK Timbangan Bayi Digital.pdf	.pdf	358.786
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Timbangan Bayi\LK Timbangan Bayi.pdf	.pdf	206.144
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Timbangan Dewasa\Anak Timb,therm (dewasa).pdf	.pdf	95.839
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Timbangan Dewasa\IK Timbangan Dewasa Digital.pdf	.pdf	359.685
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Timbangan Dewasa\LK Timbangan Dewasa.pdf	.pdf	205.872
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Ultrasonic Nebulizers\ESA, gas flow, thermohygro.jpeg	.jpeg	2.103.296
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Ultrasonic Nebulizers\ESA, gas flow, thermohygro.pdf	.pdf	351.164
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Ultrasonic Nebulizers\IK Nebulizer.pdf	.pdf	290.506
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Ultrasonic Nebulizers\LK Nebulizer Ultrasonic.pdf	.pdf	170.926
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\USG\IK Ultrasonograph (USG).pdf	.pdf	690.753
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\USG\LK Ultrasonograph (USG).pdf	.pdf	331.336
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\USG\phantom usg,therm,ESA.pdf	.pdf	124.151
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Vaccine Ref\IK Cold Chain, Vaccine Refrigerator.pdf	.pdf	277.528
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Vaccine Ref\LK Cold Chain, Vaccine Refrigerator.pdf	.pdf	226.780
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Ventilator\ESA, gas flow, thermohygro.jpeg	.jpeg	2.103.296
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Ventilator\ESA, gas flow, thermohygro.pdf	.pdf	351.164
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Ventilator\IK Ventilator.pdf	.pdf	359.333
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Ventilator\LK Ventilator Transport.pdf	.pdf	237.635
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Ventilator\Thumbs.db	.db	20.480
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Whirlpool Baths (suhu)\ESA, 12 channel, thermohygro.jpeg	.jpeg	1.942.877
+D:\medcal\docs\legal_n_competency\Penilaian Kemampuan\Whirlpool Baths (suhu)\ESA, 12 channel, thermohygro.pdf	.pdf	325.502
+D:\medcal\docs\legal_n_competency\WhatsApp Image 2026-08-03 at 16.29.04.jpeg	.jpeg	35.566

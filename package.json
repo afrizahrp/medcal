@@ -1,0 +1,21 @@
+{
+  "name": "medcal",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @medcal/db generate",
+    "db:migrate": "pnpm --filter @medcal/db migrate:dev",
+    "format": "pnpm --filter @medcal/db format"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

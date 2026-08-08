@@ -1,0 +1,870 @@
+// medcal MVP Prisma schema
+// Sources: docs/ERD (approved 2026-08-02), entity-catalog, ADR-000
+// Notes:
+// - No branchId (Company only)
+// - ContactMessage + GetMessageFrom aligned with server-bi-erp
+// - Billable SoR = Certificate.billingStatus
+// - MVP billing = Invoice + Payment + CreditNote
+// - Better Auth may add/replace auth tables later; User here is domain-facing
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+enum CompanyStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+enum MembershipRole {
+  SUPERADMIN
+  ADMIN
+  SUPERVISOR
+  TECHNICIAN
+  FINANCE
+  CUSTOMER
+}
+
+enum PushApp {
+  WEB
+  PORTAL
+  TECH_PWA
+}
+
+enum GetMessageFrom {
+  CONTACTFORM
+  WHATSAPP
+  CHAT_AI
+  CHAT_PERSON
+  EMAIL
+}
+
+enum ContactStatus {
+  PENDING
+  READ
+  REPLIED
+  CLOSED
+}
+
+enum MatchStatus {
+  NONE
+  EXACT_EMAIL
+  DOMAIN_CANDIDATE
+  CONFIRMED_EXISTING
+  DISMISSED
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  REJECTED
+  CONVERTED
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum DeviceStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ServiceMode {
+  ON_SITE
+  SEND_TO_LAB
+}
+
+enum CalibrationRequestStatus {
+  DRAFT
+  SUBMITTED
+  IN_QUOTATION
+  CANCELLED
+  FULFILLED
+}
+
+enum QuotationSource {
+  PORTAL
+  PHONE
+  WHATSAPP
+  OTHER
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum WorkOrderStatus {
+  PLANNED
+  ASSIGNED
+  IN_PROGRESS
+  TECHNICALLY_DONE
+  CLOSED
+  CANCELLED
+}
+
+enum AssignmentRole {
+  LEAD
+  ASSIST
+}
+
+enum CalibrationJobStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  REWORK
+  ACCEPTED_BY_QA
+}
+
+enum ReviewDecision {
+  APPROVE
+  REJECT
+}
+
+enum QualityReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CertificateStatus {
+  DRAFT
+  ISSUED
+  REVOKED
+  SUPERSEDED
+}
+
+enum CertificateBillingStatus {
+  UNBILLED
+  BILLABLE
+  INVOICED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  VOID
+}
+
+enum PaymentMethod {
+  TRANSFER
+  CASH
+  OTHER
+}
+
+enum CreditNoteStatus {
+  DRAFT
+  ISSUED
+  APPLIED
+  VOID
+}
+
+enum ReminderChannel {
+  EMAIL
+  PUSH
+  WHATSAPP
+}
+
+enum ReminderEventStatus {
+  SCHEDULED
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum FileOwnerType {
+  CERTIFICATE
+  JOB_EVIDENCE
+  SIGNATURE
+  REQUEST_ATTACHMENT
+  INVOICE
+  CREDIT_NOTE
+  OTHER
+}
+
+// =============================================================================
+// Organization & IAM
+// =============================================================================
+
+model Company {
+  id          String        @id @default(cuid())
+  name        String
+  legalName   String?
+  taxId       String?
+  address     String?
+  phone       String?
+  email       String?
+  status      CompanyStatus @default(ACTIVE)
+  settingsJson Json?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  memberships       UserMembership[]
+  contactMessages   ContactMessage[]
+  leads             Lead[]
+  customers         Customer[]
+  devices           Device[]
+  calibrationRequests CalibrationRequest[]
+  serviceTariffs    ServiceTariff[]
+  quotations        Quotation[]
+  workOrders        WorkOrder[]
+  certificates      Certificate[]
+  invoices          Invoice[]
+  creditNotes       CreditNote[]
+  reminderEvents    ReminderEvent[]
+  fileObjects       FileObject[]
+  pushSubscriptions PushSubscription[]
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  status    UserStatus @default(INVITED)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  memberships           UserMembership[]
+  customerLinks         CustomerUserLink[]
+  pushSubscriptions     PushSubscription[]
+  assignedLeads         Lead[]                 @relation("LeadAssignee")
+  confirmedMatches      ContactMessage[]       @relation("MatchConfirmer")
+  workOrderAssignments  WorkOrderAssignment[]
+  qualityReviews        QualityReview[]        @relation("Reviewer")
+}
+
+model UserMembership {
+  id        String         @id @default(cuid())
+  userId    String
+  companyId String
+  role      MembershipRole
+  isDefault Boolean        @default(false)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+}
+
+model CustomerUserLink {
+  id         String   @id @default(cuid())
+  userId     String
+  customerId String
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, customerId])
+  @@index([customerId])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  companyId String
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  app       PushApp
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([endpoint])
+  @@index([companyId, userId])
+}
+
+// =============================================================================
+// Acquisition — ContactMessage (bi-erp) + Lead
+// =============================================================================
+
+model ContactMessage {
+  id                 String         @id @default(cuid())
+  companyId          String
+  getFrom            GetMessageFrom @default(CONTACTFORM)
+  status             ContactStatus  @default(PENDING)
+  subject            String?
+  topicId            Int?
+  message            String
+  name               String
+  email              String
+  phone              String?
+  organizationName   String?
+  utmJson            Json?
+  matchStatus        MatchStatus    @default(NONE)
+  matchedCustomerId  String?
+  confirmedByUserId  String?
+  confirmedAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  matchedCustomer Customer? @relation("ContactMatchCandidate", fields: [matchedCustomerId], references: [id])
+  lead            Lead?
+  confirmedBy     User?     @relation("MatchConfirmer", fields: [confirmedByUserId], references: [id])
+
+  @@index([companyId, createdAt])
+  @@index([companyId, email])
+  @@index([companyId, status])
+  @@index([companyId, getFrom])
+}
+
+model Lead {
+  id               String     @id @default(cuid())
+  companyId        String
+  contactMessageId String?    @unique
+  status           LeadStatus @default(NEW)
+  assignedToUserId String?
+  customerId       String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactMessage      ContactMessage?      @relation(fields: [contactMessageId], references: [id])
+  assignedTo          User?                @relation("LeadAssignee", fields: [assignedToUserId], references: [id])
+  customer            Customer?            @relation(fields: [customerId], references: [id])
+  calibrationRequests CalibrationRequest[]
+
+  @@index([companyId, status])
+}
+
+model Customer {
+  id        String         @id @default(cuid())
+  companyId String
+  name      String
+  legalName String?
+  taxId     String?
+  address   String?
+  status    CustomerStatus @default(ACTIVE)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contacts            CustomerContact[]
+  userLinks           CustomerUserLink[]
+  devices             Device[]
+  leads               Lead[]
+  matchedMessages     ContactMessage[]     @relation("ContactMatchCandidate")
+  calibrationRequests CalibrationRequest[]
+  quotations          Quotation[]
+  workOrders          WorkOrder[]
+  certificates        Certificate[]
+  invoices            Invoice[]
+  creditNotes         CreditNote[]
+  reminderEvents      ReminderEvent[]
+  fileObjects         FileObject[]
+
+  @@index([companyId, status])
+  @@index([companyId, name])
+}
+
+model CustomerContact {
+  id         String   @id @default(cuid())
+  companyId  String
+  customerId String
+  name       String
+  email      String?
+  phone      String?
+  title      String?
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([companyId, email])
+}
+
+// =============================================================================
+// Devices & Request
+// =============================================================================
+
+model Device {
+  id            String       @id @default(cuid())
+  companyId     String
+  customerId    String
+  brand         String?
+  model         String?
+  serialNumber  String?
+  category      String?
+  locationText  String?
+  status        DeviceStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  requestItems    CalibrationRequestItem[]
+  quotationItems  QuotationItem[]
+  calibrationJobs CalibrationJob[]
+  certificates    Certificate[]
+
+  @@index([companyId, customerId])
+  @@index([companyId, serialNumber])
+}
+
+model CalibrationRequest {
+  id                  String                    @id @default(cuid())
+  companyId           String
+  customerId          String
+  leadId              String?
+  serviceMode         ServiceMode
+  desiredScheduleNote String?
+  status              CalibrationRequestStatus  @default(DRAFT)
+  notes               String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  lead     Lead?    @relation(fields: [leadId], references: [id])
+
+  items      CalibrationRequestItem[]
+  quotations Quotation[]
+
+  @@index([companyId, status])
+  @@index([customerId])
+}
+
+model CalibrationRequestItem {
+  id        String   @id @default(cuid())
+  companyId String
+  requestId String
+  deviceId  String
+  notes     String?
+  createdAt DateTime @default(now())
+
+  request CalibrationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  device  Device             @relation(fields: [deviceId], references: [id])
+  quotationItems QuotationItem[]
+
+  @@index([requestId])
+}
+
+// =============================================================================
+// Commercial & Work Order
+// =============================================================================
+
+model ServiceTariff {
+  id        String   @id @default(cuid())
+  companyId String
+  code      String
+  name      String
+  unitPrice Decimal  @db.Decimal(18, 2)
+  currency  String   @default("IDR")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items   QuotationItem[]
+
+  @@unique([companyId, code])
+}
+
+model Quotation {
+  id                 String          @id @default(cuid())
+  companyId          String
+  customerId         String
+  requestId          String?
+  source             QuotationSource @default(PORTAL)
+  status             QuotationStatus @default(DRAFT)
+  validUntil         DateTime?
+  subtotal           Decimal         @db.Decimal(18, 2)
+  taxAmount          Decimal?        @db.Decimal(18, 2)
+  totalAmount        Decimal         @db.Decimal(18, 2)
+  currency           String          @default("IDR")
+  approvedAt         DateTime?
+  approvedByUserId   String?
+  customerApprovedAt DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer   Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  request    CalibrationRequest? @relation(fields: [requestId], references: [id])
+  items      QuotationItem[]
+  workOrders WorkOrder[]
+
+  @@index([companyId, status])
+  @@index([customerId])
+}
+
+model QuotationItem {
+  id            String   @id @default(cuid())
+  companyId     String
+  quotationId   String
+  deviceId      String?
+  requestItemId String?
+  tariffId      String?
+  description   String
+  qty           Decimal  @default(1) @db.Decimal(18, 4)
+  unitPrice     Decimal  @db.Decimal(18, 2)
+  lineTotal     Decimal  @db.Decimal(18, 2)
+  createdAt     DateTime @default(now())
+
+  quotation   Quotation               @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  device      Device?                 @relation(fields: [deviceId], references: [id])
+  requestItem CalibrationRequestItem? @relation(fields: [requestItemId], references: [id])
+  tariff      ServiceTariff?          @relation(fields: [tariffId], references: [id])
+
+  @@index([quotationId])
+}
+
+model WorkOrder {
+  id             String          @id @default(cuid())
+  companyId      String
+  quotationId    String
+  customerId     String
+  number         String
+  serviceMode    ServiceMode
+  addressText    String?
+  geoLat         Float?
+  geoLng         Float?
+  locationNotes  String?
+  scheduledStart DateTime?
+  scheduledEnd   DateTime?
+  status         WorkOrderStatus @default(PLANNED)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  quotation   Quotation             @relation(fields: [quotationId], references: [id])
+  customer    Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignments WorkOrderAssignment[]
+  jobs        CalibrationJob[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([quotationId])
+}
+
+model WorkOrderAssignment {
+  id               String         @id @default(cuid())
+  companyId        String
+  workOrderId      String
+  technicianUserId String
+  roleOnJob        AssignmentRole @default(LEAD)
+  createdAt        DateTime       @default(now())
+
+  workOrder  WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  technician User      @relation(fields: [technicianUserId], references: [id])
+
+  @@unique([workOrderId, technicianUserId])
+  @@index([technicianUserId])
+}
+
+// =============================================================================
+// Field & QA
+// =============================================================================
+
+model CalibrationJob {
+  id          String               @id @default(cuid())
+  companyId   String
+  workOrderId String
+  deviceId    String
+  status      CalibrationJobStatus @default(PENDING)
+  startedAt   DateTime?
+  submittedAt DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  workOrder  WorkOrder           @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  device     Device              @relation(fields: [deviceId], references: [id])
+  results    MeasurementResult[]
+  evidences  JobEvidence[]
+  signature  CustomerSignature?
+  reviews    QualityReview[]
+  certificate Certificate?
+
+  @@unique([workOrderId, deviceId])
+  @@index([companyId, status])
+}
+
+model MeasurementResult {
+  id               String   @id @default(cuid())
+  companyId        String
+  calibrationJobId String
+  payloadJson      Json
+  summaryJson      Json?
+  recordedAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  calibrationJob CalibrationJob @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+
+  @@index([calibrationJobId])
+}
+
+model JobEvidence {
+  id               String   @id @default(cuid())
+  companyId        String
+  calibrationJobId String
+  fileObjectId     String
+  caption          String?
+  createdAt        DateTime @default(now())
+
+  calibrationJob CalibrationJob @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  fileObject     FileObject     @relation(fields: [fileObjectId], references: [id])
+
+  @@index([calibrationJobId])
+}
+
+model CustomerSignature {
+  id               String   @id @default(cuid())
+  companyId        String
+  calibrationJobId String   @unique
+  fileObjectId     String?
+  signerName       String?
+  signedAt         DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  calibrationJob CalibrationJob @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  fileObject     FileObject?    @relation(fields: [fileObjectId], references: [id])
+}
+
+model QualityReview {
+  id               String              @id @default(cuid())
+  companyId        String
+  calibrationJobId String
+  reviewerUserId   String
+  decision         ReviewDecision?
+  status           QualityReviewStatus @default(PENDING)
+  notes            String?
+  reviewedAt       DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  calibrationJob CalibrationJob @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  reviewer       User           @relation("Reviewer", fields: [reviewerUserId], references: [id])
+  certificates   Certificate[]
+
+  @@index([calibrationJobId])
+  @@index([companyId, status])
+}
+
+// =============================================================================
+// Certificate
+// =============================================================================
+
+model Certificate {
+  id                      String                   @id @default(cuid())
+  companyId               String
+  customerId              String
+  deviceId                String
+  calibrationJobId        String                   @unique
+  qualityReviewId         String?
+  number                  String
+  verificationToken       String?                  @unique
+  status                  CertificateStatus        @default(DRAFT)
+  billingStatus           CertificateBillingStatus @default(UNBILLED)
+  issuedAt                DateTime?
+  validUntil              DateTime?
+  supersedesCertificateId String?
+  revokeReason            String?
+  pdfFileObjectId         String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  device           Device            @relation(fields: [deviceId], references: [id])
+  calibrationJob   CalibrationJob    @relation(fields: [calibrationJobId], references: [id])
+  qualityReview    QualityReview?    @relation(fields: [qualityReviewId], references: [id])
+  supersedes       Certificate?      @relation("CertificateSupersede", fields: [supersedesCertificateId], references: [id])
+  supersededBy     Certificate[]     @relation("CertificateSupersede")
+  pdfFile          FileObject?       @relation("CertificatePdf", fields: [pdfFileObjectId], references: [id])
+  invoiceLinks     InvoiceCertificate[]
+  invoiceItems     InvoiceItem[]
+  creditNotes      CreditNote[]
+  reminderEvents   ReminderEvent[]
+
+  @@unique([companyId, number])
+  @@index([companyId, billingStatus])
+  @@index([companyId, status])
+  @@index([customerId])
+  @@index([validUntil])
+}
+
+// =============================================================================
+// Billing
+// =============================================================================
+
+model Invoice {
+  id          String        @id @default(cuid())
+  companyId   String
+  customerId  String
+  number      String
+  status      InvoiceStatus @default(DRAFT)
+  issueDate   DateTime?
+  dueDate     DateTime?
+  subtotal    Decimal       @db.Decimal(18, 2)
+  taxAmount   Decimal?      @db.Decimal(18, 2)
+  totalAmount Decimal       @db.Decimal(18, 2)
+  currency    String        @default("IDR")
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer     Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  certificates InvoiceCertificate[]
+  items        InvoiceItem[]
+  payments     Payment[]
+  creditNotes  CreditNote[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([customerId])
+}
+
+model InvoiceCertificate {
+  id            String   @id @default(cuid())
+  companyId     String
+  invoiceId     String
+  certificateId String
+  createdAt     DateTime @default(now())
+
+  invoice     Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  certificate Certificate @relation(fields: [certificateId], references: [id])
+
+  @@unique([invoiceId, certificateId])
+  @@index([certificateId])
+}
+
+model InvoiceItem {
+  id            String   @id @default(cuid())
+  companyId     String
+  invoiceId     String
+  certificateId String?
+  description   String
+  qty           Decimal? @db.Decimal(18, 4)
+  unitPrice     Decimal? @db.Decimal(18, 2)
+  amount        Decimal  @db.Decimal(18, 2)
+  createdAt     DateTime @default(now())
+
+  invoice     Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  certificate Certificate? @relation(fields: [certificateId], references: [id])
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  companyId String
+  invoiceId String
+  amount    Decimal       @db.Decimal(18, 2)
+  method    PaymentMethod @default(TRANSFER)
+  paidAt    DateTime      @default(now())
+  reference String?
+  notes     String?
+  createdAt DateTime      @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([companyId, paidAt])
+}
+
+model CreditNote {
+  id            String           @id @default(cuid())
+  companyId     String
+  customerId    String
+  invoiceId     String?
+  certificateId String?
+  number        String
+  status        CreditNoteStatus @default(DRAFT)
+  amount        Decimal          @db.Decimal(18, 2)
+  reason        String
+  issuedAt      DateTime?
+  appliedAt     DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  invoice     Invoice?     @relation(fields: [invoiceId], references: [id])
+  certificate Certificate? @relation(fields: [certificateId], references: [id])
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([invoiceId])
+}
+
+// =============================================================================
+// Retain & Vault
+// =============================================================================
+
+model ReminderEvent {
+  id            String              @id @default(cuid())
+  companyId     String
+  certificateId String
+  customerId    String
+  channel       ReminderChannel
+  status        ReminderEventStatus @default(SCHEDULED)
+  scheduledFor  DateTime
+  sentAt        DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  certificate Certificate @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+  customer    Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status, scheduledFor])
+  @@index([certificateId])
+}
+
+model FileObject {
+  id           String        @id @default(cuid())
+  companyId    String
+  customerId   String?
+  ownerType    FileOwnerType
+  ownerId      String
+  storageKey   String
+  mimeType     String?
+  sizeBytes    Int?
+  originalName String?
+  createdAt    DateTime      @default(now())
+
+  company              Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer             Customer?           @relation(fields: [customerId], references: [id])
+  jobEvidences         JobEvidence[]
+  signatures           CustomerSignature[]
+  certificatePdfs      Certificate[]       @relation("CertificatePdf")
+
+  @@index([companyId, ownerType, ownerId])
+  @@index([storageKey])
+}
