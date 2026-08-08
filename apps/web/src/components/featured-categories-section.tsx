@@ -25,7 +25,7 @@ export function FeaturedCategoriesSection() {
         </p>
       </div>
 
-      <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:mt-10 sm:gap-5 lg:grid-cols-2">
         {featured.map((category) => {
           const image = categoryImages[category.slug];
           return (
@@ -35,32 +35,32 @@ export function FeaturedCategoriesSection() {
               className="group flex flex-col overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-sm transition-colors hover:border-brand-300 hover:bg-brand-50/30"
             >
               {image ? (
-                <div className="relative h-40 w-full shrink-0 overflow-hidden bg-brand-50 sm:h-44 lg:h-48">
+                <div className="relative aspect-[2/1] w-full shrink-0 overflow-hidden bg-brand-50 sm:aspect-[16/9] lg:aspect-[2.2/1]">
                   <Image
                     src={image.main}
                     alt={image.alt}
                     fill
                     sizes="(min-width: 1024px) 50vw, 100vw"
-                    className="object-cover object-center"
+                    className="object-contain object-center p-3 sm:p-4"
                   />
                 </div>
               ) : null}
-              <div className="flex flex-1 flex-col justify-between p-6 sm:p-7">
+              <div className="flex flex-1 flex-col justify-between p-5 sm:p-6 lg:p-7">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-accent-100 px-3 py-1 text-xs font-semibold text-accent-800">
                       Terakreditasi KAN · LK-521-IDN
                     </span>
                   </div>
-                  <h3 className="mt-4 text-lg font-semibold text-ink-900 sm:text-xl">
+                  <h3 className="mt-3 text-lg font-semibold text-ink-900 sm:mt-4 sm:text-xl">
                     Kalibrasi {category.name}
                   </h3>
-                  <p className="mt-2 text-base leading-relaxed text-ink-500">
+                  <p className="mt-2 text-base leading-relaxed text-ink-600">
                     {category.exampleProducts.slice(0, 4).join(", ")}, dan
                     lainnya.
                   </p>
                 </div>
-                <span className="mt-5 inline-flex items-center text-sm font-medium text-brand-700 group-hover:text-brand-800">
+                <span className="mt-4 inline-flex items-center text-sm font-medium text-brand-700 group-hover:text-brand-800 sm:mt-5">
                   Lihat detail layanan →
                 </span>
               </div>

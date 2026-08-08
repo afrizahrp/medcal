@@ -8,7 +8,7 @@ export function CtaSection() {
         <h2 className="text-2xl font-bold text-white sm:text-3xl">
           Siap Kalibrasi Tanpa Khawatir Sertifikat Ditolak Audit?
         </h2>
-        <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-brand-100 sm:text-base">
+        <p className="mx-auto mt-3 max-w-xl text-base leading-relaxed text-brand-100">
           Konsultasikan kebutuhan kalibrasi alat kesehatan Anda — kami bantu
           proses yang jelas dan tepat waktu.
         </p>

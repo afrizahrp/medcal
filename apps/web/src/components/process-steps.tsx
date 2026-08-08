@@ -43,7 +43,7 @@ export function ProcessSteps() {
               <h3 className="mt-2 text-base font-semibold text-ink-900">
                 {s.title}
               </h3>
-              <p className="mt-1.5 text-base leading-relaxed text-ink-500">
+              <p className="mt-1.5 text-base leading-relaxed text-ink-600">
                 {s.body}
               </p>
             </li>

@@ -25,7 +25,7 @@ export function ServiceCategoryCard({
         <h3 className="mt-3 text-base font-semibold text-ink-900">
           Kalibrasi {category.name}
         </h3>
-        <p className="mt-1.5 line-clamp-2 text-base leading-relaxed text-ink-500">
+        <p className="mt-1.5 line-clamp-2 text-base leading-relaxed text-ink-600">
           {category.exampleProducts.slice(0, 3).join(", ")}, dan lainnya.
         </p>
       </div>

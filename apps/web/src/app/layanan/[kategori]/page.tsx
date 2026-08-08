@@ -4,6 +4,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getServiceCategory, serviceCategories, waLink } from "@/data/site";
 import { categoryImages } from "@/data/category-images";
+import { BackButton } from "@/components/back-button";
 
 function resolveSlug(kategoriParam: string) {
   return kategoriParam.startsWith("kalibrasi-")
@@ -46,7 +47,9 @@ export default async function ServiceCategoryPage({
     <div>
       <section className="border-b border-ink-100 bg-brand-50/40">
         <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_200px] lg:items-start">
+          <BackButton fallbackHref="/layanan" label="Kembali" />
+
+          <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px] lg:items-start">
             <div>
               <nav className="text-sm text-ink-500" aria-label="Breadcrumb">
                 <Link href="/layanan" className="hover:text-brand-700">
@@ -71,18 +74,18 @@ export default async function ServiceCategoryPage({
             </div>
 
             {image ? (
-              <div className="w-32 sm:w-40 lg:w-full">
+              <div className="mx-auto w-56 sm:w-64 lg:mx-0 lg:w-full">
                 <div className="relative aspect-square overflow-hidden rounded-2xl border border-ink-100 bg-white">
                   <Image
                     src={image.full}
                     alt={image.alt}
                     fill
-                    sizes="(min-width: 1024px) 200px, 160px"
-                    className="object-contain p-3"
+                    sizes="(min-width: 1024px) 280px, 256px"
+                    className="object-contain p-4 sm:p-5"
                     priority
                   />
                 </div>
-                <p className="mt-2 text-xs leading-snug text-ink-400">
+                <p className="mt-2 text-sm leading-relaxed text-ink-500">
                   Ilustrasi alat kalibrasi yang digunakan dalam proses —
                   bukan alat yang dikalibrasi.
                 </p>
@@ -96,11 +99,11 @@ export default async function ServiceCategoryPage({
         <div className="flex flex-col gap-6">
           {category.sections.map((s) => (
             <div key={s.heading}>
-              <h2 className="text-lg font-semibold text-ink-900">
+              <h2 className="text-lg font-semibold text-ink-900 sm:text-xl">
                 {s.heading}
               </h2>
               {s.note ? (
-                <p className="mt-1 text-sm font-medium text-brand-700">
+                <p className="mt-1.5 text-base leading-relaxed text-brand-700">
                   {s.note}
                 </p>
               ) : null}
@@ -110,14 +113,14 @@ export default async function ServiceCategoryPage({
 
         {category.accredited && category.accreditedNote ? (
           <div className="mt-8 rounded-2xl border border-brand-200 bg-brand-50/60 p-5">
-            <p className="text-sm leading-relaxed text-ink-700">
+            <p className="text-base leading-relaxed text-ink-700">
               {category.accreditedNote}
             </p>
           </div>
         ) : null}
 
         <div className="mt-10">
-          <h2 className="text-lg font-semibold text-ink-900">
+          <h2 className="text-lg font-semibold text-ink-900 sm:text-xl">
             Alat yang Kami Layani
           </h2>
           <ul className="mt-4 flex flex-wrap gap-2">
@@ -134,10 +137,10 @@ export default async function ServiceCategoryPage({
 
         <div className="mt-10 flex flex-col gap-3 rounded-2xl border border-ink-100 bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-base font-semibold text-ink-900">
+            <p className="text-base font-semibold text-ink-900 sm:text-lg">
               Butuh jadwal kalibrasi {category.name.toLowerCase()}?
             </p>
-            <p className="mt-1 text-sm text-ink-500">
+            <p className="mt-1 text-base leading-relaxed text-ink-600">
               Konsultasikan kebutuhan Anda, kami bantu prosesnya.
             </p>
           </div>
