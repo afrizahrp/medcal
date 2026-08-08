@@ -18,12 +18,11 @@ export function PainPointSection() {
     <section className="mx-auto max-w-8xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
       <div className="mx-auto max-w-2xl text-center">
         <h2 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
-          Ketakutan terbesar tim purchasing: sertifikat ditolak saat audit
+          Kenapa Sertifikat Kalibrasi Bisa Ditolak Saat Audit?
         </h2>
         <p className="mt-3 text-base leading-relaxed text-ink-600 sm:text-lg">
           Ini bukan soal harga atau kelengkapan alat — ini soal risiko
-          operasional dan kepatuhan rumah sakit yang harus dihindari sejak
-          awal.
+          operasional dan kepatuhan rumah sakit yang harus dihindari sejak awal.
         </p>
       </div>
 

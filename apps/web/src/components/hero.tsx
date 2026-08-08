@@ -12,14 +12,13 @@ export function Hero() {
           </p>
 
           <h1 className="mt-3 text-3xl font-bold leading-tight tracking-tight text-ink-900 sm:text-4xl lg:text-5xl">
-            Kalibrasi Alat Kesehatan yang Sertifikatnya Pasti Lolos Audit
-            Akreditasi
+            Kalibrasi Alat Kesehatan Terakreditasi
           </h1>
 
-          <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-ink-600 sm:text-lg">
-            Terakreditasi KAN (LK-521-IDN) & berizin resmi — bantu RS dan
-            laboratorium tipe C/D memenuhi kewajiban kalibrasi rutin tanpa
-            risiko sertifikat ditolak saat audit.
+          <p className="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-ink-600 sm:text-xl">
+            Melayani kebutuhan kalibrasi alat kesehatan dan laboratorium dengan
+            hasil yang terdokumentasi dan mudah ditelusuri. Berizin resmi dan
+            terakreditasi KAN (LK-521-IDN) sesuai ruang lingkup akreditasi.
           </p>
 
           <div className="mt-6 w-full">

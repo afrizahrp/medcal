@@ -18,13 +18,13 @@ const badges = [
 export function TrustBadges({ className = "" }: { className?: string }) {
   return (
     <ul
-      className={`grid w-full grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3 ${className}`}
+      className={`grid w-full grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3 ${className}`}
       aria-label="Sertifikasi dan legalitas"
     >
       {badges.map((badge) => (
         <li
           key={badge.title}
-          className="flex w-full items-center justify-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-2 shadow-sm sm:justify-start sm:py-1.5"
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1.5 shadow-sm sm:justify-start sm:py-1.5"
         >
           <span
             aria-hidden

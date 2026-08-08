@@ -7,9 +7,10 @@ import { AccreditationSection } from "@/components/accreditation-section";
 import { CtaSection } from "@/components/cta-section";
 
 export const metadata: Metadata = {
-  title: "Presisi Kalibrasi Medika — Kalibrasi Alat Kesehatan Terakreditasi KAN",
+  title:
+    "Presisi Kalibrasi Medika — Kalibrasi Alat Kesehatan Terakreditasi KAN",
   description:
-    "Kalibrasi alat kesehatan yang sertifikatnya pasti lolos audit akreditasi. Terakreditasi KAN (LK-521-IDN) & SNI ISO/IEC 17025:2017, tepat waktu, tanpa ribet.",
+    "Kalibrasi Alat Kesehatan Terakreditasi. Terakreditasi KAN (LK-521-IDN) & SNI ISO/IEC 17025:2017, tepat waktu, tanpa ribet.",
   alternates: { canonical: "/" },
 };
 
