@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { company, kanAccreditedProducts } from "@/data/site";
-import { CtaSection } from "@/components/cta-section";
+import { SectionCta } from "@/components/section-cta";
 
 export const metadata: Metadata = {
   title: "Sertifikasi & Legalitas",
@@ -100,7 +100,11 @@ export default function SertifikasiLegalitasPage() {
         </div>
       </section>
 
-      <CtaSection />
+      <SectionCta
+        variant="banner"
+        title="Siap Kalibrasi Tanpa Khawatir Sertifikat Ditolak Audit?"
+        description="Konsultasikan kebutuhan kalibrasi alat kesehatan Anda — kami bantu proses yang jelas dan tepat waktu."
+      />
     </div>
   );
 }

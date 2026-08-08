@@ -10,6 +10,7 @@
     "lint": "echo \"lint web skipped\""
   },
   "dependencies": {
+    "@base-ui/react": "^1.7.0",
     "@medcal/shared": "workspace:*",
     "@medcal/ui": "workspace:*",
     "fuse.js": "^7.5.0",

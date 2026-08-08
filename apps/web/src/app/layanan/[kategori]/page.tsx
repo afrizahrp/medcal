@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { getServiceCategory, serviceCategories, waLink } from "@/data/site";
+import { getServiceCategory, serviceCategories } from "@/data/site";
 import { categoryImages } from "@/data/category-images";
 import { BackButton } from "@/components/back-button";
+import { SectionCta } from "@/components/section-cta";
 
 function resolveSlug(kategoriParam: string) {
   return kategoriParam.startsWith("kalibrasi-")
@@ -135,34 +136,12 @@ export default async function ServiceCategoryPage({
           </ul>
         </div>
 
-        <div className="mt-10 flex flex-col gap-3 rounded-2xl border border-ink-100 bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-base font-semibold text-ink-900 sm:text-lg">
-              Butuh jadwal kalibrasi {category.name.toLowerCase()}?
-            </p>
-            <p className="mt-1 text-base leading-relaxed text-ink-600">
-              Konsultasikan kebutuhan Anda, kami bantu prosesnya.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Link
-              href="/kontak"
-              className="inline-flex items-center justify-center rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-700"
-            >
-              Konsultasi Kebutuhan Kalibrasi
-            </Link>
-            <a
-              href={waLink(
-                `Halo, saya ingin konsultasi kalibrasi ${category.name.toLowerCase()}.`,
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center rounded-full border border-ink-200 px-5 py-3 text-sm font-semibold text-ink-700 hover:border-brand-300"
-            >
-              Chat WhatsApp
-            </a>
-          </div>
-        </div>
+        <SectionCta
+          variant="card"
+          title={`Butuh jadwal kalibrasi ${category.name.toLowerCase()}?`}
+          description="Konsultasikan kebutuhan Anda, kami bantu prosesnya."
+          waMessage={`Halo, saya ingin konsultasi kalibrasi ${category.name.toLowerCase()}.`}
+        />
       </section>
     </div>
   );

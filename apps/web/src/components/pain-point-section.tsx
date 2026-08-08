@@ -1,45 +1,69 @@
-const points = [
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { SectionCta } from "@/components/section-cta";
+
+const items = [
   {
-    title: "Vendor lambat merespons",
-    body: "Jadwal akreditasi mepet, tapi vendor kalibrasi sulit dihubungi saat dibutuhkan.",
+    question:
+      "Apakah sertifikat kalibrasi sesuai dengan ruang lingkup akreditasi?",
+    answer:
+      "Kalibrasi perlu dilakukan sesuai ruang lingkup akreditasi yang tersedia. Jenis alat, parameter, dan metode yang dapat dilayani perlu disesuaikan dengan scope akreditasi yang berlaku",
   },
   {
-    title: "Alat menganggur menunggu sertifikat",
-    body: "Operasional tertahan karena proses kalibrasi tidak jelas kapan selesainya.",
+    question: "Bagaimana memastikan dokumentasi kalibrasi mudah ditelusuri?",
+    answer:
+      "Hasil kalibrasi dilengkapi dokumentasi yang jelas dan rapi, sehingga informasi terkait alat dan hasil pengukurannya lebih mudah ditelusuri untuk memenuhi kebutuhan audit akreditasi kapan saja",
   },
   {
-    title: "Dokumen tidak sesuai format auditor",
-    body: "Sertifikat yang tidak lengkap berisiko ditolak saat pemeriksaan akreditasi.",
+    question: "Berapa lama proses kalibrasi sampai sertifikat diterbitkan?",
+    answer:
+      "Waktu penyelesaian bergantung pada jenis alat, jumlah alat, parameter yang dikalibrasi, serta kebutuhan proses kalibrasi. Jadwal dapat dikonfirmasi saat pengajuan",
+  },
+  {
+    question: "Apa yang perlu disiapkan sebelum mengajukan kalibrasi?",
+    answer:
+      "Siapkan informasi alat seperti nama alat, merek, tipe/model, nomor seri, serta kebutuhan kalibrasi. Tim kami dapat membantu memastikan kebutuhan tersebut sesuai dengan layanan dan ruang lingkup yang tersedia",
   },
 ];
 
 export function PainPointSection() {
   return (
     <section className="mx-auto max-w-8xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
-      <div className="mx-auto max-w-2xl text-center">
-        <h2 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
-          Kenapa Sertifikat Kalibrasi Bisa Ditolak Saat Audit?
-        </h2>
-        <p className="mt-3 text-base leading-relaxed text-ink-600 sm:text-lg">
-          Ini bukan soal harga atau kelengkapan alat — ini soal risiko
-          operasional dan kepatuhan rumah sakit yang harus dihindari sejak awal.
-        </p>
-      </div>
+      <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="text-xs font-semibold uppercase tracking-wider text-brand-700 sm:text-sm">
+            Sebelum Memilih Layanan Kalibrasi
+          </p>
+          <h2 className="mt-3 text-balance text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+            Apa yang Perlu Anda Pastikan?
+          </h2>
+          <p className="mt-3 text-pretty text-base leading-relaxed text-ink-600 sm:text-lg">
+            Mulai dari ruang lingkup akreditasi hingga dokumentasi hasil
+            kalibrasi, berikut beberapa hal yang penting untuk diketahui
+          </p>
+        </div>
 
-      <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {points.map((point) => (
-          <div
-            key={point.title}
-            className="rounded-2xl border border-ink-100 bg-white p-5 shadow-sm"
-          >
-            <h3 className="text-base font-semibold text-ink-900">
-              {point.title}
-            </h3>
-            <p className="mt-2 text-base leading-relaxed text-ink-600">
-              {point.body}
-            </p>
-          </div>
-        ))}
+        <Accordion className="mt-8">
+          {items.map((item, index) => {
+            return (
+              <AccordionItem key={item.question} value={`faq-${index + 1}`}>
+                <AccordionTrigger>{item.question}</AccordionTrigger>
+                <AccordionContent>
+                  <p>{item.answer}</p>
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
+        </Accordion>
+
+        <SectionCta
+          title="Masih ada yang ingin Anda pastikan?"
+          description="Jangan ragu menghubungi kami untuk mendiskusikan kebutuhan kalibrasi dan menemukan layanan yang tepat untuk Anda"
+        />
       </div>
     </section>
   );

@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { TrustBadges } from "@/components/trust-badges";
-import { waLink } from "@/data/site";
+import { SectionCta } from "@/components/section-cta";
 
 export function Hero() {
   return (
@@ -11,38 +10,20 @@ export function Hero() {
             Kalibrasi Alat Kesehatan & Laboratorium
           </p>
 
-          <h1 className="mt-3 text-3xl font-bold leading-tight tracking-tight text-ink-900 sm:text-4xl lg:text-5xl">
+          <h1 className="mt-3 whitespace-nowrap text-[clamp(0.8rem,4.5vw,2.25rem)] font-bold leading-none tracking-tight text-ink-900">
             Kalibrasi Alat Kesehatan Terakreditasi
           </h1>
 
           <p className="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-ink-600 sm:text-xl">
-            Melayani kebutuhan kalibrasi alat kesehatan dan laboratorium dengan
-            hasil yang terdokumentasi dan mudah ditelusuri. Berizin resmi dan
-            terakreditasi KAN (LK-521-IDN) sesuai ruang lingkup akreditasi.
-          </p>
+          Hasil kalibrasi Anda kami dokumentasikan rapi dan mudah ditelusuri, 
+          agar siap memenuhi keperluan audit akreditasi. 
+          Didukung izin resmi dan akreditasi KAN (LK-521-IDN) sesuai ruang lingkupnya          </p>
 
           <div className="mt-6 w-full">
             <TrustBadges />
           </div>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <Link
-              href="/kontak"
-              className="inline-flex items-center justify-center rounded-full bg-brand-600 px-6 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
-            >
-              Konsultasi Kebutuhan Kalibrasi
-            </Link>
-            <a
-              href={waLink(
-                "Halo, saya ingin konsultasi kebutuhan kalibrasi alat kesehatan.",
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-ink-200 bg-white px-6 py-3.5 text-base font-semibold text-ink-700 transition-colors hover:border-brand-300 hover:text-brand-800"
-            >
-              Chat WhatsApp
-            </a>
-          </div>
+          <SectionCta variant="actions" className="mt-8" />
         </div>
       </div>
     </section>

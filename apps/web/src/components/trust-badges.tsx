@@ -3,11 +3,11 @@ import { company } from "@/data/site";
 const badges = [
   {
     title: "Terakreditasi KAN",
-    detail: `${company.accreditation.number} · 3 item dalam scope`,
+    detail: `${company.accreditation.number} · 3 item scope`,
   },
   {
     title: "SNI ISO/IEC 17025:2017",
-    detail: "Standar kompetensi laboratorium",
+    detail: "Standar laboratorium",
   },
   {
     title: "Legalitas Lengkap",
@@ -24,7 +24,7 @@ export function TrustBadges({ className = "" }: { className?: string }) {
       {badges.map((badge) => (
         <li
           key={badge.title}
-          className="flex w-full items-center justify-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1.5 shadow-sm sm:justify-start sm:py-1.5"
+          className="flex w-full min-w-0 items-center justify-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1.5 shadow-sm sm:justify-start"
         >
           <span
             aria-hidden
@@ -32,11 +32,13 @@ export function TrustBadges({ className = "" }: { className?: string }) {
           >
             ✓
           </span>
-          <span className="text-left text-xs leading-tight sm:text-sm">
-            <span className="block font-semibold text-ink-900">
+          <span className="min-w-0 text-left text-xs leading-tight sm:text-sm">
+            <span className="block truncate font-semibold text-ink-900">
               {badge.title}
             </span>
-            <span className="block text-ink-500">{badge.detail}</span>
+            <span className="block truncate text-ink-500" title={badge.detail}>
+              {badge.detail}
+            </span>
           </span>
         </li>
       ))}

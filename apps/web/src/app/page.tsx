@@ -4,7 +4,7 @@ import { PainPointSection } from "@/components/pain-point-section";
 import { FeaturedCategoriesSection } from "@/components/featured-categories-section";
 import { ProcessSteps } from "@/components/process-steps";
 import { AccreditationSection } from "@/components/accreditation-section";
-import { CtaSection } from "@/components/cta-section";
+import { SectionCta } from "@/components/section-cta";
 
 export const metadata: Metadata = {
   title:
@@ -22,7 +22,11 @@ export default function HomePage() {
       <FeaturedCategoriesSection />
       <ProcessSteps />
       <AccreditationSection />
-      <CtaSection />
+      <SectionCta
+        variant="banner"
+        title="Siap Kalibrasi Tanpa Khawatir Sertifikat Ditolak Audit?"
+        description="Konsultasikan kebutuhan kalibrasi alat kesehatan Anda — kami bantu proses yang jelas dan tepat waktu."
+      />
     </>
   );
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { company, primaryNav } from "@/data/site";
 import { CatalogSearch } from "@/components/catalog-search";
+import { SectionCta } from "@/components/section-cta";
 import logo from "../../public/logo.jpeg";
 
 export function SiteHeader() {
@@ -38,12 +39,7 @@ export function SiteHeader() {
           <CatalogSearch />
 
           <div className="hidden md:block">
-            <Link
-              href="/kontak"
-              className="inline-flex items-center rounded-full bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
-            >
-              Konsultasi Kebutuhan Kalibrasi
-            </Link>
+            <SectionCta variant="nav" />
           </div>
 
           <button
@@ -99,13 +95,11 @@ export function SiteHeader() {
               </li>
             ))}
           </ul>
-          <Link
-            href="/kontak"
-            onClick={() => setOpen(false)}
+          <SectionCta
+            variant="nav"
             className="mt-3 flex w-full items-center justify-center rounded-full bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-sm"
-          >
-            Konsultasi Kebutuhan Kalibrasi
-          </Link>
+            onCtaClick={() => setOpen(false)}
+          />
           <a
             href={`tel:${company.phoneRaw}`}
             className="mt-2 flex w-full items-center justify-center rounded-full border border-ink-200 px-4 py-3 text-sm font-semibold text-ink-700"

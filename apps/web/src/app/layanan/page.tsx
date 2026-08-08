@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { TrustBadges } from "@/components/trust-badges";
 import { ServiceCategoryCard } from "@/components/service-category-card";
-import { CtaSection } from "@/components/cta-section";
+import { SectionCta } from "@/components/section-cta";
 import { serviceCategories } from "@/data/site";
 
 export const metadata: Metadata = {
@@ -37,7 +37,11 @@ export default function LayananPage() {
         </div>
       </section>
 
-      <CtaSection />
+      <SectionCta
+        variant="banner"
+        title="Siap Kalibrasi Tanpa Khawatir Sertifikat Ditolak Audit?"
+        description="Konsultasikan kebutuhan kalibrasi alat kesehatan Anda — kami bantu proses yang jelas dan tepat waktu."
+      />
     </div>
   );
 }
