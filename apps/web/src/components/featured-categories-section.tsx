@@ -71,21 +71,21 @@ export function FeaturedCategoriesSection() {
 
       <div className="mt-6 rounded-2xl border border-ink-100 bg-ink-50/60 p-5 sm:p-6">
         <p className="text-sm font-semibold text-ink-900">Kategori Lainnya</p>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {otherCategories.map((category) => (
             <Link
               key={category.slug}
               href={`/layanan/kalibrasi-${category.slug}`}
-              className="rounded-full border border-ink-200 bg-white px-3.5 py-1.5 text-sm text-ink-700 hover:border-brand-300 hover:text-brand-800"
+              className="inline-flex min-h-10 items-center justify-center rounded-full border border-ink-200 bg-white px-3 py-2 text-center text-sm leading-snug text-ink-700 hover:border-brand-300 hover:text-brand-800"
             >
               {category.name}
             </Link>
           ))}
         </div>
-        <div className="mt-5">
+        <div className="mt-5 flex justify-center">
           <Link
             href="/layanan"
-            className="inline-flex items-center rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
+            className="inline-flex items-center justify-center rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
           >
             Lihat Semua Kategori & Jenis Alat
           </Link>

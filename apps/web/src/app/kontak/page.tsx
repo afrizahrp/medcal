@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { company, waLink } from "@/data/site";
+import { BackButton } from "@/components/back-button";
 
 export default function KontakPage() {
   const [status, setStatus] = useState<string | null>(null);
@@ -49,7 +50,9 @@ export default function KontakPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-      <div className="mx-auto max-w-2xl text-center">
+      <BackButton fallbackHref="/" label="Kembali" />
+
+      <div className="mx-auto mt-6 max-w-2xl text-center">
         <h1 className="text-3xl font-bold tracking-tight text-ink-900 sm:text-4xl">
           Konsultasi Kebutuhan Kalibrasi
         </h1>

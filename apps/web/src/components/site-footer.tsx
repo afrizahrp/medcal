@@ -18,7 +18,7 @@ export function SiteFooter() {
           <div>
             <p className="text-sm font-semibold text-ink-900">Layanan</p>
             <ul className="mt-3 flex flex-col gap-2">
-              {serviceCategories.slice(0, 6).map((cat) => (
+              {serviceCategories.slice(0, 3).map((cat) => (
                 <li key={cat.slug}>
                   <Link
                     href={`/layanan/kalibrasi-${cat.slug}`}
