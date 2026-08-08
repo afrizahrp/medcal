@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getServiceCategory, serviceCategories, waLink } from "@/data/site";
+import { categoryImages } from "@/data/category-images";
 
 function resolveSlug(kategoriParam: string) {
   return kategoriParam.startsWith("kalibrasi-")
@@ -38,30 +40,55 @@ export default async function ServiceCategoryPage({
   const category = getServiceCategory(resolveSlug(kategori));
   if (!category) notFound();
 
+  const image = categoryImages[category.slug];
+
   return (
     <div>
       <section className="border-b border-ink-100 bg-brand-50/40">
         <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-          <nav className="text-sm text-ink-500" aria-label="Breadcrumb">
-            <Link href="/layanan" className="hover:text-brand-700">
-              Layanan
-            </Link>{" "}
-            / <span className="text-ink-700">{category.name}</span>
-          </nav>
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_200px] lg:items-start">
+            <div>
+              <nav className="text-sm text-ink-500" aria-label="Breadcrumb">
+                <Link href="/layanan" className="hover:text-brand-700">
+                  Layanan
+                </Link>{" "}
+                / <span className="text-ink-700">{category.name}</span>
+              </nav>
 
-          <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900 sm:text-4xl">
-            {category.h1}
-          </h1>
+              <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900 sm:text-4xl">
+                {category.h1}
+              </h1>
 
-          {category.accredited ? (
-            <span className="mt-4 inline-flex items-center rounded-full bg-brand-600 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white">
-              Sebagian item terakreditasi KAN
-            </span>
-          ) : null}
+              {category.accredited ? (
+                <span className="mt-4 inline-flex items-center rounded-full bg-brand-600 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white">
+                  Sebagian item terakreditasi KAN
+                </span>
+              ) : null}
 
-          <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-600">
-            {category.intro}
-          </p>
+              <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-600 sm:text-lg">
+                {category.intro}
+              </p>
+            </div>
+
+            {image ? (
+              <div className="w-32 sm:w-40 lg:w-full">
+                <div className="relative aspect-square overflow-hidden rounded-2xl border border-ink-100 bg-white">
+                  <Image
+                    src={image.full}
+                    alt={image.alt}
+                    fill
+                    sizes="(min-width: 1024px) 200px, 160px"
+                    className="object-contain p-3"
+                    priority
+                  />
+                </div>
+                <p className="mt-2 text-xs leading-snug text-ink-400">
+                  Ilustrasi alat kalibrasi yang digunakan dalam proses —
+                  bukan alat yang dikalibrasi.
+                </p>
+              </div>
+            ) : null}
+          </div>
         </div>
       </section>
 

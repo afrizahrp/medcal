@@ -40,10 +40,10 @@ export function ProcessSteps() {
               <span className="text-sm font-bold text-brand-600">
                 {s.step}
               </span>
-              <h3 className="mt-2 text-sm font-semibold text-ink-900">
+              <h3 className="mt-2 text-base font-semibold text-ink-900">
                 {s.title}
               </h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-ink-500">
+              <p className="mt-1.5 text-base leading-relaxed text-ink-500">
                 {s.body}
               </p>
             </li>
