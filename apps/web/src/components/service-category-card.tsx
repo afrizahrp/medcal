@@ -1,5 +1,8 @@
 import Link from "next/link";
-import type { ServiceCategory } from "@/data/site";
+import {
+  isCategoryAccredited,
+  type ServiceCategory,
+} from "@/data/site";
 
 export function ServiceCategoryCard({
   category,
@@ -16,7 +19,7 @@ export function ServiceCategoryCard({
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-sm font-bold text-brand-700">
             {category.name.charAt(0)}
           </span>
-          {category.accredited ? (
+          {isCategoryAccredited(category) ? (
             <span className="rounded-full bg-brand-600 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
               KAN
             </span>
@@ -26,7 +29,7 @@ export function ServiceCategoryCard({
           Kalibrasi {category.name}
         </h3>
         <p className="mt-1.5 line-clamp-2 text-base leading-relaxed text-ink-600">
-          {category.exampleProducts.slice(0, 3).join(", ")}, dan lainnya.
+          {category.servedEquipment.slice(0, 3).join(", ")}, dan lainnya.
         </p>
       </div>
       <span className="mt-4 inline-flex items-center text-sm font-medium text-brand-700 group-hover:text-brand-800">

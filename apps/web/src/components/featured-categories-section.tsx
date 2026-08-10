@@ -56,7 +56,7 @@ export function FeaturedCategoriesSection() {
                       Kalibrasi {category.name}
                     </h3>
                     <p className="mt-2 truncate text-base leading-relaxed text-ink-600">
-                      {category.exampleProducts.slice(0, 3).join(", ")}, dan
+                      {category.servedEquipment.slice(0, 3).join(", ")}, dan
                       lain …
                     </p>
                   </div>

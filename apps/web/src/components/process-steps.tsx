@@ -1,21 +1,21 @@
 const steps = [
   {
-    step: "01",
+    step: "1",
     title: "Ajukan Kebutuhan",
     body: "Sampaikan jenis alat dan kebutuhan kalibrasi Anda melalui layanan kami",
   },
   {
-    step: "02",
+    step: "2",
     title: "Jadwal Disepakati",
     body: "Kami mengonfirmasi kebutuhan dan menjadwalkan kalibrasi sesuai kebutuhan Anda",
   },
   {
-    step: "03",
+    step: "3",
     title: "Kalibrasi Dilakukan",
     body: "Pantau proses kalibrasi hingga pekerjaan selesai sesuai standar yang berlaku",
   },
   {
-    step: "04",
+    step: "4",
     title: "Sertifikat Tersedia",
     body: "Akses sertifikat kalibrasi setelah proses selesai dan dokumen diterbitkan",
   },

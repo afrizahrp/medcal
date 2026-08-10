@@ -1,14 +1,14 @@
 [
   { "name": "Patient Monitor", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
   { "name": "ECG", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
-  { "name": "Sphygmomanometer", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": true },
+  { "name": "Sphygmomanometer", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
   { "name": "Bed Side Monitor", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": true },
   { "name": "Ambulatory ECG", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
   { "name": "Electrocardiograph", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
   { "name": "Pulse Oxymeter", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
   { "name": "Oxymeter Monitor", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
   { "name": "Cardiac Output Unit", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
-  { "name": "Tensimeter", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": true },
+  { "name": "Tensimeter", "categorySlug": "monitoring-pasien", "categoryName": "Monitoring Pasien", "accredited": false },
 
   { "name": "Ventilator", "categorySlug": "respirasi", "categoryName": "Respirasi & Life Support", "accredited": false },
   { "name": "Nebulizer Compressor", "categorySlug": "respirasi", "categoryName": "Respirasi & Life Support", "accredited": false },

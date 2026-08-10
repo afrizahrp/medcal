@@ -1,0 +1,289 @@
+[
+  {
+    "slug": "monitoring-pasien",
+    "name": "Monitoring Pasien",
+    "h1": "Jasa Kalibrasi Alat Monitoring Pasien Rumah Sakit",
+    "intro": "Layanan pengujian dan kalibrasi alat monitoring pasien untuk membantu memastikan akurasi pengukuran dan melengkapi dokumentasi akreditasi fasilitas kesehatan. Sphygmomanometer dan Bed Side Monitor dikalibrasi dalam ruang lingkup akreditasi KAN LK-521-IDN",
+    "keywords": {
+      "primary": "kalibrasi alat monitoring pasien",
+      "secondary": [
+        "kalibrasi sphygmomanometer scope KAN LK-521-IDN",
+        "kalibrasi bed side monitor scope KAN LK-521-IDN",
+        "jasa kalibrasi patient monitor rumah sakit",
+        "kalibrasi tensimeter digital aneroid",
+        "kalibrasi ecg electrocardiograph"
+      ]
+    },
+    "sections": [
+      {
+        "heading": "Sphygmomanometer & Bed Side Monitor",
+        "badge": "Dalam Scope KAN LK-521-IDN",
+        "scopeDetail": "Sphygmomanometer (0-250 mmHg) & Bed side monitor (Heart rate 30-180 bpm, Systole 60-250 mmHg, Diastole 30-195 mmHg)"
+      },
+      {
+        "heading": "Patient Monitor, ECG & Alat Monitoring Lainnya",
+        "badge": null,
+        "scopeDetail": "Dikalibrasi mengikuti metode standar Kemenkes RI / SNI ISO/IEC 17025:2017"
+      }
+    ],
+    "servedEquipment": [
+      "Sphygmomanometer",
+      "Bed Side Monitor",
+      "Patient Monitor",
+      "ECG / Electrocardiograph",
+      "Ambulatory ECG",
+      "Pulse Oximeter",
+      "Cardiac Output Unit"
+    ],
+    "accreditation": {
+      "status": "partial",
+      "scopeNote": "Dalam ruang lingkup akreditasi KAN LK-521-IDN",
+      "equipmentInScope": [
+        "Sphygmomanometer",
+        "Bed Side Monitor"
+      ]
+    }
+  },
+  {
+    "slug": "respirasi",
+    "name": "Respirasi & Life Support",
+    "h1": "Jasa Kalibrasi Alat Respirasi & Life Support Rumah Sakit",
+    "intro": "Peralatan respirasi ICU dan ruang operasi memerlukan kalibrasi rutin yang akurat dan tepat waktu. Kalibrasi dilakukan oleh PT Presisi Kalibrasi Medika sesuai standar SNI ISO/IEC 17025:2017.",
+    "keywords": {
+      "primary": "kalibrasi alat respirasi rumah sakit",
+      "secondary": [
+        "jasa kalibrasi ventilator icu",
+        "kalibrasi regulator oksigen flow meter",
+        "kalibrasi suction pump aspirator",
+        "kalibrasi nebulizer compressor"
+      ]
+    },
+    "sections": [
+      {
+        "heading": "Kalibrasi Ventilator & Alat Bantu Napas"
+      },
+      {
+        "heading": "Kalibrasi Regulator & Flow Meter Oksigen"
+      },
+      {
+        "heading": "Kalibrasi Suction Pump & Aspirator Medis"
+      }
+    ],
+    "servedEquipment": [
+      "Ventilator",
+      "Nebulizer Compressor",
+      "Oxygen Concentrator",
+      "Oxygen-Air Proportioner",
+      "Suction Pump / Aspirator",
+      "Resuscitator"
+    ],
+    "accreditation": {
+      "status": "none",
+      "scopeNote": "Dikalibrasi mengikuti metode standar Kemenkes RI / SNI ISO/IEC 17025:2017",
+      "equipmentInScope": []
+    }
+  },
+  {
+    "slug": "neonatal-termal",
+    "name": "Neonatal & Termal",
+    "h1": "Jasa Kalibrasi Alat Neonatal & Termal Ruang NICU",
+    "intro": "Pengujian dan kalibrasi peralatan NICU untuk membantu menjaga akurasi instrumen dan melengkapi kriteria dokumentasi audit akreditasi faskes.",
+    "keywords": {
+      "primary": "kalibrasi alat neonatal nicu",
+      "secondary": [
+        "jasa kalibrasi inkubator bayi",
+        "kalibrasi infant radiant warmer",
+        "kalibrasi timbangan bayi medis"
+      ]
+    },
+    "sections": [
+      {
+        "heading": "Kalibrasi Inkubator Bayi & Infant Warmer"
+      },
+      {
+        "heading": "Kalibrasi Radiant Warmer & Termoterapi"
+      },
+      {
+        "heading": "Kalibrasi Timbangan Bayi Medis"
+      }
+    ],
+    "servedEquipment": [
+      "Baby Incubator",
+      "Infant Warmer",
+      "Radiant Warmer",
+      "Timbangan Bayi",
+      "Paraffin Bath",
+      "Whirlpool Bath"
+    ],
+    "accreditation": {
+      "status": "none",
+      "scopeNote": "Dikalibrasi mengikuti metode standar Kemenkes RI / SNI ISO/IEC 17025:2017",
+      "equipmentInScope": []
+    }
+  },
+  {
+    "slug": "infus-pompa-cairan",
+    "name": "Infus & Pompa Cairan",
+    "h1": "Jasa Kalibrasi Pompa Infus & Alat Cairan Medis",
+    "intro": "Kalibrasi laju alir (flow rate) pada pompa infus dan syringe pump untuk mendukung ketepatan dosis cairan medis.",
+    "keywords": {
+      "primary": "kalibrasi infuse pump syringe pump",
+      "secondary": [
+        "jasa kalibrasi pompa infus rumah sakit",
+        "kalibrasi syringe pump icu",
+        "kalibrasi blood solution warmer"
+      ]
+    },
+    "sections": [
+      {
+        "heading": "Kalibrasi Infuse Pump & Syringe Pump"
+      },
+      {
+        "heading": "Kalibrasi Blood / Solution Warmer"
+      }
+    ],
+    "servedEquipment": [
+      "Infuse Pump",
+      "Syringe Pump",
+      "Blood / Solution Warmer",
+      "Breast Pump (Suction)"
+    ],
+    "accreditation": {
+      "status": "none",
+      "scopeNote": "Dikalibrasi mengikuti metode standar Kemenkes RI / SNI ISO/IEC 17025:2017",
+      "equipmentInScope": []
+    }
+  },
+  {
+    "slug": "cold-chain",
+    "name": "Cold Chain & Penyimpanan Suhu",
+    "h1": "Jasa Kalibrasi Cold Chain & Penyimpanan Suhu Medis",
+    "intro": "Layanan kalibrasi alat penyimpanan suhu medis. Khusus Blood Bank Refrigerator dilakukan dalam ruang lingkup akreditasi KAN LK-521-IDN untuk rentang suhu 1°C s/d 9°C. Peralatan cold chain lainnya dikalibrasi sesuai standar SNI ISO/IEC 17025:2017.",
+    "keywords": {
+      "primary": "kalibrasi cold chain medis",
+      "secondary": [
+        "kalibrasi blood bank refrigerator scope KAN LK-521-IDN",
+        "kalibrasi kulkas vaksin puskesmas",
+        "jasa kalibrasi medical freezer"
+      ]
+    },
+    "sections": [
+      {
+        "heading": "Blood Bank Refrigerator",
+        "badge": "Dalam Scope KAN LK-521-IDN",
+        "scopeDetail": "Rentang ukur 1°C s/d 9°C (SK Dirjen Yankes HK.02.02/D/43649/2024)"
+      },
+      {
+        "heading": "Kulkas Vaksin, Medical Freezer & Storage Farmasi",
+        "badge": null,
+        "scopeDetail": "Dikalibrasi mengikuti metode standar Kemenkes RI / SNI ISO/IEC 17025:2017"
+      }
+    ],
+    "servedEquipment": [
+      "Blood Bank Refrigerator",
+      "Kulkas Vaksin (Vaccine Ref)",
+      "Medical Freezer",
+      "Medical Refrigerator",
+      "Oven Sterilisasi"
+    ],
+    "accreditation": {
+      "status": "partial",
+      "scopeNote": "Dalam ruang lingkup akreditasi KAN LK-521-IDN",
+      "equipmentInScope": [
+        "Blood Bank Refrigerator"
+      ]
+    }
+  },
+  {
+    "slug": "sterilisasi",
+    "name": "Sterilisasi",
+    "h1": "Jasa Kalibrasi Autoclave & Sterilizer Medis",
+    "intro": "Kalibrasi parameter suhu dan tekanan autoclave untuk mendukung kepatuhan proses sterilisasi unit CSSD Rumah Sakit dan Klinik.",
+    "keywords": {
+      "primary": "kalibrasi autoclave sterilizer",
+      "secondary": [
+        "jasa kalibrasi autoclave cssd rumah sakit",
+        "kalibrasi sterilizer laboratorium klinik"
+      ]
+    },
+    "sections": [
+      {
+        "heading": "Kalibrasi Autoclave CSSD"
+      },
+      {
+        "heading": "Kalibrasi Sterilizer Laboratorium & Klinik"
+      }
+    ],
+    "servedEquipment": [
+      "Autoclave CSSD",
+      "Sterilizer Laboratorium / Klinik"
+    ],
+    "accreditation": {
+      "status": "none",
+      "scopeNote": "Dikalibrasi mengikuti metode standar Kemenkes RI / SNI ISO/IEC 17025:2017",
+      "equipmentInScope": []
+    }
+  },
+  {
+    "slug": "laboratorium",
+    "name": "Laboratorium & Diagnostik",
+    "h1": "Jasa Kalibrasi Alat Laboratorium Klinik & Diagnostik",
+    "intro": "Pengujian dan kalibrasi instrumen laboratorium untuk membantu menjaga ketelitian instrumen diagnostik kesehatan.",
+    "keywords": {
+      "primary": "kalibrasi alat laboratorium klinik",
+      "secondary": [
+        "jasa kalibrasi centrifuge laboratorium",
+        "kalibrasi mikroskop laboratorium",
+        "kalibrasi USG rumah sakit"
+      ]
+    },
+    "sections": [
+      {
+        "heading": "Kalibrasi Centrifuge & Mikroskop Laboratorium"
+      },
+      {
+        "heading": "Kalibrasi Alat Diagnostik USG"
+      }
+    ],
+    "servedEquipment": [
+      "Centrifuge",
+      "Mikroskop",
+      "USG (Ultrasonografi)"
+    ],
+    "accreditation": {
+      "status": "none",
+      "scopeNote": "Dikalibrasi mengikuti metode standar Kemenkes RI / SNI ISO/IEC 17025:2017",
+      "equipmentInScope": []
+    }
+  },
+  {
+    "slug": "fasilitas-umum",
+    "name": "Fasilitas Umum RS",
+    "h1": "Jasa Kalibrasi Alat Penunjang & Fasilitas Rumah Sakit",
+    "intro": "Layanan kalibrasi peralatan penunjang medis seperti timbangan dan tempat tidur elektrik untuk melengkapi kelengkapan dokumentasi akreditasi.",
+    "keywords": {
+      "primary": "kalibrasi fasilitas umum rumah sakit",
+      "secondary": [
+        "jasa kalibrasi timbangan dewasa medis",
+        "kalibrasi tempat tidur elektrik electric bed"
+      ]
+    },
+    "sections": [
+      {
+        "heading": "Kalibrasi Timbangan Dewasa Medis"
+      },
+      {
+        "heading": "Kalibrasi Tempat Tidur Pasien Elektrik (Electric Bed)"
+      }
+    ],
+    "servedEquipment": [
+      "Timbangan Dewasa",
+      "Electric Bed (Tempat Tidur Elektrik)"
+    ],
+    "accreditation": {
+      "status": "none",
+      "scopeNote": "Dikalibrasi mengikuti metode standar Kemenkes RI / SNI ISO/IEC 17025:2017",
+      "equipmentInScope": []
+    }
+  }
+]

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { getServiceCategory, serviceCategories } from "@/data/site";
+import { getServiceCategory, serviceCategories, isCategoryAccredited } from "@/data/site";
 import { categoryImages } from "@/data/category-images";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { SectionCta } from "@/components/section-cta";
@@ -62,9 +62,9 @@ export default async function ServiceCategoryPage({
                 {category.h1}
               </h1>
 
-              {category.accredited ? (
+              {isCategoryAccredited(category) ? (
                 <span className="mt-4 inline-flex items-center rounded-full bg-brand-600 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white">
-                  Sebagian item terakreditasi KAN
+                  Sphygmomanometer & Bed Side Monitor dalam Scope KAN
                 </span>
               ) : null}
 
@@ -102,44 +102,51 @@ export default async function ServiceCategoryPage({
               <h2 className="text-lg font-semibold text-ink-900 sm:text-xl">
                 {s.heading}
               </h2>
-              {s.note ? (
-                <p className="mt-1.5 text-base leading-relaxed text-brand-700">
-                  {s.note}
+              {s.badge ? (
+                <p className="mt-1.5 text-base font-medium leading-relaxed text-brand-700">
+                  {s.badge}
+                </p>
+              ) : null}
+              {s.scopeDetail ? (
+                <p className="mt-1 text-base leading-relaxed text-ink-600">
+                  {s.scopeDetail}
                 </p>
               ) : null}
             </div>
           ))}
         </div>
 
-        {category.accredited && category.accreditedNote ? (
+        {isCategoryAccredited(category) ? (
           <div className="mt-8 rounded-2xl border border-brand-200 bg-brand-50/60 p-5">
             <p className="text-base leading-relaxed text-ink-700">
-              {category.accreditedNote}
+              {category.accreditation.scopeNote}
+              {category.accreditation.equipmentInScope.length > 0
+                ? ` — ${category.accreditation.equipmentInScope.join(", ")}.`
+                : null}
             </p>
           </div>
         ) : null}
 
         <div className="mt-10">
           <h2 className="text-lg font-semibold text-ink-900 sm:text-xl">
-            Alat yang Kami Layani
+            Peralatan dalam Layanan Ini
           </h2>
           <ul className="mt-4 flex flex-wrap gap-2">
-            {category.exampleProducts.map((product) => (
+            {category.servedEquipment.map((equipment) => (
               <li
-                key={product}
+                key={equipment}
                 className="rounded-full border border-ink-200 bg-white px-3.5 py-1.5 text-sm text-ink-700"
               >
-                {product}
+                {equipment}
               </li>
             ))}
           </ul>
         </div>
 
         <SectionCta
-          variant="card"
-          title={`Butuh jadwal kalibrasi ${category.name.toLowerCase()}?`}
-          description="Konsultasikan kebutuhan Anda, kami bantu prosesnya."
-          waMessage={`Halo, saya ingin konsultasi kalibrasi ${category.name.toLowerCase()}.`}
+          title={`Butuh jadwal kalibrasi alat ${category.name.toLowerCase()}?`}
+            description={`Konsultasikan kebutuhan kalibrasi alat Anda dan kami bantu menentukan jadwal yang sesuai`}
+          waMessage={`Halo, saya ingin konsultasi kalibrasi ${category.name.toLowerCase()} untuk alat ${category.servedEquipment.join(", ")}.`}
         />
       </section>
     </div>
