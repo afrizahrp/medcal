@@ -5,7 +5,7 @@ export function AccreditationSection() {
     <section className="mx-auto max-w-8xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:items-center">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+          <h2 className="text-xl font-semibold tracking-tight text-ink-900 sm:text-2xl">
             Akreditasi KAN & Standar SNI ISO/IEC 17025:2017
           </h2>
           <p className="mt-3 text-base leading-relaxed text-ink-600">
