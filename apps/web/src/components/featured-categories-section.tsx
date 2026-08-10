@@ -20,8 +20,7 @@ export function FeaturedCategoriesSection() {
           Layanan Kalibrasi per Kategori Alat
         </h2>
         <p className="mt-3 text-base leading-relaxed text-ink-600 sm:text-lg">
-           Mulai dari monitoring pasien hingga penyimpanan suhu, dengan cakupan akreditasi
-           KAN pada alat tertentu
+        Jelajahi kategori layanan kami, termasuk yang tercakup dalam scope akreditasi KAN
         </p>
       </div>
 
@@ -71,7 +70,7 @@ export function FeaturedCategoriesSection() {
         </div>
 
         <div className="mt-6 rounded-2xl border border-ink-100 bg-ink-50/60 p-5 sm:p-6">
-          <p className="text-sm font-semibold text-ink-900">Kategori Lainnya</p>
+          <p className="text-sm font-semibold text-ink-900">Kategori Alat Lainnya</p>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {otherCategories.map((category) => (
               <Link
@@ -88,7 +87,7 @@ export function FeaturedCategoriesSection() {
               href="/layanan"
               className="inline-flex items-center justify-center rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
             >
-              Lihat Semua Kategori & Jenis Alat
+              Lihat Semua Kategori Alat
             </Link>
           </div>
         </div>
