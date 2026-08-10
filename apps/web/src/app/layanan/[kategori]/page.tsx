@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getServiceCategory, serviceCategories } from "@/data/site";
 import { categoryImages } from "@/data/category-images";
-import { BackButton } from "@/components/back-button";
+import { Breadcrumb } from "@/components/breadcrumb";
 import { SectionCta } from "@/components/section-cta";
 
 function resolveSlug(kategoriParam: string) {
@@ -48,16 +47,16 @@ export default async function ServiceCategoryPage({
     <div>
       <section className="border-b border-ink-100 bg-brand-50/40">
         <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-          <BackButton fallbackHref="/layanan" label="Kembali" />
 
           <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px] lg:items-start">
             <div>
-              <nav className="text-sm text-ink-500" aria-label="Breadcrumb">
-                <Link href="/layanan" className="hover:text-brand-700">
-                  Layanan
-                </Link>{" "}
-                / <span className="text-ink-700">{category.name}</span>
-              </nav>
+              <Breadcrumb
+                items={[
+                  { label: "Beranda", href: "/" },
+                  { label: "Layanan", href: "/layanan" },
+                  { label: category.name },
+                ]}
+              />
 
               <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900 sm:text-4xl">
                 {category.h1}

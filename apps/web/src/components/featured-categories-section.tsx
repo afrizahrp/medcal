@@ -20,8 +20,8 @@ export function FeaturedCategoriesSection() {
           Layanan Kalibrasi per Kategori Alat
         </h2>
         <p className="mt-3 text-base leading-relaxed text-ink-600 sm:text-lg">
-          Dua kategori berikut mencakup alat yang masuk scope akreditasi KAN
-          — prioritas trust signal tertinggi untuk audit akreditasi.
+           Mulai dari monitoring pasien hingga penyimpanan suhu, dengan cakupan akreditasi
+           KAN pada alat tertentu
         </p>
       </div>
 
@@ -35,24 +35,24 @@ export function FeaturedCategoriesSection() {
               className="group flex flex-col overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-sm transition-colors hover:border-brand-300 hover:bg-brand-50/30"
             >
               {image ? (
-                <div className="relative aspect-[2/1] w-full shrink-0 overflow-hidden bg-brand-50 sm:aspect-[16/9] lg:aspect-[2.2/1]">
+                <div className="relative aspect-[2.2/1] w-full shrink-0 overflow-hidden bg-brand-50 sm:aspect-auto sm:h-[140px] lg:h-[132px]">
                   <Image
                     src={image.main}
                     alt={image.alt}
                     fill
                     sizes="(min-width: 1024px) 50vw, 100vw"
-                    className="object-contain object-center p-3 sm:p-4"
+                    className="object-contain object-center p-1.5 sm:p-2"
                   />
                 </div>
               ) : null}
-              <div className="flex flex-1 flex-col justify-between p-5 sm:p-6 lg:p-7">
+              <div className="flex flex-1 flex-col justify-between p-5 lg:px-6 lg:py-5">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-accent-100 px-3 py-1 text-xs font-semibold text-accent-800">
                       Terakreditasi KAN · LK-521-IDN
                     </span>
                   </div>
-                  <h3 className="mt-3 text-lg font-semibold text-ink-900 sm:mt-4 sm:text-xl">
+                  <h3 className="mt-3 text-lg font-semibold text-ink-900 sm:text-xl">
                     Kalibrasi {category.name}
                   </h3>
                   <p className="mt-2 text-base leading-relaxed text-ink-600">
@@ -60,7 +60,7 @@ export function FeaturedCategoriesSection() {
                     lainnya.
                   </p>
                 </div>
-                <span className="mt-4 inline-flex items-center text-sm font-medium text-brand-700 group-hover:text-brand-800 sm:mt-5">
+                <span className="mt-4 inline-flex items-center text-sm font-medium text-brand-700 group-hover:text-brand-800">
                   Lihat detail layanan →
                 </span>
               </div>

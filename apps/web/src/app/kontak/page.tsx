@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { company, waLink } from "@/data/site";
-import { BackButton } from "@/components/back-button";
+import { Breadcrumb } from "@/components/breadcrumb";
 
 export default function KontakPage() {
   const [status, setStatus] = useState<string | null>(null);
@@ -50,10 +50,17 @@ export default function KontakPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-      <BackButton fallbackHref="/" label="Kembali" />
 
       <div className="mx-auto mt-6 max-w-2xl text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-ink-900 sm:text-4xl">
+        <div className="flex justify-center">
+          <Breadcrumb
+            items={[
+              { label: "Beranda", href: "/" },
+              { label: "Kontak" },
+            ]}
+          />
+        </div>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900 sm:text-4xl">
           Konsultasi Kebutuhan Kalibrasi
         </h1>
         <p className="mt-3 text-base leading-relaxed text-ink-600">

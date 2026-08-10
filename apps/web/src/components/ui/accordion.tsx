@@ -42,29 +42,24 @@ function AccordionTrigger({
   children,
   ...props
 }: AccordionPrimitive.Trigger.Props) {
-  const title = typeof children === "string" ? children : undefined;
-
   return (
     <AccordionPrimitive.Header className="flex">
       <AccordionPrimitive.Trigger
         data-slot="accordion-trigger"
         className={joinClasses(
-          "group/accordion-trigger flex flex-1 items-center justify-between gap-2 px-4 py-4 text-left outline-none transition-colors hover:bg-ink-50/60 aria-disabled:pointer-events-none aria-disabled:opacity-50 sm:gap-4 sm:px-6 sm:py-5",
+          "group/accordion-trigger flex flex-1 items-start justify-between gap-2 px-4 py-4 text-left outline-none transition-colors hover:bg-ink-50/60 aria-disabled:pointer-events-none aria-disabled:opacity-50 sm:items-center sm:gap-4 sm:px-6 sm:py-5",
           resolveClassName(className),
         )}
         {...props}
       >
-        <span
-          title={title}
-          className="min-w-0 flex-1 truncate whitespace-nowrap text-[12px] font-medium leading-none text-ink-900 sm:text-[15px] sm:leading-snug md:text-[17px]"
-        >
+        <span className="min-w-0 flex-1 text-pretty text-sm font-medium leading-snug text-ink-900 sm:text-[15px] md:text-[17px]">
           {children}
         </span>
         <svg
           aria-hidden="true"
           viewBox="0 0 20 20"
           fill="none"
-          className="pointer-events-none h-3.5 w-3.5 shrink-0 text-ink-400 transition-transform duration-200 group-aria-expanded/accordion-trigger:rotate-180 sm:h-4 sm:w-4"
+          className="pointer-events-none mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-400 transition-transform duration-200 group-aria-expanded/accordion-trigger:rotate-180 sm:mt-0 sm:h-4 sm:w-4"
         >
           <path
             d="M5.75 7.75L10 12.25L14.25 7.75"
