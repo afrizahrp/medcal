@@ -6,7 +6,7 @@ export function AccreditationSection() {
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:items-center">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-ink-900 sm:text-2xl">
-            Akreditasi KAN & Standar SNI ISO/IEC 17025:2017
+            Terakreditasi KAN, Mengikuti SNI ISO/IEC 17025:2017
           </h2>
           <p className="mt-3 text-base leading-relaxed text-ink-600">
             Presisi Kalibrasi Medika terakreditasi Komite Akreditasi Nasional

@@ -31,7 +31,7 @@ export function ProcessSteps() {
           </h2>
           <p className="mt-3 text-base leading-relaxed text-ink-600 sm:text-lg">
             Ajukan kebutuhan kalibrasi, pantau prosesnya, dan akses sertifikat
-            Anda melalui satu layanan yang terintegrasi.
+            Anda melalui satu layanan yang terintegrasi
           </p>
         </div>
 
