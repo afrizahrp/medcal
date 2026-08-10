@@ -27,8 +27,11 @@ export function ProcessSteps() {
       <div className="mx-auto max-w-8xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
-            Proses Kalibrasi yang Jelas, Tanpa Ribet
+            Proses Kalibrasi Yang Sederhana dan Jelas
           </h2>
+          <p className="mt-3 text-base leading-relaxed text-ink-600">
+          Ajukan kebutuhan kalibrasi, pantau prosesnya, dan akses sertifikat Anda melalui satu layanan yang terintegrasi
+          </p>
         </div>
 
         <ol className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
