@@ -56,9 +56,9 @@ export function FeaturedCategoriesSection() {
                     <h3 className="mt-3 text-lg font-semibold text-ink-900 sm:text-xl">
                       Kalibrasi {category.name}
                     </h3>
-                    <p className="mt-2 text-base leading-relaxed text-ink-600">
-                      {category.exampleProducts.slice(0, 4).join(", ")}, dan
-                      lainnya.
+                    <p className="mt-2 truncate text-base leading-relaxed text-ink-600">
+                      {category.exampleProducts.slice(0, 3).join(", ")}, dan
+                      lain …
                     </p>
                   </div>
                   <span className="mt-4 inline-flex items-center text-sm font-medium text-brand-700 group-hover:text-brand-800">
