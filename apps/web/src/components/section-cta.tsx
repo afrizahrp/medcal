@@ -11,6 +11,8 @@ type SectionCtaProps = {
   onCtaClick?: () => void;
 };
 
+const CTA_TITLE = "Siap Memulai Kebutuhan Kalibrasi Anda?";
+const CTA_DESCRIPTION = "Konsultasikan kebutuhan kalibrasi alat kesehatan Anda dan kami bantu menentukan layanan yang sesuai";
 const CTA_LABEL = "Konsultasikan Kebutuhan Anda";
 const SECONDARY_CTA_LABEL = "Chat WhatsApp";
 const DEFAULT_WA_MESSAGE =
@@ -56,8 +58,8 @@ function SecondaryCtaLink({
 }
 
 export function SectionCta({
-  title,
-  description,
+  title =CTA_TITLE,
+  description = CTA_DESCRIPTION,
   href = "/kontak",
   waMessage = DEFAULT_WA_MESSAGE,
   variant = "plain",

@@ -9,17 +9,15 @@ export function AccreditationSection() {
             Terakreditasi KAN, Mengikuti SNI ISO/IEC 17025:2017
           </h2>
           <p className="mt-3 text-base leading-relaxed text-ink-600">
-            Presisi Kalibrasi Medika terakreditasi Komite Akreditasi Nasional
-            (KAN) dengan nomor {company.accreditation.number}, berlaku{" "}
-            {company.accreditation.validity}, mengikuti standar{" "}
-            {company.accreditation.standard}. Seluruh legalitas usaha kami
-            lengkap: Akta PT, NIB, NPWP, dan dokumen pendukung lainnya.
+          Legalitas usaha tersedia, termasuk Akta PT, NIB, NPWP, dan
+          dokumen pendukung lainnya.
           </p>
           <p className="mt-3 text-base leading-relaxed text-ink-600">
-            Saat ini scope akreditasi KAN kami mencakup 3 jenis alat.
-            Kalibrasi alat lain tetap dilakukan oleh laboratorium yang sama
-            mengikuti standar SNI ISO/IEC 17025:2017, di luar scope
-            akreditasi resmi.
+          Scope akreditasi KAN kami saat ini mencakup 3 jenis alat. 
+          Layanan kalibrasi untuk alat lainnya tetap dilakukan oleh laboratorium yang sama
+           sesuai SNI ISO/IEC 17025:2017. 
+           Kami terus mengembangkan kompetensi dan cakupan akreditasi untuk memenuhi kebutuhan
+           kalibrasi alat kesehatan yang lebih luas
           </p>
         </div>
 

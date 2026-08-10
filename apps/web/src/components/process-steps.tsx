@@ -7,7 +7,7 @@ const steps = [
   {
     step: "02",
     title: "Jadwal Disepakati",
-    body: "Kami mengonfirmasi kebutuhan dan menjadwalkan kalibrasi sesuai kebutuhan operasional Anda",
+    body: "Kami mengonfirmasi kebutuhan dan menjadwalkan kalibrasi sesuai kebutuhan Anda",
   },
   {
     step: "03",
@@ -43,7 +43,7 @@ export function ProcessSteps() {
             return (
               <li
                 key={s.step}
-                className="grid grid-cols-[2.25rem_1rem_minmax(0,1fr)] gap-x-3 lg:flex lg:flex-col lg:items-center lg:px-3 lg:text-center"
+                className="grid grid-cols-[2.25rem_1rem_minmax(0,1fr)] gap-x-3 lg:flex lg:flex-col lg:items-left lg:px-3 lg:text-left"
               >
                 {/* Mobile: step number beside the dot */}
                 <span className="pt-0.5 text-sm font-bold tabular-nums text-brand-700 lg:hidden">

@@ -111,9 +111,7 @@ export default function SertifikasiLegalitasPage() {
 
       <SectionCta
         variant="banner"
-        title="Siap Kalibrasi Tanpa Khawatir Sertifikat Ditolak Audit?"
-        description="Konsultasikan kebutuhan kalibrasi alat kesehatan Anda — kami bantu proses yang jelas dan tepat waktu."
-      />
+        />
     </div>
   );
 }
