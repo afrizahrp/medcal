@@ -23,7 +23,7 @@
       {
         "heading": "Patient Monitor, ECG & Alat Monitoring Lainnya",
         "badge": null,
-        "scopeDetail": "Dikalibrasi mengikuti metode standar Kemenkes RI / SNI ISO/IEC 17025:2017"
+        "scopeDetail": "Dikalibrasi sesuai metode yang berlaku berdasarkan Kemenkes RI dan SNI ISO/IEC 17025:2017."
       }
     ],
     "servedEquipment": [
@@ -176,7 +176,7 @@
       {
         "heading": "Kulkas Vaksin, Medical Freezer & Storage Farmasi",
         "badge": null,
-        "scopeDetail": "Dikalibrasi mengikuti metode standar Kemenkes RI / SNI ISO/IEC 17025:2017"
+        "scopeDetail": "Dikalibrasi sesuai metode yang berlaku berdasarkan Kemenkes RI dan SNI ISO/IEC 17025:2017."
       }
     ],
     "servedEquipment": [

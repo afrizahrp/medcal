@@ -85,9 +85,8 @@ export default async function ServiceCategoryPage({
                     priority
                   />
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-ink-500">
-                  Ilustrasi alat kalibrasi yang digunakan dalam proses —
-                  bukan alat yang dikalibrasi.
+                <p className="mt-2 text-xs leading-relaxed text-ink-500">
+                  Ilustrasi alat yang digunakan dalam proses kalibrasi 
                 </p>
               </div>
             ) : null}
@@ -116,17 +115,6 @@ export default async function ServiceCategoryPage({
           ))}
         </div>
 
-        {isCategoryAccredited(category) ? (
-          <div className="mt-8 rounded-2xl border border-brand-200 bg-brand-50/60 p-5">
-            <p className="text-base leading-relaxed text-ink-700">
-              {category.accreditation.scopeNote}
-              {category.accreditation.equipmentInScope.length > 0
-                ? ` — ${category.accreditation.equipmentInScope.join(", ")}.`
-                : null}
-            </p>
-          </div>
-        ) : null}
-
         <div className="mt-10">
           <h2 className="text-lg font-semibold text-ink-900 sm:text-xl">
             Peralatan dalam Layanan Ini
@@ -146,7 +134,7 @@ export default async function ServiceCategoryPage({
         <SectionCta
           title={`Butuh jadwal kalibrasi alat ${category.name.toLowerCase()}?`}
           ctaLabel={`Konsultasikan Jadwal Kalibrasi`}
-          description={`Konsultasikan kebutuhan kalibrasi alat Anda dan kami bantu menentukan jadwal yang sesuai`}
+          description="Konsultasikan kebutuhan kalibrasi alat Anda dan kami bantu menentukan jadwal yang sesuai."
           waMessage={`Halo, saya ingin konsultasi kalibrasi ${category.name.toLowerCase()} untuk alat ${category.servedEquipment.join(", ")}.`}
         />
       </section>
