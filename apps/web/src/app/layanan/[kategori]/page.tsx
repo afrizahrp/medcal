@@ -145,7 +145,8 @@ export default async function ServiceCategoryPage({
 
         <SectionCta
           title={`Butuh jadwal kalibrasi alat ${category.name.toLowerCase()}?`}
-            description={`Konsultasikan kebutuhan kalibrasi alat Anda dan kami bantu menentukan jadwal yang sesuai`}
+          ctaLabel={`Konsultasikan Jadwal Kalibrasi`}
+          description={`Konsultasikan kebutuhan kalibrasi alat Anda dan kami bantu menentukan jadwal yang sesuai`}
           waMessage={`Halo, saya ingin konsultasi kalibrasi ${category.name.toLowerCase()} untuk alat ${category.servedEquipment.join(", ")}.`}
         />
       </section>

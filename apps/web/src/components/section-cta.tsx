@@ -4,6 +4,7 @@ import { waLink } from "@/data/site";
 type SectionCtaProps = {
   title?: string;
   description?: string;
+  ctaLabel?: string;
   href?: string;
   waMessage?: string;
   variant?: "plain" | "banner" | "card" | "actions" | "nav";
@@ -12,8 +13,9 @@ type SectionCtaProps = {
 };
 
 const CTA_TITLE = "Siap Memulai Kebutuhan Kalibrasi Anda?";
-const CTA_DESCRIPTION = "Konsultasikan kebutuhan kalibrasi alat kesehatan Anda dan kami bantu menentukan layanan yang sesuai";
 const CTA_LABEL = "Konsultasikan Kebutuhan Anda";
+const CTA_DESCRIPTION =
+  "Konsultasikan kebutuhan kalibrasi alat kesehatan Anda dan kami bantu menentukan layanan yang sesuai";
 const SECONDARY_CTA_LABEL = "Chat WhatsApp";
 const DEFAULT_WA_MESSAGE =
   "Halo, saya ingin konsultasi kebutuhan kalibrasi alat kesehatan.";
@@ -26,14 +28,16 @@ function PrimaryCtaLink({
   href,
   className,
   onClick,
+  label,
 }: {
   href: string;
   className: string;
   onClick?: () => void;
+  label: string;
 }) {
   return (
     <Link href={href} onClick={onClick} className={className}>
-      {CTA_LABEL}
+      {label}
     </Link>
   );
 }
@@ -58,8 +62,9 @@ function SecondaryCtaLink({
 }
 
 export function SectionCta({
-  title =CTA_TITLE,
+  title = CTA_TITLE,
   description = CTA_DESCRIPTION,
+  ctaLabel = CTA_LABEL,
   href = "/kontak",
   waMessage = DEFAULT_WA_MESSAGE,
   variant = "plain",
@@ -71,6 +76,7 @@ export function SectionCta({
       <PrimaryCtaLink
         href={href}
         onClick={onCtaClick}
+        label={ctaLabel}
         className={
           className ??
           "inline-flex items-center justify-center rounded-full bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
@@ -90,6 +96,7 @@ export function SectionCta({
         <PrimaryCtaLink
           href={href}
           onClick={onCtaClick}
+          label={ctaLabel}
           className="inline-flex items-center justify-center rounded-full bg-brand-600 px-6 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
         />
         <SecondaryCtaLink
@@ -123,6 +130,7 @@ export function SectionCta({
             <PrimaryCtaLink
               href={href}
               onClick={onCtaClick}
+              label={ctaLabel}
               className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3.5 text-base font-semibold text-brand-800 shadow-sm transition-colors hover:bg-brand-50"
             />
             <SecondaryCtaLink
@@ -159,6 +167,7 @@ export function SectionCta({
           <PrimaryCtaLink
             href={href}
             onClick={onCtaClick}
+            label={ctaLabel}
             className="inline-flex items-center justify-center rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-700"
           />
           <SecondaryCtaLink
@@ -191,6 +200,7 @@ export function SectionCta({
         <PrimaryCtaLink
           href={href}
           onClick={onCtaClick}
+          label={ctaLabel}
           className="inline-flex items-center justify-center rounded-full bg-brand-600 px-6 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
         />
         <SecondaryCtaLink
