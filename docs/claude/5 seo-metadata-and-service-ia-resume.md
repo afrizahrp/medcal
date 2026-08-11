@@ -95,12 +95,40 @@ Kategori → Product category → Products
 
 ---
 
-## 4. Pemisahan tanggung jawab metadata (target)
+## 4. Refinement kartu index `/layanan`
+
+Audit IA `/layanan` menyimpulkan metadata hub sudah OK; yang diperbaiki hanya framing kartu.
+
+### Tidak diubah
+- Title, meta description, canonical `/layanan`
+- Route / URL kartu (`/layanan/kalibrasi-{slug}`)
+- Struktur data kategori, TrustBadges, sitemap, robots, OG/Twitter/JSON-LD
+
+### Perubahan UI (`service-category-card.tsx`)
+
+| Aspek | Sebelum | Sesudah |
+|---|---|---|
+| Teaser peralatan | `Sphygmomanometer, Bed Side Monitor, …, dan lainnya.` | `Peralatan yang dilayani: Sphygmomanometer, Bed Side Monitor, …, dan lainnya.` |
+| Badge partial KAN | `KAN` | `Scope KAN` |
+
+- Tetap: `servedEquipment.slice(0, 3)`
+- Badge hanya jika `accreditation.status !== "none"` (`isCategoryAccredited`)
+- Framed sebagai **Service → Equipment Served**, bukan Category → Products
+
+### Hasil yang diharapkan
+- 8 kartu tetap render
+- Kategori `status: "none"` tanpa badge
+- Kategori partial (monitoring-pasien, cold-chain) menampilkan **Scope KAN**
+
+---
+
+## 5. Pemisahan tanggung jawab metadata (target)
 
 | Layer | Isi |
 |---|---|
 | Global | `metadataBase`, title template/default, description jasa umum |
 | Homepage | Brand + value prop; KAN berkualifikasi |
+| Service index (`/layanan`) | Positioning 8 layanan + KAN “untuk item dalam scope” (metadata dibiarkan) |
 | Service category | `h1` + `metaDescription` spesifik |
 | Sertifikasi & legalitas | Detail KAN LK-521-IDN, SNI 17025, legalitas |
 | Kontak | Kontak/konsultasi + canonical |
@@ -112,7 +140,7 @@ Sumber kebenaran scope KAN tetap:
 
 ---
 
-## 5. File utama yang tersentuh
+## 6. File utama yang tersentuh
 
 - `apps/web/src/data/service-categories.json`
 - `apps/web/src/data/site.ts`
@@ -126,9 +154,10 @@ Sumber kebenaran scope KAN tetap:
 
 ---
 
-## 6. Belum dikerjakan (backlog SEO)
+## 7. Belum dikerjakan (backlog SEO)
 
 - Open Graph (`og:title`, `og:description`, `og:image`)
 - Twitter/X card metadata
 - JSON-LD / structured data
-- Review ulang title/description halaman `/layanan` & `/sertifikasi-legalitas` bila perlu selaras penuh dengan hierarki di atas
+- Review metadata `/sertifikasi-legalitas` bila perlu selaras penuh dengan hierarki di atas
+- Opsional: H2 pada outline `/layanan` (H1 → H3 saat ini)
