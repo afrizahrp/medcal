@@ -82,6 +82,18 @@ export function getServiceCategory(slug: string) {
   return serviceCategories.find((c) => c.slug === slug);
 }
 
+export function getKanEquipmentForCategory(categorySlug: string) {
+  return kanAccreditedProducts.filter(
+    (product) => product.categorySlug === categorySlug,
+  );
+}
+
+export function hasKanScopeForCategory(categorySlug: string) {
+  return kanAccreditedProducts.some(
+    (product) => product.categorySlug === categorySlug,
+  );
+}
+
 export function isCategoryAccredited(category: ServiceCategory) {
-  return category.accreditation.status !== "none";
+  return hasKanScopeForCategory(category.slug);
 }

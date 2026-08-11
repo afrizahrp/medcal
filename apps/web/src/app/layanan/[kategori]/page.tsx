@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { getServiceCategory, serviceCategories, isCategoryAccredited } from "@/data/site";
+import { getServiceCategory, serviceCategories, getKanEquipmentForCategory } from "@/data/site";
 import { categoryImages } from "@/data/category-images";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { SectionCta } from "@/components/section-cta";
@@ -42,6 +42,11 @@ export default async function ServiceCategoryPage({
   if (!category) notFound();
 
   const image = categoryImages[category.slug];
+  const kanEquipment = getKanEquipmentForCategory(category.slug);
+  const kanScopeBadgeLabel =
+    kanEquipment.length > 0
+      ? `${kanEquipment.map((item) => item.name).join(" & ")} dalam Scope KAN`
+      : null;
 
   return (
     <div>
@@ -62,9 +67,9 @@ export default async function ServiceCategoryPage({
                 {category.h1}
               </h1>
 
-              {isCategoryAccredited(category) ? (
+              {kanScopeBadgeLabel ? (
                 <span className="mt-4 inline-flex items-center rounded-full bg-brand-600 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white">
-                  Sphygmomanometer & Bed Side Monitor dalam Scope KAN
+                  {kanScopeBadgeLabel}
                 </span>
               ) : null}
 
