@@ -13,6 +13,16 @@ export const metadata: Metadata = {
   },
   description:
     "Jasa kalibrasi alat kesehatan dan laboratorium untuk rumah sakit serta laboratorium",
+  openGraph: {
+    type: "website",
+    locale: "id_ID",
+    siteName: "Presisi Kalibrasi Medika",
+    images: ["/images/og/pkm-og-default.webp"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ["/images/og/pkm-og-default.webp"],
+  },
 };
 
 export default function RootLayout({
