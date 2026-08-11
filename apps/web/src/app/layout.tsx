@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     template: "%s — Presisi Kalibrasi Medika",
   },
   description:
-    "Jasa kalibrasi alat kesehatan & laboratorium untuk rumah sakit dan laboratorium tipe C/D. Terakreditasi KAN (LK-521-IDN) & SNI ISO/IEC 17025:2017.",
+    "Jasa kalibrasi alat kesehatan dan laboratorium untuk rumah sakit serta laboratorium",
 };
 
 export default function RootLayout({

@@ -6,10 +6,10 @@ export const company = {
   brandName: "Presisi Kalibrasi Medika",
   address:
     "Gedung Graha Bumi Indah Lantai 3, Jl. Inspeksi Kalimalang Kavling Agraria Blok E No. 10, Duren Sawit, Jakarta Timur, DKI Jakarta",
-  phoneDisplay: "0821-2378-2666",
-  phoneRaw: "082123782666",
-  whatsappNumber: "6282123782666",
-  email: "presisikalibrasimedika@gmail.com",
+  phoneDisplay: "62 857-7329-2530",
+  phoneRaw: "6285773292530",
+  whatsappNumber: "6285773292530",
+  email: "info@kalibrasimedika.co.id",
   accreditation: {
     body: "KAN",
     number: "LK-521-IDN",
