@@ -21,7 +21,7 @@ export function ServiceCategoryCard({
           </span>
           {isCategoryAccredited(category) ? (
             <span className="rounded-full bg-brand-600 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
-              KAN
+              Scope KAN
             </span>
           ) : null}
         </div>
@@ -29,6 +29,7 @@ export function ServiceCategoryCard({
           Kalibrasi {category.name}
         </h3>
         <p className="mt-1.5 line-clamp-2 text-base leading-relaxed text-ink-600">
+          Peralatan yang dilayani:{" "}
           {category.servedEquipment.slice(0, 3).join(", ")}, dan lainnya.
         </p>
       </div>
