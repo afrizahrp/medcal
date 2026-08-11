@@ -86,7 +86,7 @@ export default async function ServiceCategoryPage({
                   />
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-ink-500">
-                  Ilustrasi alat yang digunakan dalam proses kalibrasi 
+                  Ilustrasi alat yang digunakan dalam proses kalibrasi, bukan alat yang dikalibrasi.
                 </p>
               </div>
             ) : null}
