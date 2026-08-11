@@ -6,7 +6,7 @@ import { Breadcrumb } from "@/components/breadcrumb";
 export const metadata: Metadata = {
   title: "Sertifikasi & Legalitas",
   description:
-    "Akreditasi KAN LK-521-IDN, standar SNI ISO/IEC 17025:2017, dan legalitas usaha lengkap PT Presisi Kalibrasi Medika.",
+    "Akreditasi KAN LK-521-IDN dengan scope 3 jenis alat, standar SNI ISO/IEC 17025:2017, serta dokumen legalitas PT Presisi Kalibrasi Medika.",
   alternates: { canonical: "/sertifikasi-legalitas" },
 };
 
@@ -35,9 +35,8 @@ export default function SertifikasiLegalitasPage() {
               Sertifikasi & Legalitas
             </h1>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-600">
-              PT Presisi Kalibrasi Medika beroperasi dengan legalitas usaha
-              lengkap dan akreditasi resmi dari Komite Akreditasi Nasional
-              (KAN).
+              PT Presisi Kalibrasi Medika memiliki dokumen legalitas usaha serta
+              akreditasi KAN untuk ruang lingkup kalibrasi tertentu.
             </p>
           </div>
         </div>
