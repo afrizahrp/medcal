@@ -14,6 +14,7 @@ export const metadata: Metadata = {
   description:
     "Jasa kalibrasi alat kesehatan dan laboratorium. Terakreditasi KAN (LK-521-IDN) untuk item dalam ruang lingkup, mengikuti SNI ISO/IEC 17025:2017.",
   alternates: { canonical: "/" },
+  openGraph: { url: "/" },
 };
 
 export default function HomePage() {

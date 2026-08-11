@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   description:
     "Akreditasi KAN LK-521-IDN dengan scope 3 jenis alat, standar SNI ISO/IEC 17025:2017, serta dokumen legalitas PT Presisi Kalibrasi Medika.",
   alternates: { canonical: "/sertifikasi-legalitas" },
+  openGraph: { url: "/sertifikasi-legalitas" },
 };
 
 const legalDocs = [

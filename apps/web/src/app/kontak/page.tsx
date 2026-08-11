@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   description:
     "Hubungi Presisi Kalibrasi Medika untuk konsultasi kebutuhan kalibrasi alat kesehatan dan laboratorium.",
   alternates: { canonical: "/kontak" },
+  openGraph: { url: "/kontak" },
 };
 
 export default function KontakPage() {

@@ -25,10 +25,13 @@ export async function generateMetadata({
   const category = getServiceCategory(resolveSlug(kategori));
   if (!category) return {};
 
+  const path = `/layanan/kalibrasi-${category.slug}`;
+
   return {
     title: category.h1,
     description: category.metaDescription,
-    alternates: { canonical: `/layanan/kalibrasi-${category.slug}` },
+    alternates: { canonical: path },
+    openGraph: { url: path },
   };
 }
 
