@@ -27,7 +27,7 @@ export async function generateMetadata({
 
   return {
     title: category.h1,
-    description: category.intro,
+    description: category.metaDescription,
     alternates: { canonical: `/layanan/kalibrasi-${category.slug}` },
   };
 }

@@ -55,6 +55,7 @@ export type ServiceCategory = {
   name: string;
   h1: string;
   intro: string;
+  metaDescription: string;
   keywords: {
     primary: string;
     secondary: string[];
