@@ -1,6 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
-import { serviceCategories, getServiceCategory } from "@/data/site";
+import {
+  serviceCategories,
+  getServiceCategory,
+  isCategoryAccredited,
+} from "@/data/site";
 import { categoryImages } from "@/data/category-images";
 
 const featuredSlugs = ["monitoring-pasien", "cold-chain"] as const;
@@ -48,9 +52,11 @@ export function FeaturedCategoriesSection() {
                 <div className="flex flex-1 flex-col justify-between p-5 lg:px-6 lg:py-5">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-accent-100 px-3 py-1 text-xs font-semibold text-accent-800">
-                        Terakreditasi KAN · LK-521-IDN
-                      </span>
+                      {isCategoryAccredited(category) ? (
+                        <span className="rounded-full bg-accent-100 px-3 py-1 text-xs font-semibold text-accent-800">
+                          Scope KAN
+                        </span>
+                      ) : null}
                     </div>
                     <h3 className="mt-3 text-lg font-semibold text-ink-900 sm:text-xl">
                       Kalibrasi {category.name}

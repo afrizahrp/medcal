@@ -5,6 +5,8 @@ import { FeaturedCategoriesSection } from "@/components/featured-categories-sect
 import { ProcessSteps } from "@/components/process-steps";
 import { AccreditationSection } from "@/components/accreditation-section";
 import { SectionCta } from "@/components/section-cta";
+import { JsonLd } from "@/components/json-ld";
+import { websiteJsonLd } from "@/data/structured-data";
 
 export const metadata: Metadata = {
   title: {
@@ -20,6 +22,7 @@ export const metadata: Metadata = {
 export default function HomePage() {
   return (
     <>
+      <JsonLd data={websiteJsonLd()} />
       <Hero />
       <PainPointSection />
       <FeaturedCategoriesSection />

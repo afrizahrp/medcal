@@ -56,7 +56,7 @@ export function KontakForm() {
           <Breadcrumb
             items={[
               { label: "Beranda", href: "/" },
-              { label: "Kontak" },
+              { label: "Kontak", href: "/kontak" },
             ]}
           />
         </div>

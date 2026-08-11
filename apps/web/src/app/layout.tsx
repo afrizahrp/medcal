@@ -3,7 +3,9 @@ import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { WhatsAppFab } from "@/components/whatsapp-fab";
+import { JsonLd } from "@/components/json-ld";
 import { siteUrl } from "@/data/seo";
+import { professionalServiceJsonLd } from "@/data/structured-data";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -33,6 +35,7 @@ export default function RootLayout({
   return (
     <html lang="id">
       <body className="flex min-h-screen flex-col bg-white text-ink-900 antialiased">
+        <JsonLd data={professionalServiceJsonLd()} />
         <SiteHeader />
         <main className="flex-1">{children}</main>
         <SiteFooter />

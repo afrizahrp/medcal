@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getServiceCategory, serviceCategories, getKanEquipmentForCategory } from "@/data/site";
 import { categoryImages } from "@/data/category-images";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { SectionCta } from "@/components/section-cta";
+import { JsonLd } from "@/components/json-ld";
+import { serviceJsonLd } from "@/data/structured-data";
 
 function resolveSlug(kategoriParam: string) {
   return kategoriParam.startsWith("kalibrasi-")
@@ -14,6 +17,50 @@ function resolveSlug(kategoriParam: string) {
 
 export function generateStaticParams() {
   return serviceCategories.map((c) => ({ kategori: `kalibrasi-${c.slug}` }));
+}
+
+function tokenizeEquipment(equipment: string[]) {
+  return new Set(
+    equipment
+      .flatMap((entry) =>
+        entry
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}\s]/gu, " ")
+          .split(/\s+/),
+      )
+      .filter((token) => token.length >= 4),
+  );
+}
+
+function getRelatedCategories(currentSlug: string) {
+  const current = getServiceCategory(currentSlug);
+  if (!current) return [];
+
+  const currentTokens = tokenizeEquipment(current.servedEquipment);
+  const scored = serviceCategories
+    .filter((candidate) => candidate.slug !== currentSlug)
+    .map((candidate) => {
+      const candidateTokens = tokenizeEquipment(candidate.servedEquipment);
+      let overlap = 0;
+      for (const token of candidateTokens) {
+        if (currentTokens.has(token)) overlap += 1;
+      }
+      return { candidate, overlap };
+    })
+    .sort((a, b) => b.overlap - a.overlap);
+
+  const withOverlap = scored.filter((item) => item.overlap > 0).slice(0, 3);
+  if (withOverlap.length === 3) {
+    return withOverlap.map((item) => item.candidate);
+  }
+
+  const fallback = scored
+    .filter(
+      (item) => !withOverlap.some((picked) => picked.candidate.slug === item.candidate.slug),
+    )
+    .slice(0, 3 - withOverlap.length);
+
+  return [...withOverlap, ...fallback].map((item) => item.candidate);
 }
 
 export async function generateMetadata({
@@ -45,6 +92,8 @@ export default async function ServiceCategoryPage({
   if (!category) notFound();
 
   const image = categoryImages[category.slug];
+  const path = `/layanan/kalibrasi-${category.slug}`;
+  const relatedCategories = getRelatedCategories(category.slug);
   const kanEquipment = getKanEquipmentForCategory(category.slug);
   const kanScopeBadgeLabel =
     kanEquipment.length > 0
@@ -53,6 +102,13 @@ export default async function ServiceCategoryPage({
 
   return (
     <div>
+      <JsonLd
+        data={serviceJsonLd({
+          name: category.h1,
+          description: category.intro,
+          path,
+        })}
+      />
       <section className="border-b border-ink-100 bg-brand-50/40">
         <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
 
@@ -62,7 +118,7 @@ export default async function ServiceCategoryPage({
                 items={[
                   { label: "Beranda", href: "/" },
                   { label: "Layanan", href: "/layanan" },
-                  { label: category.name },
+                  { label: category.name, href: path },
                 ]}
               />
 
@@ -137,6 +193,23 @@ export default async function ServiceCategoryPage({
               </li>
             ))}
           </ul>
+        </div>
+
+        <div className="mt-10">
+          <h2 className="text-lg font-semibold text-ink-900 sm:text-xl">
+            Layanan Terkait
+          </h2>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {relatedCategories.map((relatedCategory) => (
+              <Link
+                key={relatedCategory.slug}
+                href={`/layanan/kalibrasi-${relatedCategory.slug}`}
+                className="rounded-full border border-ink-200 bg-white px-3.5 py-1.5 text-sm text-ink-700 hover:border-brand-300 hover:text-brand-800"
+              >
+                Kalibrasi {relatedCategory.name}
+              </Link>
+            ))}
+          </div>
         </div>
 
         <SectionCta

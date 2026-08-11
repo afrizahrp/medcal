@@ -23,7 +23,7 @@ export default function LayananPage() {
               <Breadcrumb
                 items={[
                   { label: "Beranda", href: "/" },
-                  { label: "Layanan" },
+                  { label: "Layanan", href: "/layanan" },
                 ]}
               />
             </div>

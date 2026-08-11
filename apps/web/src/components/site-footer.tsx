@@ -78,12 +78,12 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-2 border-t border-ink-100 pt-6 text-xs text-ink-400 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-10 flex flex-col gap-2 border-t border-ink-100 pt-6 text-xs text-ink-400 sm:flex-row sm:items-center sm:justify-center">
           <p>
             © {new Date().getFullYear()} PT Presisi Kalibrasi Medika. Semua
             hak cipta dilindungi.
           </p>
-          <p>Terakreditasi KAN {company.accreditation.number}</p>
+          <p>Akreditasi KAN {company.accreditation.number} · 3 item dalam scope</p>
         </div>
       </div>
     </footer>

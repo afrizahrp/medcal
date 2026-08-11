@@ -29,7 +29,10 @@ export default function SertifikasiLegalitasPage() {
             <Breadcrumb
               items={[
                 { label: "Beranda", href: "/" },
-                { label: "Sertifikasi & Legalitas" },
+                {
+                  label: "Sertifikasi & Legalitas",
+                  href: "/sertifikasi-legalitas",
+                },
               ]}
             />
             <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900 sm:text-4xl">
