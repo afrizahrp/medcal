@@ -3,7 +3,7 @@
     "slug": "monitoring-pasien",
     "name": "Monitoring Pasien",
     "h1": "Jasa Kalibrasi Alat Monitoring Pasien Rumah Sakit",
-    "intro": "Layanan pengujian dan kalibrasi alat monitoring pasien untuk membantu memastikan akurasi pengukuran dan melengkapi dokumentasi akreditasi fasilitas kesehatan. Sphygmomanometer dan Bed Side Monitor dikalibrasi dalam ruang lingkup akreditasi KAN LK-521-IDN",
+    "intro": "Layanan pengujian dan kalibrasi alat monitoring pasien untuk membantu memastikan akurasi pengukuran dan melengkapi dokumentasi akreditasi fasilitas kesehatan. Sphygmomanometer (tensimeter) dan Bed Side Monitor dikalibrasi dalam ruang lingkup akreditasi KAN LK-521-IDN",
     "metaDescription": "Jasa kalibrasi alat monitoring pasien untuk rumah sakit. Sphygmomanometer dan Bed Side Monitor dalam scope akreditasi KAN LK-521-IDN.",
     "keywords": {
       "primary": "kalibrasi alat monitoring pasien",
@@ -159,13 +159,13 @@
     }
   },
   {
-    "slug": "cold-chain",
-    "name": "Cold Chain & Penyimpanan Suhu",
-    "h1": "Jasa Kalibrasi Cold Chain & Penyimpanan Suhu Medis",
-    "intro": "Layanan kalibrasi alat penyimpanan suhu medis. Khusus Blood Bank Refrigerator dilakukan dalam ruang lingkup akreditasi KAN LK-521-IDN untuk rentang suhu 1°C s/d 9°C. Peralatan cold chain lainnya dikalibrasi sesuai standar SNI ISO/IEC 17025:2017.",
-    "metaDescription": "Jasa kalibrasi cold chain dan penyimpanan suhu medis. Blood Bank Refrigerator dalam scope akreditasi KAN LK-521-IDN (1°C–9°C).",
+    "slug": "blood-bank",
+    "name": "Blood Bank & Penyimpanan Suhu",
+    "h1": "Jasa Kalibrasi Blood Bank & Penyimpanan Suhu Medis",
+    "intro": "Layanan kalibrasi alat penyimpanan suhu medis. Khusus Blood Bank Refrigerator dilakukan dalam ruang lingkup akreditasi KAN LK-521-IDN untuk rentang suhu 1°C s/d 9°C. Peralatan blood bank & penyimpanan suhu lainnya dikalibrasi sesuai standar SNI ISO/IEC 17025:2017.",
+    "metaDescription": "Jasa kalibrasi blood bank dan penyimpanan suhu medis. Blood Bank Refrigerator dalam scope akreditasi KAN LK-521-IDN (1°C–9°C).",
     "keywords": {
-      "primary": "kalibrasi cold chain medis",
+      "primary": "kalibrasi blood bank medis",
       "secondary": [
         "kalibrasi blood bank refrigerator scope KAN LK-521-IDN",
         "kalibrasi kulkas vaksin puskesmas",

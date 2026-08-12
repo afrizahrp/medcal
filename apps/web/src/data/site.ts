@@ -34,7 +34,7 @@ export const kanAccreditedProducts = [
   {
     name: "Blood Bank Refrigerator",
     scope: "Suhu 1–9°C",
-    categorySlug: "cold-chain",
+    categorySlug: "blood-bank",
   },
   {
     name: "Sphygmomanometer",

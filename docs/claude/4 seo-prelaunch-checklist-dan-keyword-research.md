@@ -260,7 +260,7 @@ penggantian total" di checklist atas.
 /layanan/kalibrasi-respirasi
 /layanan/kalibrasi-neonatal-termal
 /layanan/kalibrasi-infus-pompa-cairan
-/layanan/kalibrasi-cold-chain
+/layanan/kalibrasi-blood-bank
 /layanan/kalibrasi-sterilisasi
 /layanan/kalibrasi-laboratorium
 /layanan/kalibrasi-fasilitas-umum
@@ -270,7 +270,7 @@ penggantian total" di checklist atas.
 /kontak
 ```
 
-Kategori dengan item terakreditasi (`monitoring-pasien`, `cold-chain`)
+Kategori dengan item terakreditasi (`monitoring-pasien`, `blood-bank`)
 diprioritaskan sebagai halaman pertama yang ditulis — sudah punya bukti
 akreditasi konkret untuk trust signal terkuat, sesuai diskusi
 sebelumnya.

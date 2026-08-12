@@ -1,0 +1,230 @@
+{
+  "name": "PKM Keyword-to-Page Map v1",
+  "version": 1,
+  "status": "locked",
+  "locked": true,
+  "purpose": "SEO research/decision artifact; not consumed by the Next.js runtime.",
+  "source": {
+    "primary": "Google Keyword Planner",
+    "refinement": "Gemini Pro Keyword-to-Page and Keyword-to-Copy analysis"
+  },
+  "kan": {
+    "qualificationRequired": true,
+    "sourceOfTruth": "kanAccreditedProducts",
+    "items": [
+      "Blood Bank Refrigerator",
+      "Sphygmomanometer",
+      "Bed Side Monitor"
+    ]
+  },
+  "pages": {
+    "/": {
+      "primary": {
+        "keyword": "kalibrasi alat kesehatan",
+        "volume": 500
+      },
+      "secondary": [
+        {
+          "keyword": "pengujian dan kalibrasi alat kesehatan",
+          "volume": 50
+        }
+      ],
+      "valuePillar": [
+        "seo-demand",
+        "business-value"
+      ],
+      "kanQualificationRequired": true,
+      "status": "locked",
+      "notes": "Core head-term owner for kalibrasi alat kesehatan."
+    },
+    "/layanan": {
+      "primary": null,
+      "secondary": [],
+      "valuePillar": [
+        "navigational",
+        "ia"
+      ],
+      "kanQualificationRequired": false,
+      "status": "locked",
+      "notes": "Service hub; no measurable primary keyword assigned."
+    },
+    "/layanan/kalibrasi-monitoring-pasien": {
+      "primary": {
+        "keyword": "kalibrasi tensimeter",
+        "volume": 50
+      },
+      "secondary": [
+        {
+          "keyword": "jasa kalibrasi tensimeter",
+          "volume": 50
+        },
+        {
+          "keyword": "kalibrasi sphygmomanometer",
+          "volume": 50
+        }
+      ],
+      "valuePillar": [
+        "seo-demand",
+        "business-value"
+      ],
+      "kanQualificationRequired": true,
+      "status": "locked",
+      "notes": "KAN claims limited to Sphygmomanometer and Bed Side Monitor."
+    },
+    "/layanan/kalibrasi-respirasi": {
+      "primary": {
+        "keyword": "kalibrasi ventilator",
+        "volume": 50
+      },
+      "secondary": [],
+      "candidates": [
+        {
+          "keyword": "kalibrasi mesin anestesi",
+          "volume": 50,
+          "status": "insufficient-evidence"
+        }
+      ],
+      "valuePillar": [
+        "seo-demand",
+        "business-value"
+      ],
+      "kanQualificationRequired": false,
+      "status": "locked",
+      "notes": "Mesin anestesi is not a locked target until business/service availability is verified."
+    },
+    "/layanan/kalibrasi-neonatal-termal": {
+      "primary": null,
+      "secondary": [],
+      "valuePillar": [
+        "business-value",
+        "navigational",
+        "ia"
+      ],
+      "kanQualificationRequired": false,
+      "status": "locked",
+      "notes": "No measurable keyword target in the current GKP dataset."
+    },
+    "/layanan/kalibrasi-infus-pompa-cairan": {
+      "primary": null,
+      "secondary": [],
+      "valuePillar": [
+        "business-value",
+        "navigational",
+        "ia"
+      ],
+      "kanQualificationRequired": false,
+      "status": "locked",
+      "notes": "No measurable keyword target in the current GKP dataset."
+    },
+    "/layanan/kalibrasi-blood-bank": {
+      "primary": null,
+      "secondary": [],
+      "candidates": [
+        {
+          "keyword": "kalibrasi blood bank refrigerator",
+          "volume": 0,
+          "status": "business-trust-candidate"
+        }
+      ],
+      "valuePillar": [
+        "business-value",
+        "navigational",
+        "ia"
+      ],
+      "kanQualificationRequired": true,
+      "status": "locked",
+      "notes": "Blood Bank Refrigerator is a KAN/trust signal, not a measurable SEO-demand target."
+    },
+    "/layanan/kalibrasi-sterilisasi": {
+      "primary": {
+        "keyword": "kalibrasi autoclave",
+        "volume": 50
+      },
+      "secondary": [
+        {
+          "keyword": "kalibrasi autoklaf",
+          "volume": 50
+        }
+      ],
+      "valuePillar": [
+        "seo-demand",
+        "business-value"
+      ],
+      "kanQualificationRequired": false,
+      "status": "locked",
+      "notes": "Autoclave is primary; autoklaf is a semantic variant and should not be forced repeatedly."
+    },
+    "/layanan/kalibrasi-laboratorium": {
+      "primary": {
+        "keyword": "kalibrasi alat laboratorium",
+        "volume": 500
+      },
+      "secondary": [
+        {
+          "keyword": "kalibrasi centrifuge",
+          "volume": 50
+        }
+      ],
+      "valuePillar": [
+        "seo-demand",
+        "business-value"
+      ],
+      "kanQualificationRequired": false,
+      "status": "locked",
+      "notes": "Core head-term owner for laboratory calibration."
+    },
+    "/layanan/kalibrasi-fasilitas-umum": {
+      "primary": null,
+      "secondary": [],
+      "candidates": [
+        {
+          "keyword": "kalibrasi suction pump",
+          "volume": 50,
+          "status": "map-conflict"
+        }
+      ],
+      "valuePillar": [
+        "business-value",
+        "navigational",
+        "ia"
+      ],
+      "kanQualificationRequired": false,
+      "status": "locked",
+      "notes": "Suction Pump ownership conflicts with current Respirasi service data; do not move equipment for SEO alone."
+    },
+    "/sertifikasi-legalitas": {
+      "primary": null,
+      "secondary": [],
+      "valuePillar": [
+        "business-value",
+        "navigational",
+        "ia"
+      ],
+      "kanQualificationRequired": true,
+      "status": "locked",
+      "notes": "Trust/accreditation authority page; no measurable SEO keyword assigned."
+    },
+    "/kontak": {
+      "primary": null,
+      "secondary": [],
+      "candidates": [
+        {
+          "keyword": "biaya kalibrasi alat kesehatan",
+          "volume": 50,
+          "status": "commercial-opportunity"
+        },
+        {
+          "keyword": "tarif kalibrasi alat kesehatan",
+          "volume": 50,
+          "status": "commercial-opportunity"
+        }
+      ],
+      "valuePillar": [
+        "business-value"
+      ],
+      "kanQualificationRequired": false,
+      "status": "locked",
+      "notes": "Quotation/conversion page; pricing keywords remain opportunities, not locked canonical ownership."
+    }
+  }
+}

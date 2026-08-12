@@ -7,7 +7,7 @@ import {
 } from "@/data/site";
 import { categoryImages } from "@/data/category-images";
 
-const featuredSlugs = ["monitoring-pasien", "cold-chain"] as const;
+const featuredSlugs = ["monitoring-pasien", "blood-bank"] as const;
 
 export function FeaturedCategoriesSection() {
   const featured = featuredSlugs

@@ -31,11 +31,11 @@
   { "name": "Blood/Solution Warmer", "categorySlug": "infus-pompa-cairan", "categoryName": "Infus & Pompa Cairan", "accredited": false },
   { "name": "Breast Pump", "categorySlug": "infus-pompa-cairan", "categoryName": "Infus & Pompa Cairan", "accredited": false },
 
-  { "name": "Blood Bank Refrigerator", "categorySlug": "cold-chain", "categoryName": "Cold Chain & Penyimpanan Suhu", "accredited": true },
-  { "name": "Kulkas Vaksin", "categorySlug": "cold-chain", "categoryName": "Cold Chain & Penyimpanan Suhu", "accredited": false },
-  { "name": "Medical Freezer", "categorySlug": "cold-chain", "categoryName": "Cold Chain & Penyimpanan Suhu", "accredited": false },
-  { "name": "Vaccine Refrigerator", "categorySlug": "cold-chain", "categoryName": "Cold Chain & Penyimpanan Suhu", "accredited": false },
-  { "name": "Oven", "categorySlug": "cold-chain", "categoryName": "Cold Chain & Penyimpanan Suhu", "accredited": false },
+  { "name": "Blood Bank Refrigerator", "categorySlug": "blood-bank", "categoryName": "Blood Bank & Penyimpanan Suhu", "accredited": true },
+  { "name": "Kulkas Vaksin", "categorySlug": "blood-bank", "categoryName": "Blood Bank & Penyimpanan Suhu", "accredited": false },
+  { "name": "Medical Freezer", "categorySlug": "blood-bank", "categoryName": "Blood Bank & Penyimpanan Suhu", "accredited": false },
+  { "name": "Vaccine Refrigerator", "categorySlug": "blood-bank", "categoryName": "Blood Bank & Penyimpanan Suhu", "accredited": false },
+  { "name": "Oven", "categorySlug": "blood-bank", "categoryName": "Blood Bank & Penyimpanan Suhu", "accredited": false },
 
   { "name": "Autoclave", "categorySlug": "sterilisasi", "categoryName": "Sterilisasi", "accredited": false },
   { "name": "Sterilizer", "categorySlug": "sterilisasi", "categoryName": "Sterilisasi", "accredited": false },

@@ -64,9 +64,9 @@ export function KontakForm() {
           Konsultasi Kebutuhan Kalibrasi
         </h1>
         <p className="mt-3 text-base leading-relaxed text-ink-600">
-          Ceritakan alat dan jadwal akreditasi Anda — tim kami akan
-          menghubungi untuk membantu proses kalibrasi yang jelas dan tepat
-          waktu.
+          Ceritakan alat, jadwal akreditasi, atau kebutuhan informasi biaya
+          dan penawaran kalibrasi Anda — tim kami akan menghubungi untuk
+          membantu proses yang jelas dan tepat waktu.
         </p>
       </div>
 

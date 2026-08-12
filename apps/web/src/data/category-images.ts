@@ -1,8 +1,8 @@
 import type { StaticImageData } from "next/image";
 import patientMonitorMain from "../../public/images/patient-monitor/patient-monitor-kalibrasi-main.png";
 import patientMonitorFull from "../../public/images/patient-monitor/patient-monitor-kalibrasi-full.png";
-import coldChainMain from "../../public/images/cold-chain/cold-chain-kalibrasi-main.png";
-import coldChainFull from "../../public/images/cold-chain/cold-chain-kalibrasi-full.png";
+import bloodBankMain from "../../public/images/blood-bank/blood-bank-kalibrasi-main.png";
+import bloodBankFull from "../../public/images/blood-bank/blood-bank-kalibrasi-full.png";
 
 type CategoryImage = {
   main: StaticImageData;
@@ -19,9 +19,9 @@ export const categoryImages: Record<string, CategoryImage> = {
     full: patientMonitorFull,
     alt: "Konteks layanan kalibrasi alat monitoring pasien",
   },
-  "cold-chain": {
-    main: coldChainMain,
-    full: coldChainFull,
-    alt: "Konteks layanan kalibrasi cold chain & penyimpanan suhu medis",
+  "blood-bank": {
+    main: bloodBankMain,
+    full: bloodBankFull,
+    alt: "Konteks layanan kalibrasi blood bank & penyimpanan suhu medis",
   },
 };

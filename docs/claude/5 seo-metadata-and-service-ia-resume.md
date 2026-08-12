@@ -51,7 +51,7 @@ Kategori → Product category → Products
 | respirasi | Jasa kalibrasi alat respirasi dan life support rumah sakit, termasuk ventilator, flow meter oksigen, dan suction pump, sesuai SNI ISO/IEC 17025:2017. |
 | neonatal-termal | Jasa kalibrasi alat neonatal dan termal ruang NICU, termasuk inkubator bayi, radiant warmer, dan timbangan bayi medis. |
 | infus-pompa-cairan | Jasa kalibrasi pompa infus dan alat cairan medis, termasuk infuse pump, syringe pump, dan blood/solution warmer. |
-| cold-chain | Jasa kalibrasi cold chain dan penyimpanan suhu medis. Blood Bank Refrigerator dalam scope akreditasi KAN LK-521-IDN (1°C–9°C). |
+| blood-bank | Jasa kalibrasi blood bank dan penyimpanan suhu medis. Blood Bank Refrigerator dalam scope akreditasi KAN LK-521-IDN (1°C–9°C). |
 | sterilisasi | Jasa kalibrasi autoclave dan sterilizer medis untuk unit CSSD rumah sakit dan laboratorium klinik. |
 | laboratorium | Jasa kalibrasi alat laboratorium klinik dan diagnostik, termasuk centrifuge, mikroskop, dan USG. |
 | fasilitas-umum | Jasa kalibrasi alat penunjang dan fasilitas rumah sakit, termasuk timbangan dewasa medis dan tempat tidur elektrik. |
@@ -118,7 +118,7 @@ Audit IA `/layanan` menyimpulkan metadata hub sudah OK; yang diperbaiki hanya fr
 ### Hasil yang diharapkan
 - 8 kartu tetap render
 - Kategori `status: "none"` tanpa badge
-- Kategori partial (monitoring-pasien, cold-chain) menampilkan **Scope KAN**
+- Kategori partial (monitoring-pasien, blood-bank) menampilkan **Scope KAN**
 
 ---
 
