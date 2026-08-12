@@ -71,20 +71,35 @@ Ketakutan turunan lain yang relevan:
 tahun membuat klaim ini rawan skeptis) atau "vendor termurah" (race to
 the bottom, bukan yang dicari untuk urusan compliance).
 
-**Adalah:** partner kalibrasi yang **sertifikatnya bisa diandalkan lolos
-audit** — tepat waktu, proses jelas, tidak ribet.
+**Adalah:** partner kalibrasi yang **membantu memastikan akurasi dan
+ketelitian pengukuran** — dengan dokumentasi hasil yang rapi dan mudah
+ditelusuri, serta dukungan compliance (kebutuhan audit akreditasi,
+standar, dan KAN sesuai ruang lingkup). Tepat waktu, proses jelas, tidak
+ribet.
 
 ---
 
 ## 5. Value Proposition (core message — LOCKED)
 
-> **"Kalibrasi alat kesehatan yang sertifikatnya pasti lolos audit
-> akreditasi — tepat waktu, tanpa ribet."**
+Hierarchy positioning:
 
-Bukti pendukung (bukan pesan utama, tapi memperkuat):
+- **CORE:** akurasi / ketelitian pengukuran
+- **SECONDARY:** dokumentasi hasil; ketertelusuran
+- **COMPLIANCE OUTCOME:** kebutuhan audit akreditasi; standar SNI ISO/IEC
+  17025:2017; KAN sesuai ruang lingkup
+
+> **"Kalibrasi alat kesehatan yang membantu memastikan akurasi dan
+> ketelitian pengukuran — terdokumentasi rapi, mudah ditelusuri, termasuk
+> untuk kebutuhan audit akreditasi."**
+
+Bukti pendukung (memperkuat, bukan menggantikan CORE):
 - Akreditasi KAN (LK-521-IDN) untuk 3 item terverifikasi
 - Legalitas usaha lengkap
 - Standar SNI ISO/IEC 17025:2017
+
+Jangan memakai wording: "menjamin akurasi", "pasti/terjamin lolos audit",
+keselamatan pasien, kenyamanan pasien, keputusan tenaga medis, atau mutu
+pelayanan — kecuali ada evidence source terpisah yang disetujui.
 
 ---
 
@@ -138,31 +153,49 @@ Detail keyword & struktur H1/H2/H3 lengkap: lihat
 
 Description → Benefit → Ruang Lingkup & Parameter → Proses Kalibrasi → CTA
 
-Setiap bagian **harus** dikaitkan balik ke pain point audit akreditasi,
-bukan sekadar spesifikasi teknis alat. Untuk 3 produk terakreditasi,
-bagian "Ruang Lingkup & Parameter" menampilkan rentang ukur & standar
-resmi dari LK-521-IDN.
+Benefit dan narasi layanan mengutamakan **CORE** (membantu memastikan
+akurasi / ketelitian pengukuran) bila relevan dengan layanan tersebut —
+bukan sekadar spesifikasi teknis alat. Dokumentasi hasil dan
+ketertelusuran boleh muncul sebagai supporting value. Kebutuhan audit
+akreditasi boleh dikaitkan sebagai **compliance outcome** ketika
+relevan, tetapi tidak wajib menjadi poros setiap bagian. Untuk 3 produk
+terakreditasi, bagian "Ruang Lingkup & Parameter" menampilkan rentang
+ukur & standar resmi dari LK-521-IDN.
 
 ---
 
 ## 9. Homepage Messaging (siap pakai)
 
-**Opsi A — outcome langsung (direkomendasikan):**
-- H1: *Kalibrasi Alat Kesehatan yang Sertifikatnya Pasti Lolos Audit Akreditasi*
-- Sub: *Terakreditasi KAN (LK-521-IDN) & berizin resmi — bantu RS dan laboratorium tipe C/D memenuhi kewajiban kalibrasi rutin tanpa risiko sertifikat ditolak saat audit.*
+Guidance aktif homepage harus konsisten dengan hierarchy §5 dan supporting
+paragraph hero live. Jangan memakai H1 baru. Jangan memakai klaim
+"Pasti/Terjamin Lolos Audit", "Pasti Diterima Auditor", "menjamin akurasi",
+atau klaim absolut setara.
 
-**Opsi B — lebih pendek, fokus kepastian:**
-- H1: *Kalibrasi yang Sertifikatnya Pasti Diterima Auditor Akreditasi*
-- Sub: *Laboratorium kalibrasi terakreditasi KAN, berizin resmi, dipercaya untuk kepatuhan RS dan laboratorium tipe C/D.*
+### Core homepage message
+Membantu memastikan akurasi pengukuran alat kesehatan.
 
-**Opsi C — angle kecepatan + kepastian:**
-- H1: *Kalibrasi Alat Kesehatan, Tepat Waktu, Sertifikat Terjamin Lolos Audit*
-- Sub: *Terakreditasi KAN & SNI ISO/IEC 17025 — proses jelas, tanpa ribet, untuk kebutuhan akreditasi RS dan laboratorium Anda.*
+### Supporting message
+Hasil kalibrasi terdokumentasi rapi dan mudah ditelusuri.
 
-CTA: `Konsultasi Kebutuhan Kalibrasi` atau `Hubungi Kami`.
+### Compliance / trust message
+Termasuk untuk keperluan audit akreditasi; mengikuti standar laboratorium
+(SNI ISO/IEC 17025:2017); didukung izin resmi dan akreditasi KAN
+(LK-521-IDN) sesuai ruang lingkupnya (bukan blanket untuk seluruh layanan).
 
-**Wajib tampil di atas fold (15 detik pertama):** badge logo KAN +
-ISO 17025, bukan disembunyikan di halaman "Tentang Kami".
+### Approved supporting paragraph (hero live)
+> Kami membantu memastikan akurasi pengukuran alat Anda, dengan hasil yang
+> terdokumentasi rapi dan mudah ditelusuri — termasuk untuk keperluan audit
+> akreditasi. Didukung izin resmi dan akreditasi KAN (LK-521-IDN) sesuai
+> ruang lingkupnya.
+
+### CTA guidance
+`Konsultasi Kebutuhan Kalibrasi`, `Konsultasikan Kebutuhan Anda`, atau
+`Hubungi Kami`.
+
+### Above-fold trust guidance
+**Wajib tampil di atas fold (15 detik pertama):** badge KAN (dengan
+kualifikasi scope) + ISO 17025 / legalitas, bukan disembunyikan di halaman
+"Tentang Kami".
 
 **Brand yang benar di header/label:** "Presisi Kalibrasi Medika" — bukan
 "medcal" (itu nama codename internal monorepo, jangan bocor ke publik).
@@ -174,7 +207,9 @@ ISO 17025, bukan disembunyikan di halaman "Tentang Kami".
 **Ini prioritas #1, di atas semua pertimbangan desain lain.** Purchasing
 RS/lab sering cek vendor lewat HP (misal saat rapat, di lokasi, atau
 sela-sela kerja) — bukan selalu dari desktop kantor. Kalau pengalaman
-mobile buruk, pesan inti (lolos audit akreditasi) tidak akan sempat
+mobile buruk, pesan inti (membantu memastikan akurasi pengukuran — dengan
+dokumentasi/ketertelusuran sebagai supporting, dan audit sebagai
+compliance outcome bila relevan) tidak akan sempat
 tersampaikan sebelum orang menutup tab.
 
 Implikasi konkret untuk setiap halaman yang dibuat:
