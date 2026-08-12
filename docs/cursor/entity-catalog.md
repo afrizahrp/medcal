@@ -2,6 +2,7 @@
 
 **Status:** Draft for validation  
 **Sources:** [`business-domain.md`](./business-domain.md), [`000-project-bootstrap.md`](./000-project-bootstrap.md)  
+**Related architecture decision:** [BIPMED → MedCal Architecture Adoption Matrix](../Architecture/01-bipmed-medcal-architecture-adoption-matrix.md) — locked source for the Chat MVP status, `ChatSessionToken`, `EmailWhitelist`, and FCM-token corrections below.  
 **Out of scope:** Prisma schema, SQL DDL, indexes, column types, scaffolding
 
 This document translates locked business domains into **conceptual entities**, relationships, lifecycles, and ownership. It is the bridge before ERD / Prisma.
@@ -136,7 +137,7 @@ flowchart LR
   Certificate --> ReminderEvent
   FileObject -.stores.-> Certificate
   FileObject -.stores.-> JobEvidence
-  PushSubscription --> User
+  FCMToken --> User
 ```
 
 ---
@@ -165,8 +166,10 @@ flowchart LR
 | **UserMembership** | Yes | User ↔ Company + role | N:1 User, N:1 Company | Role on membership (not global-only) |
 | **Session** | Yes | Auth session | N:1 User | Often owned by Better Auth — treat as IAM-owned |
 | **CustomerUserLink** | Yes | Portal user ↔ Customer | User ↔ Customer | Ensure customer sees only their data |
+| **EmailWhitelist** | Yes | Registration gate — email must be pre-listed before sign-up succeeds | Standalone; no companyId | Normalized unique email, `active`/`revoked` status (reusable, not consumed), `createdBy`/`createdAt`/`revokedBy`/`revokedAt` audit fields. `whitelist:manage` permission → `superadmin` by default |
 
 **Lifecycle (User):** `invited` \| `active` \| `disabled`
+**Lifecycle (EmailWhitelist):** `active` \| `revoked`
 
 **Write owner:** IAM  
 **Read:** all authenticated surfaces
@@ -189,7 +192,7 @@ Ini **bukan** “halaman statis saja”; setiap interaksi bermakna yang meminta 
 | ------- | ------- | ----- |
 | `CONTACTFORM` | ContactMessage | Form kontak / penawaran |
 | `WHATSAPP` | ContactMessage | WA handoff |
-| `CHAT_AI` / `CHAT_PERSON` | ContactMessage (+ optional ChatSession later) | Intent jasa dari chat |
+| `CHAT_AI` / `CHAT_PERSON` | ContactMessage (+ ChatSession, MVP) | Intent jasa dari chat |
 | `EMAIL` | ContactMessage | Inbound email ringkas; full Email model later |
 
 **No durable anonymous user** for public web.
@@ -216,7 +219,7 @@ ContactMessage
   + name, email, phone?, company?, subject?, message, topic_id?
 ```
 
-Di medcal, **`LeadSubmission` = alias konseptual dari `ContactMessage`** (boleh namakan entity `ContactMessage` di Prisma agar familiar dengan kode existing). Chat realtime tetap boleh punya `ChatSession` / `ChatMessage` terpisah (seperti bi-erp); saat intent jadi prospek jasa, buat/tautan `ContactMessage` dengan `getFrom = CHAT_AI | CHAT_PERSON`.
+Di medcal, **`LeadSubmission` = alias konseptual dari `ContactMessage`** (boleh namakan entity `ContactMessage` di Prisma agar familiar dengan kode existing). **Human Live Chat adalah MVP (updated — lihat Adoption Matrix)**: `ChatSession` / `ChatMessage` di-port dari bi-erp, human-responder-only (tanpa field `mode`/AI sampai ada ADR baru); WebSocket dihosting di `apps/api` (NestJS), bukan service terpisah. Staff pakai session Better Auth yang sudah ada; visitor anonim divalidasi lewat `ChatSessionToken` — cookie sempit, revocable, terikat ke satu `ChatSession`, tanpa role/permission/`userId`, dan tidak pernah auto-merge ke user account. Saat intent jadi prospek jasa, buat/tautan `ContactMessage` dengan `getFrom = CHAT_AI | CHAT_PERSON`.
 
 | Entity | MVP | Purpose | Key relationships | Notes |
 | ------ | --- | ------- | ----------------- | ----- |
@@ -224,7 +227,8 @@ Di medcal, **`LeadSubmission` = alias konseptual dari `ContactMessage`** (boleh 
 | **ContactTopic** | Later | Topik form (bi-erp) | 1 → N ContactMessage | Boleh string topic dulu |
 | **Lead** | Yes | Pipeline prospect setelah qualify | N:1 Company; optional ← ContactMessage; optional → Customer | Created only if not confirmed existing customer |
 | **LeadActivity** | Later | Notes / call log | N:1 Lead | Can start as notes field on Lead |
-| **ChatSession / ChatMessage** | Later* | Realtime chat stack (bi-erp) | Session 1 → N Message | *Port bertahap; intent jasa → ContactMessage |
+| **ChatSession / ChatMessage** | **Yes (MVP)** | Realtime chat stack (bi-erp), human-only | Session 1 → N Message; optional → ContactMessage | No `mode`/AI field in MVP — future ADR only |
+| **ChatSessionToken** | **Yes (MVP)** | Anonymous-visitor chat continuity credential | 1:1 → ChatSession | Not a Better Auth construct; not an IAM identity; not auto-merged into a User |
 | **Email** (opsional) | Later | Full mailbox (bi-erp) | optional `contactMessageId` | MVP: EMAIL cukup via ContactMessage.getFrom |
 
 **GetMessageFrom (LOCKED — copy bi-erp):**  
@@ -482,7 +486,7 @@ Di medcal, **`LeadSubmission` = alias konseptual dari `ContactMessage`** (boleh 
 
 | Entity | MVP | Purpose | Key relationships | Notes |
 | ------ | --- | ------- | ----------------- | ----- |
-| **PushSubscription** | Yes | Web Push endpoint | N:1 User; Company; `app` = web\|portal\|tech-pwa | |
+| **FCMToken** | Yes | FCM device token (**corrects prior native-Web-Push shape — see Adoption Matrix**) | N:1 User; Company; `app` = web\|portal\|tech-pwa | Fields: `token`, `deviceType`, `isActive`, `lastUsedAt` |
 | **NotificationMessage** | Later | Outbox/log | Company; optional User | Sync send OK first; log optional |
 | **DeliveryReceipt** | Later | Provider result | N:1 NotificationMessage | |
 
@@ -555,7 +559,9 @@ Di medcal, **`LeadSubmission` = alias konseptual dari `ContactMessage`** (boleh 
 | ReminderEvent | Retention |
 | ServiceTariff | Mini ERP |
 | FileObject | Vault |
-| PushSubscription | Notification (+ IAM user) |
+| FCMToken | Notification (+ IAM user) |
+| EmailWhitelist | IAM |
+| ChatSession / ChatMessage / ChatSessionToken | Lead / Messaging (Chat) |
 
 Express **never** writes these directly except by forwarding commands to Nest.
 
@@ -582,7 +588,7 @@ Express **never** writes these directly except by forwarding commands to Nest.
 Urutan bangun disarankan mengikuti funnel (jangan loncat ke WO dulu):
 
 **A. Acquisition (website → CRM)**  
-Company, **ContactMessage** (`GetMessageFrom`), Lead, Customer, CustomerContact, User, UserMembership, PushSubscription (admin notif)
+Company, **ContactMessage** (`GetMessageFrom`), Lead, Customer, CustomerContact, User, UserMembership, EmailWhitelist, **ChatSession / ChatMessage / ChatSessionToken** (Human Chat, human-only), FCMToken (admin notif)
 
 **B. Delivery (request → certificate)**  
 Device, CalibrationRequest, CalibrationRequestItem, Quotation, QuotationItem, ServiceTariff (light), WorkOrder, WorkOrderAssignment, CalibrationJob, MeasurementResult, JobEvidence, CustomerSignature, QualityReview, Certificate, FileObject

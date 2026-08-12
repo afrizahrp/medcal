@@ -5,6 +5,7 @@
 **Project path:** `d:\medcal`  
 **Related ADR:** [`docs/000-project-bootstrap.md`](./000-project-bootstrap.md)  
 **Related catalog / ERD:** [`entity-catalog.md`](./entity-catalog.md), [`ERD/`](./ERD/)  
+**Related architecture decision:** [BIPMED → MedCal Architecture Adoption Matrix](../Architecture/01-bipmed-medcal-architecture-adoption-matrix.md) — locked source for Human Chat MVP scope, FCM push, and the `EmailWhitelist` registration gate referenced below.  
 **Out of scope in this document:** code, Prisma schema, ERD tables detail, scaffolding
 
 ---
@@ -191,6 +192,8 @@ Control who can access the system and with what authority (RBAC), across portal 
 - Authorization via roles/permissions
 - Bind users to **Company** and to Customer (for portal)
 - Lifecycle of internal accounts (admin, supervisor, technician, finance) and customer accounts
+- Registration gate: pre-existing-email whitelist required before sign-up succeeds (no email verification step) — see Adoption Matrix Authentication + User & Permission Management sections
+- `whitelist:manage` permission assigned to `superadmin` by default (no separate "Super User" role)
 
 **Main Actors**
 
@@ -210,6 +213,7 @@ Control who can access the system and with what authority (RBAC), across portal 
 - Role / Permission (concept)
 - Session (technical concept owned by IAM)
 - UserMembership (user ↔ **company** only)
+- EmailWhitelist (registration gate — reusable, not consumed; not scoped by companyId)
 
 **Future Dependencies**
 
@@ -297,7 +301,7 @@ Lead (CBMS pipeline — after / beside inbox)
 - Possible existing customer → **admin manual confirmation** (no silent auto-merge), then route to `CalibrationRequest`
 - No match → create/continue `Lead` pipeline (new → contacted → qualified → rejected → converted)
 - Assign lead to admin/sales; convert Lead → Customer (+ optional Calibration Request)
-- Optional later: port `ChatSession` / `ChatMessage` and full `Email` mailbox from bi-erp; when chat/email expresses service intent, still land or link a **ContactMessage** with the proper `getFrom`
+- **Human Live Chat is MVP (updated — see Adoption Matrix):** `ChatSession` / `ChatMessage` port from bi-erp, human-responder-only (no `mode`/AI field), WebSocket hosted inside `apps/api` (NestJS), not a separate service. Staff connect via the existing Better Auth session; anonymous visitors are validated by a narrow, revocable `ChatSessionToken` cookie scoped to exactly one `ChatSession` — it carries no role/permissions/`userId` and is never merged automatically into a user account. When chat expresses service intent, still land or link a **ContactMessage** with the proper `getFrom` (`CHAT_AI`/`CHAT_PERSON`). Full `Email` mailbox remains a later port.
 
 **Main Actors**
 
@@ -312,7 +316,7 @@ Lead (CBMS pipeline — after / beside inbox)
 - GetMessageFrom classification
 - Existing-customer detection (email / email-domain)
 - Lead qualification, assignment, conversion
-- Chat realtime stack (later port)
+- Chat realtime stack (MVP — human-only; see Adoption Matrix)
 - Email mailbox (later port; MVP: EMAIL via ContactMessage)
 
 **Main Business Objects**
@@ -323,7 +327,8 @@ Lead (CBMS pipeline — after / beside inbox)
 - ContactTopic (optional / later)
 - **Lead**
 - LeadActivity / LeadNote (concept)
-- ChatSession / ChatMessage (later — bi-erp)
+- **ChatSession / ChatMessage (MVP — human-only, ported from bi-erp; no `mode`/AI field until a future ADR)**
+- **ChatSessionToken (MVP — anonymous-visitor chat continuity credential; not an IAM identity)**
 - Email (+ contactMessageId link) (later — bi-erp)
 
 **Future Dependencies**
@@ -970,7 +975,7 @@ Deliver multi-channel notifications as a consequence of other domain events.
 
 **Responsibilities**
 
-- Channels: email, push (service worker), WhatsApp, contact formatting
+- Channels: email, push (**FCM — not native Web Push**; see Adoption Matrix), WhatsApp, contact formatting
 - Called by other domains after business decisions (including new ContactMessage / lead alerts)
 - Does **not** decide business policy such as “when a lead is qualified” or replace ContactMessage inbox
 
@@ -989,7 +994,7 @@ Deliver multi-channel notifications as a consequence of other domain events.
 **Main Business Objects**
 
 - NotificationMessage (concept)
-- PushSubscription (often near IAM/user device technically)
+- FCMToken (token/deviceType/isActive/lastUsedAt — often near IAM/user device technically; corrects the earlier native-Web-Push assumption)
 - DeliveryReceipt (concept)
 
 **Future Dependencies**

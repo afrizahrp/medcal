@@ -36,3 +36,4 @@ Browser
 - ADR-000 bootstrap decisions
 - ADR-001 Next.js version pin
 - `docs/design-principles.md`
+- [BIPMED → MedCal Architecture Adoption Matrix](./01-bipmed-medcal-architecture-adoption-matrix.md) — canonical, locked source for Human Chat MVP, FCM push, `EmailWhitelist`, and the full BIPMED-vs-MedCal capability-by-capability decision record

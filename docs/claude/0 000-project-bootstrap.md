@@ -4,6 +4,7 @@
 **Date:** 2026-08-01
 **Context:** medcal (CBMS — Calibration Business Management System)
 **Related doc:** `business-domain.md` (status: *Aligned with ADR-000*)
+**Related architecture decision:** [BIPMED → MedCal Architecture Adoption Matrix](../Architecture/01-bipmed-medcal-architecture-adoption-matrix.md) — reaffirms all decisions below; no ADR-000 decision is altered by it
 
 ---
 

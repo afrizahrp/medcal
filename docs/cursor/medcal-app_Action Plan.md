@@ -7,6 +7,7 @@ Dokumen ini adalah **roadmap eksekusi per fase** — bukan sumber kebenaran doma
 - [`entity-catalog.md`](./entity-catalog.md)
 - [`ERD/README.md`](./ERD/README.md)
 - [`ADR/001-nextjs-version.md`](./ADR/001-nextjs-version.md)
+- [BIPMED → MedCal Architecture Adoption Matrix](../Architecture/01-bipmed-medcal-architecture-adoption-matrix.md) — locked source for Human Chat MVP, FCM push, EmailWhitelist gate
 
 **Next step saat ini:** lanjut **Fase 1** (Fase 0 scaffold monorepo sudah selesai).
 
@@ -53,7 +54,7 @@ Website B2B → SEO → **ContactMessage** (inbound) → Lead / Customer → Cus
 | UI               | **Tailwind CSS + shadcn/ui** saja                                                     |
 | Next.js          | Pin **16.2.12** + React **19.2.8** (ADR-001)                                          |
 | UX               | **Mobile-first** (produk): Mobile → Tablet → Desktop enhancement                      |
-| Notifikasi       | @medcal/notifications = HOW; Nest module = WHEN/WHO/WHY; SW + Web Push                |
+| Notifikasi       | @medcal/notifications = HOW; Nest module = WHEN/WHO/WHY; **FCM** (bukan native Web Push)  |
 | Async infra      | **Tidak** Redis / BullMQ / RabbitMQ / Kafka / microservice / Kubernetes di awal       |
 | Filosofi         | **Simple by default** — teknologi baru hanya jika kebutuhan terukur                   |
 | Teknisi          | PWA (bukan native)                                                                    |
@@ -124,9 +125,9 @@ flowchart TB
   TechPWA --> Api
   Api --> PG
   Api --> Files
-  Api -->|"Web Push in-process"| Web
-  Api -->|"Web Push in-process"| Portal
-  Api -->|"Web Push in-process"| TechPWA
+  Api -->|"FCM push"| Web
+  Api -->|"FCM push"| Portal
+  Api -->|"FCM push"| TechPWA
 ```
 
 ```mermaid
@@ -194,6 +195,8 @@ medcal/
 apps/api/src/modules/
   contact-messages/   # inbox ContactMessage (bi-erp core)
   leads/              # qualify / convert setelah inbox
+  chat/               # ChatSession/ChatMessage WS (MVP, human-only) + ChatSessionToken
+  whitelist/          # EmailWhitelist registration gate (superadmin + whitelist:manage)
   customers/
   devices/
   quotations/
@@ -266,7 +269,7 @@ companyId String   # wajib — tidak ada branchId
 
 **Entitas inti (MVP spine — selaras entity-catalog):**
 
-Company, User, UserMembership, ContactMessage, Lead, Customer, CustomerContact, Device, CalibrationRequest, CalibrationRequestItem, Quotation, QuotationItem, ServiceTariff (light), WorkOrder, WorkOrderAssignment, CalibrationJob, MeasurementResult, JobEvidence, CustomerSignature, QualityReview, Certificate, Invoice, InvoiceCertificate, InvoiceItem, Payment, CreditNote, ReminderEvent, FileObject, PushSubscription
+Company, User, UserMembership, EmailWhitelist, ContactMessage, Lead, Customer, CustomerContact, Device, CalibrationRequest, CalibrationRequestItem, Quotation, QuotationItem, ServiceTariff (light), WorkOrder, WorkOrderAssignment, CalibrationJob, MeasurementResult, JobEvidence, CustomerSignature, QualityReview, Certificate, Invoice, InvoiceCertificate, InvoiceItem, Payment, CreditNote, ReminderEvent, FileObject, FCMToken, ChatSession, ChatMessage, ChatSessionToken
 
 Filter **`companyId` wajib di Nest** (guards/interceptors). Tidak ada filter Branch.
 
@@ -318,6 +321,7 @@ sequenceDiagram
 - [x] Architecture overview + ERD approved (Company only)
 - [x] Prisma schema draft (`packages/db`) — migrate/seed saat DATABASE_URL siap
 - [x] Better Auth stub / package wiring
+- [ ] `EmailWhitelist` registration gate (pre-existing-email required, no verification step) — named Foundation deliverable per Adoption Matrix; not yet implemented
 - [x] Docker Compose tanpa Redis
 - [x] Next apps: Tailwind + pin 16.2.12
 
@@ -351,7 +355,7 @@ sequenceDiagram
 - Lihat permintaan, quotation approve/reject
 - Status WO, unduh sertifikat (stub OK jika sertifikat belum full)
 - Upload daftar alat (CSV/Excel → Device)
-- Web Push setelah login
+- FCM push setelah login
 - UI mobile-first; tabel→card di HP
 
 **DoD Fase 2:** customer bisa login, approve quotation, lihat status di HP & desktop.
@@ -443,4 +447,4 @@ Sebelum naik fase:
 
 **12. Lampiran cepat - yang ditunda**
 
-Redis · BullMQ · RabbitMQ · Kafka · Microservices · Kubernetes · UI non-shadcn · Premature packages/ui · Subscription SaaS · Native mobile · Desktop file-sync · Full accounting ERP · **Branch / multi-cabang** · Debit Note · Refund entity · ChatSession / mailbox Email penuh · LeadSubmission-as-SoR / enum channel paralel · WO sebagai billable SoR
+Redis · BullMQ · RabbitMQ · Kafka · Microservices · Kubernetes · UI non-shadcn · Premature packages/ui · Subscription SaaS · Native mobile · Desktop file-sync · Full accounting ERP · **Branch / multi-cabang** · Debit Note · Refund entity · `ChatSession.mode`/AI responder · mailbox Email penuh · LeadSubmission-as-SoR / enum channel paralel · WO sebagai billable SoR · WhatsApp Business API
