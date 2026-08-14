@@ -1,6 +1,6 @@
 # Foundation Implementation Plan — medcal
 
-**Status:** F1, F2, F3, and F4 implemented and verified. F5 (apps/api containerization + real-VPS deployment topology) implemented and verified for the apps/api slice; remaining F5 sub-items (other apps' containers, Nginx applied on the live VPS, host-based routing) intentionally not yet done — see §3 F5.
+**Status:** F1, F2, F3, and F4 implemented and verified. F5 (apps/api containerization + real-VPS deployment topology) implemented and verified for the apps/api slice; remaining F5 sub-items (other apps' containers, Nginx applied on the live VPS) intentionally not yet done — see §3 F5. F6 (application/UI foundation) implemented and verified — see §3 F6.
 **Source of truth:** [BIPMED → MedCal Architecture Adoption Matrix](./01-bipmed-medcal-architecture-adoption-matrix.md) (FINAL, LOCKED) — Foundation roadmap line: "monorepo/package layout (done), Better Auth in `apps/api`, `EmailWhitelist` + registration gate, RBAC (role/permission/resource/action), `companyId` central enforcement, mobile-first UI guidelines, Docker Compose deployment (done), domain topology + cookie/CORS/`trustedOrigins` configuration, `packages/auth` dependency boundary."
 **Repo audited:** `d:\medcal` as of 2026-08-13 (Fase 0 scaffold); F1/F2 implementation and verification completed 2026-08-13; F3 implementation and verification completed 2026-08-14; F4 implementation and verification completed 2026-08-14; first-SUPERADMIN bootstrap mechanism (F4 follow-up) added and verified 2026-08-14; F5 repo-only audit 2026-08-14; F5 real-VPS audit received and apps/api containerization implemented + verified 2026-08-14.
 
@@ -14,8 +14,8 @@ This document does not reopen, redesign, or add any architecture decision. Every
 - **F2 (Better Auth in `apps/api`) — COMPLETE**, verified end-to-end against real PostgreSQL
 - **F3 (RBAC + `companyId` enforcement) — COMPLETE**, verified end-to-end against real PostgreSQL
 - **F4 (`EmailWhitelist` + registration gate) — COMPLETE**, verified end-to-end against real PostgreSQL
-- **F5 (domain topology / env wiring) — IN PROGRESS**: `apps/api` containerization + production env contract + Compose networking design + proposed Nginx integration DONE and verified against real Postgres via Docker; applying Nginx config on the live VPS, containerizing `web`/`web-api`/`portal`/`tech-pwa`, and host-based routing remain not started (see §3 F5)
-- **F6 (mobile-first UI application) — pending**
+- **F5 (domain topology / env wiring) — IN PROGRESS**: `apps/api` containerization + production env contract + Compose networking design + proposed Nginx integration DONE and verified against real Postgres via Docker; applying Nginx config on the live VPS and containerizing `web`/`web-api`/`portal`/`tech-pwa` remain not started (see §3 F5)
+- **F6 (application/UI foundation) — COMPLETE**, verified end-to-end (sign-in/session/host-routing) against real PostgreSQL and a real browser (see §3 F6)
 
 ---
 
@@ -199,8 +199,41 @@ Applied. `PushSubscription` renamed to `FCMToken` with the FCM-token field shape
 
 `packages/config`'s `COMPANY_ID`/cookie-domain/`trustedOrigins`/per-app-base-URL schema (already implemented in F2/F3, see §1 table) is consumed as-is by the production env contract above — no change to `packages/config` itself was needed for F5.
 
-### F6. Mobile-first UI guideline application
-No code artifact required yet — `apps/portal`/`apps/tech-pwa`/`apps/web` UI work hasn't started. Apply `docs/cursor/design-principles.md` guidelines when that work begins; not a Foundation-phase blocker today.
+### F6. Application/UI foundation — COMPLETE, verified 2026-08-14
+
+**Objective:** structural readiness for MVP feature work on `apps/web` (audit only), `apps/portal` (host-routed management/customer surfaces), and `apps/tech-pwa` — sign-in, session, role-aware nav, host-based routing, API client boundary. No business modules; no new RBAC/auth system; no `packages/ui` extraction without evidence.
+
+**Audit findings:** `apps/web` was already complete (contact-form → `web-api` integration correct, no changes needed). `apps/portal`/`apps/tech-pwa` were Fase-0 stubs with no `@medcal/auth` dependency, no middleware, no API client. `packages/auth/src/index.ts` exported only the server `betterAuth()` config — no client subpath existed. No endpoint exposed `UserMembership.role` to a caller about themselves (`CompanyRoleGuard` looks it up per-request but never returns it). `apps/tech-pwa/public/manifest.webmanifest` had empty `icons: []`; no service worker existed anywhere.
+
+**Decisions implemented (all additive, none reopen F1–F5):**
+- **`GET /me`** (`apps/api/src/modules/me/`) — new, small, session-only endpoint (global `AuthGuard`, no `@RequirePermission`) reusing `CompanyRoleGuard`'s exact `getSession()` → `UserMembership` lookup pattern. Returns `{ user, membership: { role, companyId } }`. No new DB model, no change to `packages/auth`/`access-control.ts`/cookies/CORS.
+- **`packages/auth/src/client.ts`** — new Better Auth React client subpath (`createAuthClient` from `better-auth/react`), exposed via a `package.json` `exports` map (`"."` unchanged/server-only, `"./client"` browser-safe) so client components never bundle `@medcal/db`/Prisma. Server config (`src/index.ts`) untouched.
+- **`packages/shared/src/http/api-fetch.ts`** — shared `apiFetch`/`ApiError`/`isUnauthorized`/`isForbidden` helper (genuinely shared: both portal and tech-pwa need identical `NEXT_PUBLIC_API_URL` + `credentials:"include"` + 401/403 handling). Unit-tested.
+- **`apps/portal/src/proxy.ts`** (Next.js 16 renamed `middleware.ts` → `proxy.ts` on the framework's own deprecation notice) — reads the `Host` header, rewrites `apps.*` → `/management`, `portal.*` → `/client`, with a `DEV_DEFAULT_HOST_GROUP` fallback for plain `localhost:3003`. Implements the Adoption Matrix's locked "Option A" (one codebase, two hostnames) using real path segments (`app/management/`, `app/client/`) as rewrite targets — parenthesized route groups are invisible to the URL and cannot be rewrite targets.
+- **Client-side session gating**, not SSR cookie-forwarding: `useRequireSession()` (`lib/use-require-session.ts` in both portal and tech-pwa) uses `useSession()` + a client-side `apiFetch("/me")` call. This was a genuine correction made during verification — see "Finding" below.
+- **RBAC stays UX-only**: per-app `nav-config.ts` filters nav items by role, explicitly commented as non-authoritative. No frontend permission catalog. All real enforcement remains `CompanyRoleGuard` in `apps/api`.
+- **`apps/tech-pwa`**: sign-in/session/sign-out skeleton (same pattern as portal, no host routing needed), `viewport`/`theme-color` metadata added for installability. Real icon assets (192×192/512×512 PNG) remain a design-asset dependency — not fabricated. Service worker explicitly deferred (no offline requirement exists).
+- **`packages/ui`** — left deferred (unchanged 4-line `cx()` stub). No components exist in portal/tech-pwa yet to justify extraction.
+- **Pre-existing gap fixed (Foundation-blocking, not F6-scope-creep):** Next.js only auto-loads `.env` from its own app directory, not the monorepo root, so `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_WEB_API_URL` were never actually reaching any Next.js app in dev (`apps/web` included). Fixed by loading the root `.env` explicitly at the top of each app's `next.config.js` via `dotenv` (no-op in production, which sets real env vars directly).
+- **Pre-existing gap fixed:** `packages/config` was missing `@types/node`, breaking `pnpm turbo run typecheck` repo-wide (same one-line gap already present/fixed in `packages/shared`).
+
+**Finding during verification — dev cross-subdomain cookies do not work, by design:** dev's `COOKIE_DOMAIN=""` (host-scoped cookies) means a browser navigating to `apps.localhost:3003` never receives the session cookie issued by `apps/api`'s own origin — only production's `crossSubDomainCookies`/`.kalibrasimedika.co.id` sharing makes that work (already flagged as unverified-until-real-deployment in §5). An initial SSR-layout design (forwarding the incoming request's cookies server-side) was therefore replaced with client-side session checking (`useSession()` + browser `apiFetch`), which works correctly cross-origin via CORS+credentials in both dev and prod, and fits the "UX only" principle since real enforcement never depended on it. Separately, real cross-*-localhost-subdomain* browser testing surfaced that Chrome's SameSite=Lax cookie policy blocks the session cookie on cross-site `fetch` even when CORS allows the origin (`apps.localhost` and plain `localhost` are different "sites" per the public-suffix algorithm) — this is a dev-only browser policy limitation, not a bug, and mirrors the already-documented "production cross-subdomain cookie behavior not yet verified" gap. `TRUSTED_ORIGINS` was extended with `http://apps.localhost:3003`/`http://portal.localhost:3003` regardless, since CORS trust is necessary (if not sufficient) for the dev-subdomain strategy.
+
+**Verification (2026-08-14, against the real dev database, `pkmdb`):**
+- `pnpm turbo run typecheck --continue`: 9/10 packages pass, including every F6-touched package (`@medcal/auth`, `@medcal/shared`, `@medcal/config`, `@medcal/portal`, `@medcal/tech-pwa`, `@medcal/api`, `@medcal/web`). The one failure (`@medcal/web-api` — `@medcal/notifications` missing an exported member) is pre-existing, confirmed via `git status` to be untouched by this pass, and out of F6 scope (WhatsApp/notifications business logic).
+- `pnpm turbo run test --continue`: all pass (`@medcal/api` 7/7, `@medcal/shared` 9/9, including the new `apiFetch` classification tests).
+- `pnpm turbo run build --continue`: `apps/web`, `apps/portal`, `apps/tech-pwa`, `apps/api` all succeed; `apps/web-api` fails on the same pre-existing, unrelated error.
+- `GET /me`: 401 with no session; 403 with a valid session but no `UserMembership`; 200 with real `{ user, membership: { role, companyId } }` once granted — exercised against a throwaway whitelisted test account, cleaned up (zero rows left behind), matching F4's verification style.
+- Host-based routing: `curl -H "Host: apps.localhost:3003"` / `"Host: portal.localhost:3003"` / no-Host-override against `apps/portal` dev server all return the correct route (307 → `/sign-in` unauthenticated; `x-middleware-rewrite` header confirms `/management` vs `/client` target).
+- **Full browser end-to-end** (headless Chrome via `puppeteer-core`, ad hoc, not a repo dependency): sign in via the real `/sign-in` form on `http://localhost:3003` → lands on `/` (rewritten to `/management`) showing the real signed-in user's email and `ADMIN` role → sign out → redirected to `/sign-in` → session confirmed gone on revisit. Regression: `apps/api`'s `/health`, `/contact-messages` (401), `/whitelist` (401), `/internal/contact-messages` (401 without secret) all unchanged.
+- No regression to F1–F5: all of the above re-verified green after F6 changes.
+
+**Remaining / deferred (explicitly, not blockers):**
+- Real icon assets for `apps/tech-pwa`'s manifest (design-asset dependency).
+- Service worker for `apps/tech-pwa` (no offline requirement exists yet).
+- Production cross-subdomain cookie behavior against the real `kalibrasimedika.co.id` topology — still unverified from a dev machine (unchanged from F5's note); the client-side session-check design means this only affects whether `apps.*`/`portal.*` share a session seamlessly in production, not whether the mechanism itself is sound (proven end-to-end on same-site `localhost`).
+- `packages/ui` stays deferred until a second real MVP feature needs a shared component.
+- No architecture redesign performed or required — every F6 decision implements an already-locked shape or fills a structural gap (client Better Auth access, `/me`, dev env loading) with no contradiction to the Adoption Matrix.
 
 ---
 
@@ -230,8 +263,15 @@ Per the locked matrix's Phase column, do **not** build yet: `ChatSession`/`ChatM
 - ✅ Registration blocked for non-whitelisted and revoked emails, with zero orphaned `User` rows; succeeds for active whitelisted emails.
 - ✅ `prisma migrate status` clean after migration `20260814073119_email_whitelist`; F1/F2/F3 regressions all re-verified green.
 
+**F6 — done, verified 2026-08-14 (see §3):**
+- ✅ `GET /me`: 401 (no session) / 403 (session, no membership) / 200 (real role+companyId), against real PostgreSQL.
+- ✅ Host-based routing: correct route (`/management` vs `/client`) per `Host` header, verified via curl and the `x-middleware-rewrite` response header.
+- ✅ Full browser E2E (headless Chrome): sign-in form → session → role-aware dashboard → sign-out → session cleared.
+- ✅ `pnpm turbo run typecheck/test/build --continue`: all F6-touched packages pass; the one pre-existing unrelated failure (`@medcal/web-api`) confirmed untouched by this pass.
+- ✅ Regression: F1–F5 `apps/api` endpoints (`/health`, `/contact-messages`, `/whitelist`, `/internal/contact-messages`) unchanged.
+
 **F5+ — not yet started:**
-- Production cross-subdomain cookie behavior against the real `kalibrasimedika.co.id` topology (deferred to F5).
+- Production cross-subdomain cookie behavior against the real `kalibrasimedika.co.id` topology (deferred to F5; F6's client-side session-check design does not depend on this working in dev, only in production).
 
 ---
 
@@ -241,6 +281,7 @@ Per the locked matrix's Phase column, do **not** build yet: `ChatSession`/`ChatM
 - **F2 — COMPLETE, PASS:** Better Auth is running in-process in `apps/api`, backed by the existing `User` model with no duplicate/shadow model, verified end-to-end (sign-up/sign-in/session/logout) against real PostgreSQL. A pre-existing, unrelated `ContactMessage` dependency-injection defect was found and fixed during verification (§3, F2 note) — root cause was a `tsx`/esbuild tooling limitation, not a Better Auth or architecture issue.
 - **F3 — COMPLETE, PASS:** `UserMembership.role` is the sole operative role authority; Better Auth's `createAccessControl`/`role()` statements provide the permission mechanism; `companyId` enforcement is centralized through two guards split by trust boundary (`InternalServiceGuard` for internal service trust, `CompanyRoleGuard` for authenticated RBAC — the two are kept deliberately separate). `contactMessage:read` is a minimal demonstration permission, not a complete product catalog. No Prisma migration was required. The F2 `tsx`/esbuild explicit-`@Inject()` constraint was applied proactively to every new class in F3.
 - **F4 — COMPLETE, PASS:** `EmailWhitelist` (with `EmailWhitelistStatus`, reusable/not-consumed entries, full audit trail, no `companyId`) is live and migrated. `whitelist:manage` extends F3's existing access-control mechanism — granted to `SUPERADMIN` only, no new role or permission table. Registration is gated via `@DatabaseHook()`/`@BeforeCreate("user")`, which required adding `databaseHooks: {}` to the Better Auth config for `@thallesp/nestjs-better-auth` to wire the hook at all (an undocumented library requirement found by reading its source). Full verification (401/403/200/201/409, zero-orphan blocked registration, revoked-email rejection, F1–F3 regressions) all green against real PostgreSQL.
-- **No architecture redesign performed or required anywhere** — every remaining gap (F5–F6) is "not yet started," not "contradicts the lock."
+- **F6 — COMPLETE, PASS:** `apps/portal`/`apps/tech-pwa` now have working sign-in/session/sign-out via a new Better Auth client subpath (`@medcal/auth/client`) and a new `GET /me` endpoint (session + `UserMembership` lookup, reusing `CompanyRoleGuard`'s exact pattern — no new DB model). `apps/portal` implements the locked "one codebase, host-routed" design via `proxy.ts` (Next.js 16's renamed `middleware.ts`). RBAC stays UX-only (per-app `nav-config.ts`, no frontend permission catalog). `packages/ui` stays deferred. Verification found session-checking had to be client-side, not SSR (dev's host-scoped cookies don't cross `apps.portal`'s own origin), and fixed two pre-existing, F6-unrelated gaps blocking clean verification (`NEXT_PUBLIC_*` env vars never loading in Next.js dev; `packages/config` missing `@types/node`). Full sign-in→session→role-aware-nav→sign-out cycle verified in a real headless-Chrome browser session against real PostgreSQL; zero regression to F1–F5.
+- **No architecture redesign performed or required anywhere** — every gap closed (F1–F4, F6) implements an already-locked shape; the one remaining item (F5's Nginx/containerization rollout on the live VPS) is "not yet started," not "contradicts the lock."
 
 **Dependency-order note:** F4 (`EmailWhitelist`) is sequenced after F3 (RBAC), which is now real, so its `whitelist:manage` permission check will be a genuine permission check from the start — no temporary/stub permission is ever introduced.

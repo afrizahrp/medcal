@@ -1,9 +1,10 @@
 "use client";
 
-import { useRequireSession } from "../lib/use-require-session";
-import { SignOutButton } from "../components/sign-out-button";
+import { useRequireSession } from "../../lib/use-require-session";
+import { SignOutButton } from "../../components/sign-out-button";
+import { clientNav } from "./nav-config";
 
-export default function TechHome() {
+export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const { me, status } = useRequireSession();
 
   if (status === "loading") {
@@ -19,10 +20,21 @@ export default function TechHome() {
     );
   }
 
+  const nav = clientNav.filter((item) => item.roles.includes(me.membership.role));
+
   return (
     <div className="min-h-screen">
       <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <span className="font-semibold">Technician PWA</span>
+        <div className="flex items-center gap-6">
+          <span className="font-semibold">medcal Portal</span>
+          <nav className="flex gap-4 text-sm text-slate-600">
+            {nav.map((item) => (
+              <a key={item.href} href={item.href}>
+                {item.label}
+              </a>
+            ))}
+          </nav>
+        </div>
         <div className="flex items-center gap-3 text-sm text-slate-600">
           <span>
             {me.user.email} · {me.membership.role}
@@ -30,12 +42,7 @@ export default function TechHome() {
           <SignOutButton />
         </div>
       </header>
-      <main className="mx-auto max-w-md px-4 py-12">
-        <h1 className="text-2xl font-semibold">Technician PWA</h1>
-        <p className="mt-2 text-slate-600">
-          Skeleton — F6 foundation only, field checklist and business modules land later.
-        </p>
-      </main>
+      <main>{children}</main>
     </div>
   );
 }

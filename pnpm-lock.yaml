@@ -75,6 +75,9 @@ importers:
 
   apps/portal:
     dependencies:
+      '@medcal/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@medcal/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -106,6 +109,9 @@ importers:
       autoprefixer:
         specifier: ^10.4.21
         version: 10.5.4(postcss@8.5.25)
+      dotenv:
+        specifier: ^16.6.1
+        version: 16.6.1
       postcss:
         specifier: ^8.5.3
         version: 8.5.25
@@ -118,6 +124,9 @@ importers:
 
   apps/tech-pwa:
     dependencies:
+      '@medcal/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@medcal/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -149,6 +158,9 @@ importers:
       autoprefixer:
         specifier: ^10.4.21
         version: 10.5.4(postcss@8.5.25)
+      dotenv:
+        specifier: ^16.6.1
+        version: 16.6.1
       postcss:
         specifier: ^8.5.3
         version: 8.5.25
@@ -198,6 +210,9 @@ importers:
       autoprefixer:
         specifier: ^10.4.21
         version: 10.5.4(postcss@8.5.25)
+      dotenv:
+        specifier: ^16.6.1
+        version: 16.6.1
       postcss:
         specifier: ^8.5.3
         version: 8.5.25
@@ -288,6 +303,9 @@ importers:
       '@medcal/typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
+      '@types/node':
+        specifier: ^22.13.10
+        version: 22.20.1
       typescript:
         specifier: ^5.8.2
         version: 5.9.3
@@ -332,6 +350,9 @@ importers:
       '@medcal/typescript-config':
         specifier: workspace:*
         version: link:../typescript-config
+      '@types/node':
+        specifier: ^22.13.10
+        version: 22.20.1
       typescript:
         specifier: ^5.8.2
         version: 5.9.3

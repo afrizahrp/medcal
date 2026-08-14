@@ -10,6 +10,7 @@
     "lint": "echo \"lint tech-pwa skipped\""
   },
   "dependencies": {
+    "@medcal/auth": "workspace:*",
     "@medcal/shared": "workspace:*",
     "@medcal/ui": "workspace:*",
     "next": "16.2.12",
@@ -22,6 +23,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.21",
+    "dotenv": "^16.6.1",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2"
