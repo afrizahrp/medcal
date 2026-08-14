@@ -1,0 +1,51 @@
+# MedCal production Compose stack (F5.4) — VPS deployment only.
+#
+# Isolated from every existing project on the VPS by design:
+#   - explicit Compose project name ("medcal") -> prefixes network/container names
+#   - explicit container_name so nothing can collide with existing containers
+#     (only pre-existing container today: mssql2019)
+#   - its own bridge network (medcal_net), not the default/shared bridge
+#   - apps/api's port is published to 127.0.0.1 only — never 0.0.0.0 — so it is
+#     reachable from Nginx on the same host but not directly from the Internet
+#   - no Postgres service here: native PostgreSQL is existing VPS infrastructure
+#     and is reached from the container via the Docker bridge gateway, not
+#     containerized or duplicated by this stack (see .env.production.example)
+#
+# Does NOT touch: existing PM2 apps, existing Nginx config, existing Docker
+# SQL Server container, existing native PostgreSQL config, UFW rules.
+#
+# apps/web-api, apps/web, apps/portal, apps/tech-pwa are intentionally not
+# included yet — containerize each when its own implementation reaches the
+# appropriate stage (per F5.2 scope), not merely for symmetry.
+
+name: medcal
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: medcal-api:latest
+    container_name: medcal-api
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    ports:
+      - "127.0.0.1:3001:3001"
+    extra_hosts:
+      # Linux Docker has no automatic host.docker.internal like Docker Desktop does;
+      # host-gateway makes it resolve to the VPS host, where native Postgres listens.
+      - "host.docker.internal:host-gateway"
+    networks:
+      - medcal_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  medcal_net:
+    name: medcal_net
+    driver: bridge

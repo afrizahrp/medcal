@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+.turbo
+.git
+.env
+.env.local
+.env.*.local
+.env.production
+!.env.production.example
+coverage
+**/coverage
+docs
+public
+*.log

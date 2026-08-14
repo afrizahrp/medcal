@@ -3,7 +3,7 @@ import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 import { contactMessageCreateSchema } from "@medcal/shared";
-// import { buildWhatsAppDeepLink } from "@medcal/notifications";
+import { buildWhatsAppDeepLink } from "@medcal/notifications";
 
 /**
  * Public edge only — captcha/rate-limit/forward.
