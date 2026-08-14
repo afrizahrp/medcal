@@ -1,11 +1,18 @@
 /**
  * Better Auth wiring lives here (server + client).
  */
-import { betterAuth } from "better-auth";
+import { APIError, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@medcal/db";
 
 export { hasPermission } from "./access-control";
+// Re-exported so callers throw the exact APIError class this betterAuth()
+// instance's internals check `instanceof` against — apps/api also declares
+// its own direct "better-auth" dependency, which pnpm can resolve to a
+// different peer-dependency-hashed module instance; importing APIError
+// straight from "better-auth" there would silently fail Better Auth's
+// isAPIError() identity check and collapse into a generic error.
+export { APIError };
 
 export const AUTH_ROLES = [
   "SUPERADMIN",
