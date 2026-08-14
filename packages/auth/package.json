@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "@medcal/db": "workspace:*",
-    "@medcal/shared": "workspace:*"
+    "@medcal/shared": "workspace:*",
+    "better-auth": "^1.6.27"
   },
   "devDependencies": {
     "typescript": "^5.8.2",
-    "@medcal/typescript-config": "workspace:*"
+    "@medcal/typescript-config": "workspace:*",
+    "@types/node": "^22.13.10"
   }
 }

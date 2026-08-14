@@ -1,30 +1,24 @@
-import {
-  Body,
-  Controller,
-  Headers,
-  Post,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { Body, Controller, Inject, Post, UseGuards } from "@nestjs/common";
+import { AllowAnonymous } from "@thallesp/nestjs-better-auth";
 import type { ContactMessageCreateInput } from "@medcal/shared";
+import { CompanyId } from "../../common/decorators/company-id.decorator";
+import { InternalServiceGuard } from "../../common/guards/internal-service.guard";
 import { ContactMessagesService } from "./contact-messages.service";
 
+// Trusted via x-internal-secret from apps/web-api, not a Better Auth session.
 @Controller("internal/contact-messages")
 export class ContactMessagesController {
-  constructor(private readonly service: ContactMessagesService) {}
+  // Explicit token: tsx/esbuild doesn't emit design:paramtypes metadata,
+  // so Nest can't resolve this by type alone.
+  constructor(
+    @Inject(ContactMessagesService)
+    private readonly service: ContactMessagesService,
+  ) {}
 
   @Post()
-  async create(
-    @Body() body: ContactMessageCreateInput,
-    @Headers("x-internal-secret") secret: string | undefined,
-    @Headers("x-company-id") companyId: string | undefined,
-  ) {
-    const expected = process.env.INTERNAL_API_SECRET ?? "";
-    if (!expected || secret !== expected) {
-      throw new UnauthorizedException("Invalid internal secret");
-    }
-    if (!companyId) {
-      throw new UnauthorizedException("Missing company id");
-    }
+  @AllowAnonymous()
+  @UseGuards(InternalServiceGuard)
+  async create(@Body() body: ContactMessageCreateInput, @CompanyId() companyId: string) {
     return this.service.create(companyId, body);
   }
 }

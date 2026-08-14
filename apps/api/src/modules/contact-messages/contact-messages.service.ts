@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { prisma } from "@medcal/db";
+import type { ContactMessage } from "@medcal/db";
 import type { ContactMessageCreateInput } from "@medcal/shared";
 import { emailDomain, isPublicEmailDomain } from "@medcal/shared";
 
@@ -58,5 +59,12 @@ export class ContactMessagesService {
     });
 
     return { id: created.id, matchStatus: created.matchStatus };
+  }
+
+  async findAll(companyId: string): Promise<ContactMessage[]> {
+    return prisma.contactMessage.findMany({
+      where: { companyId },
+      orderBy: { createdAt: "desc" },
+    });
   }
 }

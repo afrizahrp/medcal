@@ -6,13 +6,13 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: medcal
-      POSTGRES_PASSWORD: medcal
-      POSTGRES_DB: medcal
+      POSTGRES_USER: afriza
+      POSTGRES_PASSWORD: Afrbyu12
+      POSTGRES_DB: pkmdb
     volumes:
       - medcal_pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U medcal -d medcal"]
+      test: ["CMD-SHELL", "pg_isready -U afriza -d pkmdb"]
       interval: 5s
       timeout: 5s
       retries: 10

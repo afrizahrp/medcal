@@ -40,6 +40,11 @@ enum MembershipRole {
   CUSTOMER
 }
 
+enum EmailWhitelistStatus {
+  ACTIVE
+  REVOKED
+}
+
 enum PushApp {
   WEB
   PORTAL
@@ -211,50 +216,109 @@ enum FileOwnerType {
 // =============================================================================
 
 model Company {
-  id          String        @id @default(cuid())
-  name        String
-  legalName   String?
-  taxId       String?
-  address     String?
-  phone       String?
-  email       String?
-  status      CompanyStatus @default(ACTIVE)
+  id           String        @id @db.Char(3)
+  name         String        @db.VarChar(50)
+  legalName    String?       @db.VarChar(50)
+  taxId        String?       @db.VarChar(25)
+  address      String?       @db.VarChar(100)
+  phone        String?       @db.VarChar(25)
+  email        String?       @db.VarChar(50)
+  status       CompanyStatus @default(ACTIVE)
   settingsJson Json?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  memberships       UserMembership[]
-  contactMessages   ContactMessage[]
-  leads             Lead[]
-  customers         Customer[]
-  devices           Device[]
+  memberships         UserMembership[]
+  contactMessages     ContactMessage[]
+  leads               Lead[]
+  customers           Customer[]
+  devices             Device[]
   calibrationRequests CalibrationRequest[]
-  serviceTariffs    ServiceTariff[]
-  quotations        Quotation[]
-  workOrders        WorkOrder[]
-  certificates      Certificate[]
-  invoices          Invoice[]
-  creditNotes       CreditNote[]
-  reminderEvents    ReminderEvent[]
-  fileObjects       FileObject[]
-  pushSubscriptions PushSubscription[]
+  serviceTariffs      ServiceTariff[]
+  quotations          Quotation[]
+  workOrders          WorkOrder[]
+  certificates        Certificate[]
+  invoices            Invoice[]
+  creditNotes         CreditNote[]
+  reminderEvents      ReminderEvent[]
+  fileObjects         FileObject[]
+  fcmTokens           FCMToken[]
 }
 
 model User {
-  id        String     @id @default(cuid())
-  email     String     @unique
-  name      String?
-  status    UserStatus @default(INVITED)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id            String     @id @default(cuid())
+  email         String     @unique @db.VarChar(50)
+  name          String?    @db.VarChar(50)
+  status        UserStatus @default(INVITED)
+  // Better Auth-owned bookkeeping fields (locked: no email verification step enforced,
+  // but the column is part of Better Auth's own user-model contract).
+  emailVerified Boolean    @default(false)
+  image         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   memberships           UserMembership[]
   customerLinks         CustomerUserLink[]
-  pushSubscriptions     PushSubscription[]
-  assignedLeads         Lead[]                 @relation("LeadAssignee")
-  confirmedMatches      ContactMessage[]       @relation("MatchConfirmer")
+  fcmTokens             FCMToken[]
+  assignedLeads         Lead[]                @relation("LeadAssignee")
+  confirmedMatches      ContactMessage[]      @relation("MatchConfirmer")
   workOrderAssignments  WorkOrderAssignment[]
-  qualityReviews        QualityReview[]        @relation("Reviewer")
+  qualityReviews        QualityReview[]       @relation("Reviewer")
+  sessions              Session[]
+  accounts              Account[]
+  emailWhitelistCreated EmailWhitelist[]      @relation("EmailWhitelistCreator")
+  emailWhitelistRevoked EmailWhitelist[]      @relation("EmailWhitelistRevoker")
+}
+
+// =============================================================================
+// Better Auth — owned tables (locked: hosted in-process inside apps/api;
+// domain-facing User model above is reused as Better Auth's user model)
+// =============================================================================
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String    @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+
+  @@index([identifier])
 }
 
 model UserMembership {
@@ -273,6 +337,28 @@ model UserMembership {
   @@index([companyId])
 }
 
+// Registration gate (F4, locked): reusable, not consumed — a revoked row still
+// exists but no longer authorizes sign-up. Standalone, no companyId.
+// createdBy is nullable ONLY for the one-time SUPERADMIN bootstrap entry (see
+// apps/api/src/bootstrap-superadmin.ts): NULL means "created by the bootstrap
+// process, not by a user" — there is no admin yet at that point. Every entry
+// created through the normal whitelist:manage flow (WhitelistService.create)
+// always supplies a real createdBy and must continue to do so.
+model EmailWhitelist {
+  id        String               @id @default(cuid())
+  email     String               @unique
+  status    EmailWhitelistStatus @default(ACTIVE)
+  createdBy String?
+  createdAt DateTime             @default(now())
+  revokedBy String?
+  revokedAt DateTime?
+
+  creator User? @relation("EmailWhitelistCreator", fields: [createdBy], references: [id])
+  revoker User? @relation("EmailWhitelistRevoker", fields: [revokedBy], references: [id])
+
+  @@index([status])
+}
+
 model CustomerUserLink {
   id         String   @id @default(cuid())
   userId     String
@@ -286,22 +372,21 @@ model CustomerUserLink {
   @@index([customerId])
 }
 
-model PushSubscription {
-  id        String   @id @default(cuid())
-  companyId String
-  userId    String
-  endpoint  String
-  p256dh    String
-  auth      String
-  app       PushApp
-  userAgent String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model FCMToken {
+  id         String    @id @default(cuid())
+  companyId  String
+  userId     String
+  token      String    @unique
+  deviceType String
+  app        PushApp
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([endpoint])
   @@index([companyId, userId])
 }
 
@@ -310,24 +395,24 @@ model PushSubscription {
 // =============================================================================
 
 model ContactMessage {
-  id                 String         @id @default(cuid())
-  companyId          String
-  getFrom            GetMessageFrom @default(CONTACTFORM)
-  status             ContactStatus  @default(PENDING)
-  subject            String?
-  topicId            Int?
-  message            String
-  name               String
-  email              String
-  phone              String?
-  organizationName   String?
-  utmJson            Json?
-  matchStatus        MatchStatus    @default(NONE)
-  matchedCustomerId  String?
-  confirmedByUserId  String?
-  confirmedAt        DateTime?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  id                String         @id @default(cuid())
+  companyId         String
+  getFrom           GetMessageFrom @default(CONTACTFORM)
+  status            ContactStatus  @default(PENDING)
+  subject           String?
+  topicId           Int?
+  message           String
+  name              String
+  email             String
+  phone             String?
+  organizationName  String?
+  utmJson           Json?
+  matchStatus       MatchStatus    @default(NONE)
+  matchedCustomerId String?
+  confirmedByUserId String?
+  confirmedAt       DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   matchedCustomer Customer? @relation("ContactMatchCandidate", fields: [matchedCustomerId], references: [id])
@@ -412,17 +497,17 @@ model CustomerContact {
 // =============================================================================
 
 model Device {
-  id            String       @id @default(cuid())
-  companyId     String
-  customerId    String
-  brand         String?
-  model         String?
-  serialNumber  String?
-  category      String?
-  locationText  String?
-  status        DeviceStatus @default(ACTIVE)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id           String       @id @default(cuid())
+  companyId    String
+  customerId   String
+  brand        String?
+  model        String?
+  serialNumber String?
+  category     String?
+  locationText String?
+  status       DeviceStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
@@ -437,16 +522,16 @@ model Device {
 }
 
 model CalibrationRequest {
-  id                  String                    @id @default(cuid())
+  id                  String                   @id @default(cuid())
   companyId           String
   customerId          String
   leadId              String?
   serviceMode         ServiceMode
   desiredScheduleNote String?
-  status              CalibrationRequestStatus  @default(DRAFT)
+  status              CalibrationRequestStatus @default(DRAFT)
   notes               String?
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
@@ -467,8 +552,8 @@ model CalibrationRequestItem {
   notes     String?
   createdAt DateTime @default(now())
 
-  request CalibrationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  device  Device             @relation(fields: [deviceId], references: [id])
+  request        CalibrationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  device         Device             @relation(fields: [deviceId], references: [id])
   quotationItems QuotationItem[]
 
   @@index([requestId])
@@ -602,12 +687,12 @@ model CalibrationJob {
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 
-  workOrder  WorkOrder           @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  device     Device              @relation(fields: [deviceId], references: [id])
-  results    MeasurementResult[]
-  evidences  JobEvidence[]
-  signature  CustomerSignature?
-  reviews    QualityReview[]
+  workOrder   WorkOrder           @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  device      Device              @relation(fields: [deviceId], references: [id])
+  results     MeasurementResult[]
+  evidences   JobEvidence[]
+  signature   CustomerSignature?
+  reviews     QualityReview[]
   certificate Certificate?
 
   @@unique([workOrderId, deviceId])
@@ -698,18 +783,18 @@ model Certificate {
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
 
-  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  device           Device            @relation(fields: [deviceId], references: [id])
-  calibrationJob   CalibrationJob    @relation(fields: [calibrationJobId], references: [id])
-  qualityReview    QualityReview?    @relation(fields: [qualityReviewId], references: [id])
-  supersedes       Certificate?      @relation("CertificateSupersede", fields: [supersedesCertificateId], references: [id])
-  supersededBy     Certificate[]     @relation("CertificateSupersede")
-  pdfFile          FileObject?       @relation("CertificatePdf", fields: [pdfFileObjectId], references: [id])
-  invoiceLinks     InvoiceCertificate[]
-  invoiceItems     InvoiceItem[]
-  creditNotes      CreditNote[]
-  reminderEvents   ReminderEvent[]
+  company        Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer       Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  device         Device               @relation(fields: [deviceId], references: [id])
+  calibrationJob CalibrationJob       @relation(fields: [calibrationJobId], references: [id])
+  qualityReview  QualityReview?       @relation(fields: [qualityReviewId], references: [id])
+  supersedes     Certificate?         @relation("CertificateSupersede", fields: [supersedesCertificateId], references: [id])
+  supersededBy   Certificate[]        @relation("CertificateSupersede")
+  pdfFile        FileObject?          @relation("CertificatePdf", fields: [pdfFileObjectId], references: [id])
+  invoiceLinks   InvoiceCertificate[]
+  invoiceItems   InvoiceItem[]
+  creditNotes    CreditNote[]
+  reminderEvents ReminderEvent[]
 
   @@unique([companyId, number])
   @@index([companyId, billingStatus])
@@ -859,11 +944,11 @@ model FileObject {
   originalName String?
   createdAt    DateTime      @default(now())
 
-  company              Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer             Customer?           @relation(fields: [customerId], references: [id])
-  jobEvidences         JobEvidence[]
-  signatures           CustomerSignature[]
-  certificatePdfs      Certificate[]       @relation("CertificatePdf")
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer        Customer?           @relation(fields: [customerId], references: [id])
+  jobEvidences    JobEvidence[]
+  signatures      CustomerSignature[]
+  certificatePdfs Certificate[]       @relation("CertificatePdf")
 
   @@index([companyId, ownerType, ownerId])
   @@index([storageKey])

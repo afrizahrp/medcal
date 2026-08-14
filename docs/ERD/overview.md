@@ -19,7 +19,7 @@ erDiagram
   ContactMessage ||--o| Lead : may_create
   ContactMessage }o--o| Customer : match_candidate
   Lead }o--o| Customer : converts_to
-  User ||--o{ PushSubscription : subscribes
+  User ||--o{ FCMToken : subscribes
 
   Company {
     string id PK
@@ -77,7 +77,7 @@ erDiagram
     string customerId FK
   }
 
-  PushSubscription {
+  FCMToken {
     string id PK
     string userId FK
     string companyId FK
@@ -91,7 +91,7 @@ erDiagram
 - `matchStatus` (medcal): none | exact_email | domain_candidate | confirmed_existing | dismissed
 - Domain match excludes public email blocklist
 - New prospect → `Lead`; confirmed existing → skip Lead, go to Request
-- Full `ChatSession` / mailbox `Email` stack = later port from bi-erp; MVP cukup ContactMessage
+- `ChatSession` / `ChatMessage` / `ChatSessionToken` are **MVP** (human-only, see Adoption Matrix) — only the full mailbox `Email` stack remains a later port from bi-erp
 
 ---
 

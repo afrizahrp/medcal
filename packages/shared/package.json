@@ -6,11 +6,13 @@
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "echo \"lint shared skipped\""
+    "lint": "echo \"lint shared skipped\"",
+    "test": "vitest run"
   },
   "devDependencies": {
+    "@medcal/typescript-config": "workspace:*",
     "typescript": "^5.8.2",
-    "@medcal/typescript-config": "workspace:*"
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "zod": "^3.24.2"

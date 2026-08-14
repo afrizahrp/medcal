@@ -28,8 +28,8 @@ Common on almost all entities:
 ### CustomerUserLink
 `userId`, `customerId` (unique pair)
 
-### PushSubscription
-`userId`, `endpoint`, `p256dh`, `auth`, `app` (portal|tech-pwa|web), `userAgent?`
+### FCMToken
+`userId`, `token`, `deviceType`, `isActive`, `lastUsedAt`, `app` (portal|tech-pwa|web)
 
 ---
 
