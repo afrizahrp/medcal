@@ -1,31 +1,78 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Script from "next/script";
 import { company, waLink } from "@/data/site";
 import { Breadcrumb } from "@/components/breadcrumb";
+
+interface ContactTopic {
+  id: number;
+  name: string;
+}
+
+declare global {
+  interface Window {
+    grecaptcha?: {
+      ready: (callback: () => void) => void;
+      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+    };
+  }
+}
+
+const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? "";
 
 export function KontakForm() {
   const [status, setStatus] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [topics, setTopics] = useState<ContactTopic[]>([]);
+
+  useEffect(() => {
+    const base = process.env.NEXT_PUBLIC_WEB_API_URL ?? "http://localhost:3002";
+    fetch(`${base}/public/contact-topics`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setTopics(Array.isArray(data) ? data : []))
+      .catch(() => setTopics([]));
+  }, []);
+
+  async function getCaptchaToken(): Promise<string> {
+    if (!RECAPTCHA_SITE_KEY || !window.grecaptcha) {
+      throw new Error("Verifikasi keamanan belum siap, silakan coba lagi.");
+    }
+    return new Promise((resolve, reject) => {
+      window.grecaptcha!.ready(() => {
+        window
+          .grecaptcha!.execute(RECAPTCHA_SITE_KEY, { action: "contact_submit" })
+          .then(resolve)
+          .catch(reject);
+      });
+    });
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Captured synchronously: React clears e.currentTarget once the
+    // synchronous event phase ends, so it's null by the time we reach any
+    // code after an `await` below (getCaptchaToken/fetch).
+    const formEl = e.currentTarget;
     setPending(true);
     setStatus(null);
-    const fd = new FormData(e.currentTarget);
-    const payload = {
-      getFrom: "CONTACTFORM" as const,
-      name: String(fd.get("name") ?? ""),
-      email: String(fd.get("email") ?? ""),
-      phone: String(fd.get("phone") ?? "") || undefined,
-      organizationName: String(fd.get("organizationName") ?? "") || undefined,
-      subject: String(fd.get("subject") ?? "") || undefined,
-      message: String(fd.get("message") ?? ""),
-    };
+    const fd = new FormData(formEl);
+    const topicIdRaw = String(fd.get("topicId") ?? "");
 
     try {
-      const base =
-        process.env.NEXT_PUBLIC_WEB_API_URL ?? "http://localhost:3002";
+      const captchaToken = await getCaptchaToken();
+      const payload = {
+        name: String(fd.get("name") ?? ""),
+        email: String(fd.get("email") ?? ""),
+        phone: String(fd.get("phone") ?? "") || undefined,
+        organizationName: String(fd.get("organizationName") ?? "") || undefined,
+        subject: String(fd.get("subject") ?? "") || undefined,
+        message: String(fd.get("message") ?? ""),
+        topicId: Number(topicIdRaw),
+        captchaToken,
+      };
+
+      const base = process.env.NEXT_PUBLIC_WEB_API_URL ?? "http://localhost:3002";
       const res = await fetch(`${base}/public/contact-messages`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -37,7 +84,7 @@ export function KontakForm() {
           ? "Terkirim! Tim kami akan segera menghubungi Anda."
           : `Gagal: ${JSON.stringify(json.error ?? json)}`,
       );
-      if (res.ok) e.currentTarget.reset();
+      if (res.ok) formEl.reset();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Network error");
     } finally {
@@ -50,6 +97,12 @@ export function KontakForm() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+      {RECAPTCHA_SITE_KEY ? (
+        <Script
+          src={`https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`}
+          strategy="afterInteractive"
+        />
+      ) : null}
 
       <div className="mx-auto mt-6 max-w-2xl text-center">
         <div className="flex justify-center">
@@ -76,8 +129,23 @@ export function KontakForm() {
           onSubmit={onSubmit}
         >
           <div>
+            <label htmlFor="topicId" className="mb-1.5 block text-sm font-medium text-ink-700">
+              Topik Konsultasi <span className="text-red-500">*</span>
+            </label>
+            <select id="topicId" className={inputClass} name="topicId" required defaultValue="">
+              <option value="" disabled>
+                Pilih topik konsultasi
+              </option>
+              {topics.map((topic) => (
+                <option key={topic.id} value={topic.id}>
+                  {topic.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label htmlFor="name" className="mb-1.5 block text-sm font-medium text-ink-700">
-              Nama <span className="text-red-500">*</span>
+              Nama Lengkap <span className="text-red-500">*</span>
             </label>
             <input
               id="name"
@@ -102,7 +170,7 @@ export function KontakForm() {
           </div>
           <div>
             <label htmlFor="phone" className="mb-1.5 block text-sm font-medium text-ink-700">
-              Telepon
+              Nomor Telepon
             </label>
             <input
               id="phone"
@@ -117,7 +185,7 @@ export function KontakForm() {
               htmlFor="organizationName"
               className="mb-1.5 block text-sm font-medium text-ink-700"
             >
-              Institusi
+              Nama Perusahaan
             </label>
             <input
               id="organizationName"
@@ -157,6 +225,27 @@ export function KontakForm() {
           >
             {pending ? "Mengirim…" : "Kirim Permintaan Konsultasi"}
           </button>
+          <p className="text-xs text-ink-400">
+            Formulir ini dilindungi reCAPTCHA dan tunduk pada{" "}
+            <a
+              href="https://policies.google.com/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              Kebijakan Privasi
+            </a>{" "}
+            dan{" "}
+            <a
+              href="https://policies.google.com/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              Persyaratan Layanan
+            </a>{" "}
+            Google.
+          </p>
           {status ? (
             <p className="text-sm text-ink-600" role="status">
               {status}

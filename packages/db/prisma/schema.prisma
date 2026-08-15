@@ -414,15 +414,30 @@ model ContactMessage {
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
-  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  matchedCustomer Customer? @relation("ContactMatchCandidate", fields: [matchedCustomerId], references: [id])
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  matchedCustomer Customer?     @relation("ContactMatchCandidate", fields: [matchedCustomerId], references: [id])
   lead            Lead?
-  confirmedBy     User?     @relation("MatchConfirmer", fields: [confirmedByUserId], references: [id])
+  confirmedBy     User?         @relation("MatchConfirmer", fields: [confirmedByUserId], references: [id])
+  topic           ContactTopic? @relation(fields: [topicId], references: [id], onDelete: SetNull)
 
   @@index([companyId, createdAt])
   @@index([companyId, email])
   @@index([companyId, status])
   @@index([companyId, getFrom])
+}
+
+// Static, seeded lookup for Contact Form topic selection — global (no companyId),
+// no admin CRUD by design (matches the reference implementation's own proportions).
+model ContactTopic {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages ContactMessage[]
+
+  @@index([isActive])
 }
 
 model Lead {

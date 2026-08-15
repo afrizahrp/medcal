@@ -1,15 +1,44 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common";
 import { prisma } from "@medcal/db";
-import type { ContactMessage } from "@medcal/db";
-import type { ContactMessageCreateInput } from "@medcal/shared";
-import { emailDomain, isPublicEmailDomain } from "@medcal/shared";
+import type { ContactMessage, ContactTopic } from "@medcal/db";
+import { contactMessageCreateSchema, emailDomain, isPublicEmailDomain } from "@medcal/shared";
 
 @Injectable()
 export class ContactMessagesService {
-  async create(companyId: string, input: ContactMessageCreateInput) {
+  async create(companyId: string, rawInput: unknown) {
+    // Authoritative server-side validation — this endpoint must not rely
+    // solely on apps/web-api having already validated the same shape;
+    // reuses the exact schema web-api uses, not a second parallel one.
+    const parsed = contactMessageCreateSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid contact message payload",
+        code: "INVALID_CONTACT_MESSAGE",
+        issues: parsed.error.flatten(),
+      });
+    }
+    const input = parsed.data;
+
+    // companyId is guard-derived (see InternalServiceGuard), never client
+    // input, so "unknown companyId" here means this deployment's own
+    // COMPANY_ID env var doesn't match a real Company row — a deployment
+    // misconfiguration, not a caller error.
     const company = await prisma.company.findUnique({ where: { id: companyId } });
     if (!company) {
-      return { error: "Unknown companyId", statusCode: 400 };
+      throw new InternalServerErrorException({
+        message: "Server misconfiguration: COMPANY_ID does not match a known company",
+        code: "COMPANY_NOT_CONFIGURED",
+      });
+    }
+
+    if (input.topicId !== undefined) {
+      const topic = await prisma.contactTopic.findUnique({ where: { id: input.topicId } });
+      if (!topic || !topic.isActive) {
+        throw new BadRequestException({
+          message: "Invalid topic",
+          code: "INVALID_CONTACT_TOPIC",
+        });
+      }
     }
 
     const domain = emailDomain(input.email);
@@ -65,6 +94,13 @@ export class ContactMessagesService {
     return prisma.contactMessage.findMany({
       where: { companyId },
       orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async findActiveTopics(): Promise<ContactTopic[]> {
+    return prisma.contactTopic.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
     });
   }
 }
