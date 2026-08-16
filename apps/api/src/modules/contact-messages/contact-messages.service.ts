@@ -1,7 +1,14 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common";
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { prisma } from "@medcal/db";
-import type { ContactMessage, ContactTopic } from "@medcal/db";
-import { contactMessageCreateSchema, emailDomain, isPublicEmailDomain } from "@medcal/shared";
+import type { ContactMessage, ContactStatus, ContactTopic } from "@medcal/db";
+import {
+  contactMessageCreateSchema,
+  emailDomain,
+  isPublicEmailDomain,
+  normalizePhone,
+} from "@medcal/shared";
+import type { ContactMessageLeadResolution } from "@medcal/shared";
+import { classifyLeadMatch, findLeadMatchCandidates } from "../leads/lead-matching";
 
 @Injectable()
 export class ContactMessagesService {
@@ -70,6 +77,38 @@ export class ContactMessagesService {
       }
     }
 
+    // Lead identity matching (Lead Inbox design review, 2026-08-16, §4,
+    // corrected 2026-08-16) — a separate concern from the
+    // matchStatus/matchedCustomerId Customer dedup above. STRONG MATCH
+    // auto-attaches; POSSIBLE MATCH leaves leadId null (surfaced in Needs
+    // Review, never auto-created into a Lead — avoids duplicate Leads);
+    // NO MATCH creates a new Lead.
+    const phoneNormalized = input.phone ? normalizePhone(input.phone) : undefined;
+    const candidates = await findLeadMatchCandidates(companyId, {
+      email: input.email,
+      phone: input.phone,
+      organizationName: input.organizationName,
+    });
+    const match = classifyLeadMatch(candidates);
+
+    let leadId: string | null;
+    if (match.kind === "STRONG") {
+      leadId = match.leadId;
+    } else if (match.kind === "POSSIBLE") {
+      leadId = null;
+    } else {
+      const newLead = await prisma.lead.create({
+        data: {
+          companyId,
+          name: input.name,
+          email: input.email,
+          phone: input.phone,
+          organizationName: input.organizationName,
+        },
+      });
+      leadId = newLead.id;
+    }
+
     const created = await prisma.contactMessage.create({
       data: {
         companyId,
@@ -77,6 +116,7 @@ export class ContactMessagesService {
         name: input.name,
         email: input.email,
         phone: input.phone,
+        phoneNormalized,
         organizationName: input.organizationName,
         subject: input.subject,
         message: input.message,
@@ -84,10 +124,79 @@ export class ContactMessagesService {
         utmJson: input.utmJson,
         matchStatus,
         matchedCustomerId,
+        leadId,
       },
     });
 
-    return { id: created.id, matchStatus: created.matchStatus };
+    return { id: created.id, matchStatus: created.matchStatus, leadId: created.leadId };
+  }
+
+  /**
+   * Staff resolution of a Needs Review item (POSSIBLE MATCH, ContactMessage
+   * still leadId=null). Two actions only: attach to an existing Lead the
+   * staff member picked, or create a new Lead from this message's own
+   * identity — exactly the same Lead-creation shape as the NO MATCH path in
+   * create() above. Concurrency-safe: the update only succeeds if leadId is
+   * still null at write time (atomic WHERE-guarded updateMany), so a second
+   * staff member resolving the same item — or the message somehow already
+   * being resolved — fails loudly instead of silently overwriting.
+   */
+  async resolveLeadMatch(
+    companyId: string,
+    messageId: string,
+    resolution: ContactMessageLeadResolution,
+  ): Promise<ContactMessage> {
+    const message = await prisma.contactMessage.findFirst({ where: { id: messageId, companyId } });
+    if (!message) {
+      throw new NotFoundException({ message: "Contact message not found", code: "CONTACT_MESSAGE_NOT_FOUND" });
+    }
+    if (message.leadId !== null) {
+      throw new BadRequestException({
+        message: "Contact message is already linked to a Lead",
+        code: "CONTACT_MESSAGE_ALREADY_LINKED",
+      });
+    }
+
+    let targetLeadId: string;
+    let createdLeadIdOnFailure: string | undefined;
+
+    if (resolution.action === "ATTACH") {
+      const targetLead = await prisma.lead.findFirst({ where: { id: resolution.leadId, companyId } });
+      if (!targetLead) {
+        throw new BadRequestException({ message: "Target lead not found", code: "LEAD_NOT_FOUND" });
+      }
+      targetLeadId = targetLead.id;
+    } else {
+      const newLead = await prisma.lead.create({
+        data: {
+          companyId,
+          name: message.name,
+          email: message.email,
+          phone: message.phone,
+          organizationName: message.organizationName,
+        },
+      });
+      targetLeadId = newLead.id;
+      createdLeadIdOnFailure = newLead.id;
+    }
+
+    const result = await prisma.contactMessage.updateMany({
+      where: { id: messageId, companyId, leadId: null },
+      data: { leadId: targetLeadId },
+    });
+    if (result.count === 0) {
+      // Someone else resolved it between our read and this write — roll back
+      // the Lead we just created (CREATE_NEW case) so it isn't orphaned.
+      if (createdLeadIdOnFailure) {
+        await prisma.lead.delete({ where: { id: createdLeadIdOnFailure } });
+      }
+      throw new BadRequestException({
+        message: "Contact message was already resolved by another user",
+        code: "CONTACT_MESSAGE_ALREADY_LINKED",
+      });
+    }
+
+    return prisma.contactMessage.findUniqueOrThrow({ where: { id: messageId } });
   }
 
   async findAll(companyId: string): Promise<ContactMessage[]> {
@@ -102,5 +211,13 @@ export class ContactMessagesService {
       where: { isActive: true },
       orderBy: { name: "asc" },
     });
+  }
+
+  async updateStatus(companyId: string, id: string, status: ContactStatus): Promise<ContactMessage> {
+    const message = await prisma.contactMessage.findFirst({ where: { id, companyId } });
+    if (!message) {
+      throw new NotFoundException({ message: "Contact message not found", code: "CONTACT_MESSAGE_NOT_FOUND" });
+    }
+    return prisma.contactMessage.update({ where: { id }, data: { status } });
   }
 }

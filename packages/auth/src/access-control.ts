@@ -7,15 +7,19 @@ import type { MembershipRole } from "@medcal/db";
  * chain per module. Extend per-module as needed.
  * - contactMessage:read (F3): proves the guard chain on ContactMessagesModule.
  * - whitelist:manage (F4, locked): EmailWhitelist CRUD, superadmin-only by default.
+ * - lead:read/lead:update (Lead Inbox, locked 2026-08-16 Decision 5 — per-verb,
+ *   not a blanket manage): no lead:assign — assignment is out of scope for v1
+ *   (Decision 3).
  */
 const ac = createAccessControl({
   contactMessage: ["read"],
   whitelist: ["manage"],
+  lead: ["read", "update"],
 } as const);
 
 const roleStatements: Record<MembershipRole, ReturnType<typeof ac.newRole>> = {
-  SUPERADMIN: ac.newRole({ contactMessage: ["read"], whitelist: ["manage"] }),
-  ADMIN: ac.newRole({ contactMessage: ["read"] }),
+  SUPERADMIN: ac.newRole({ contactMessage: ["read"], whitelist: ["manage"], lead: ["read", "update"] }),
+  ADMIN: ac.newRole({ contactMessage: ["read"], lead: ["read", "update"] }),
   SUPERVISOR: ac.newRole({}),
   TECHNICIAN: ac.newRole({}),
   FINANCE: ac.newRole({}),

@@ -125,3 +125,26 @@ describe("ContactMessagesService.findActiveTopics", () => {
     expect(topics.length).toBeGreaterThan(0);
   });
 });
+
+describe("ContactMessagesService.updateStatus — unread tracking (Lead Inbox, locked 2026-08-16 Decision 4)", () => {
+  it("transitions PENDING → READ", async () => {
+    const created = await service.create(realCompanyId, basePayload({ topicId: activeTopicId }));
+    createdMessageIds.push(created.id);
+
+    const stored = await prisma.contactMessage.findUniqueOrThrow({ where: { id: created.id } });
+    expect(stored.status).toBe("PENDING");
+
+    const updated = await service.updateStatus(realCompanyId, created.id, "READ");
+    expect(updated.status).toBe("READ");
+  });
+
+  it("throws NotFoundException for a message belonging to a different company", async () => {
+    const created = await service.create(realCompanyId, basePayload({ topicId: activeTopicId }));
+    createdMessageIds.push(created.id);
+
+    await expect(service.updateStatus("ZZZ-UNKNOWN", created.id, "READ")).rejects.toMatchObject({
+      status: 404,
+      response: { code: "CONTACT_MESSAGE_NOT_FOUND" },
+    });
+  });
+});

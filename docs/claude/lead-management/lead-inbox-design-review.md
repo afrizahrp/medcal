@@ -3,8 +3,6 @@
 > Review-only. No code, schema, migrations, or files modified. Verified directly against the current repository state (`d:\medcal`) as of 2026-08-16 — schema file, migration history, `apps/api` application code, RBAC catalog, and locked documentation (`docs/claude/lead-management/lead-inbox.md`, `docs/claude/lead-management/final-before-locked.md`, `docs/Architecture/01-bipmed-medcal-architecture-adoption-matrix.md`). Distinguishes **CURRENT CODE** from **DOCUMENTED INTENT** throughout, per your instruction not to assume docs are newer than the schema.
 >
 > **All decisions confirmed 2026-08-16.** Decision 1 (Lead → 1:N aggregate) = **YES**; Decision 2 (identity field placement) = **Option B, denormalized snapshot on Lead**; Decision 3 (assignment in scope for v1) = **NO, deferred**; Decision 4 (unread tracking via `ContactStatus`) = **YES**; Decision 5 (RBAC granularity) = **Option B, per-verb**; identity-matching auto-attach on STRONG MATCH = **YES**; matching scope = **exact normalized fields only, no fuzzy matching**. Every section below reflects the final, fully-locked design — nothing remains open.
->
-> Full copy of this review also saved to `D:\medcal\docs\claude\lead-management\lead-inbox-design-review.md`.
 
 ---
 

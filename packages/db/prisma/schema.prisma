@@ -405,18 +405,23 @@ model ContactMessage {
   name              String
   email             String
   phone             String?
+  // Canonical digit-only form of `phone` (see normalizePhone in @medcal/shared),
+  // computed at write time — used for Lead identity matching (see Lead below),
+  // kept separate from `phone` so the original submitted value is preserved.
+  phoneNormalized   String?
   organizationName  String?
   utmJson           Json?
   matchStatus       MatchStatus    @default(NONE)
   matchedCustomerId String?
   confirmedByUserId String?
   confirmedAt       DateTime?
+  leadId            String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
   company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   matchedCustomer Customer?     @relation("ContactMatchCandidate", fields: [matchedCustomerId], references: [id])
-  lead            Lead?
+  lead            Lead?         @relation(fields: [leadId], references: [id])
   confirmedBy     User?         @relation("MatchConfirmer", fields: [confirmedByUserId], references: [id])
   topic           ContactTopic? @relation(fields: [topicId], references: [id], onDelete: SetNull)
 
@@ -424,6 +429,7 @@ model ContactMessage {
   @@index([companyId, email])
   @@index([companyId, status])
   @@index([companyId, getFrom])
+  @@index([leadId])
 }
 
 // Static, seeded lookup for Contact Form topic selection — global (no companyId),
@@ -440,23 +446,34 @@ model ContactTopic {
   @@index([isActive])
 }
 
+// Aggregate root over multiple channel interactions (Lead Inbox design review,
+// 2026-08-16, Decision 1): one Lead may have many ContactMessage rows across
+// different getFrom channels. name/email/phone/organizationName are a
+// denormalized snapshot (Decision 2) populated from the first ContactMessage
+// at Lead-creation time, used as the inbox list's display source of truth —
+// ContactMessage rows remain the historical record of what was actually
+// submitted on each interaction.
 model Lead {
   id               String     @id @default(cuid())
   companyId        String
-  contactMessageId String?    @unique
   status           LeadStatus @default(NEW)
+  name             String
+  email            String
+  phone            String?
+  organizationName String?
   assignedToUserId String?
   customerId       String?
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
   company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  contactMessage      ContactMessage?      @relation(fields: [contactMessageId], references: [id])
+  contactMessages     ContactMessage[]
   assignedTo          User?                @relation("LeadAssignee", fields: [assignedToUserId], references: [id])
   customer            Customer?            @relation(fields: [customerId], references: [id])
   calibrationRequests CalibrationRequest[]
 
   @@index([companyId, status])
+  @@index([companyId, createdAt])
 }
 
 model Customer {
