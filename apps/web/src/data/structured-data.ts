@@ -18,7 +18,7 @@ export function professionalServiceJsonLd() {
     name: company.brandName,
     legalName: company.legalName,
     url: siteUrl,
-    logo: absoluteUrl("/logo.jpg"),
+    logo: absoluteUrl("/logo.jpeg"),
     telephone: `+${company.phoneRaw}`,
     email: company.email,
     address: {
@@ -39,9 +39,7 @@ export function websiteJsonLd() {
   };
 }
 
-export function breadcrumbListJsonLd(
-  items: { label: string; href: string }[],
-) {
+export function breadcrumbListJsonLd(items: { label: string; href: string }[]) {
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
