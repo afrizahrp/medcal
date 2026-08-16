@@ -4,10 +4,11 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import { whatsapp } from "@medcal/notifications";
-import { CHAT_SESSION_TOKEN_COOKIE, signChatSessionToken } from "@medcal/shared";
+import { CHAT_SESSION_TOKEN_COOKIE, signChatSessionToken, WHATSAPP_DEFAULT_MESSAGE } from "@medcal/shared";
 import { publicChatSessionSchema } from "./public-chat-session-schema";
 import { publicContactFormSchema } from "./public-contact-form-schema";
 import { publicWebChatSchema } from "./public-web-chat-schema";
+import { publicWhatsappLeadSchema } from "./public-whatsapp-lead-schema";
 import { verifyRecaptcha } from "./recaptcha";
 
 /**
@@ -95,6 +96,18 @@ const webChatLimiter = rateLimit({
 const chatSessionLimiter = rateLimit({
   windowMs: Number(process.env.CHAT_SESSION_RATE_LIMIT_WINDOW_MS ?? "60000"),
   limit: Number(process.env.CHAT_SESSION_RATE_LIMIT_MAX ?? "5"),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many submissions, please try again shortly." },
+});
+
+// Dedicated limiter for the WhatsApp identity dialog's ContactMessage
+// creation — its own quota, independent from contactFormLimiter/
+// webChatLimiter/chatSessionLimiter, per the same "channels don't share a
+// quota" principle already established for every other public route.
+const whatsappLeadLimiter = rateLimit({
+  windowMs: Number(process.env.WHATSAPP_LEAD_RATE_LIMIT_WINDOW_MS ?? "60000"),
+  limit: Number(process.env.WHATSAPP_LEAD_RATE_LIMIT_MAX ?? "5"),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many submissions, please try again shortly." },
@@ -198,6 +211,50 @@ app.post("/public/web-chat", webChatLimiter, async (req, res) => {
         "x-internal-secret": internalSecret,
       },
       body: JSON.stringify({ ...formData, getFrom: "CHAT_PERSON" }),
+    });
+
+    const body = await upstream.json().catch(() => ({}));
+    res.status(upstream.status).json(body);
+  } catch (err) {
+    res.status(502).json({
+      error: "Failed to reach business API",
+      detail: err instanceof Error ? err.message : "unknown",
+    });
+  }
+});
+
+app.post("/public/whatsapp-lead", whatsappLeadLimiter, async (req, res) => {
+  if (!companyId) {
+    res.status(500).json({ error: "COMPANY_ID not configured" });
+    return;
+  }
+
+  const parsed = publicWhatsappLeadSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const { captchaToken, ...formData } = parsed.data;
+  const captchaOk = await verifyRecaptcha(captchaToken, "whatsapp_lead_submit");
+  if (!captchaOk) {
+    res.status(400).json({ error: "CAPTCHA verification failed" });
+    return;
+  }
+
+  try {
+    // getFrom is always server-assigned — the browser never supplies it or
+    // a message body. The WhatsApp flow always uses the same fixed
+    // greeting as both the ContactMessage.message and the wa.me pre-fill
+    // text (WHATSAPP_DEFAULT_MESSAGE, @medcal/shared) — a client-supplied
+    // message is never accepted as authoritative.
+    const upstream = await fetch(`${apiUrl}/internal/contact-messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-internal-secret": internalSecret,
+      },
+      body: JSON.stringify({ ...formData, getFrom: "WHATSAPP", message: WHATSAPP_DEFAULT_MESSAGE }),
     });
 
     const body = await upstream.json().catch(() => ({}));

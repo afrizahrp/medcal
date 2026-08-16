@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
-import { WhatsAppFab } from "@/components/whatsapp-fab";
 import { WebChatBubble } from "@/components/web-chat-bubble";
 import { JsonLd } from "@/components/json-ld";
 import { siteUrl } from "@/data/seo";
@@ -40,7 +39,6 @@ export default function RootLayout({
         <SiteHeader />
         <main className="flex-1">{children}</main>
         <SiteFooter />
-        {/* <WhatsAppFab /> */}
         <WebChatBubble />
       </body>
     </html>

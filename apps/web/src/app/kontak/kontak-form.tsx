@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Script from "next/script";
-import { company, waLink } from "@/data/site";
+import { company } from "@/data/site";
 import { Breadcrumb } from "@/components/breadcrumb";
+import { WhatsAppIdentityDialog } from "@/components/whatsapp-identity-dialog";
 
 interface ContactTopic {
   id: number;
@@ -258,16 +259,10 @@ export function KontakForm() {
             <p className="text-sm font-semibold text-ink-900">
               Hubungi Langsung
             </p>
-            <a
-              href={waLink(
-                "Halo, saya ingin konsultasi kebutuhan kalibrasi alat kesehatan.",
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 flex items-center justify-center rounded-full bg-[#25D366] px-4 py-3 text-sm font-semibold text-white"
-            >
-              Chat WhatsApp
-            </a>
+            <WhatsAppIdentityDialog
+              triggerLabel="Chat WhatsApp"
+              triggerClassName="mt-3 flex w-full items-center justify-center rounded-full bg-[#25D366] px-4 py-3 text-sm font-semibold text-white"
+            />
             <a
               href={`tel:${company.phoneRaw}`}
               className="mt-2 flex items-center justify-center rounded-full border border-ink-200 px-4 py-3 text-sm font-semibold text-ink-700"
