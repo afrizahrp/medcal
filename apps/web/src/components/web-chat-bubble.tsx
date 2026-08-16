@@ -125,8 +125,13 @@ export function WebChatBubble() {
     e.preventDefault();
     const body = draft.trim();
     if (!body || chat.sessionClosed) return;
-    chat.sendMessage(body);
-    setDraft("");
+    // Only clear the draft if the message was actually emitted — the
+    // socket may be disconnected (e.g. Enter-submitting while offline
+    // bypasses the disabled submit button, which HTML only blocks clicks
+    // on, not implicit Enter-submission). The connection-state line above
+    // the composer already communicates why nothing was sent.
+    const sent = chat.sendMessage(body);
+    if (sent) setDraft("");
   }
 
   const inputClass =

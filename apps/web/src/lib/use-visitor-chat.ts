@@ -30,7 +30,10 @@ interface UseVisitorChatResult {
   messages: ChatWireMessage[];
   sessionClosed: boolean;
   startSession: (input: StartSessionInput) => Promise<{ ok: true } | { ok: false; error: string }>;
-  sendMessage: (body: string) => void;
+  // Returns false if the socket wasn't connected and nothing was sent —
+  // callers must not act as if the message went out (e.g. must not clear
+  // a draft) when this returns false.
+  sendMessage: (body: string) => boolean;
 }
 
 const WEB_API_URL = process.env.NEXT_PUBLIC_WEB_API_URL ?? "http://localhost:3002";
@@ -176,14 +179,20 @@ export function useVisitorChat(enabled: boolean): UseVisitorChatResult {
     [],
   );
 
-  const sendMessage = useCallback((body: string) => {
+  // Returns whether the message was actually emitted (socket connected at
+  // call time) — false means the caller MUST NOT treat the send as having
+  // happened (e.g. must not clear a draft). This is a synchronous,
+  // race-free check: `socket.connected` is read immediately before emit,
+  // not from React state, so there is no stale-render window here.
+  const sendMessage = useCallback((body: string): boolean => {
     const socket = socketRef.current;
-    if (!socket?.connected) return;
+    if (!socket?.connected) return false;
     // Only message content — sender identity/company are always derived
     // server-side from the authenticated socket (Phase 2 contract). No
     // sessionId either: a visitor socket has exactly one authorized
     // session and never supplies one.
     socket.emit("send_message", { body, clientMessageId: crypto.randomUUID() });
+    return true;
   }, []);
 
   return { phase, connectionState, messages, sessionClosed, startSession, sendMessage };
