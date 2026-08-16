@@ -6,7 +6,7 @@ import Image from "next/image";
 import { company, primaryNav } from "@/data/site";
 import { CatalogSearch } from "@/components/catalog-search";
 import { SectionCta } from "@/components/section-cta";
-import logo from "../../public/logo.jpeg";
+import logo from "../../public/logo.jpg";
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);

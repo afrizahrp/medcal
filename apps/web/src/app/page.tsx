@@ -11,10 +11,10 @@ import { websiteJsonLd } from "@/data/structured-data";
 export const metadata: Metadata = {
   title: {
     absolute:
-      "Presisi Kalibrasi Medika — Kalibrasi Alat Kesehatan Terakreditasi KAN",
+      "Presisi Kalibrasi Medika | Kalibrasi Alat Kesehatan Terakreditasi KAN",
   },
   description:
-    "Jasa kalibrasi alat kesehatan dan laboratorium. Terakreditasi KAN (LK-521-IDN) untuk item dalam ruang lingkup, mengikuti SNI ISO/IEC 17025:2017.",
+    "Jasa kalibrasi alat kesehatan dan laboratorium. Terakreditasi KAN (LK-521-IDN) untuk item dalam scope, mengikuti SNI ISO/IEC 17025:2017.",
   alternates: { canonical: "/" },
   openGraph: { url: "/" },
 };
@@ -28,9 +28,7 @@ export default function HomePage() {
       <FeaturedCategoriesSection />
       <ProcessSteps />
       <AccreditationSection />
-      <SectionCta
-        variant="banner"
-      />
+      <SectionCta variant="banner" />
     </>
   );
 }

@@ -18,7 +18,7 @@ export function professionalServiceJsonLd() {
     name: company.brandName,
     legalName: company.legalName,
     url: siteUrl,
-    logo: absoluteUrl("/logo.jpeg"),
+    logo: absoluteUrl("/logo.jpg"),
     telephone: `+${company.phoneRaw}`,
     email: company.email,
     address: {
