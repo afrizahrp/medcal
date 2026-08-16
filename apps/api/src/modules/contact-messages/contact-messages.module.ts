@@ -9,5 +9,8 @@ import { ContactMessagesService } from "./contact-messages.service";
 @Module({
   controllers: [ContactMessagesController, ContactMessagesQueryController, ContactTopicsController],
   providers: [ContactMessagesService, InternalServiceGuard, CompanyRoleGuard],
+  // Exported so ChatModule's ChatSessionsService can reuse the existing
+  // ContactMessage -> Lead pipeline unmodified (Web Chat Phase 1).
+  exports: [ContactMessagesService],
 })
 export class ContactMessagesModule {}

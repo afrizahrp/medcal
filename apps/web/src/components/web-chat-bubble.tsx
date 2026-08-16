@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
 import { Popover } from "@base-ui/react/popover";
+import { useVisitorChat } from "@/lib/use-visitor-chat";
 
 declare global {
   interface Window {
@@ -17,13 +18,15 @@ declare global {
 }
 
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? "";
-// Must match apps/web-api's publicWebChatSchema max length exactly.
+// Must match apps/web-api's publicChatSessionSchema max length exactly.
 const MESSAGE_MAX_LENGTH = 2000;
 
-type Status =
-  | { kind: "idle" }
-  | { kind: "success" }
-  | { kind: "error"; message: string };
+const CONNECTION_LABEL: Record<string, string> = {
+  connecting: "Menghubungkan…",
+  connected: "Terhubung",
+  disconnected: "Terputus, mencoba menyambung kembali…",
+  error: "Gagal terhubung",
+};
 
 function MessageIcon() {
   return (
@@ -58,33 +61,38 @@ function CloseIcon() {
   );
 }
 
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+}
+
 export function WebChatBubble() {
   const [open, setOpen] = useState(false);
+  const [everOpened, setEverOpened] = useState(false);
   const [pending, setPending] = useState(false);
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const [formError, setFormError] = useState<string | null>(null);
   const [values, setValues] = useState({ name: "", email: "", message: "" });
+  const [draft, setDraft] = useState("");
+  const threadRef = useRef<HTMLDivElement | null>(null);
 
-  // A visitor reopening the bubble after a previous success should see a
-  // fresh form, not the stale confirmation from last time.
+  const chat = useVisitorChat(everOpened);
+
   function handleOpenChange(next: boolean) {
     setOpen(next);
-    if (!next) setStatus({ kind: "idle" });
+    if (next) setEverOpened(true);
   }
 
   useEffect(() => {
-    if (status.kind !== "success") return;
-    const timer = setTimeout(() => setOpen(false), 4000);
-    return () => clearTimeout(timer);
-  }, [status.kind]);
+    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
+  }, [chat.messages]);
 
-  async function getCaptchaToken(): Promise<string> {
+  async function getCaptchaToken(action: string): Promise<string> {
     if (!RECAPTCHA_SITE_KEY || !window.grecaptcha) {
       throw new Error("Verifikasi keamanan belum siap, silakan coba lagi.");
     }
     return new Promise((resolve, reject) => {
       window.grecaptcha!.ready(() => {
         window
-          .grecaptcha!.execute(RECAPTCHA_SITE_KEY, { action: "webchat_submit" })
+          .grecaptcha!.execute(RECAPTCHA_SITE_KEY, { action })
           .then(resolve)
           .catch(reject);
       });
@@ -94,37 +102,31 @@ export function WebChatBubble() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPending(true);
-    setStatus({ kind: "idle" });
+    setFormError(null);
 
     try {
-      const captchaToken = await getCaptchaToken();
-      const base =
-        process.env.NEXT_PUBLIC_WEB_API_URL ?? "http://localhost:3002";
-      const res = await fetch(`${base}/public/web-chat`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...values, captchaToken }),
-      });
-
-      if (res.ok) {
-        setStatus({ kind: "success" });
-        setValues({ name: "", email: "", message: "" });
-      } else {
-        // Never surface raw Zod/captcha error payloads to the visitor.
-        setStatus({
-          kind: "error",
-          message: "Gagal mengirim pesan. Silakan coba lagi.",
-        });
+      // Action must match apps/web-api's verifyRecaptcha(..., "chat_session_create") call exactly.
+      const captchaToken = await getCaptchaToken("chat_session_create");
+      const result = await chat.startSession({ ...values, captchaToken });
+      if (!result.ok) {
+        setFormError(result.error);
       }
+      // On success the widget transitions into the conversation view itself
+      // (chat.phase flips to "chat") — no terminal "Terkirim!" screen, and
+      // values are left as-is (irrelevant once the form is gone).
     } catch (err) {
-      setStatus({
-        kind: "error",
-        message:
-          err instanceof Error ? err.message : "Terjadi kesalahan jaringan.",
-      });
+      setFormError(err instanceof Error ? err.message : "Terjadi kesalahan jaringan.");
     } finally {
       setPending(false);
     }
+  }
+
+  function handleSend(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const body = draft.trim();
+    if (!body || chat.sessionClosed) return;
+    chat.sendMessage(body);
+    setDraft("");
   }
 
   const inputClass =
@@ -172,9 +174,64 @@ export function WebChatBubble() {
               </Popover.Close>
             </div>
 
-            {status.kind === "success" ? (
-              <p className="mt-3 text-sm text-accent-700" role="status">
-                Terkirim! Tim kami akan segera menghubungi Anda.
+            {chat.phase === "chat" ? (
+              <div className="mt-3 flex flex-1 flex-col overflow-hidden">
+                <p className="text-xs text-ink-400" role="status">
+                  {CONNECTION_LABEL[chat.connectionState]}
+                </p>
+
+                <div ref={threadRef} className="mt-2 flex-1 space-y-2 overflow-y-auto pr-1">
+                  {chat.messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={
+                        message.senderType === "ADMIN"
+                          ? "mr-auto max-w-[85%] rounded-xl rounded-bl-sm bg-ink-50 px-3 py-2 text-sm text-ink-900"
+                          : "ml-auto max-w-[85%] rounded-xl rounded-br-sm bg-brand-600 px-3 py-2 text-sm text-white"
+                      }
+                    >
+                      <p className="whitespace-pre-wrap">{message.body}</p>
+                      <p
+                        className={
+                          message.senderType === "ADMIN"
+                            ? "mt-1 text-[10px] text-ink-400"
+                            : "mt-1 text-[10px] text-white/70"
+                        }
+                      >
+                        {formatTime(message.createdAt)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {chat.sessionClosed ? (
+                  <p className="mt-3 rounded-xl border border-ink-100 bg-ink-50 px-3 py-2 text-xs text-ink-500">
+                    Percakapan ini sudah ditutup.
+                  </p>
+                ) : (
+                  <form onSubmit={handleSend} className="mt-3 flex gap-2">
+                    <input
+                      type="text"
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      placeholder="Tulis pesan…"
+                      maxLength={MESSAGE_MAX_LENGTH}
+                      className={inputClass}
+                      aria-label="Tulis pesan"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!draft.trim() || chat.connectionState !== "connected"}
+                      className="shrink-0 rounded-full bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
+                    >
+                      Kirim
+                    </button>
+                  </form>
+                )}
+              </div>
+            ) : chat.phase === "checking" ? (
+              <p className="mt-4 text-sm text-ink-500" role="status">
+                Memuat percakapan…
               </p>
             ) : (
               <form className="mt-3 flex flex-col gap-3" onSubmit={onSubmit}>
@@ -240,9 +297,9 @@ export function WebChatBubble() {
                   />
                 </div>
 
-                {status.kind === "error" ? (
+                {formError ? (
                   <p className="text-sm text-red-600" role="status">
-                    {status.message}
+                    {formError}
                   </p>
                 ) : null}
 

@@ -201,6 +201,23 @@ enum ReminderEventStatus {
   CANCELLED
 }
 
+// Real-time Web Chat conversation domain (separate from the Lead-intake
+// domain below) — locked 2026-08-16 Web Chat correction audit + technical
+// spike. A ChatSession's OPEN/CLOSED lifecycle is deliberately the only two
+// states for MVP (no IDLE/EXPIRED/AUTO_CLOSED/ARCHIVED — no auto-close
+// requirement exists yet).
+enum ChatSessionStatus {
+  OPEN
+  CLOSED
+}
+
+// VISITOR = the anonymous visitor side of a ChatSession; ADMIN = a staff
+// reply. No AI sender type — human-only chat is a locked product decision.
+enum ChatSenderType {
+  VISITOR
+  ADMIN
+}
+
 enum FileOwnerType {
   CERTIFICATE
   JOB_EVIDENCE
@@ -230,6 +247,7 @@ model Company {
 
   memberships         UserMembership[]
   contactMessages     ContactMessage[]
+  chatSessions        ChatSession[]
   leads               Lead[]
   customers           Customer[]
   devices             Device[]
@@ -424,6 +442,10 @@ model ContactMessage {
   lead            Lead?         @relation(fields: [leadId], references: [id])
   confirmedBy     User?         @relation("MatchConfirmer", fields: [confirmedByUserId], references: [id])
   topic           ContactTopic? @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  // Set when this ContactMessage is the one first-touch lead-intake record
+  // created by a Web Chat ChatSession (see ChatSession.contactMessageId) —
+  // null for every other channel (CONTACTFORM, WHATSAPP, EMAIL, etc.).
+  chatSession     ChatSession?
 
   @@index([companyId, createdAt])
   @@index([companyId, email])
@@ -474,6 +496,65 @@ model Lead {
 
   @@index([companyId, status])
   @@index([companyId, createdAt])
+}
+
+// Real-time Web Chat conversation domain (locked 2026-08-16, Web Chat
+// correction audit + technical spike). Deliberately separate from the Lead
+// domain above: a ChatSession creates AT MOST ONE ContactMessage (the
+// first-touch lead-intake record, getFrom=CHAT_PERSON), never one per
+// message — the full transcript lives in ChatMessage. contactMessageId is
+// nullable (set once, right after the linked ContactMessage is created —
+// see Phase 1's ChatSessionsService for the exact sequencing) and @unique
+// so the database itself enforces "at most one ChatSession per
+// ContactMessage" and, by the service never calling create twice per
+// session, "at most one ContactMessage per ChatSession".
+//
+// No assignedToUserId — MVP is a shared inbox (no per-session ownership),
+// matching Lead's own deferred assignment decision. No auto-close/expiry
+// state — OPEN/CLOSED only.
+model ChatSession {
+  id               String            @id @default(cuid())
+  companyId        String
+  visitorName      String
+  visitorEmail     String
+  status           ChatSessionStatus @default(OPEN)
+  contactMessageId String?           @unique
+  closedAt         DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactMessage ContactMessage? @relation(fields: [contactMessageId], references: [id])
+  messages       ChatMessage[]
+
+  @@index([companyId, status])
+  @@index([companyId, createdAt])
+}
+
+// One row per conversation turn (visitor or admin). `seq` is a
+// table-wide monotonic counter (not reset per session) — sufficient for
+// deterministic per-session ordering since every read is already scoped to
+// one sessionId; a per-session counter would need its own transaction/lock
+// machinery for no additional ordering guarantee this schema needs.
+// `clientMessageId` + the compound unique index below is the
+// duplicate-submission guard: a resend of the same client-generated id
+// within the same session is rejected at the database level, not just
+// application logic.
+model ChatMessage {
+  id              String         @id @default(cuid())
+  companyId       String
+  sessionId       String
+  seq             Int         @default(autoincrement())
+  senderType      ChatSenderType
+  senderUserId    String?
+  body            String
+  clientMessageId String?
+  createdAt       DateTime       @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, clientMessageId])
+  @@index([sessionId, seq])
 }
 
 model Customer {

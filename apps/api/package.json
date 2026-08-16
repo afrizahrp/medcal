@@ -20,15 +20,19 @@
     "@nestjs/common": "^11.0.12",
     "@nestjs/core": "^11.0.12",
     "@nestjs/platform-express": "^11.0.12",
+    "@nestjs/platform-socket.io": "^11.0.12",
+    "@nestjs/websockets": "^11.0.12",
     "@thallesp/nestjs-better-auth": "^2.7.0",
     "better-auth": "^1.6.27",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@medcal/typescript-config": "workspace:*",
     "@types/express": "^4.17.21",
     "@types/node": "^22.13.10",
+    "socket.io-client": "^4.8.1",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vitest": "^4.1.10"

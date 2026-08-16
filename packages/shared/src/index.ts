@@ -4,3 +4,4 @@ export * from "./constants";
 export * from "./errors";
 export * from "./utils";
 export * from "./http/api-fetch";
+export * from "./chat-session-token";

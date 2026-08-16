@@ -69,3 +69,36 @@ export const contactMessageLeadResolutionSchema = z.discriminatedUnion("action",
 ]);
 
 export type ContactMessageLeadResolution = z.infer<typeof contactMessageLeadResolutionSchema>;
+
+/**
+ * Web Chat ChatSession creation payload (Web Chat correction audit, locked
+ * 2026-08-16) — exactly name/email/first message. No phone, no
+ * organizationName, no topicId: Web Chat is a deliberately low-commitment
+ * fallback channel, distinct from the Contact Form's field set on purpose,
+ * not an oversight. Same 2000-char message cap as `chatMessageCreateSchema`
+ * below — the first message is also a ChatMessage, not a separate limit.
+ */
+export const chatSessionCreateSchema = z.object({
+  name: z.string().min(1).max(100),
+  email: z.string().email().max(100),
+  message: z.string().min(1).max(2000),
+});
+
+export type ChatSessionCreateInput = z.infer<typeof chatSessionCreateSchema>;
+
+const chatSenderTypeValues = ["VISITOR", "ADMIN"] as const;
+
+/**
+ * A subsequent ChatMessage in an existing ChatSession (the first message is
+ * created as part of chatSessionCreateSchema's flow, not through this
+ * schema). `clientMessageId` is optional but, when supplied, is the
+ * duplicate-submission guard (enforced by ChatMessage's DB-level
+ * `@@unique([sessionId, clientMessageId])`, not just here).
+ */
+export const chatMessageCreateSchema = z.object({
+  senderType: z.enum(chatSenderTypeValues),
+  body: z.string().min(1).max(2000),
+  clientMessageId: z.string().min(1).max(100).optional(),
+});
+
+export type ChatMessageCreateInput = z.infer<typeof chatMessageCreateSchema>;

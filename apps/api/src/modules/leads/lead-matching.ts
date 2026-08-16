@@ -1,6 +1,16 @@
 import { prisma } from "@medcal/db";
-import type { Lead } from "@medcal/db";
+import type { Lead, Prisma } from "@medcal/db";
 import { normalizeEmail, normalizeOrganizationName, normalizePhone } from "@medcal/shared";
+
+// Accepts either the module-level singleton or a `prisma.$transaction`
+// callback's scoped client — PrismaClient is structurally a superset of
+// Prisma.TransactionClient (same model delegates, minus $transaction/
+// $connect/etc.), so the default value below type-checks without a cast.
+// Added so ChatSessionsService.createSession can run this exact matching
+// logic inside its own transaction (Web Chat Phase 1 correction,
+// 2026-08-16) — behavior/semantics are unchanged, only the client used to
+// run the queries is now overridable.
+export type Db = Prisma.TransactionClient;
 
 /**
  * Shared identity-matching evidence (Lead Inbox design review, 2026-08-16,
@@ -32,6 +42,7 @@ export interface LeadMatchCandidate {
 export async function findLeadMatchCandidates(
   companyId: string,
   identity: LeadMatchIdentity,
+  db: Db = prisma,
 ): Promise<LeadMatchCandidate[]> {
   const normalizedPhone = identity.phone ? normalizePhone(identity.phone) : undefined;
   const normalizedOrg = identity.organizationName
@@ -39,7 +50,7 @@ export async function findLeadMatchCandidates(
     : undefined;
   const normalizedEmail = normalizeEmail(identity.email);
 
-  const leads = await prisma.lead.findMany({ where: { companyId } });
+  const leads = await db.lead.findMany({ where: { companyId } });
 
   const candidates: LeadMatchCandidate[] = [];
   for (const lead of leads) {

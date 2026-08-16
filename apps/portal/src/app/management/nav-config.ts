@@ -12,4 +12,6 @@ export const managementNav: NavItem[] = [
   { label: "Dashboard", href: "/", roles: ["SUPERADMIN", "ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE"] },
   // Matches apps/api's lead:read grant (SUPERADMIN/ADMIN only) — see packages/auth/src/access-control.ts.
   { label: "Leads", href: "/leads", roles: ["SUPERADMIN", "ADMIN"] },
+  // Matches apps/api's chat:read grant (SUPERADMIN/ADMIN only) — same file.
+  { label: "Chat", href: "/chat", roles: ["SUPERADMIN", "ADMIN"] },
 ];

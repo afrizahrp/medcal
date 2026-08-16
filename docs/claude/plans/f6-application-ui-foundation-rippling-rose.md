@@ -1,3 +1,27 @@
+# Node Runtime Compatibility Spike — RESULT (2026-08-16)
+
+**Empirically resolved: Node 20 is sufficient. No production Node upgrade required before Web Chat implementation.** Full result saved to `D:\medcal\docs\claude\lead-management\web-chat-node-runtime-spike.md`.
+
+A temporary, isolated spike project (outside the repo, deleted after the test — confirmed via `git status`) built real `node:20-alpine` and `node:22-alpine` Docker images using the exact dependency versions pinned in `pnpm-lock.yaml`, and ran the actual mechanism the Web Chat design depends on: a real Socket.IO handshake carrying a genuine Better Auth session cookie, through a NestJS WS execution context, through `@thallesp/nestjs-better-auth`'s `AuthGuard`, through `better-auth`'s `getSession()`, into a guarded handler reading the authenticated identity.
+
+**Result: PASS on both Node v20.20.2 (exact production match) and Node v22.23.2 — identical behavior, no runtime difference found.** The declared `engines: {node: ">=22.22.1"}` on `@thallesp/nestjs-better-auth@2.7.0` produced only an install-time warning on Node 20 (no `engine-strict` setting exists in this repo), never a runtime failure. Both open items from the earlier technical spike (Better Auth+Socket.IO feasibility, the untested WS-context code path) are now closed with empirical evidence, not inference. `apps/api/Dockerfile` stays on `node:20-alpine` — no change needed.
+
+---
+
+# (superseded) Original next-step framing, kept for record
+
+**Scope, confirmed with the user:**
+
+- Isolated, temporary spike project only — clearly marked SPIKE ONLY, removed after the test.
+- Does NOT touch `apps/api/Dockerfile`, `package.json`, `pnpm-lock.yaml`, `docker-compose.prod.yml`, Prisma schema, or any production file.
+- Does NOT build `ChatSession`/`ChatMessage`, the Chat UI, visitor auth, or the production `ChatGateway` — only the staff Better-Auth-via-WS-handshake mechanism, isolated.
+- Test A: Node 20 Alpine. Test B: Node 22+ Alpine (prefer `22.22.1`+ per the dependency's own floor). Identical application logic between the two, only the base image changes.
+- Produces a PASS/FAIL verdict per Node version, then a final A/B/C decision (Node 20 sufficient / Node 20 incompatible / inconclusive) with empirical evidence, not source-reading inference.
+
+Proceeding to execute this now, outside plan mode, per explicit user approval.
+
+---
+
 # Production Node Compatibility Result (2026-08-16)
 
 > **AUDIT ONLY. Nothing modified — no Node upgrade, no package.json edits, no Docker/PM2 changes.** Findings below are all VERIFIED FROM REPO (direct file reads), except where explicitly marked otherwise. Full copy also saved to `D:\medcal\docs\claude\lead-management\web-chat-node-compatibility-audit.md`.
@@ -7,6 +31,7 @@
 ## 1–2. What actually executes `apps/api` in production
 
 `apps/api/Dockerfile` (read in full) — **production runs via Docker, not PM2 or any other runtime.** Explicit comment at the top of the file: "workspace packages... are consumed as raw TypeScript... Plain `node dist/main.js` cannot resolve those at runtime... This image runs the app through `tsx`." The final `runner` stage:
+
 ```dockerfile
 FROM node:20-alpine AS base
 ...
@@ -15,6 +40,7 @@ ENV NODE_ENV=production
 ...
 CMD ["node_modules/.bin/tsx", "src/main.ts"]
 ```
+
 No PM2 ecosystem file exists anywhere in the repo (`find . -iname "ecosystem*"` — zero matches). `docker-compose.prod.yml` (re-confirmed) builds this exact Dockerfile as its only service. **This directly confirms the user's stated production observation (`node -v` → `v20.20.2`)** — the base image is explicitly pinned `node:20-alpine`, not a floating `node:latest` or `node:22`.
 
 ## 3. Docker image Node version
@@ -30,7 +56,8 @@ No PM2 ecosystem file exists anywhere in the repo (`find . -iname "ecosystem*"` 
 ```json
 "engines": { "node": ">=20" }
 ```
-A floor, not a ceiling — technically satisfied by both Node 20.20.2 (current production) and Node 24.12.0 (current local dev). This field does not, by itself, prove Node 20 is *sufficient* for every dependency — it's the repo's own stated minimum, and it predates `@thallesp/nestjs-better-auth`'s stricter requirement being introduced.
+
+A floor, not a ceiling — technically satisfied by both Node 20.20.2 (current production) and Node 24.12.0 (current local dev). This field does not, by itself, prove Node 20 is _sufficient_ for every dependency — it's the repo's own stated minimum, and it predates `@thallesp/nestjs-better-auth`'s stricter requirement being introduced.
 
 ## 6. `apps/api/package.json` engines
 
@@ -43,11 +70,13 @@ A floor, not a ceiling — technically satisfied by both Node 20.20.2 (current p
 ## 8. Is `@thallesp/nestjs-better-auth@2.7.0` actually installed/resolved?
 
 **Yes, confirmed resolved in `pnpm-lock.yaml`:**
+
 ```yaml
-'@thallesp/nestjs-better-auth@2.7.0':
-  resolution: {integrity: sha512-Grq74scQ...}
-  engines: {node: '>=22.22.1'}
+"@thallesp/nestjs-better-auth@2.7.0":
+  resolution: { integrity: sha512-Grq74scQ... }
+  engines: { node: ">=22.22.1" }
 ```
+
 It is a real, already-installed dependency of `apps/api` (registered via `AuthModule.forRoot(...)` in `app.module.ts`, per the earlier technical spike) — this is not a hypothetical future addition, it is already load-bearing for today's `CompanyRoleGuard`/staff-auth flow, unrelated to whether Web Chat is ever built.
 
 ## 9. Any other dependency imposing a conflicting Node version?
@@ -56,14 +85,15 @@ Searched every non-`node_modules` `package.json` in the repo for an `engines` fi
 
 ## 10. Is Node 20.20.2 currently technically supported by the installed dependency tree?
 
-**Partially — one real gap, not a tree-wide incompatibility.** Every other dependency in the tree is satisfied by Node 20.20.2 (root floor is `>=20`, and no other package declares a stricter floor per §9). The one exception is `@thallesp/nestjs-better-auth@2.7.0`'s own `>=22.22.1` declaration. Because pnpm does not enforce engines (§7), `pnpm install --frozen-lockfile` on Node 20 (exactly what the production Docker build does today) **succeeds with a warning, not a failure** — the package installs regardless of the declared floor. Whether it then *behaves correctly at runtime* on Node 20 is a separate question this audit cannot answer by reading source alone (see §11).
+**Partially — one real gap, not a tree-wide incompatibility.** Every other dependency in the tree is satisfied by Node 20.20.2 (root floor is `>=20`, and no other package declares a stricter floor per §9). The one exception is `@thallesp/nestjs-better-auth@2.7.0`'s own `>=22.22.1` declaration. Because pnpm does not enforce engines (§7), `pnpm install --frozen-lockfile` on Node 20 (exactly what the production Docker build does today) **succeeds with a warning, not a failure** — the package installs regardless of the declared floor. Whether it then _behaves correctly at runtime_ on Node 20 is a separate question this audit cannot answer by reading source alone (see §11).
 
 ## 11. Is the `>=22.22.1` requirement advisory or a real compatibility requirement?
 
 **Not resolvable with certainty from static code reading alone — flagged, not asserted either way.** Two things are true simultaneously and worth holding in tension:
-- The specific WS-context code path read in full during the prior technical spike (`getRequestFromContext`, the `AuthGuard.canActivate` branch used for `CompanyRoleGuard` today) contains nothing that looks Node-22-specific — plain conditionals, a lazy `import()`, and calls into `better-auth`'s own headers helpers. Nothing in *that one code path* explains the version floor.
+
+- The specific WS-context code path read in full during the prior technical spike (`getRequestFromContext`, the `AuthGuard.canActivate` branch used for `CompanyRoleGuard` today) contains nothing that looks Node-22-specific — plain conditionals, a lazy `import()`, and calls into `better-auth`'s own headers helpers. Nothing in _that one code path_ explains the version floor.
 - However, this audit did not read `@thallesp/nestjs-better-auth`'s **entire** package source (only the auth-guard portion relevant to the previous spike's question) — the `>=22.22.1` floor could reflect something used elsewhere in the package (a newer built-in API, a test/build-tooling requirement leaking into the published `engines` field, or genuinely a runtime feature used in a code path not yet read). This is a real gap in this audit's coverage, not something to guess past.
-- **One piece of indirect evidence worth weighing:** this exact package version is *already* a production dependency of `apps/api` today (via `AuthModule.forRoot`, powering the existing staff-auth flow, unrelated to WebSockets) — if production is currently live and that flow is working, that would be empirical evidence the `>=22.22.1` floor is conservative/advisory rather than a hard blocker for at least the parts of the package already in use. This audit found no repo-internal way to confirm whether production has actually been deployed and is currently serving live traffic — that's operational knowledge outside the repo, not something to assume.
+- **One piece of indirect evidence worth weighing:** this exact package version is _already_ a production dependency of `apps/api` today (via `AuthModule.forRoot`, powering the existing staff-auth flow, unrelated to WebSockets) — if production is currently live and that flow is working, that would be empirical evidence the `>=22.22.1` floor is conservative/advisory rather than a hard blocker for at least the parts of the package already in use. This audit found no repo-internal way to confirm whether production has actually been deployed and is currently serving live traffic — that's operational knowledge outside the repo, not something to assume.
 
 ## 12. Is upgrading production to Node ≥22.22.1 necessary before Web Chat implementation?
 
@@ -72,6 +102,7 @@ Searched every non-`node_modules` `package.json` in the repo for an `engines` fi
 ## 13. Smallest safe upgrade path (if needed) — not performed, described only
 
 If empirical testing (§ Recommendation below) reveals an actual Node-20 incompatibility:
+
 - Target: Node `22.22.1` or later (matching `@thallesp/nestjs-better-auth`'s own stated floor exactly, not an arbitrary newer version).
 - Files that would need changing: `apps/api/Dockerfile` line 15 (`FROM node:20-alpine` → `FROM node:22-alpine`), and re-validation that `node:22-alpine` has the same `libc6-compat`/`openssl` package availability the Dockerfile already installs (`RUN apk add --no-cache libc6-compat openssl`) — Alpine package availability can shift between major tags, worth a real build-and-boot test, not assumed.
 - Root `package.json` `engines.node` could be tightened from `>=20` to `>=22.22.1` to make the floor honest repo-wide, though this is optional (advisory either way, per §7).
@@ -102,6 +133,7 @@ Do not upgrade Node speculatively. Instead, resolve §11/§12's uncertainty empi
 **Recommendation:** proceed with a NestJS `@WebSocketGateway()` in `apps/api` guarded by `@thallesp/nestjs-better-auth`'s existing `AuthGuard`. Do not build a second/parallel auth mechanism.
 
 **Evidence from current repository (all VERIFIED FROM REPO, i.e. read directly from installed package source, not external docs):**
+
 - `apps/api/src/common/guards/company-role.guard.ts` calls `auth.api.getSession({ headers: fromNodeHeaders(request.headers) })`. Read directly from `better-auth@1.6.27`'s own type/impl files: `fromNodeHeaders` takes a plain `IncomingHttpHeaders` object and the `getSession` endpoint takes a `Headers`-shaped input — **neither depends on an Express `Request` object**, only on a headers map. A Socket.IO handshake's `socket.handshake.headers` is exactly such a map (copied straight from the underlying HTTP Upgrade request).
 - The already-installed `@thallesp/nestjs-better-auth@2.7.0` (pinned in `apps/api/package.json`, not a hypothetical) ships this in its own `dist/index.mjs`:
   ```js
@@ -115,17 +147,20 @@ Do not upgrade Node speculatively. Instead, resolve §11/§12's uncertainty empi
   // inside AuthGuard.canActivate:
   const request = await getRequestFromContext(context);
   const session = await this.options.auth.api.getSession({
-    headers: fromNodeHeaders(request.headers || request?.handshake?.headers || [])
+    headers: fromNodeHeaders(
+      request.headers || request?.handshake?.headers || [],
+    ),
   });
   ```
   This is the exact library this repo already depends on, already branching on a NestJS WS execution context, already falling back to `client.handshake.headers`, already calling the same `getSession` call `CompanyRoleGuard` uses today. Its own type docstring states "Supports HTTP, GraphQL and WebSocket execution contexts." This is the strongest single piece of evidence for feasibility — it comes from code already sitting in this repo's `node_modules`, not from Better Auth's general documentation.
 - Cookie reachability: in dev, apps/api's session cookie is host-scoped to `localhost:3001` (`COOKIE_DOMAIN=""`); a Socket.IO client connecting directly to that same origin carries the cookie under ordinary same-origin rules — the identical mechanism the portal's `credentials:"include"` fetches already rely on today. In production, `COOKIE_DOMAIN=".kalibrasimedika.co.id"` means the cookie is shared across every `*.kalibrasimedika.co.id` subdomain automatically, which (per §2 below) is exactly where the WS gateway will live.
 
 **Required implementation change (non-blocking, standard additions):**
+
 - Add `@nestjs/websockets` and `@nestjs/platform-socket.io` as real dependencies — **currently only present as declared-but-unsatisfied optional peer dependencies** of `@nestjs/core` and `@thallesp/nestjs-better-auth`; neither is actually installed anywhere in the repo today (confirmed by direct `node_modules` search and `pnpm-lock.yaml` inspection — zero resolved packages for `socket.io`, `ws`, `@nestjs/websockets`, `@nestjs/platform-socket.io`).
 - Add Socket.IO's own `cors: { origin, credentials }` config to the gateway when built — this is separate from Nest's HTTP-level `app.enableCors()` and does not exist yet for any WS context (none exists at all today). Reuse the existing `parseTrustedOrigins(process.env.TRUSTED_ORIGINS)` helper already used by `main.ts`'s HTTP CORS setup, rather than inventing a second parsing path.
 - **Node engine mismatch, flagged not resolved:** `@thallesp/nestjs-better-auth@2.7.0` declares `"engines": {"node": ">=22.22.1"}`, stricter than this repo's root `"engines": {"node": ">=20"}`. Local dev here runs Node v24.12.0 (satisfies both), so nothing breaks today, but this must be confirmed against whatever Node version actually runs in CI/production before relying on it — not something this spike can resolve by reading code alone.
-- **The WS-context branch itself is unexercised** — no `@WebSocketGateway()` exists anywhere in `apps/api/src` today, so this code path has never actually run in this codebase. Reading the library's source proves it *should* work; it does not prove it *does* work end-to-end (e.g., whether `switchToWs().getClient()` returns a socket whose `handshake.headers.cookie` is actually populated the way expected once Socket.IO's own CORS/credentials options are layered on top). A small real gateway + a real browser/client connection is the only way to close this gap — recommended as the very first implementation step, not deferred to the end.
+- **The WS-context branch itself is unexercised** — no `@WebSocketGateway()` exists anywhere in `apps/api/src` today, so this code path has never actually run in this codebase. Reading the library's source proves it _should_ work; it does not prove it _does_ work end-to-end (e.g., whether `switchToWs().getClient()` returns a socket whose `handshake.headers.cookie` is actually populated the way expected once Socket.IO's own CORS/credentials options are layered on top). A small real gateway + a real browser/client connection is the only way to close this gap — recommended as the very first implementation step, not deferred to the end.
 
 ## 2. Public WebSocket Routing
 
@@ -134,6 +169,7 @@ Do not upgrade Node speculatively. Instead, resolve §11/§12's uncertainty empi
 **Recommendation:** do **not** build a WebSocket proxy inside `apps/web-api`. Serve the chat gateway directly from `apps/api`, reachable at its own dedicated subdomain (`api.kalibrasimedika.co.id`), fronted by Nginx exactly the way REST traffic to `apps/api` already is.
 
 **Current infrastructure evidence (VERIFIED FROM REPO):**
+
 - `infra/nginx/api.kalibrasimedika.co.id.conf.example` — a template file, explicitly labeled "PROPOSED... NOT YET APPLIED," but its content already answers this question. Quoting its own comment directly: **"apps/api serves both REST and the Chat WebSocket gateway from the same origin (locked topology) — Upgrade/Connection headers are required for the WS path to work through the proxy, not just REST."** Someone already made and recorded this decision before this spike began. The config block already forwards `Upgrade`/`Connection` headers correctly:
   ```nginx
   location / {
@@ -150,17 +186,18 @@ Do not upgrade Node speculatively. Instead, resolve §11/§12's uncertainty empi
 
 **Architecture comparison (per the three requested):**
 
-| | A. Browser→web-api→proxy→api | B. Browser→direct public ingress→api (via Nginx) | 
-|---|---|---|
-| Security | New proxy code = new attack surface; apps/api boundary unchanged either way | apps/api boundary unchanged; Nginx is the same trusted front door already used for REST |
-| Complexity | Requires building/maintaining a WS proxy in Express (net-new code, net-new failure mode) | Zero new code — reuses the Nginx template already written for this exact purpose |
-| Ops burden | web-api needs its own deploy story built first (doesn't exist yet) | Nginx block already drafted; only needs the VPS operator to apply it (manual, documented steps already in the file) |
-| Consistency with existing decisions | Contradicts the repo's own recorded "locked topology" comment | Matches it exactly |
-| Cookie/CORS | Adds a second-hop origin, complicating cookie/CORS reasoning | Single origin (`api.kalibrasimedika.co.id`), same cookie-domain rules already relied on for REST |
+|                                     | A. Browser→web-api→proxy→api                                                             | B. Browser→direct public ingress→api (via Nginx)                                                                    |
+| ----------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Security                            | New proxy code = new attack surface; apps/api boundary unchanged either way              | apps/api boundary unchanged; Nginx is the same trusted front door already used for REST                             |
+| Complexity                          | Requires building/maintaining a WS proxy in Express (net-new code, net-new failure mode) | Zero new code — reuses the Nginx template already written for this exact purpose                                    |
+| Ops burden                          | web-api needs its own deploy story built first (doesn't exist yet)                       | Nginx block already drafted; only needs the VPS operator to apply it (manual, documented steps already in the file) |
+| Consistency with existing decisions | Contradicts the repo's own recorded "locked topology" comment                            | Matches it exactly                                                                                                  |
+| Cookie/CORS                         | Adds a second-hop origin, complicating cookie/CORS reasoning                             | Single origin (`api.kalibrasimedika.co.id`), same cookie-domain rules already relied on for REST                    |
 
 **Recommendation: Architecture B.** Not chosen for ease of implementation — chosen because it's what the repository's own infrastructure already declares as the intended design, it doesn't require building anything new in `apps/web-api` (an app with no production deployment story yet), and it preserves the exact security boundary (`apps/api` never directly Internet-facing) that already protects REST traffic today.
 
 **Required infra/code change:**
+
 - Code: none beyond building the gateway itself in `apps/api` (§1) — no new proxy code needed anywhere.
 - Infra: apply `infra/nginx/api.kalibrasimedika.co.id.conf.example` (already written, marked "not yet applied" — a VPS-operator action, the file itself documents the exact install steps).
 - Config: add Socket.IO's own CORS allowlist to the future gateway (§1) — the public web (`kalibrasimedika.co.id`) and portal (`apps.*`/`portal.*`) origins need to be in it, same list already used for `TRUSTED_ORIGINS`.
@@ -247,33 +284,40 @@ Visitor browser (kalibrasimedika.co.id)
 ## 7. Required Dependencies
 
 **Already installed:**
+
 - `better-auth@1.6.27`, `@thallesp/nestjs-better-auth@2.7.0` (with the WS-context branch already present, §1).
 - `@nestjs/core@11.1.28`, `@nestjs/platform-express@11.1.28`.
 
 **Must be added:**
+
 - `@nestjs/websockets`, `@nestjs/platform-socket.io` — currently unsatisfied optional peer dependencies, need to become real dependencies.
 - (implicitly, as `@nestjs/platform-socket.io`'s own dependency) `socket.io` server package.
 - `socket.io-client` in `apps/web` and `apps/portal` (neither currently has any WS client).
 
 **Not required:**
+
 - `http-proxy-middleware`, `ws` (raw), or any proxy library in `apps/web-api` — Architecture B (§2) means `apps/web-api` needs no changes for WS at all.
 - Redis/any distributed adapter — single-process `apps/api` deployment (confirmed by `docker-compose.prod.yml`, one `api` service, no horizontal scaling config anywhere in the repo) means Socket.IO's default in-memory adapter is sufficient; revisit only if `apps/api` is ever scaled to multiple instances.
 
 ## 8. Production Changes Required Before Web Chat Implementation
 
 ### Code
+
 - Add the two NestJS WS packages (§7) to `apps/api`.
 - Build `ChatGateway` in `apps/api` with two guarded namespaces (staff via `AuthGuard`'s ws-context path, visitor via a new `ChatSessionToken` verifier) — per the correction audit's §6/§7/§12 implementation scope, unchanged by this spike.
 - Add Socket.IO's own CORS config to the gateway (§1).
 
 ### Infrastructure
+
 - Apply `infra/nginx/api.kalibrasimedika.co.id.conf.example` (VPS-operator action, already documented in the file itself — not automated by this repo).
 - Confirm the actual CI/production Node version satisfies `@thallesp/nestjs-better-auth`'s `>=22.22.1` floor (§1) — currently unconfirmed against the repo's own stated `>=20` floor.
 
 ### Configuration / Environment Variables
+
 - None new required beyond what's already templated (`TRUSTED_ORIGINS`, `COOKIE_DOMAIN` already cover the WS gateway's needs since it lives on `apps/api`'s existing origin) — reuse, don't duplicate.
 
 ### Security
+
 - Build the `ChatSessionToken` signing/verification helper (correction audit §4/§6) — not yet designed in detail, only its shape (signed, HttpOnly, Secure, SameSite=Lax) is locked.
 - Decide the mid-connection session-expiry behavior (§6) before shipping, not after.
 - New `chat` RBAC resource/action set in `packages/auth/src/access-control.ts` — exact actions still flagged unresolved (correction audit §13, item 7).
@@ -292,9 +336,11 @@ Not flagged as risks (no evidence found for them, not invented): distributed rat
 **Proceed to Web Chat implementation with the architecture above — Architecture B (direct-to-`apps/api` via the already-templated Nginx block), staff auth via `@thallesp/nestjs-better-auth`'s existing WS-context `AuthGuard` path, visitor auth via a new signed `ChatSessionToken`.** This is not a vague "it depends" — both open questions from the correction audit (§13 items 1 and 3) are resolved by direct evidence, not preference.
 
 **BLOCKING** (must happen before implementation starts, not during):
+
 - None. Both major uncertainties resolved GREEN/mechanically-sound. There is no fundamental architectural blocker.
 
 **NON-BLOCKING but must happen before this ships to production** (can proceed with implementation now, resolve these in parallel or before the production cutover specifically):
+
 - Build and empirically verify a minimal real gateway (§9 risk 1) — first implementation step, not a pre-implementation gate.
 - Confirm production Node version against the `>=22.22.1` requirement (§9 risk 2).
 - Apply the Nginx config (§9 risk 3) — an ops task with no code dependency, can happen in parallel with implementation.
@@ -312,13 +358,14 @@ Not flagged as risks (no evidence found for them, not invented): distributed rat
 
 ## Corrected product requirement
 
-MedCal Web Chat is a real-time, human-to-human conversation — not a form. Visitor provides `name`+`email`+first `message` → a `ChatSession` is created → the first message is persisted → staff sees it in the admin app → staff replies → visitor sees the reply live → conversation continues. The earlier "no ChatSession/ChatMessage/realtime" decision is superseded. Field constraints are unchanged: still exactly `name`/`email`/`message`, still no phone/organizationName/topicId, still `getFrom=CHAT_PERSON`, still no AI/human mode — this correction is about *transport and persistence*, not about reopening the low-commitment product framing.
+MedCal Web Chat is a real-time, human-to-human conversation — not a form. Visitor provides `name`+`email`+first `message` → a `ChatSession` is created → the first message is persisted → staff sees it in the admin app → staff replies → visitor sees the reply live → conversation continues. The earlier "no ChatSession/ChatMessage/realtime" decision is superseded. Field constraints are unchanged: still exactly `name`/`email`/`message`, still no phone/organizationName/topicId, still `getFrom=CHAT_PERSON`, still no AI/human mode — this correction is about _transport and persistence_, not about reopening the low-commitment product framing.
 
 ---
 
 ## 1. Bumiindah Chat Architecture (as found in the repo, not the screenshot)
 
 The "one product" is actually **three services sharing one Prisma/Postgres schema**, bridged by plain HTTP calls — not one coherent system:
+
 - `server-bumiindah-website` (Express, visitor-facing) — its own raw **`ws`** WebSocket server (`src/websocket/secureChatWebSocketServer.ts`, path `/ws`), custom JSON protocol.
 - `server-bi-erp` (NestJS, admin-facing, the real backend behind `apps.bumiindah.co.id`) — **Socket.IO** via `@nestjs/platform-socket.io` (`src/chat/chat.gateway.ts`), namespace `/chat`.
 - `easy-app` (Next.js admin dashboard) — `socket.io-client` + a custom JWT bearer/refresh auth flow (not Better Auth).
@@ -326,12 +373,14 @@ The "one product" is actually **three services sharing one Prisma/Postgres schem
 These two backends do **not** share a socket layer — a visitor's WS message and its appearance on the admin dashboard are two separate hops through the DB plus HTTP-forwarding calls (`fcmNotificationService.forwardNewMessage`, `/admin/typing`, `/customer/typing`). This bifurcated-transport pattern is a structural weakness, not a feature — flagged below as explicitly **DO NOT COPY**.
 
 **Data model** (`server-bumiindah-website/prisma/schema.prisma`):
+
 - `ChatSession { id, status(PENDING/ASSIGNED/CLOSED), mode(AI_ONLY/AI_WITH_HUMAN/HUMAN_ONLY), topicId, assignedTo, name/company, firstHumanReplyAt/firstAiReplyAt/closedAt, company_id, createdAt/updatedAt }` — `id` is **client-generated** (`chat_<timestamp>_<rand>` from the website, or a real `uuidv4()` on the NestJS create path — inconsistent even within Bumiindah itself).
 - `ChatMessage { id, sessionId, chatStatus(PENDING/SENT/READ/REPLIED/CLOSED), role(USER/PIC/AI), senderId, content, createdAt, createdBy }`.
 - Plus `ChatHistory` (AI Q&A log), `ChatAssignment`, `ChatAuditLog`, `ChatIPTracking`, `ChatTopic`, `ChatPICAssigned` — support tables, mostly AI/assignment/audit machinery MedCal doesn't need.
 
 **Security findings — significant, must inform the "do not copy" list:**
-- **No signed visitor session token anywhere.** The frontend does `localStorage.setItem('chat_session_id', generateSessionId())` (`session-utils.ts`) and that same client-chosen string *is* the DB primary key and the sole access credential. **Knowledge of the session id is the only thing gating `GET /api/chat/history/:sessionId`** (`chatController.ts:getChatHistory` — `prisma.chatSession.findUnique({ where: { id: sessionId } })`, **no ownership check at all**). Anyone who obtains/guesses a session id can read that visitor's full transcript.
+
+- **No signed visitor session token anywhere.** The frontend does `localStorage.setItem('chat_session_id', generateSessionId())` (`session-utils.ts`) and that same client-chosen string _is_ the DB primary key and the sole access credential. **Knowledge of the session id is the only thing gating `GET /api/chat/history/:sessionId`** (`chatController.ts:getChatHistory` — `prisma.chatSession.findUnique({ where: { id: sessionId } })`, **no ownership check at all**). Anyone who obtains/guesses a session id can read that visitor's full transcript.
 - The NestJS side does check `company_id` (tenant-level, not per-conversation) but that value is caller-supplied via query param — not derived server-side the way MedCal's own guards do it.
 - Every chat route on the NestJS admin backend — including admin-only actions (`assign`, `mark-read`, `mode`, `close`) — is decorated `@Public()` (`chat.controller.ts`), so the app's own global `JwtAuthGuard` **never runs for chat at all**. Authorization is enforced only at the `easy-app` UI layer (redirect-on-401), not at the API. This is a real security antipattern, not an MVP shortcut worth emulating.
 - Socket.IO's `handleConnection` auto-joins **every** connecting socket into `admin_room` with zero auth check.
@@ -339,9 +388,10 @@ These two backends do **not** share a socket layer — a visitor's WS message an
 - No message ordering guarantee beyond `createdAt` + `orderBy: asc` (no sequence number); no idempotency/dedup mechanism at all (every send is a bare `create()`).
 
 **Real-time mechanics worth learning from (not copying wholesale):**
+
 - DB-write-before-broadcast (`prisma.chatMessage.create()` happens before the socket emit) — correct pattern, worth keeping.
 - Client-side reconnect: `ws.onclose` → `setTimeout(..., 2000)` retry; server pings every 30s, drops idle >120s. Socket.IO admin client uses built-in exponential backoff.
-- Unread count = `chatMessage.count({ role: USER, chatStatus: PENDING })`, admin list polls every 10s (TanStack Query `refetchInterval`) *in addition to* the Socket.IO push — belt-and-suspenders, reasonable.
+- Unread count = `chatMessage.count({ role: USER, chatStatus: PENDING })`, admin list polls every 10s (TanStack Query `refetchInterval`) _in addition to_ the Socket.IO push — belt-and-suspenders, reasonable.
 - AI/human hybrid mode (`ChatMode` enum, OpenAI-backed auto-replies, PIC takeover) — **explicitly out of scope for MedCal** per the standing hard constraint; not evaluated further.
 
 ---
@@ -349,11 +399,13 @@ These two backends do **not** share a socket layer — a visitor's WS message an
 ## 2. MedCal Current Architecture
 
 **The just-built "Web Chat" is a single-shot form, confirmed by direct code read — not a chat:**
+
 - `apps/web/src/components/web-chat-bubble.tsx`: one POST, static success text, `values` reset to empty after submit, **no session id, no thread, no memory of a prior submission** — reopening the bubble always starts fresh.
 - `apps/web-api/src/index.ts` `/public/web-chat`: validates → CAPTCHA (`webchat_submit` action) → forwards once to `apps/api`'s `POST internal/contact-messages` with `getFrom: "CHAT_PERSON"` hardcoded after the spread → proxies the response back. One request, one response, done. No streaming.
 - `apps/web-api/src/public-web-chat-schema.ts`: `{name, email, message, captchaToken}` only — confirms the locked field constraint is already correctly implemented and doesn't need to change.
 
 **ContactMessage/Lead pipeline (confirmed unchanged, channel-agnostic, correct as-is):**
+
 - `ContactMessagesService.create()` (`apps/api/src/modules/contact-messages/contact-messages.service.ts`) does Customer-email-dedup, then Lead identity matching (`lead-matching.ts` — phone+org+email only, `getFrom` never read), then creates the `ContactMessage` row. This logic must not change.
 - `grep` for `ChatSession`/`ChatMessage` across the entire repo: **zero matches**. Confirmed greenfield.
 
@@ -362,7 +414,8 @@ These two backends do **not** share a socket layer — a visitor's WS message an
 **Portal (`apps/portal`) has no live-data mechanism today either** — Lead Inbox (`management/leads/page.tsx`) is fetch-on-mount + fetch-after-mutation only, no polling interval, no SWR/React Query, no socket client. Adding chat will be the portal's first push-based UI.
 
 **Auth boundaries (unchanged, must be respected by the new design):**
-- `CompanyRoleGuard` (Better Auth session + `UserMembership` lookup) for staff; `InternalServiceGuard` (shared-secret header) for `web-api → api` service calls. Both derive `companyId` **exclusively** from `process.env.COMPANY_ID` — never client input. Neither guard currently has a concept of an *anonymous authenticated visitor* — that's a genuine gap the new design must fill, not paper over.
+
+- `CompanyRoleGuard` (Better Auth session + `UserMembership` lookup) for staff; `InternalServiceGuard` (shared-secret header) for `web-api → api` service calls. Both derive `companyId` **exclusively** from `process.env.COMPANY_ID` — never client input. Neither guard currently has a concept of an _anonymous authenticated visitor_ — that's a genuine gap the new design must fill, not paper over.
 - `apps/api` is NestJS with **no** `@nestjs/websockets`/`@nestjs/platform-socket.io`/`ws` installed today — realtime transport is a net-new dependency either way.
 - RBAC catalog (`packages/auth/src/access-control.ts`) is minimal and per-verb (`contactMessage:["read"]`, `lead:["read","update"]`, `whitelist:["manage"]`) — a new `chat` resource would follow the same narrow pattern.
 - CAPTCHA (`verifyRecaptcha`, action-scoped, fails closed) and two independent per-route `express-rate-limit` instances (`contactFormLimiter`, `webChatLimiter`) exist only at the web-api edge, only guarding the initial POST — neither concept maps directly onto a persistent connection sending many messages; the new design must decide where CAPTCHA moves to (session creation only) and how per-message abuse is throttled once connected.
@@ -371,17 +424,17 @@ These two backends do **not** share a socket layer — a visitor's WS message an
 
 ## 3. Architecture Comparison
 
-| Concern | Bumiindah | MedCal today | Implication |
-|---|---|---|---|
-| Chat session id | Client-generated, IS the auth credential | N/A (no chat exists) | MedCal must not repeat this — session id must not double as authorization |
-| Visitor session security | None — localStorage string only | N/A | MedCal already has a locked answer for this (see §6) — must actually use it |
-| Real-time transport | Two transports (raw `ws` + Socket.IO), HTTP-bridged | None | MedCal should pick **one** transport, co-located with the existing NestJS app — avoid Bumiindah's bifurcation |
-| Admin auth on chat routes | Decorated `@Public()` everywhere — not actually enforced | `CompanyRoleGuard` enforced on every Lead/ContactMessage route | MedCal must actually enforce auth on chat admin routes/gateway handlers, unlike Bumiindah |
-| Presence indicator | Fake (ticket-status-based, not connection-based) | N/A (already decided against in the first-pass Web Chat review) | Reaffirms the earlier decision — now with concrete evidence of why a fake indicator is a bad idea |
-| Message ordering | `createdAt` only, no sequence | N/A | MedCal can cheaply do better (see §6) |
-| Dedup/idempotency | None | N/A | MedCal can cheaply do better (see §6) |
-| Company/tenant scoping | Client-supplied `company_id` query param | Exclusively server-derived from `process.env.COMPANY_ID`, never client input | MedCal's existing pattern is already stricter — must carry it forward unchanged into the chat gateway |
-| AI mode | Hybrid AI/human, mode switching | Explicitly forbidden by product decision | Not evaluated further, confirmed out of scope |
+| Concern                   | Bumiindah                                                | MedCal today                                                                 | Implication                                                                                                   |
+| ------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Chat session id           | Client-generated, IS the auth credential                 | N/A (no chat exists)                                                         | MedCal must not repeat this — session id must not double as authorization                                     |
+| Visitor session security  | None — localStorage string only                          | N/A                                                                          | MedCal already has a locked answer for this (see §6) — must actually use it                                   |
+| Real-time transport       | Two transports (raw `ws` + Socket.IO), HTTP-bridged      | None                                                                         | MedCal should pick **one** transport, co-located with the existing NestJS app — avoid Bumiindah's bifurcation |
+| Admin auth on chat routes | Decorated `@Public()` everywhere — not actually enforced | `CompanyRoleGuard` enforced on every Lead/ContactMessage route               | MedCal must actually enforce auth on chat admin routes/gateway handlers, unlike Bumiindah                     |
+| Presence indicator        | Fake (ticket-status-based, not connection-based)         | N/A (already decided against in the first-pass Web Chat review)              | Reaffirms the earlier decision — now with concrete evidence of why a fake indicator is a bad idea             |
+| Message ordering          | `createdAt` only, no sequence                            | N/A                                                                          | MedCal can cheaply do better (see §6)                                                                         |
+| Dedup/idempotency         | None                                                     | N/A                                                                          | MedCal can cheaply do better (see §6)                                                                         |
+| Company/tenant scoping    | Client-supplied `company_id` query param                 | Exclusively server-derived from `process.env.COMPANY_ID`, never client input | MedCal's existing pattern is already stricter — must carry it forward unchanged into the chat gateway         |
+| AI mode                   | Hybrid AI/human, mode switching                          | Explicitly forbidden by product decision                                     | Not evaluated further, confirmed out of scope                                                                 |
 
 ---
 
@@ -390,7 +443,7 @@ These two backends do **not** share a socket layer — a visitor's WS message an
 - **Transport: Socket.IO via `@nestjs/platform-socket.io`, gateway lives inside `apps/api`** (the existing NestJS app — one process, one Prisma connection, one deployment unit), not a second standalone `ws` server. Avoids Bumiindah's two-transport-bridged-by-HTTP mistake.
 - **Public reachability:** `apps/api`'s internal port is documented today as intentionally not publicly network-reachable (the entire `InternalServiceGuard` trust model rests on this). The chat gateway must not silently break that boundary. Recommended default: `apps/web-api` (the public edge) proxies the WebSocket upgrade through to `apps/api`'s gateway (e.g. `http-proxy-middleware` with `ws:true`), keeping `apps/api` off the public network exactly as today. This is flagged as needing infra/ops sign-off in §13, not silently assumed.
 - **Visitor session security:** a signed, `HttpOnly`, `Secure`, `SameSite=Lax` cookie-based `ChatSessionToken`, issued by `apps/api` at session creation, scoped to the shared parent domain — **this is not new; it's the design already locked in `docs/claude/lead-management/final-before-locked.md`** during the original Lead Inbox review ("a signed, opaque ChatSessionToken issued by apps/api... revocable/expirable, not authentication") which was deferred at the time as "MVP, not Foundation." That deferral is now lifted. The DB row id (`ChatSession.id`) stays an opaque `cuid()` but is never itself the authorization check — the signed cookie is. This directly fixes Bumiindah's core flaw (session-id-as-credential).
-- **Message ordering:** add a lightweight `seq BigInt @default(autoincrement())` on `ChatMessage`, ordered by `seq` not `createdAt` — cheap, removes Bumiindah's same-millisecond ambiguity.
+- **Message ordering:** add a lightweight `seq Int @default(autoincrement())` on `ChatMessage`, ordered by `seq` not `createdAt` — cheap, removes Bumiindah's same-millisecond ambiguity.
 - **Duplicate-submission prevention:** client mints a UUID per outgoing message (`clientMessageId`); `@@unique([sessionId, clientMessageId])` on `ChatMessage` — a resend after a dropped ack is a no-op, not a duplicate row. Bumiindah has no equivalent.
 - **Persistence:** DB-write-before-broadcast (`prisma.chatMessage.create()` then `server.to(room).emit(...)`) — same correct order Bumiindah already uses, worth keeping.
 - **Reconnect:** Socket.IO's built-in exponential-backoff client reconnect (cookie is sent automatically on the handshake, no localStorage needed) + a REST `GET` history-fetch-on-reconnect as the correctness backstop, so a client that missed events while disconnected resyncs from persisted state rather than relying purely on live delivery.
@@ -412,6 +465,7 @@ ChatSession (1) ──contactMessageId──> ContactMessage (the lead-intake en
 ```
 
 Why this shape and not the reverse (ContactMessage referencing ChatSession, or one ContactMessage per chat message):
+
 - **Lead matching must keep running exactly once per conversation**, against the visitor's declared identity (`name`+`email`) at the moment they start chatting — not re-run or re-triggered by every subsequent message. Making `ChatSession` the thing that owns a single `contactMessageId` preserves the already-correct, already-tested "STRONG/POSSIBLE/NONE decided once" behavior with zero changes to `ContactMessagesService`/`lead-matching.ts`.
 - **`ContactMessage` stays channel-agnostic**, as it already is today (§2) — it should not need to know a live conversation exists behind it. It remains exactly what it already is: a snapshot lead-intake record, now with one specific instance additionally referenced by a `ChatSession`.
 - **Lead Inbox / Needs Review must not be flooded** with one row per chat message — only the conversation's opening message enters that pipeline, matching the existing MVP's "first-touch" mental model.
@@ -447,9 +501,9 @@ model ChatSession {
 }
 
 model ChatMessage {
-  id              String         @id @default(cuid())
+  id              String      @id @default(cuid())
   sessionId       String
-  seq             BigInt         @default(autoincrement())  // ordering, cheap fix vs. Bumiindah's createdAt-only approach
+  seq             Int         @default(autoincrement())  // ordering, cheap fix vs. Bumiindah's createdAt-only approach
   senderType      ChatSenderType
   senderUserId    String?                                    // set when senderType = STAFF
   clientMessageId String?                                    // idempotency key from the sending client
@@ -482,7 +536,7 @@ The visitor-security token (`ChatSessionToken`, §4) is **not** a DB model — i
 
 - **Visitor session authorization:** signed `ChatSessionToken` cookie, not a guessable/client-chosen id (directly fixes Bumiindah's worst flaw, §1).
 - **Tenant isolation:** unchanged — `companyId` resolved exclusively from `process.env.COMPANY_ID` server-side, at both the session-creation REST call and the WS handshake; never accepted from any client-supplied field (unlike Bumiindah's client-supplied `company_id` query param).
-- **CAPTCHA:** enforced once, at `POST /public/chat-sessions` (session creation), action-scoped (`webchat_submit`, unchanged), fails closed — matches today's implementation exactly for this one boundary. Per-message CAPTCHA inside an open connection is not proposed (not how reCAPTCHA v3 is meant to be used) — abuse *within* an open connection is instead handled by:
+- **CAPTCHA:** enforced once, at `POST /public/chat-sessions` (session creation), action-scoped (`webchat_submit`, unchanged), fails closed — matches today's implementation exactly for this one boundary. Per-message CAPTCHA inside an open connection is not proposed (not how reCAPTCHA v3 is meant to be used) — abuse _within_ an open connection is instead handled by:
 - **Per-connection message-rate limiting:** a lightweight in-gateway limit (e.g. N messages per M seconds per socket) — a new, WS-specific mechanism, since `express-rate-limit` only covers HTTP routes.
 - **Admin authorization:** every admin-facing gateway handler and REST route must actually enforce the guard/permission check — explicitly not Bumiindah's `@Public()`-on-everything pattern (§1, §3). New `chat` RBAC resource (§9), no blanket `manage`.
 - **Internal API exposure:** unchanged — `apps/api`'s internal routes stay off the public network; the WS gateway's public reachability goes through the `web-api` proxy (§4), preserving the existing boundary rather than punching a new hole in it.
@@ -504,12 +558,14 @@ Explicitly **not** in the minimum viable set: typing indicators, presence/online
 ## 10. Bumiindah Features — Reuse vs. Adapt vs. Reject
 
 **REUSE (pattern, not code):**
+
 - `ChatSession` → many `ChatMessage` domain shape.
 - DB-write-before-broadcast persistence order.
 - Reconnect-with-backoff client behavior.
 - Company-scoped conversation list with an unread count derived from message state.
 
 **ADAPT (same idea, done more safely):**
+
 - Session identity → signed cookie token instead of a client-chosen/guessable id (§4, §8).
 - Single real-time transport co-located with the existing NestJS app, instead of two bridged transports (§4).
 - Ordering → add a `seq` column instead of relying on `createdAt` alone (§6).
@@ -517,6 +573,7 @@ Explicitly **not** in the minimum viable set: typing indicators, presence/online
 - Unread/read state → same concept, scoped to MedCal's existing `ContactStatus`-adjacent conventions rather than a new bespoke enum sprawl.
 
 **DO NOT COPY:**
+
 - Client-generated session id doubling as the access credential.
 - `@Public()` on every admin chat route (auth not actually enforced at the API layer).
 - Two independent realtime servers bridged by HTTP polling/webhooks.
@@ -530,6 +587,7 @@ Explicitly **not** in the minimum viable set: typing indicators, presence/online
 ## 11. Migration From the Current (Incorrect) Implementation
 
 **RETAIN as-is:**
+
 - Field constraints: `name`/`email`/`message` only, no phone/organizationName/topicId — unaffected by this correction.
 - `getFrom: "CHAT_PERSON"` hardcoded server-side after the spread, `InternalServiceGuard`/company-scoping pattern — unchanged, now the entry point fires once per `ChatSession` instead of once per submission (same call, different trigger point).
 - `publicWebChatSchema`'s validation shape — becomes the validator for the new `POST /public/chat-sessions` creation payload.
@@ -537,11 +595,13 @@ Explicitly **not** in the minimum viable set: typing indicators, presence/online
 - The bubble's visual chrome: fixed position/z-index/mount-point in `layout.tsx`, `brand` token styling, the Base UI `Popover` shell.
 
 **MUST BE REPLACED:**
+
 - The core interaction model: today's single fire-and-forget POST-and-done must become a two-part flow — create session (REST, once) + persistent live connection (WS, ongoing).
 - `web-chat-bubble.tsx`'s internal state (`values` reset on success, no persisted identifier, static confirmation-only success branch) — replaced by the session-aware state machine in §9.
 - `POST /public/web-chat`'s "complete in one call" semantics — becomes `POST /public/chat-sessions`, which starts a session rather than closing out an interaction.
 
 **MUST BE EXTENDED (net new, not replacing anything):**
+
 - `ChatSession`/`ChatMessage` Prisma models + migration (§6).
 - `apps/api` `ChatGateway` module (§7).
 - WS proxy at `apps/web-api` or an infra-level routing decision (§4, flagged in §13).
@@ -571,7 +631,7 @@ Explicitly **not** in the minimum viable set: typing indicators, presence/online
 1. **WS public reachability** — proxy through `apps/web-api` (recommended default, §4) vs. a direct infra-level ingress rule to `apps/api`'s gateway port. This is partly an ops/networking decision, not purely code; needs sign-off from whoever manages deployment.
 2. **Session ownership/assignment** — should a `ChatSession` be claimable/assignable to a specific staff member (mirroring Lead's `assignedToUserId`, itself deferred in the original Lead Inbox review), or stay a shared inbox for MVP? Recommend deferring for consistency, but this is a product call, not a technical one.
 3. **Better Auth session validation inside a Socket.IO handshake** — technically unverified by this audit; `apps/api` uses `@thallesp/nestjs-better-auth`, and whether its session-reading helper works cleanly at WS-handshake time (vs. only in an HTTP request context) needs a small technical spike before implementation starts.
-4. **`express-rate-limit`'s in-memory (non-distributed) store** — acceptable at current scale for gating session *creation*, but flag if `apps/web-api` ever runs multiple instances, since the store wouldn't be shared.
+4. **`express-rate-limit`'s in-memory (non-distributed) store** — acceptable at current scale for gating session _creation_, but flag if `apps/web-api` ever runs multiple instances, since the store wouldn't be shared.
 5. **Conversation retention/auto-close policy** — not specified anywhere; needs a product decision (e.g. auto-close after N days idle) before implementation, not something to invent silently.
 6. **In-thread message length cap** — recommend reusing the existing 2000-char limit for consistency; needs explicit confirmation, not assumed.
 7. **Exact `chat` RBAC action set** — `chat:["read","reply"]` is a reasonable per-verb guess mirroring `lead`'s pattern, but not yet confirmed against a concrete route list the way `lead:["read","update"]` was derived from an actual finished endpoint set.
@@ -590,7 +650,7 @@ Explicitly **not** in the minimum viable set: typing indicators, presence/online
 
 ## Context
 
-Lead Inbox v1 is done. The next gap is the visitor-facing entry point: MedCal's public website has no way for a visitor to start a conversation today — the WhatsApp FAB is intentionally disabled, and the only contact surface is the full `/kontak` page form. The goal is a lightweight floating "Web Chat" bubble that funnels into the *existing* `ContactMessage` pipeline (via `getFrom=CHAT_PERSON`) exactly the way the Contact Form already does via `getFrom=CONTACTFORM` — not a new realtime chat platform. BIPMED's floating-bubble screenshot is the UX reference for the *interaction pattern only* (closed bubble → click → open panel), not for literal visuals, copy, or a promise of realtime human availability, which MedCal's current backend cannot support.
+Lead Inbox v1 is done. The next gap is the visitor-facing entry point: MedCal's public website has no way for a visitor to start a conversation today — the WhatsApp FAB is intentionally disabled, and the only contact surface is the full `/kontak` page form. The goal is a lightweight floating "Web Chat" bubble that funnels into the _existing_ `ContactMessage` pipeline (via `getFrom=CHAT_PERSON`) exactly the way the Contact Form already does via `getFrom=CONTACTFORM` — not a new realtime chat platform. BIPMED's floating-bubble screenshot is the UX reference for the _interaction pattern only_ (closed bubble → click → open panel), not for literal visuals, copy, or a promise of realtime human availability, which MedCal's current backend cannot support.
 
 ---
 
@@ -638,6 +698,7 @@ Recommend **"Chat dengan kami"** for the closed-state label/bubble tooltip and o
 ## 6. Existing Implementation Reuse
 
 **Reuse as-is:**
+
 - The `ContactMessage` creation pipeline end-to-end: `apps/web-api`'s public-schema-hardcodes-`getFrom` pattern (`publicContactFormSchema` in `apps/web-api/src/public-contact-form-schema.ts` is the direct template — add a sibling schema, e.g. `publicWebChatSchema`, that hardcodes `getFrom: "CHAT_PERSON"`), forwarding to the same `POST internal/contact-messages` → `ContactMessagesService.create()` in `apps/api`. This already runs Lead identity matching (STRONG/POSSIBLE/NONE) — Web Chat messages get that behavior for free, no new logic needed.
 - reCAPTCHA v3 flow already implemented in `kontak-form.tsx` (`grecaptcha.execute(...)`) — same token-fetch-and-submit pattern applies to the chat composer's submit handler.
 - The inline `role="status"` success/error text pattern from `kontak-form.tsx`.
@@ -645,6 +706,7 @@ Recommend **"Chat dengan kami"** for the closed-state label/bubble tooltip and o
 - The FAB's fixed-position/z-index/mount-point pattern (`apps/web/src/app/layout.tsx`, same slot as the commented-out `WhatsAppFab`).
 
 **Do NOT rebuild / do NOT introduce:**
+
 - `ChatSession`, `ChatMessage`, or any new DB table — v1 has no message thread to persist.
 - WebSocket/realtime transport, presence system, typing indicators.
 - Any AI/human mode concept, mode selector, or bot persona (hard constraint, already excluded above by construction — the composer only ever does one thing: submit a `ContactMessage`).
@@ -668,6 +730,7 @@ Recommend **"Chat dengan kami"** for the closed-state label/bubble tooltip and o
 ## 9. UX States
 
 CLOSED → OPEN (panel visible, form focused) → SUBMITTING (button disabled, "Mengirim…" label, matching `kontak-form.tsx`'s existing `pending` pattern) → one of:
+
 - SUCCESS (form replaced by confirmation text, auto-return to CLOSED after a short delay or explicit close)
 - VALIDATION ERROR (inline, per-field or summary, panel stays OPEN)
 - SERVER ERROR (inline generic message, panel stays OPEN, form values preserved so the visitor doesn't retype)
@@ -680,6 +743,7 @@ Confirmed: `WhatsAppFab` (`apps/web/src/components/whatsapp-fab.tsx`) stays comm
 ## 11. Implementation Scope (for later handoff to Cursor)
 
 Minimal file list, not a build plan:
+
 - `apps/web/src/components/web-chat-bubble.tsx` (new) — closed/open UI, states.
 - `apps/web/src/app/layout.tsx` — mount point (same slot as the commented `<WhatsAppFab />`).
 - `apps/web-api/src/public-web-chat-schema.ts` (new, sibling of `public-contact-form-schema.ts`) — hardcodes `getFrom: "CHAT_PERSON"`.
@@ -788,6 +852,7 @@ model ContactTopic {
   @@index([isActive])
 }
 ```
+
 No `companyId` — intentionally global lookup data, seeded once, no admin CRUD by design.
 
 **Customer — real, unrelated matching logic lives outside it (no dedicated module).**
@@ -802,27 +867,33 @@ model Customer {
   @@index([companyId, name])
 }
 ```
+
 No `apps/api/src/modules/customer*` exists — `Customer` is Prisma-model-only. The email-matching logic that does exist is inline in `ContactMessagesService`, not a reusable `CustomerService.findByEmail()`-style method.
 
 **Enums (current code):**
+
 ```prisma
 enum LeadStatus     { NEW, CONTACTED, QUALIFIED, REJECTED, CONVERTED }
 enum ContactStatus  { PENDING, READ, REPLIED, CLOSED }
 enum GetMessageFrom { CONTACTFORM, WHATSAPP, CHAT_AI, CHAT_PERSON, EMAIL }
 ```
+
 `MatchStatus` also exists (values observed in service logic: `NONE` default, `DOMAIN_CANDIDATE`, `EXACT_EMAIL`) — a third, distinct status axis from the two above.
 
 **API surface today (apps/api):**
+
 - `POST internal/contact-messages` — `@AllowAnonymous() + InternalServiceGuard`, `companyId` from `@CompanyId()` decorator (`process.env.COMPANY_ID` only, never client input).
 - `GET contact-messages` — `@RequirePermission("contactMessage","read") + CompanyRoleGuard`, `service.findAll(companyId)` = **unpaginated, unfiltered, unsearched `findMany` ordered by `createdAt desc`.** No list controls exist at all today.
 - `GET contact-topics` — `@AllowAnonymous()`, public reference data.
 - No mutation endpoints exist for `ContactMessage.status`, no confirm/merge endpoint, no Lead endpoints whatsoever.
 
 **RBAC catalog (`packages/auth/src/access-control.ts`):** only two resources are defined —
+
 ```
 contactMessage: ["read"]
 whitelist: ["manage"]
 ```
+
 `SUPERADMIN` → both; `ADMIN` → `contactMessage:read`; everyone else → neither. **There is zero `lead:*` permission scaffolding today.**
 
 **Guards:** `CompanyRoleGuard` derives `companyId` from the session's `UserMembership` (never client input); `InternalServiceGuard` derives it from `process.env.COMPANY_ID` and validates a shared secret header, explicitly documented as having removed a prior client-supplied `x-company-id` header as an "unnecessary trust surface." Both are already correct for this design — no changes needed here.
@@ -839,19 +910,19 @@ whitelist: ["manage"]
 
 Pulled from `docs/claude/lead-management/lead-inbox.md` §9 and `docs/Architecture/01-bipmed-medcal-architecture-adoption-matrix.md`, cross-checked against current code:
 
-| # | Decision | Status |
-|---|---|---|
-| 1 | Lead as 1:N multi-channel aggregate vs. today's 1:1 (`contactMessageId @unique`) | **CONFIRMED 2026-08-16 — YES, reverse to 1:N** (§3 Option B) |
-| 2 | Where the prospect's organization name (and other identity fields) lives long-term | **CONFIRMED 2026-08-16 — Option B, denormalized snapshot on `Lead`**, source-of-truth stays on `ContactMessage` |
-| 3 | Whether `Lead.assignedToUserId` (ownership) is in scope for v1 | **CONFIRMED 2026-08-16 — NO, deferred past v1** |
-| 4 | Whether unread/new tracking is in scope for v1 | **CONFIRMED 2026-08-16 — YES, reuse `ContactStatus.PENDING→READ`** |
-| 5 | RBAC granularity for Lead (`lead:read/update/assign` vs. single `lead:manage`) | **CONFIRMED 2026-08-16 — Option B, per-verb** (`lead:read`, `lead:update`; no `lead:assign` in v1 per Decision 3) |
-| 6 | `topicId` — drop or build a real Topic table | **RESOLVED by code, not docs** — `ContactTopic` shipped with a real FK since the doc was written |
-| 7 | Internal-trust pattern for future inbound-channel webhooks | Adjacent, out of scope for Lead Inbox itself |
-| — | Web Chat is MVP, human-only, no AI mode, no `mode` field | **LOCKED** (Adoption Matrix + `final-before-locked.md`) |
-| — | Chat expressing service intent links to/creates `ContactMessage` with `getFrom=CHAT_PERSON` | **LOCKED** (Adoption Matrix, "per MedCal's own already-locked D04 rule") |
-| — | Visitor/anonymous chat identity: no durable Better Auth anon user; a narrowly scoped, revocable, non-authenticating signed chat-session cookie only | **LOCKED** (`final-before-locked.md`, explicit and detailed) |
-| — | Lead/Customer dedup: email-domain match + mandatory admin confirmation before merge, no silent auto-merge | **LOCKED** (Adoption Matrix) — **partially implemented**: the matching computation exists (`matchStatus`), the confirmation step does not (no endpoint writes `confirmedByUserId`/`confirmedAt`) |
+| #   | Decision                                                                                                                                            | Status                                                                                                                                                                                           |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Lead as 1:N multi-channel aggregate vs. today's 1:1 (`contactMessageId @unique`)                                                                    | **CONFIRMED 2026-08-16 — YES, reverse to 1:N** (§3 Option B)                                                                                                                                     |
+| 2   | Where the prospect's organization name (and other identity fields) lives long-term                                                                  | **CONFIRMED 2026-08-16 — Option B, denormalized snapshot on `Lead`**, source-of-truth stays on `ContactMessage`                                                                                  |
+| 3   | Whether `Lead.assignedToUserId` (ownership) is in scope for v1                                                                                      | **CONFIRMED 2026-08-16 — NO, deferred past v1**                                                                                                                                                  |
+| 4   | Whether unread/new tracking is in scope for v1                                                                                                      | **CONFIRMED 2026-08-16 — YES, reuse `ContactStatus.PENDING→READ`**                                                                                                                               |
+| 5   | RBAC granularity for Lead (`lead:read/update/assign` vs. single `lead:manage`)                                                                      | **CONFIRMED 2026-08-16 — Option B, per-verb** (`lead:read`, `lead:update`; no `lead:assign` in v1 per Decision 3)                                                                                |
+| 6   | `topicId` — drop or build a real Topic table                                                                                                        | **RESOLVED by code, not docs** — `ContactTopic` shipped with a real FK since the doc was written                                                                                                 |
+| 7   | Internal-trust pattern for future inbound-channel webhooks                                                                                          | Adjacent, out of scope for Lead Inbox itself                                                                                                                                                     |
+| —   | Web Chat is MVP, human-only, no AI mode, no `mode` field                                                                                            | **LOCKED** (Adoption Matrix + `final-before-locked.md`)                                                                                                                                          |
+| —   | Chat expressing service intent links to/creates `ContactMessage` with `getFrom=CHAT_PERSON`                                                         | **LOCKED** (Adoption Matrix, "per MedCal's own already-locked D04 rule")                                                                                                                         |
+| —   | Visitor/anonymous chat identity: no durable Better Auth anon user; a narrowly scoped, revocable, non-authenticating signed chat-session cookie only | **LOCKED** (`final-before-locked.md`, explicit and detailed)                                                                                                                                     |
+| —   | Lead/Customer dedup: email-domain match + mandatory admin confirmation before merge, no silent auto-merge                                           | **LOCKED** (Adoption Matrix) — **partially implemented**: the matching computation exists (`matchStatus`), the confirmation step does not (no endpoint writes `confirmedByUserId`/`confirmedAt`) |
 
 ---
 
@@ -892,21 +963,22 @@ This mirrors the already-locked Customer dedup philosophy ("no silent auto-merge
 
 Reviewing the field list against what's actually populated today:
 
-| Field | Justified? | Note |
-|---|---|---|
-| Date | Yes | `ContactMessage.createdAt` / proposed `Lead.createdAt` |
-| Name | Yes | Real field, populated on every submission |
-| Email | Yes | Real field, required on the form |
-| Phone | Yes | Real field, optional on the form |
-| Prospect Company | Yes | `organizationName`, optional |
-| Topic | Yes | Real FK now (`ContactTopic`), resolved per §2 |
-| Source | Yes | `getFrom` enum, already populated correctly |
-| Lead Status | Yes | `LeadStatus` enum exists, unused today |
-| Assigned PIC | **Deferred (Decision 3 = No)** | Not in v1 — no assign endpoint, no column consumed |
-| Unread indicator | **Yes (Decision 4 = Yes)** | Reuses `ContactStatus.PENDING→READ`, no new field |
-| Last interaction | **Yes (Decision 1 = Yes)** | Meaningful now that Lead is confirmed 1:N |
+| Field            | Justified?                     | Note                                                   |
+| ---------------- | ------------------------------ | ------------------------------------------------------ |
+| Date             | Yes                            | `ContactMessage.createdAt` / proposed `Lead.createdAt` |
+| Name             | Yes                            | Real field, populated on every submission              |
+| Email            | Yes                            | Real field, required on the form                       |
+| Phone            | Yes                            | Real field, optional on the form                       |
+| Prospect Company | Yes                            | `organizationName`, optional                           |
+| Topic            | Yes                            | Real FK now (`ContactTopic`), resolved per §2          |
+| Source           | Yes                            | `getFrom` enum, already populated correctly            |
+| Lead Status      | Yes                            | `LeadStatus` enum exists, unused today                 |
+| Assigned PIC     | **Deferred (Decision 3 = No)** | Not in v1 — no assign endpoint, no column consumed     |
+| Unread indicator | **Yes (Decision 4 = Yes)**     | Reuses `ContactStatus.PENDING→READ`, no new field      |
+| Last interaction | **Yes (Decision 1 = Yes)**     | Meaningful now that Lead is confirmed 1:N              |
 
 **Proposed MVP shape** (small, matches the "keep it deliberately small" instruction):
+
 - **List:** paginated (cursor or offset — either is fine, no existing pagination pattern elsewhere in `apps/api` to match against, so this is a free choice), server-side search on name/email/phone/organization (simple `ILIKE`, no full-text search infra needed), filters on `LeadStatus` + `getFrom` (source) + `ContactTopic`, sort by `createdAt` (newest first, default) — no other sort justified for MVP.
 - **Detail view:** the Lead's identity snapshot + its attached `ContactMessage`(s) as a simple reverse-chronological timeline (trivial under Option B's schema; a single row under today's 1:1 schema).
 - **Read/unread:** in scope (Decision 4 = Yes). Reuses `ContactStatus.PENDING→READ` exactly as it already exists (matches BIPMED's own confirmed manual-only behavior) — no new field needed.
@@ -931,10 +1003,10 @@ No part of this review proposes building `ChatSession`/`ChatMessage` — that re
 
 Only changes with a stated reason — nothing speculative:
 
-1. **`ContactMessage.leadId String?` replacing `Lead.contactMessageId String? @unique`** (FK direction reversed, uniqueness removed) — required now that Decision 1 = Yes (Option B, §3). *Why:* the current unique constraint is what structurally caps Lead at 1:1; there is no way to represent multi-channel aggregation without this change.
-2. **`Lead.name`, `Lead.email`, `Lead.phone`, `Lead.organizationName`** (denormalized snapshot, all nullable except perhaps name) — *Why:* avoids an N+1 join for the inbox list view; implements Decision 2 (confirmed Option B).
-3. **Normalized-phone column** (e.g. `ContactMessage.phoneNormalized String?`, computed at write time) — *Why:* the matching design in §4 requires comparing normalized values; storing it avoids re-normalizing on every match query. A normalized-organization comparison value (lowercase/trim/collapse-whitespace) can be computed inline at query time rather than stored, since it's a simple deterministic transform of `organizationName`, not a fixed-format field like phone.
-4. **Index to support Lead Inbox search/filter** — e.g. `@@index([companyId, status])` on `Lead` already exists; would additionally want something like `@@index([companyId, createdAt])` to support the default sort, mirroring the pattern already used on `ContactMessage`. *Why:* consistent with existing indexing conventions in this schema (every list-shaped query in this codebase already has a matching companyId-scoped index).
+1. **`ContactMessage.leadId String?` replacing `Lead.contactMessageId String? @unique`** (FK direction reversed, uniqueness removed) — required now that Decision 1 = Yes (Option B, §3). _Why:_ the current unique constraint is what structurally caps Lead at 1:1; there is no way to represent multi-channel aggregation without this change.
+2. **`Lead.name`, `Lead.email`, `Lead.phone`, `Lead.organizationName`** (denormalized snapshot, all nullable except perhaps name) — _Why:_ avoids an N+1 join for the inbox list view; implements Decision 2 (confirmed Option B).
+3. **Normalized-phone column** (e.g. `ContactMessage.phoneNormalized String?`, computed at write time) — _Why:_ the matching design in §4 requires comparing normalized values; storing it avoids re-normalizing on every match query. A normalized-organization comparison value (lowercase/trim/collapse-whitespace) can be computed inline at query time rather than stored, since it's a simple deterministic transform of `organizationName`, not a fixed-format field like phone.
+4. **Index to support Lead Inbox search/filter** — e.g. `@@index([companyId, status])` on `Lead` already exists; would additionally want something like `@@index([companyId, createdAt])` to support the default sort, mirroring the pattern already used on `ContactMessage`. _Why:_ consistent with existing indexing conventions in this schema (every list-shaped query in this codebase already has a matching companyId-scoped index).
 5. **`Lead.assignedToUserId`** — already exists, no schema change needed. **Deferred (Decision 3 = No)** — not wired to application code in v1.
 6. No new field is proposed for unread tracking — reusing `ContactMessage.status` (`ContactStatus`) is sufficient (Decision 4 = Yes, §5); a new field is not justified by evidence.
 
@@ -947,6 +1019,7 @@ Nothing else. No new tables (no separate "match candidate" table, no "assignment
 **Existing, reusable as-is:** `GET contact-topics`, `CompanyRoleGuard`, `InternalServiceGuard`, the `contactMessageCreateSchema` Zod pattern, the `@RequirePermission` decorator pattern.
 
 **New, minimum set for Lead Inbox:**
+
 - `GET leads` — paginated, search (name/email/phone/organizationName), filter (`status`, `getFrom`, `topicId`), sort by `createdAt`. Mirrors the shape `contact-messages`' `findAll` should have had but doesn't — this is also an opportunity to note `ContactMessagesService.findAll()` itself has no pagination/search/filter today, a pre-existing gap this work would otherwise need to solve twice.
 - `GET leads/:id` — detail + attached `ContactMessage` timeline (real 1:N under the now-confirmed Decision 1 schema change).
 - `PATCH leads/:id/status` — `LeadStatus` transition, staff-driven.

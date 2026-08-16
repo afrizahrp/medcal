@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
+import { IoAdapter } from "@nestjs/platform-socket.io";
 import { AppModule } from "./app.module";
 
 function parseTrustedOrigins(raw: string | undefined): string[] {
@@ -18,6 +19,9 @@ async function bootstrap() {
     origin: parseTrustedOrigins(process.env.TRUSTED_ORIGINS),
     credentials: true,
   });
+  // Socket.IO rides the SAME HTTP server/port as REST (locked topology: no
+  // separate WebSocket service, apps/api stays internal-only behind Nginx).
+  app.useWebSocketAdapter(new IoAdapter(app));
   const port = Number(process.env.API_PORT ?? 3001);
   await app.listen(port);
   console.log(`[api] Nest listening on :${port}`);

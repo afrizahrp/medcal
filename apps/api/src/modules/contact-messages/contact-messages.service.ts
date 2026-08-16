@@ -9,10 +9,22 @@ import {
 } from "@medcal/shared";
 import type { ContactMessageLeadResolution } from "@medcal/shared";
 import { classifyLeadMatch, findLeadMatchCandidates } from "../leads/lead-matching";
+import type { Db } from "../leads/lead-matching";
 
 @Injectable()
 export class ContactMessagesService {
-  async create(companyId: string, rawInput: unknown) {
+  /**
+   * `tx` (optional) lets a caller run this entire method's statements
+   * inside its own `prisma.$transaction` — added for ChatSessionsService.
+   * createSession (Web Chat Phase 1 correction, 2026-08-16), which needs
+   * ChatSession + first ChatMessage + this ContactMessage + the Lead-match
+   * write + the final link-back to all commit or roll back together.
+   * Defaults to the module-level `prisma` singleton, so every existing
+   * caller (ContactMessagesController, tests) is unaffected — same
+   * behavior, same non-transactional execution, as before this change.
+   * Matching semantics (STRONG/POSSIBLE/NONE) are untouched.
+   */
+  async create(companyId: string, rawInput: unknown, tx: Db = prisma) {
     // Authoritative server-side validation — this endpoint must not rely
     // solely on apps/web-api having already validated the same shape;
     // reuses the exact schema web-api uses, not a second parallel one.
@@ -30,7 +42,7 @@ export class ContactMessagesService {
     // input, so "unknown companyId" here means this deployment's own
     // COMPANY_ID env var doesn't match a real Company row — a deployment
     // misconfiguration, not a caller error.
-    const company = await prisma.company.findUnique({ where: { id: companyId } });
+    const company = await tx.company.findUnique({ where: { id: companyId } });
     if (!company) {
       throw new InternalServerErrorException({
         message: "Server misconfiguration: COMPANY_ID does not match a known company",
@@ -39,7 +51,7 @@ export class ContactMessagesService {
     }
 
     if (input.topicId !== undefined) {
-      const topic = await prisma.contactTopic.findUnique({ where: { id: input.topicId } });
+      const topic = await tx.contactTopic.findUnique({ where: { id: input.topicId } });
       if (!topic || !topic.isActive) {
         throw new BadRequestException({
           message: "Invalid topic",
@@ -55,7 +67,7 @@ export class ContactMessagesService {
       | "DOMAIN_CANDIDATE" = "NONE";
     let matchedCustomerId: string | undefined;
 
-    const exact = await prisma.customerContact.findFirst({
+    const exact = await tx.customerContact.findFirst({
       where: {
         companyId,
         email: { equals: input.email, mode: "insensitive" },
@@ -65,7 +77,7 @@ export class ContactMessagesService {
       matchStatus = "EXACT_EMAIL";
       matchedCustomerId = exact.customerId;
     } else if (domain && !isPublicEmailDomain(domain)) {
-      const domainHit = await prisma.customerContact.findFirst({
+      const domainHit = await tx.customerContact.findFirst({
         where: {
           companyId,
           email: { endsWith: `@${domain}`, mode: "insensitive" },
@@ -84,11 +96,15 @@ export class ContactMessagesService {
     // Review, never auto-created into a Lead — avoids duplicate Leads);
     // NO MATCH creates a new Lead.
     const phoneNormalized = input.phone ? normalizePhone(input.phone) : undefined;
-    const candidates = await findLeadMatchCandidates(companyId, {
-      email: input.email,
-      phone: input.phone,
-      organizationName: input.organizationName,
-    });
+    const candidates = await findLeadMatchCandidates(
+      companyId,
+      {
+        email: input.email,
+        phone: input.phone,
+        organizationName: input.organizationName,
+      },
+      tx,
+    );
     const match = classifyLeadMatch(candidates);
 
     let leadId: string | null;
@@ -97,7 +113,7 @@ export class ContactMessagesService {
     } else if (match.kind === "POSSIBLE") {
       leadId = null;
     } else {
-      const newLead = await prisma.lead.create({
+      const newLead = await tx.lead.create({
         data: {
           companyId,
           name: input.name,
@@ -109,7 +125,7 @@ export class ContactMessagesService {
       leadId = newLead.id;
     }
 
-    const created = await prisma.contactMessage.create({
+    const created = await tx.contactMessage.create({
       data: {
         companyId,
         getFrom: input.getFrom,
