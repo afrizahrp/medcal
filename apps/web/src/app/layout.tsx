@@ -3,6 +3,7 @@ import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { WhatsAppFab } from "@/components/whatsapp-fab";
+import { WebChatBubble } from "@/components/web-chat-bubble";
 import { JsonLd } from "@/components/json-ld";
 import { siteUrl } from "@/data/seo";
 import { professionalServiceJsonLd } from "@/data/structured-data";
@@ -40,6 +41,7 @@ export default function RootLayout({
         <main className="flex-1">{children}</main>
         <SiteFooter />
         {/* <WhatsAppFab /> */}
+        <WebChatBubble />
       </body>
     </html>
   );

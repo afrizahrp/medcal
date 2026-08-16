@@ -5,6 +5,7 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import { whatsapp } from "@medcal/notifications";
 import { publicContactFormSchema } from "./public-contact-form-schema";
+import { publicWebChatSchema } from "./public-web-chat-schema";
 import { verifyRecaptcha } from "./recaptcha";
 
 /**
@@ -28,6 +29,17 @@ app.use(morgan("dev"));
 const contactFormLimiter = rateLimit({
   windowMs: Number(process.env.CONTACT_FORM_RATE_LIMIT_WINDOW_MS ?? "60000"),
   limit: Number(process.env.CONTACT_FORM_RATE_LIMIT_MAX ?? "5"),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many submissions, please try again shortly." },
+});
+
+// A separate limiter instance/counter from contactFormLimiter — Web Chat and
+// Contact Form traffic must not share a quota, or one channel's abuse could
+// exhaust the other's allowance (design review §13.5).
+const webChatLimiter = rateLimit({
+  windowMs: Number(process.env.WEB_CHAT_RATE_LIMIT_WINDOW_MS ?? "60000"),
+  limit: Number(process.env.WEB_CHAT_RATE_LIMIT_MAX ?? "5"),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many submissions, please try again shortly." },
@@ -89,6 +101,48 @@ app.post("/public/contact-messages", contactFormLimiter, async (req, res) => {
         "x-internal-secret": internalSecret,
       },
       body: JSON.stringify({ ...formData, getFrom: "CONTACTFORM" }),
+    });
+
+    const body = await upstream.json().catch(() => ({}));
+    res.status(upstream.status).json(body);
+  } catch (err) {
+    res.status(502).json({
+      error: "Failed to reach business API",
+      detail: err instanceof Error ? err.message : "unknown",
+    });
+  }
+});
+
+app.post("/public/web-chat", webChatLimiter, async (req, res) => {
+  if (!companyId) {
+    res.status(500).json({ error: "COMPANY_ID not configured" });
+    return;
+  }
+
+  const parsed = publicWebChatSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const { captchaToken, ...formData } = parsed.data;
+  const captchaOk = await verifyRecaptcha(captchaToken, "webchat_submit");
+  if (!captchaOk) {
+    res.status(400).json({ error: "CAPTCHA verification failed" });
+    return;
+  }
+
+  try {
+    // getFrom is always server-assigned for this endpoint — the browser
+    // never gets to choose the message source. Placed after the spread so
+    // it always wins even if a stray key were present in formData.
+    const upstream = await fetch(`${apiUrl}/internal/contact-messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-internal-secret": internalSecret,
+      },
+      body: JSON.stringify({ ...formData, getFrom: "CHAT_PERSON" }),
     });
 
     const body = await upstream.json().catch(() => ({}));
