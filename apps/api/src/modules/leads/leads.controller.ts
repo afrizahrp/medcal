@@ -3,7 +3,7 @@ import { leadListQuerySchema, leadStatusUpdateSchema } from "@medcal/shared";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
-import { LeadsService, type LeadWithTimeline, type NeedsReviewItem } from "./leads.service";
+import { LeadsService, type LeadListResult, type LeadWithTimeline, type NeedsReviewItem } from "./leads.service";
 
 @Controller("leads")
 @UseGuards(CompanyRoleGuard)
@@ -15,7 +15,7 @@ export class LeadsController {
 
   @Get()
   @RequirePermission("lead", "read")
-  async list(@CompanyId() companyId: string, @Query() rawQuery: unknown) {
+  async list(@CompanyId() companyId: string, @Query() rawQuery: unknown): Promise<LeadListResult> {
     const parsed = leadListQuerySchema.safeParse(rawQuery);
     if (!parsed.success) {
       throw new BadRequestException({

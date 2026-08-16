@@ -6,8 +6,22 @@ import { findLeadMatchCandidates } from "./lead-matching";
 
 const DEFAULT_PAGE_SIZE = 20;
 
+// A Lead can have MANY ContactMessages (Lead Inbox design review §1) — Topic/
+// Source/interaction-date are not permanent Lead attributes, so the list view
+// carries the single latest ContactMessage (with its topic) per Lead rather
+// than assuming any one channel/topic represents the Lead going forward.
+export type LeadListRow = Prisma.LeadGetPayload<{
+  include: {
+    contactMessages: {
+      take: 1;
+      orderBy: { createdAt: "desc" };
+      include: { topic: true };
+    };
+  };
+}>;
+
 export interface LeadListResult {
-  data: Lead[];
+  data: LeadListRow[];
   page: number;
   pageSize: number;
   total: number;
@@ -60,6 +74,13 @@ export class LeadsService {
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * pageSize,
         take: pageSize,
+        include: {
+          contactMessages: {
+            take: 1,
+            orderBy: { createdAt: "desc" },
+            include: { topic: true },
+          },
+        },
       }),
     ]);
 

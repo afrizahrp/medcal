@@ -10,8 +10,19 @@ import { ContactMessagesService } from "./contact-messages.service";
 const service = new ContactMessagesService();
 const realCompanyId = "PKM"; // matches this dev environment's COMPANY_ID
 const createdMessageIds: string[] = [];
+// ContactMessagesService.create() now also creates a Lead as a side effect
+// (Lead Inbox identity matching) — must be tracked and cleaned up here too,
+// or every run of this file leaks "Test User" Leads into the real dev DB.
+const createdLeadIds: string[] = [];
 let activeTopicId: number;
 let inactiveTopicId: number;
+
+async function create(payload: Record<string, unknown>) {
+  const result = await service.create(realCompanyId, payload);
+  createdMessageIds.push(result.id);
+  if (result.leadId) createdLeadIds.push(result.leadId);
+  return result;
+}
 
 function basePayload(overrides: Record<string, unknown> = {}) {
   return {
@@ -36,6 +47,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await prisma.contactMessage.deleteMany({ where: { id: { in: createdMessageIds } } });
+  await prisma.lead.deleteMany({ where: { id: { in: createdLeadIds } } });
   await prisma.contactTopic.delete({ where: { id: inactiveTopicId } });
 });
 
@@ -88,8 +100,7 @@ describe("ContactMessagesService.create — validation", () => {
 describe("ContactMessagesService.create — companyId trust boundary", () => {
   it("ignores any companyId-shaped value inside the body — only the guard-derived companyId argument is used", async () => {
     const payload = basePayload({ companyId: "NOT-A-REAL-COMPANY", topicId: activeTopicId });
-    const result = await service.create(realCompanyId, payload);
-    createdMessageIds.push(result.id);
+    const result = await create(payload);
     const stored = await prisma.contactMessage.findUniqueOrThrow({ where: { id: result.id } });
     expect(stored.companyId).toBe(realCompanyId);
   });
@@ -106,8 +117,7 @@ describe("ContactMessagesService.create — companyId trust boundary", () => {
 
 describe("ContactMessagesService.create — happy path", () => {
   it("creates a message with a valid active topic and returns id + matchStatus", async () => {
-    const result = await service.create(realCompanyId, basePayload({ topicId: activeTopicId }));
-    createdMessageIds.push(result.id);
+    const result = await create(basePayload({ topicId: activeTopicId }));
     expect(result.id).toBeTruthy();
     expect(result.matchStatus).toBe("NONE");
 
@@ -128,8 +138,7 @@ describe("ContactMessagesService.findActiveTopics", () => {
 
 describe("ContactMessagesService.updateStatus — unread tracking (Lead Inbox, locked 2026-08-16 Decision 4)", () => {
   it("transitions PENDING → READ", async () => {
-    const created = await service.create(realCompanyId, basePayload({ topicId: activeTopicId }));
-    createdMessageIds.push(created.id);
+    const created = await create(basePayload({ topicId: activeTopicId }));
 
     const stored = await prisma.contactMessage.findUniqueOrThrow({ where: { id: created.id } });
     expect(stored.status).toBe("PENDING");
@@ -139,8 +148,7 @@ describe("ContactMessagesService.updateStatus — unread tracking (Lead Inbox, l
   });
 
   it("throws NotFoundException for a message belonging to a different company", async () => {
-    const created = await service.create(realCompanyId, basePayload({ topicId: activeTopicId }));
-    createdMessageIds.push(created.id);
+    const created = await create(basePayload({ topicId: activeTopicId }));
 
     await expect(service.updateStatus("ZZZ-UNKNOWN", created.id, "READ")).rejects.toMatchObject({
       status: 404,
