@@ -78,6 +78,10 @@ export default function LeadsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  // Staff stays on this page after resolving a Needs Review item (so they
+  // can resolve more than one in a row) — this just points at where the
+  // message went, so "Attach" no longer looks like the message vanished.
+  const [lastResolved, setLastResolved] = useState<{ name: string; leadId: string } | null>(null);
 
   useEffect(() => {
     apiFetch<ContactTopic[]>("/contact-topics")
@@ -114,14 +118,19 @@ export default function LeadsPage() {
 
   async function resolve(
     messageId: string,
+    messageName: string,
     resolution: { action: "ATTACH"; leadId: string } | { action: "CREATE_NEW" },
   ) {
     setResolvingId(messageId);
+    setLastResolved(null);
     try {
-      await apiFetch(`/contact-messages/${messageId}/lead`, {
+      const updated = await apiFetch<{ leadId: string | null }>(`/contact-messages/${messageId}/lead`, {
         method: "PATCH",
         body: JSON.stringify(resolution),
       });
+      if (updated.leadId) {
+        setLastResolved({ name: messageName, leadId: updated.leadId });
+      }
       await load();
     } catch {
       setError("Gagal menyelesaikan Needs Review.");
@@ -166,7 +175,7 @@ export default function LeadsPage() {
                       key={candidate.id}
                       type="button"
                       disabled={resolvingId === message.id}
-                      onClick={() => resolve(message.id, { action: "ATTACH", leadId: candidate.id })}
+                      onClick={() => resolve(message.id, message.name, { action: "ATTACH", leadId: candidate.id })}
                       className="rounded border border-slate-300 bg-white px-2 py-1 text-xs disabled:opacity-50"
                     >
                       Attach to #{candidate.id.slice(-6)}
@@ -175,7 +184,7 @@ export default function LeadsPage() {
                   <button
                     type="button"
                     disabled={resolvingId === message.id}
-                    onClick={() => resolve(message.id, { action: "CREATE_NEW" })}
+                    onClick={() => resolve(message.id, message.name, { action: "CREATE_NEW" })}
                     className="rounded border border-slate-300 bg-white px-2 py-1 text-xs disabled:opacity-50"
                   >
                     Create New Lead
@@ -186,6 +195,15 @@ export default function LeadsPage() {
           </ul>
         )}
       </section>
+
+      {lastResolved && (
+        <p className="mt-3 rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">
+          {lastResolved.name} berhasil dihubungkan.{" "}
+          <Link href={`/leads/${lastResolved.leadId}`} className="underline">
+            Lihat Lead →
+          </Link>
+        </p>
+      )}
 
       <div className="mt-6 flex flex-wrap gap-3">
         <input
@@ -274,7 +292,7 @@ export default function LeadsPage() {
                 return (
                   <tr key={lead.id} className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="px-3 py-2">
-                      <Link href={`/management/leads/${lead.id}`} className="block text-brand-700 underline">
+                      <Link href={`/leads/${lead.id}`} className="block text-brand-700 underline">
                         {new Date(latest?.createdAt ?? lead.createdAt).toLocaleDateString()}
                       </Link>
                     </td>

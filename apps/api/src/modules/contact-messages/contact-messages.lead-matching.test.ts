@@ -122,7 +122,12 @@ describe("ContactMessagesService.create — Lead identity matching (Lead Inbox, 
       data: { id: otherCompanyId, name: "Other Co", status: "ACTIVE" },
     });
     const org = `Cross-Tenant-${randomUUID().slice(0, 8)}`;
-    const phone = "081299999999";
+    // Unique per run — a hardcoded literal here previously collided with real
+    // Lead data created during manual trial testing in this same dev
+    // database, producing a false POSSIBLE MATCH and breaking this test.
+    const phone = `0815${Math.floor(Math.random() * 100000000)
+      .toString()
+      .padStart(8, "0")}`;
 
     const otherLead = await prisma.lead.create({
       data: { companyId: otherCompanyId, name: "Other", email: "other@example.com", phone, organizationName: org },

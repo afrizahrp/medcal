@@ -28,7 +28,7 @@ export interface LeadListResult {
 }
 
 export type LeadWithTimeline = Prisma.LeadGetPayload<{
-  include: { contactMessages: true };
+  include: { contactMessages: { include: { topic: true } } };
 }>;
 
 export interface NeedsReviewItem {
@@ -93,8 +93,9 @@ export class LeadsService {
       include: {
         // Reverse-chronological interaction timeline (Lead Inbox design
         // review §5) — Lead is the aggregate, ContactMessage rows are its
-        // per-channel interactions.
-        contactMessages: { orderBy: { createdAt: "desc" } },
+        // per-channel interactions. `topic` included so the Lead Detail UI
+        // can show each interaction's topic name without a second endpoint.
+        contactMessages: { orderBy: { createdAt: "desc" }, include: { topic: true } },
       },
     });
     if (!lead) {
