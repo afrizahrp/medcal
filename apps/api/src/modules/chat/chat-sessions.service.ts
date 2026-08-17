@@ -10,6 +10,8 @@ export interface ChatSessionWithMessages extends ChatSession {
 
 export interface ChatSessionListItem extends ChatSession {
   latestMessage: ChatMessage | null;
+  /** VISITOR messages newer than lastReadByAdminAt — same semantics as countUnread. */
+  unreadCount: number;
 }
 
 /**
@@ -186,8 +188,8 @@ export class ChatSessionsService {
    * Chat Inbox listing (Phase 2 admin UI) — company-scoped, OPEN sessions
    * first (Prisma orders a native Postgres enum by its declaration order,
    * and OPEN is declared before CLOSED in schema.prisma), then by most
-   * recent activity. No pagination/unread tracking yet — an intentionally
-   * minimal skeleton, same as Chat Inbox's own UI.
+   * recent activity. unreadCount is the per-session VISITOR unread total
+   * (same filter as countUnread); CLOSED is not treated as read.
    */
   async findAll(companyId: string): Promise<ChatSessionListItem[]> {
     const sessions = await prisma.chatSession.findMany({
@@ -195,9 +197,19 @@ export class ChatSessionsService {
       orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
       include: { messages: { orderBy: { seq: "desc" }, take: 1 } },
     });
+    if (sessions.length === 0) return [];
+
+    const grouped = await prisma.chatMessage.groupBy({
+      by: ["sessionId"],
+      where: this.unreadVisitorWhere(companyId, sessions),
+      _count: { _all: true },
+    });
+    const unreadBySessionId = new Map(grouped.map((row) => [row.sessionId, row._count._all]));
+
     return sessions.map(({ messages, ...session }) => ({
       ...session,
       latestMessage: messages[0] ?? null,
+      unreadCount: unreadBySessionId.get(session.id) ?? 0,
     }));
   }
 
@@ -256,15 +268,28 @@ export class ChatSessionsService {
     if (sessions.length === 0) return 0;
 
     return prisma.chatMessage.count({
-      where: {
-        companyId,
-        senderType: "VISITOR",
-        OR: sessions.map((session) => ({
-          sessionId: session.id,
-          createdAt: session.lastReadByAdminAt ? { gt: session.lastReadByAdminAt } : undefined,
-        })),
-      },
+      where: this.unreadVisitorWhere(companyId, sessions),
     });
+  }
+
+  /**
+   * Shared VISITOR-unread filter: message.createdAt > that session's
+   * lastReadByAdminAt, or every VISITOR message when the watermark is null.
+   * Used by both the header total (count) and Inbox per-session (groupBy)
+   * so the two cannot drift.
+   */
+  private unreadVisitorWhere(
+    companyId: string,
+    sessions: { id: string; lastReadByAdminAt: Date | null }[],
+  ): Prisma.ChatMessageWhereInput {
+    return {
+      companyId,
+      senderType: "VISITOR",
+      OR: sessions.map((session) => ({
+        sessionId: session.id,
+        createdAt: session.lastReadByAdminAt ? { gt: session.lastReadByAdminAt } : undefined,
+      })),
+    };
   }
 
   /**

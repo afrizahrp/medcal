@@ -18,6 +18,7 @@ interface ChatSessionListItem {
   visitorEmail: string;
   status: ChatSessionStatus;
   createdAt: string;
+  unreadCount: number;
   latestMessage: LatestMessage | null;
 }
 
@@ -32,8 +33,9 @@ function formatDateTime(iso: string): string {
 
 /**
  * ChatSession-based conversation list — a dedicated Chat Inbox, distinct
- * from Lead Inbox (Lead/ContactMessage). Skeleton: no pagination, no
- * unread tracking, no filters yet.
+ * from Lead Inbox (Lead/ContactMessage). unreadCount is server-computed
+ * (VISITOR messages newer than lastReadByAdminAt). Fetch-on-mount: this
+ * page remounts when navigating back from /chat/[sessionId].
  */
 export default function ChatInboxPage() {
   const [sessions, setSessions] = useState<ChatSessionListItem[] | null>(null);
@@ -79,8 +81,13 @@ export default function ChatInboxPage() {
               sessions.map((session) => (
                 <tr key={session.id} className="border-t border-slate-100 hover:bg-slate-50">
                   <td className="px-3 py-2">
-                    <Link href={`/chat/${session.id}`} className="block text-brand-700 underline">
-                      {session.visitorName}
+                    <Link href={`/chat/${session.id}`} className="inline-flex items-center gap-2 text-brand-700 underline">
+                      <span>{session.visitorName}</span>
+                      {session.unreadCount > 0 ? (
+                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-700 px-1 text-[10px] font-medium leading-none text-white no-underline">
+                          {session.unreadCount > 99 ? "99+" : session.unreadCount}
+                        </span>
+                      ) : null}
                     </Link>
                   </td>
                   <td className="px-3 py-2">{session.visitorEmail}</td>

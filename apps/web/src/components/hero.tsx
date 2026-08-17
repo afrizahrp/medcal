@@ -15,7 +15,7 @@ export function Hero() {
           </h1>
 
           <p className="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-ink-600 sm:text-xl">
-            Kami membantu memastikan akurasi pengukuran alat Anda, dengan hasil
+            Kami bantu memastikan akurasi pengukuran alat Anda, dengan hasil
             yang terdokumentasi rapi dan mudah ditelusuri, termasuk untuk
             keperluan audit akreditasi. Didukung izin resmi dan akreditasi KAN
             (LK-521-IDN) sesuai ruang lingkupnya

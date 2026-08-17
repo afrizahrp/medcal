@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { io, type Socket } from "socket.io-client";
+import { useCallback, useEffect, useState } from "react";
+import { useManagementChatSocket } from "./management-chat-socket";
 
 export type ChatConnectionState = "connecting" | "connected" | "disconnected" | "error";
 
@@ -31,89 +31,77 @@ interface UseChatSocketResult {
 }
 
 /**
- * The ONLY place Socket.IO wiring lives for the admin Chat Conversation UI —
- * kept isolated here so the page component stays plain rendering + REST
- * fetch, matching every other admin page's convention.
- *
- * Reuses the exact Phase 2 backend contract as-is: connects with the
- * existing Better Auth session cookie (withCredentials, same origin/CORS
- * setup already proven for apiFetch), never invents a second auth
- * mechanism, and never sends senderUserId/companyId/senderType/role in any
- * payload — the ChatGateway derives all of that from the authenticated
- * socket identity (see apps/api/src/modules/chat/chat.gateway.ts).
+ * Session-scoped Chat Conversation wiring on top of the shell's single
+ * Socket.IO connection. Does not call io() — joining `join_session` and
+ * filtering live events for this sessionId only. Unmount must not
+ * disconnect the shared socket.
  */
 export function useChatSocket(sessionId: string): UseChatSocketResult {
-  const socketRef = useRef<Socket | null>(null);
-  const [connectionState, setConnectionState] = useState<ChatConnectionState>("connecting");
+  const { socket, connectionState, setViewedSessionId } = useManagementChatSocket();
   const [liveMessages, setLiveMessages] = useState<ChatWireMessage[]>([]);
   const [sessionClosed, setSessionClosed] = useState(false);
   const [errorCode, setErrorCode] = useState<string | null>(null);
 
   useEffect(() => {
-    setConnectionState("connecting");
     setLiveMessages([]);
     setSessionClosed(false);
     setErrorCode(null);
+    setViewedSessionId(sessionId);
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL;
-    const socket = io(baseUrl, {
-      withCredentials: true,
-      transports: ["websocket"],
-    });
-    socketRef.current = socket;
+    if (!socket) {
+      return () => setViewedSessionId(null);
+    }
 
-    socket.on("connect", () => {
-      setConnectionState("connected");
-      // Admin identity/company/RBAC are all re-checked server-side on this
-      // event — join_session is the ONLY way an admin socket is authorized
-      // for a given session (see ChatGateway.handleJoinSession).
-      socket.emit("join_session", { sessionId });
-    });
+    const activeSocket = socket;
 
-    socket.on("disconnect", () => setConnectionState("disconnected"));
-    socket.on("connect_error", () => setConnectionState("error"));
+    function join() {
+      activeSocket.emit("join_session", { sessionId });
+    }
 
-    socket.on("error", (payload: ChatSocketErrorPayload) => {
-      setErrorCode(payload.code);
-    });
-
-    socket.on("message", (message: ChatWireMessage) => {
+    function onMessage(message: ChatWireMessage) {
       if (message.sessionId !== sessionId) return;
       setLiveMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
-    });
+    }
 
-    socket.on("session_closed", (payload: { sessionId: string }) => {
+    function onSessionClosed(payload: { sessionId: string }) {
       if (payload.sessionId === sessionId) setSessionClosed(true);
-    });
+    }
+
+    function onError(payload: ChatSocketErrorPayload) {
+      setErrorCode(payload.code);
+    }
+
+    activeSocket.on("connect", join);
+    activeSocket.on("message", onMessage);
+    activeSocket.on("session_closed", onSessionClosed);
+    activeSocket.on("error", onError);
+    if (activeSocket.connected) join();
 
     return () => {
-      socket.removeAllListeners();
-      socket.disconnect();
-      socketRef.current = null;
+      activeSocket.off("connect", join);
+      activeSocket.off("message", onMessage);
+      activeSocket.off("session_closed", onSessionClosed);
+      activeSocket.off("error", onError);
+      setViewedSessionId(null);
     };
-  }, [sessionId]);
+  }, [socket, sessionId, setViewedSessionId]);
 
   const sendMessage = useCallback(
     (body: string) => {
-      const socket = socketRef.current;
       if (!socket?.connected) return;
-      // Only body + the conversation selector — never senderUserId/
-      // companyId/senderType/role. The backend is the sole source of truth
-      // for admin identity (Phase 2 "ADMIN IDENTITY — NON-NEGOTIABLE" rule).
       socket.emit("send_message", {
         sessionId,
         body,
         clientMessageId: crypto.randomUUID(),
       });
     },
-    [sessionId],
+    [socket, sessionId],
   );
 
   const closeSession = useCallback(() => {
-    const socket = socketRef.current;
     if (!socket?.connected) return;
     socket.emit("close_session", { sessionId });
-  }, [sessionId]);
+  }, [socket, sessionId]);
 
   return { connectionState, liveMessages, sessionClosed, errorCode, sendMessage, closeSession };
 }

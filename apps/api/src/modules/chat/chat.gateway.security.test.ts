@@ -11,6 +11,7 @@ import type { MembershipRole } from "@medcal/db";
 import { signChatSessionToken } from "@medcal/shared";
 import { AppModule } from "../../app.module";
 import { ChatSessionsService } from "./chat-sessions.service";
+import { roomForCompany } from "./chat-socket-auth";
 import { ContactMessagesService } from "../contact-messages/contact-messages.service";
 
 // Real Postgres + a real listening Nest app (HTTP + Socket.IO on the same
@@ -336,5 +337,142 @@ describe("Persistence, idempotency, and client-controlled-field rejection", () =
     const ack = await waitFor<{ message: { companyId: string } }>(socket, "message_ack");
 
     expect(ack.message.companyId).toBe(COMPANY_ID);
+  });
+});
+
+describe("Company admin room — live unread fan-out", () => {
+  async function connectedAdmin(role: MembershipRole = "ADMIN") {
+    const { cookie, userId } = await createAdmin(role);
+    const socket = connect(cookie);
+    await waitFor(socket, "connect");
+    // handleConnection joins chat:company:<id> after identity resolves.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    return { socket, userId };
+  }
+
+  it("company room name is server-derived from the authenticated companyId", () => {
+    expect(roomForCompany(COMPANY_ID)).toBe(`chat:company:${COMPANY_ID}`);
+    expect(roomForCompany(FOREIGN_COMPANY_ID)).toBe(`chat:company:${FOREIGN_COMPANY_ID}`);
+  });
+
+  it("a VISITOR message is delivered to a same-company admin who has not joined the session", async () => {
+    const session = await createVisitorSession();
+    const { socket: admin } = await connectedAdmin("ADMIN");
+    const visitor = connect(cookieFor(session.id));
+    await waitFor(visitor, "history");
+
+    const incoming = waitFor<{
+      senderType: string;
+      sessionId: string;
+      id: string;
+      createdAt: string;
+      body: string;
+    }>(admin, "message");
+    visitor.emit("send_message", { body: "live unread ping" });
+    const payload = await incoming;
+
+    expect(payload.senderType).toBe("VISITOR");
+    expect(payload.sessionId).toBe(session.id);
+    expect(payload.body).toBe("live unread ping");
+    expect(payload.id).toBeTruthy();
+    expect(payload.createdAt).toBeTruthy();
+  });
+
+  it("the same VISITOR message reaches every same-company admin with chat:read, not only one socket", async () => {
+    const session = await createVisitorSession();
+    const { socket: adminA } = await connectedAdmin("ADMIN");
+    const { socket: adminB } = await connectedAdmin("ADMIN");
+    const visitor = connect(cookieFor(session.id));
+    await waitFor(visitor, "history");
+
+    const incomingA = waitFor<{ id: string; sessionId: string; senderType: string }>(adminA, "message");
+    const incomingB = waitFor<{ id: string; sessionId: string; senderType: string }>(adminB, "message");
+    visitor.emit("send_message", { body: "fan-out to both admins" });
+    const [payloadA, payloadB] = await Promise.all([incomingA, incomingB]);
+
+    expect(payloadA.senderType).toBe("VISITOR");
+    expect(payloadB.senderType).toBe("VISITOR");
+    expect(payloadA.sessionId).toBe(session.id);
+    expect(payloadB.sessionId).toBe(session.id);
+    expect(payloadA.id).toBe(payloadB.id);
+  });
+
+  it("staff whose only membership is a foreign company cannot connect — they never join this company's unread room", async () => {
+    const shortId = randomUUID().slice(0, 8);
+    const email = `chat-foreign-${shortId}@kalibrasimedika.co.id`;
+    const password = "Password123!";
+
+    await prisma.emailWhitelist.upsert({
+      where: { email },
+      create: { email, status: "ACTIVE", createdBy: null },
+      update: { status: "ACTIVE" },
+    });
+
+    const signUp = await auth.api.signUpEmail({ body: { email, password, name: "Foreign Chat Admin" } });
+    cleanup.userIds.push(signUp.user.id);
+    await prisma.userMembership.create({
+      data: { userId: signUp.user.id, companyId: FOREIGN_COMPANY_ID, role: "ADMIN" },
+    });
+
+    const signInResponse = await auth.api.signInEmail({ body: { email, password }, asResponse: true });
+    const setCookies =
+      typeof signInResponse.headers.getSetCookie === "function"
+        ? signInResponse.headers.getSetCookie()
+        : [signInResponse.headers.get("set-cookie") ?? ""].filter(Boolean);
+    const cookie = setCookies.map((c) => c.split(";")[0]).join("; ");
+
+    const socket = connect(cookie);
+    const errorEvent = await waitFor<{ code: string }>(socket, "error");
+    expect(errorEvent.code).toBe("NO_MEMBERSHIP");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(socket.connected).toBe(false);
+  });
+
+  it("staff without chat:read (SUPERVISOR) are not in the company unread room", async () => {
+    const session = await createVisitorSession();
+    const { socket: supervisor } = await connectedAdmin("SUPERVISOR");
+    const visitor = connect(cookieFor(session.id));
+    await waitFor(visitor, "history");
+
+    let received = false;
+    supervisor.on("message", () => {
+      received = true;
+    });
+    visitor.emit("send_message", { body: "should not reach supervisor" });
+    await waitFor(visitor, "message_ack");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(received).toBe(false);
+  });
+
+  it("an ADMIN reply is not broadcast to the company unread room", async () => {
+    const session = await createVisitorSession();
+    const { socket: dashboardAdmin } = await connectedAdmin("ADMIN");
+    const { socket: threadAdmin } = await connectedAdmin("ADMIN");
+    threadAdmin.emit("join_session", { sessionId: session.id });
+    await waitFor(threadAdmin, "history");
+
+    let dashboardSawMessage = false;
+    dashboardAdmin.on("message", () => {
+      dashboardSawMessage = true;
+    });
+
+    threadAdmin.emit("send_message", { sessionId: session.id, body: "Admin reply only" });
+    const ack = await waitFor<{ message: { senderType: string } }>(threadAdmin, "message_ack");
+    expect(ack.message.senderType).toBe("ADMIN");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(dashboardSawMessage).toBe(false);
+  });
+
+  it("existing session-room broadcast still delivers VISITOR messages to the visitor", async () => {
+    const session = await createVisitorSession();
+    const visitor = connect(cookieFor(session.id));
+    await waitFor(visitor, "history");
+
+    const incoming = waitFor<{ senderType: string; sessionId: string; body: string }>(visitor, "message");
+    visitor.emit("send_message", { body: "session room still works" });
+    const payload = await incoming;
+    expect(payload.senderType).toBe("VISITOR");
+    expect(payload.sessionId).toBe(session.id);
+    expect(payload.body).toBe("session room still works");
   });
 });

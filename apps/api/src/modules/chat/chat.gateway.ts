@@ -15,7 +15,7 @@ import {
 import { Server, Socket } from "socket.io";
 import { serializeChatMessage } from "./chat-serialization";
 import { ChatSessionsService } from "./chat-sessions.service";
-import { ChatSocketAuthError, requireChatPermission, resolveSocketIdentity, roomForSession } from "./chat-socket-auth";
+import { ChatSocketAuthError, requireChatPermission, resolveSocketIdentity, roomForCompany, roomForSession } from "./chat-socket-auth";
 import type { SocketIdentity } from "./chat-socket-auth";
 
 function parseTrustedOrigins(raw: string | undefined): string[] {
@@ -101,9 +101,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         await socket.join(roomForSession(identity.sessionId));
         const messages = await this.chatSessions.findMessages(identity.companyId, identity.sessionId);
         socket.emit("history", { sessionId: identity.sessionId, messages: messages.map(serializeChatMessage) });
+      } else if (requireChatPermission(identity.role, "read")) {
+        // Company-scoped unread fan-out for Management header. companyId is
+        // the authenticated membership, never a client payload. Visitors and
+        // staff without chat:read are not admitted.
+        await socket.join(roomForCompany(identity.companyId));
       }
-      // ADMIN identities are authenticated here but authorize per-session
-      // lazily, on "join_session" — connecting alone grants no room access.
     } catch (err) {
       const code = err instanceof ChatSocketAuthError ? err.code : "UNAUTHENTICATED";
       socket.emit("error", { code, message: "Authentication failed" });
@@ -197,6 +200,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const wireMessage = serializeChatMessage(message);
       socket.emit("message_ack", { clientMessageId, message: wireMessage });
       this.server.to(roomForSession(sessionId)).emit("message", wireMessage);
+      // Live unread badge: VISITOR messages also reach company admins who
+      // are not in this session room (Dashboard / Inbox / another thread).
+      // ADMIN replies stay session-scoped so they do not refetch unread-count.
+      if (wireMessage.senderType === "VISITOR") {
+        this.server.to(roomForCompany(identity.companyId)).emit("message", wireMessage);
+      }
     } catch (err) {
       this.emitSendFailure(socket, err);
     }

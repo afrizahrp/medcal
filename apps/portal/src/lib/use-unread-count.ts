@@ -14,7 +14,8 @@ type UnreadCountListener = (domain?: UnreadCountDomain) => void;
  */
 const listeners = new Set<UnreadCountListener>();
 
-/** Call only after a successful server-confirmed read mutation. */
+/** Call after a successful server-confirmed read mutation, or when a live
+ * VISITOR message arrives on a session the admin is not currently viewing. */
 export function notifyUnreadCountChanged(domain?: UnreadCountDomain): void {
   for (const listener of listeners) listener(domain);
 }

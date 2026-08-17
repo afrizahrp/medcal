@@ -111,3 +111,8 @@ export function requireChatPermission(role: MembershipRole, action: "read" | "re
 export function roomForSession(sessionId: string): string {
   return `chat:${sessionId}`;
 }
+
+/** Server-derived admin inbox room — join only from authenticated identity.companyId. */
+export function roomForCompany(companyId: string): string {
+  return `chat:company:${companyId}`;
+}

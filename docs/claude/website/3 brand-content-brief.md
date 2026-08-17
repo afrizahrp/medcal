@@ -183,7 +183,7 @@ Termasuk untuk keperluan audit akreditasi; mengikuti standar laboratorium
 (LK-521-IDN) sesuai ruang lingkupnya (bukan blanket untuk seluruh layanan).
 
 ### Approved supporting paragraph (hero live)
-> Kami membantu memastikan akurasi pengukuran alat Anda, dengan hasil yang
+> Kami bantu memastikan akurasi pengukuran alat Anda, dengan hasil yang
 > terdokumentasi rapi dan mudah ditelusuri — termasuk untuk keperluan audit
 > akreditasi. Didukung izin resmi dan akreditasi KAN (LK-521-IDN) sesuai
 > ruang lingkupnya.

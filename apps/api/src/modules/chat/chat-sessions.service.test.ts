@@ -715,3 +715,109 @@ describe("ChatSessionsService.markRead — timing/concurrency (2026-08-17 audit 
     expect(after).toBe(before + 1);
   });
 });
+
+describe("ChatSessionsService.findAll — per-session unreadCount (Chat Inbox)", () => {
+  async function unreadCountFor(sessionId: string): Promise<number> {
+    const list = await service.findAll(countCompanyId);
+    const item = list.find((session) => session.id === sessionId);
+    expect(item).toBeDefined();
+    return item!.unreadCount;
+  }
+
+  it("never-read session: 2 VISITOR + 1 ADMIN => unreadCount = 2", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await service.addMessage(countCompanyId, session.id, { senderType: "ADMIN", body: "Balasan admin" });
+    await service.addMessage(countCompanyId, session.id, { senderType: "VISITOR", body: "Follow-up visitor" });
+
+    expect(await unreadCountFor(session.id)).toBe(2);
+  });
+
+  it("after markRead => unreadCount = 0", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await service.addMessage(countCompanyId, session.id, { senderType: "VISITOR", body: "Kedua" });
+    await service.markRead(countCompanyId, session.id);
+
+    expect(await unreadCountFor(session.id)).toBe(0);
+  });
+
+  it("visitor sends another message after markRead => unreadCount = 1", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await service.markRead(countCompanyId, session.id);
+    await service.addMessage(countCompanyId, session.id, { senderType: "VISITOR", body: "Pesan baru" });
+
+    expect(await unreadCountFor(session.id)).toBe(1);
+  });
+
+  it("ADMIN messages never count", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await service.markRead(countCompanyId, session.id);
+    await service.addMessage(countCompanyId, session.id, { senderType: "ADMIN", body: "Balasan 1" });
+    await service.addMessage(countCompanyId, session.id, { senderType: "ADMIN", body: "Balasan 2" });
+
+    expect(await unreadCountFor(session.id)).toBe(0);
+  });
+
+  it("CLOSED session with unread messages keeps unreadCount > 0", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await service.addMessage(countCompanyId, session.id, { senderType: "VISITOR", body: "Sebelum ditutup" });
+    await service.closeSession(countCompanyId, session.id);
+
+    const item = (await service.findAll(countCompanyId)).find((row) => row.id === session.id);
+    expect(item?.status).toBe("CLOSED");
+    expect(item?.unreadCount).toBe(2);
+  });
+
+  it("multiple sessions have independent unreadCount values", async () => {
+    const sessionA = await createSessionForCompany(countCompanyId);
+    await service.addMessage(countCompanyId, sessionA.id, { senderType: "VISITOR", body: "A2" });
+    const sessionB = await createSessionForCompany(countCompanyId);
+    await service.markRead(countCompanyId, sessionB.id);
+
+    expect(await unreadCountFor(sessionA.id)).toBe(2);
+    expect(await unreadCountFor(sessionB.id)).toBe(0);
+  });
+
+  it("another company's messages never affect this company's unreadCount", async () => {
+    const otherCompanyId = "CH3";
+    await prisma.company.upsert({
+      where: { id: otherCompanyId },
+      create: { id: otherCompanyId, name: "Inbox Unread Isolation Co", status: "ACTIVE" },
+      update: {},
+    });
+    try {
+      const ours = await createSessionForCompany(countCompanyId);
+      const other = await createSessionForCompany(otherCompanyId);
+      await service.addMessage(otherCompanyId, other.id, { senderType: "VISITOR", body: "Foreign" });
+
+      expect(await unreadCountFor(ours.id)).toBe(1);
+      const foreignList = await service.findAll(otherCompanyId);
+      expect(foreignList.some((row) => row.id === ours.id)).toBe(false);
+      expect(foreignList.find((row) => row.id === other.id)?.unreadCount).toBe(2);
+    } finally {
+      await prisma.chatMessage.deleteMany({ where: { companyId: otherCompanyId } });
+      await prisma.chatSession.deleteMany({ where: { companyId: otherCompanyId } });
+      await prisma.contactMessage.deleteMany({ where: { companyId: otherCompanyId } });
+      await prisma.company.delete({ where: { id: otherCompanyId } });
+    }
+  });
+
+  it("session with no VISITOR messages => unreadCount = 0", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await prisma.chatMessage.deleteMany({ where: { sessionId: session.id } });
+    await service.addMessage(countCompanyId, session.id, { senderType: "ADMIN", body: "Hanya admin" });
+
+    expect(await unreadCountFor(session.id)).toBe(0);
+  });
+
+  it("sum(findAll unreadCount) === countUnread(companyId)", async () => {
+    const sessionA = await createSessionForCompany(countCompanyId);
+    await service.addMessage(countCompanyId, sessionA.id, { senderType: "VISITOR", body: "A extra" });
+    const sessionB = await createSessionForCompany(countCompanyId);
+    await service.markRead(countCompanyId, sessionB.id);
+    await service.addMessage(countCompanyId, sessionB.id, { senderType: "VISITOR", body: "B after read" });
+
+    const list = await service.findAll(countCompanyId);
+    const sum = list.reduce((total, row) => total + row.unreadCount, 0);
+    expect(sum).toBe(await service.countUnread(countCompanyId));
+  });
+});
