@@ -2,7 +2,7 @@
 
 import { useRequireSession } from "../../lib/use-require-session";
 import { ManagementShell } from "../../components/management/management-shell";
-import { managementNav } from "./nav-config";
+import { filterNavByRole, managementNav } from "./nav-config";
 
 export default function ManagementLayout({ children }: { children: React.ReactNode }) {
   const { me, status } = useRequireSession();
@@ -20,7 +20,7 @@ export default function ManagementLayout({ children }: { children: React.ReactNo
     );
   }
 
-  const nav = managementNav.filter((item) => item.roles.includes(me.membership.role));
+  const nav = filterNavByRole(managementNav, me.membership.role);
 
   return (
     <ManagementShell me={me} nav={nav}>

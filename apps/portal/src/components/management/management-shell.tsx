@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Me } from "../../lib/use-require-session";
 import type { NavItem } from "../../app/management/nav-config";
-import { SignOutButton } from "../sign-out-button";
+import { ManagementHeader } from "./header";
+import { MobileDrawer } from "./mobile-drawer";
 import { ManagementSidebar } from "./sidebar";
 import { readSidebarCollapsed, writeSidebarCollapsed } from "./shell-state";
 
+const DESKTOP_MQ = "(min-width: 1024px)";
+
 /**
- * Phase 1 Management shell: desktop sidebar + existing header chrome.
- * Mobile drawer / notification cluster / user dropdown arrive in later phases.
+ * Management shell: desktop sidebar + mobile drawer + header notifications + user menu.
  */
 export function ManagementShell({
   me,
@@ -22,10 +24,21 @@ export function ManagementShell({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setCollapsed(readSidebarCollapsed());
     setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_MQ);
+    function onChange(event: MediaQueryListEvent) {
+      if (event.matches) setMobileOpen(false);
+    }
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
   function toggleCollapsed() {
@@ -36,38 +49,39 @@ export function ManagementShell({
     });
   }
 
+  const openMobileNav = useCallback(() => setMobileOpen(true), []);
+  const closeMobileNav = useCallback(() => setMobileOpen(false), []);
+
   const contentOffset =
     hydrated && collapsed ? "lg:ml-sidebar-collapsed" : "lg:ml-sidebar-expanded";
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-canvas text-slate-900">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-canvas text-slate-900">
       <ManagementSidebar
         items={nav}
         collapsed={hydrated ? collapsed : false}
         onToggleCollapsed={toggleCollapsed}
       />
 
-      <div className={["flex min-h-screen min-w-0 flex-col transition-[margin] duration-200 ease-out", contentOffset].join(" ")}>
-        {/* Existing header behavior preserved for Phase 1 (no notification/user-menu redesign). */}
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="truncate text-sm font-semibold text-slate-900 lg:hidden">
-              medcal Management
-            </span>
-            <span className="hidden text-sm font-semibold text-slate-900 lg:inline">
-              Management
-            </span>
-          </div>
-          <div className="flex shrink-0 items-center gap-3 text-sm text-slate-600">
-            <span className="hidden truncate sm:inline">
-              {me.user.email} · {me.membership.role}
-            </span>
-            <span className="truncate sm:hidden">{me.user.email}</span>
-            <SignOutButton />
-          </div>
-        </header>
+      <MobileDrawer
+        open={mobileOpen}
+        items={nav}
+        onClose={closeMobileNav}
+        returnFocusRef={menuButtonRef}
+      />
 
-        <main className="min-w-0 flex-1">{children}</main>
+      <div
+        className={["flex min-h-screen w-full min-w-0 max-w-full flex-col transition-[margin] duration-200 ease-out", contentOffset].join(" ")}
+        inert={mobileOpen ? true : undefined}
+      >
+        <ManagementHeader
+          me={me}
+          mobileNavOpen={mobileOpen}
+          onOpenMobileNav={openMobileNav}
+          menuButtonRef={menuButtonRef}
+        />
+
+        <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden">{children}</main>
       </div>
     </div>
   );

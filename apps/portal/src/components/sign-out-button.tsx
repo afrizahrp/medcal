@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { signOut } from "@medcal/auth/client";
 
-export function SignOutButton() {
+export function SignOutButton({ className }: { className?: string }) {
   const router = useRouter();
 
   return (
@@ -14,7 +14,7 @@ export function SignOutButton() {
         router.push("/sign-in");
         router.refresh();
       }}
-      className="text-sm text-slate-600 hover:underline"
+      className={className ?? "text-sm text-slate-600 hover:underline"}
     >
       Sign out
     </button>

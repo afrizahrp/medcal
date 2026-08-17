@@ -16,6 +16,36 @@ function baseProps(props: IconProps): IconProps {
   };
 }
 
+export function DashboardIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <rect x="3" y="3" width="7" height="9" rx="1" />
+      <rect x="14" y="3" width="7" height="5" rx="1" />
+      <rect x="14" y="12" width="7" height="9" rx="1" />
+      <rect x="3" y="16" width="7" height="5" rx="1" />
+    </svg>
+  );
+}
+
+export function LeadsIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+export function ChevronIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
 export function MessagesIcon(props: IconProps) {
   return (
     <svg {...baseProps(props)}>
@@ -52,6 +82,25 @@ export function PinIcon(props: IconProps) {
   );
 }
 
+export function MenuIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
+    </svg>
+  );
+}
+
+export function CloseIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M6 6l12 12" />
+      <path d="M18 6 6 18" />
+    </svg>
+  );
+}
+
 export function NavIcon({
   name,
   className,
@@ -62,6 +111,10 @@ export function NavIcon({
   if (!name) return null;
   const props = { className: className ?? "h-5 w-5 shrink-0" };
   switch (name) {
+    case "dashboard":
+      return <DashboardIcon {...props} />;
+    case "leads":
+      return <LeadsIcon {...props} />;
     case "messages":
       return <MessagesIcon {...props} />;
     case "chat":
