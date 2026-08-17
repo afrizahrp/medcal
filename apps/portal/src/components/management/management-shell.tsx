@@ -71,7 +71,7 @@ export function ManagementShell({
       />
 
       <div
-        className={["flex min-h-screen w-full min-w-0 max-w-full flex-col transition-[margin] duration-200 ease-out", contentOffset].join(" ")}
+        className={["flex min-h-screen min-w-0 max-w-full flex-col transition-[margin] duration-200 ease-out", contentOffset].join(" ")}
         inert={mobileOpen ? true : undefined}
       >
         <ManagementHeader
