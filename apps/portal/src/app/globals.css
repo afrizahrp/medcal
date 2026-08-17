@@ -1,3 +1,23 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --shell-sidebar-expanded: 248px;
+  --shell-sidebar-collapsed: 72px;
+  --shell-canvas: #eef1f9;
+  --shell-radius: 0.5rem;
+}
+
+@layer base {
+  body {
+    @apply font-sans antialiased;
+  }
+}
+
+/* Auth chrome (easy-app radial canvas). Avoid Tailwind arbitrary
+   radial-gradient(...) — nested ')' truncates the class and throws
+   Runtime SyntaxError: Unexpected end of input. */
+.auth-canvas {
+  background: radial-gradient(ellipse at top, #38bdf8, #093a63);
+}

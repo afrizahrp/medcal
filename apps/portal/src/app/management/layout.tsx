@@ -1,7 +1,7 @@
 "use client";
 
 import { useRequireSession } from "../../lib/use-require-session";
-import { SignOutButton } from "../../components/sign-out-button";
+import { ManagementShell } from "../../components/management/management-shell";
 import { managementNav } from "./nav-config";
 
 export default function ManagementLayout({ children }: { children: React.ReactNode }) {
@@ -23,26 +23,8 @@ export default function ManagementLayout({ children }: { children: React.ReactNo
   const nav = managementNav.filter((item) => item.roles.includes(me.membership.role));
 
   return (
-    <div className="min-h-screen">
-      <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <div className="flex items-center gap-6">
-          <span className="font-semibold">medcal Management</span>
-          <nav className="flex gap-4 text-sm text-slate-600">
-            {nav.map((item) => (
-              <a key={item.href} href={item.href}>
-                {item.label}
-              </a>
-            ))}
-          </nav>
-        </div>
-        <div className="flex items-center gap-3 text-sm text-slate-600">
-          <span>
-            {me.user.email} · {me.membership.role}
-          </span>
-          <SignOutButton />
-        </div>
-      </header>
-      <main>{children}</main>
-    </div>
+    <ManagementShell me={me} nav={nav}>
+      {children}
+    </ManagementShell>
   );
 }
