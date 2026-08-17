@@ -232,33 +232,39 @@ export class ChatSessionsService {
   }
 
   /**
-   * Management header badge (notification audit, 2026-08-17). Unlike Lead's
-   * OPEN/CLOSED-agnostic PENDING status, ChatSession had no unread concept
-   * at all (see lastReadByAdminAt's schema comment) — status=OPEN only
-   * tracks whether the conversation has ended, not whether admin has seen
-   * the latest visitor message. A session counts as unread when its newest
-   * VISITOR message is newer than the admin's last read (or the admin has
-   * never read it at all); a session where the admin sent the latest
-   * message — visitor just hasn't replied yet — is NOT unread.
+   * Management header badge (notification audit, 2026-08-17; corrected
+   * 2026-08-17 — contract mismatch found by Cursor audit). The badge must
+   * be the total count of unread VISITOR *messages*, not the count of
+   * sessions that happen to have at least one unread message — a session
+   * with 5 unread visitor messages must contribute 5, not 1. A VISITOR
+   * message counts as unread when it's newer than that session's
+   * lastReadByAdminAt (or the admin has never read the session at all);
+   * ADMIN messages never count.
+   *
+   * Counting happens at the DB layer via a single `ChatMessage.count`. The
+   * per-session `lastReadByAdminAt` watermarks are fetched first (one small
+   * row per session, no message bodies) because Prisma's query layer can't
+   * express "message.createdAt > this message's own session's watermark"
+   * as a single filter — each session's watermark becomes one OR branch of
+   * the count query.
    */
   async countUnread(companyId: string): Promise<number> {
     const sessions = await prisma.chatSession.findMany({
       where: { companyId },
-      select: {
-        lastReadByAdminAt: true,
-        messages: {
-          where: { senderType: "VISITOR" },
-          orderBy: { seq: "desc" },
-          take: 1,
-          select: { createdAt: true },
-        },
+      select: { id: true, lastReadByAdminAt: true },
+    });
+    if (sessions.length === 0) return 0;
+
+    return prisma.chatMessage.count({
+      where: {
+        companyId,
+        senderType: "VISITOR",
+        OR: sessions.map((session) => ({
+          sessionId: session.id,
+          createdAt: session.lastReadByAdminAt ? { gt: session.lastReadByAdminAt } : undefined,
+        })),
       },
     });
-    return sessions.filter((session) => {
-      const latestVisitorMessage = session.messages[0];
-      if (!latestVisitorMessage) return false;
-      return !session.lastReadByAdminAt || latestVisitorMessage.createdAt > session.lastReadByAdminAt;
-    }).length;
   }
 
   /**

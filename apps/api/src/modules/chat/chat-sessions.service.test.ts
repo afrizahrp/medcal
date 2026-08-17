@@ -495,6 +495,115 @@ describe("ChatSessionsService.countUnread — Management header badge (2026-08-1
     const after = await service.countUnread("ZZZ-UNKNOWN");
     expect(after).toBe(before);
   });
+
+  // Contract fix (Cursor audit, 2026-08-17): the badge must be the total
+  // number of unread VISITOR MESSAGES, not the number of sessions that
+  // contain at least one. A session with 5 unread messages must contribute
+  // 5 to the count, not 1 — this is what the old session-counting
+  // implementation got wrong.
+  it("a single session with 5 unread VISITOR messages contributes 5, not 1", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    const before = await service.countUnread(countCompanyId);
+
+    // createSessionForCompany's initial message is #1; add 4 more.
+    for (let i = 0; i < 4; i++) {
+      await service.addMessage(countCompanyId, session.id, { senderType: "VISITOR", body: `Follow-up ${i}` });
+    }
+
+    const after = await service.countUnread(countCompanyId);
+    // "before" was captured after the session's first message already
+    // existed, so only the 4 follow-ups are new here — the session's total
+    // is 5 unread messages, matching the scenario in the task description.
+    expect(after).toBe(before + 4);
+  });
+
+  it("two sessions with 5 and 4 unread VISITOR messages sum to 9", async () => {
+    const before = await service.countUnread(countCompanyId);
+
+    const sessionA = await createSessionForCompany(countCompanyId);
+    for (let i = 0; i < 4; i++) {
+      await service.addMessage(countCompanyId, sessionA.id, { senderType: "VISITOR", body: `A follow-up ${i}` });
+    }
+    const sessionB = await createSessionForCompany(countCompanyId);
+    for (let i = 0; i < 3; i++) {
+      await service.addMessage(countCompanyId, sessionB.id, { senderType: "VISITOR", body: `B follow-up ${i}` });
+    }
+
+    const after = await service.countUnread(countCompanyId);
+    expect(after).toBe(before + 9);
+  });
+
+  it("ADMIN-authored messages never contribute to the count, even interleaved with unread VISITOR messages", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    const before = await service.countUnread(countCompanyId);
+
+    await service.addMessage(countCompanyId, session.id, { senderType: "ADMIN", body: "Admin reply 1" });
+    await service.addMessage(countCompanyId, session.id, { senderType: "VISITOR", body: "Visitor follow-up" });
+    await service.addMessage(countCompanyId, session.id, { senderType: "ADMIN", body: "Admin reply 2" });
+
+    const after = await service.countUnread(countCompanyId);
+    // "before" already includes the session's initial VISITOR message; only
+    // the interleaved follow-up VISITOR message is new here. The two ADMIN
+    // messages must not be counted at all.
+    expect(after).toBe(before + 1);
+  });
+
+  it("markRead on a multi-message session removes all of its previously-unread messages from the count, leaving other sessions untouched", async () => {
+    const sessionA = await createSessionForCompany(countCompanyId);
+    for (let i = 0; i < 4; i++) {
+      await service.addMessage(countCompanyId, sessionA.id, { senderType: "VISITOR", body: `A follow-up ${i}` });
+    }
+    const sessionB = await createSessionForCompany(countCompanyId);
+    for (let i = 0; i < 3; i++) {
+      await service.addMessage(countCompanyId, sessionB.id, { senderType: "VISITOR", body: `B follow-up ${i}` });
+    }
+    const before = await service.countUnread(countCompanyId);
+
+    await service.markRead(countCompanyId, sessionA.id);
+
+    const after = await service.countUnread(countCompanyId);
+    // Session A had 5 unread VISITOR messages; only those are cleared.
+    expect(after).toBe(before - 5);
+  });
+
+  it("a new VISITOR message after lastReadByAdminAt increases the count by exactly 1", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await service.markRead(countCompanyId, session.id);
+    const before = await service.countUnread(countCompanyId);
+
+    await service.addMessage(countCompanyId, session.id, { senderType: "VISITOR", body: "New message" });
+
+    const after = await service.countUnread(countCompanyId);
+    expect(after).toBe(before + 1);
+  });
+
+  it("messages belonging to another company are never counted (tenant isolation holds at the message level)", async () => {
+    const otherCompanyId = "CH2";
+    await prisma.company.upsert({
+      where: { id: otherCompanyId },
+      create: { id: otherCompanyId, name: "Other Unread Count Test Co", status: "ACTIVE" },
+      update: {},
+    });
+    try {
+      const before = await service.countUnread(countCompanyId);
+
+      const otherSession = await createSessionForCompany(otherCompanyId);
+      for (let i = 0; i < 3; i++) {
+        await service.addMessage(otherCompanyId, otherSession.id, { senderType: "VISITOR", body: `Other ${i}` });
+      }
+
+      const after = await service.countUnread(countCompanyId);
+      expect(after).toBe(before);
+
+      const otherCount = await service.countUnread(otherCompanyId);
+      expect(otherCount).toBe(4); // initial message + 3 follow-ups
+    } finally {
+      await prisma.chatMessage.deleteMany({ where: { companyId: otherCompanyId } });
+      await prisma.chatSession.deleteMany({ where: { companyId: otherCompanyId } });
+      await prisma.contactMessage.deleteMany({ where: { companyId: otherCompanyId } });
+      await prisma.company.delete({ where: { id: otherCompanyId } });
+    }
+  });
 });
 
 describe("ChatSessionsService.markRead — timing/concurrency (2026-08-17 audit fix)", () => {
@@ -546,6 +655,14 @@ describe("ChatSessionsService.markRead — timing/concurrency (2026-08-17 audit 
   // that makes that fix actually work — a readUpTo snapshot taken BEFORE a
   // new VISITOR message existed must never swallow that later message, no
   // matter when the markRead request actually lands relative to it.
+  //
+  // Under message-level counting (Cursor audit contract fix, 2026-08-17)
+  // the total company count now moves by exactly -1 here — the session's
+  // FIRST message (covered by the stale readUpTo) is correctly marked
+  // read, while the race message (created after that snapshot) is not.
+  // Were the bug this test guards against reintroduced, readUpTo would
+  // wrongly swallow the race message too and the count would drop by -2
+  // instead — that's the failure this test would catch.
   it("Gap B: a readUpTo snapshot never swallows a VISITOR message created after that snapshot", async () => {
     const session = await createSessionForCompany(countCompanyId);
     const initialReadUpTo = session.messages[0]!.createdAt.toISOString();
@@ -559,8 +676,9 @@ describe("ChatSessionsService.markRead — timing/concurrency (2026-08-17 audit 
     await service.markRead(countCompanyId, session.id, { readUpTo: initialReadUpTo });
     const after = await service.countUnread(countCompanyId);
 
-    // The race message must still count as unread.
-    expect(after).toBe(before);
+    // Only the first message (covered by the stale snapshot) is cleared;
+    // the race message must still count as unread.
+    expect(after).toBe(before - 1);
   });
 
   // Gap A regression: a message actually rendered live (via the socket)
