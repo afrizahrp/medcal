@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import type { Me } from "../../lib/use-require-session";
 import type { NavItem } from "../../app/management/nav-config";
 import { ManagementHeader } from "./header";
@@ -10,6 +11,15 @@ import { ManagementChatSocketProvider } from "../../lib/management-chat-socket";
 import { readSidebarCollapsed, writeSidebarCollapsed } from "./shell-state";
 
 const DESKTOP_MQ = "(min-width: 1024px)";
+
+function isChatWorkspacePath(pathname: string): boolean {
+  return (
+    pathname === "/chat" ||
+    pathname.startsWith("/chat/") ||
+    pathname === "/management/chat" ||
+    pathname.startsWith("/management/chat/")
+  );
+}
 
 /**
  * Management shell: desktop sidebar + mobile drawer + header notifications + user menu.
@@ -23,6 +33,8 @@ export function ManagementShell({
   nav: NavItem[];
   children: React.ReactNode;
 }) {
+  const pathname = usePathname() ?? "/";
+  const lockChatHeight = isChatWorkspacePath(pathname);
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -58,7 +70,12 @@ export function ManagementShell({
 
   return (
     <ManagementChatSocketProvider>
-      <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-canvas text-slate-900">
+      <div
+        className={[
+          "w-full max-w-full overflow-x-hidden bg-canvas text-slate-900",
+          lockChatHeight ? "h-dvh overflow-hidden" : "min-h-screen",
+        ].join(" ")}
+      >
         <ManagementSidebar
           items={nav}
           collapsed={hydrated ? collapsed : false}
@@ -73,7 +90,11 @@ export function ManagementShell({
         />
 
         <div
-          className={["flex min-h-screen min-w-0 max-w-full flex-col transition-[margin] duration-200 ease-out", contentOffset].join(" ")}
+          className={[
+            "flex min-w-0 max-w-full flex-col transition-[margin] duration-200 ease-out",
+            lockChatHeight ? "h-dvh overflow-hidden" : "min-h-screen",
+            contentOffset,
+          ].join(" ")}
           inert={mobileOpen ? true : undefined}
         >
           <ManagementHeader
@@ -83,7 +104,14 @@ export function ManagementShell({
             menuButtonRef={menuButtonRef}
           />
 
-          <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden">{children}</main>
+          <main
+            className={[
+              "flex min-w-0 flex-1 flex-col overflow-x-hidden",
+              lockChatHeight ? "min-h-0 overflow-hidden" : "",
+            ].join(" ")}
+          >
+            {children}
+          </main>
         </div>
       </div>
     </ManagementChatSocketProvider>

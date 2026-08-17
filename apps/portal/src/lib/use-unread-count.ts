@@ -20,7 +20,7 @@ export function notifyUnreadCountChanged(domain?: UnreadCountDomain): void {
   for (const listener of listeners) listener(domain);
 }
 
-function subscribeUnreadCount(listener: UnreadCountListener): () => void {
+export function subscribeUnreadCount(listener: UnreadCountListener): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
