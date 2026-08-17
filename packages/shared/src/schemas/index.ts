@@ -102,3 +102,17 @@ export const chatMessageCreateSchema = z.object({
 });
 
 export type ChatMessageCreateInput = z.infer<typeof chatMessageCreateSchema>;
+
+/**
+ * PATCH /chat-sessions/:id/read body (Management header notification
+ * audit follow-up, 2026-08-17). `readUpTo` is the createdAt of the newest
+ * message the caller actually fetched/rendered — NOT wall-clock "now" —
+ * so ChatSessionsService.markRead can advance ChatSession.lastReadByAdminAt
+ * to exactly what was seen, never further. Omitted body (`{}`) falls back
+ * to server "now" in the service, same as the original no-body contract.
+ */
+export const chatSessionMarkReadSchema = z.object({
+  readUpTo: z.string().datetime().optional(),
+});
+
+export type ChatSessionMarkReadInput = z.infer<typeof chatSessionMarkReadSchema>;

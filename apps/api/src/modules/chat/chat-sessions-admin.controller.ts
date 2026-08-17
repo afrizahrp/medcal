@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Param, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, UseGuards } from "@nestjs/common";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
@@ -32,10 +32,30 @@ export class ChatSessionsAdminController {
     }));
   }
 
+  // Declared before ":id" so "unread-count" is never captured as a
+  // ChatSession id (same precedent as leads.controller.ts's
+  // "needs-review"). Canonical unread count for the Management header's
+  // Web Chat badge — see ChatSessionsService.countUnread.
+  @Get("unread-count")
+  @RequirePermission("chat", "read")
+  async unreadCount(@CompanyId() companyId: string): Promise<{ count: number }> {
+    const count = await this.service.countUnread(companyId);
+    return { count };
+  }
+
   @Get(":id")
   @RequirePermission("chat", "read")
   async findOne(@CompanyId() companyId: string, @Param("id") id: string) {
     const session = await this.service.findById(companyId, id);
     return { ...session, messages: session.messages.map(serializeChatMessage) };
+  }
+
+  // Body validation (readUpTo) lives in ChatSessionsService.markRead, same
+  // convention as createSession/addMessage on this same service — the
+  // controller stays a thin pass-through.
+  @Patch(":id/read")
+  @RequirePermission("chat", "read")
+  async markRead(@CompanyId() companyId: string, @Param("id") id: string, @Body() rawBody: unknown) {
+    return this.service.markRead(companyId, id, rawBody);
   }
 }

@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { prisma } from "@medcal/db";
 import type { ChatMessage, ChatSession, Prisma } from "@medcal/db";
-import { chatMessageCreateSchema, chatSessionCreateSchema } from "@medcal/shared";
+import { chatMessageCreateSchema, chatSessionCreateSchema, chatSessionMarkReadSchema } from "@medcal/shared";
 import { ContactMessagesService } from "../contact-messages/contact-messages.service";
 
 export interface ChatSessionWithMessages extends ChatSession {
@@ -228,6 +228,87 @@ export class ChatSessionsService {
     return prisma.chatSession.update({
       where: { id: sessionId },
       data: { status: "CLOSED", closedAt: new Date() },
+    });
+  }
+
+  /**
+   * Management header badge (notification audit, 2026-08-17). Unlike Lead's
+   * OPEN/CLOSED-agnostic PENDING status, ChatSession had no unread concept
+   * at all (see lastReadByAdminAt's schema comment) — status=OPEN only
+   * tracks whether the conversation has ended, not whether admin has seen
+   * the latest visitor message. A session counts as unread when its newest
+   * VISITOR message is newer than the admin's last read (or the admin has
+   * never read it at all); a session where the admin sent the latest
+   * message — visitor just hasn't replied yet — is NOT unread.
+   */
+  async countUnread(companyId: string): Promise<number> {
+    const sessions = await prisma.chatSession.findMany({
+      where: { companyId },
+      select: {
+        lastReadByAdminAt: true,
+        messages: {
+          where: { senderType: "VISITOR" },
+          orderBy: { seq: "desc" },
+          take: 1,
+          select: { createdAt: true },
+        },
+      },
+    });
+    return sessions.filter((session) => {
+      const latestVisitorMessage = session.messages[0];
+      if (!latestVisitorMessage) return false;
+      return !session.lastReadByAdminAt || latestVisitorMessage.createdAt > session.lastReadByAdminAt;
+    }).length;
+  }
+
+  /**
+   * Explicit admin action, same convention as ContactMessage's
+   * PENDING->READ PATCH — not implicit on every fetch, since findById is
+   * also used by the visitor-facing gateway reconnect path (see
+   * chat.gateway.ts) and must NOT be treated as an admin read.
+   *
+   * `readUpTo` (timing fix, 2026-08-17 audit — Gap A/B): the caller passes
+   * the createdAt of the newest message it actually fetched/rendered,
+   * rather than this always stamping wall-clock "now". Two guards make that
+   * safe against both audit-identified races:
+   *  - Gap B (initial fetch vs. mark-read race): a visitor message that
+   *    arrives between the page's GET and this PATCH lands AFTER the
+   *    caller-supplied `readUpTo` snapshot, so it can never be swallowed by
+   *    this call — it stays correctly unread until a later markRead
+   *    explicitly covers it.
+   *  - Gap A (live messages while the page is open): the page calls this
+   *    again for each newly rendered VISITOR message, each with its own
+   *    later `readUpTo`. Concurrent/out-of-order requests (the initial
+   *    load's call landing after a live-message call, or vice versa) are
+   *    handled by only ever moving the stored value FORWARD — an older
+   *    `readUpTo` arriving late can never regress a newer one.
+   * `readUpTo` is also clamped to "now" so a bad/future client value can't
+   * push the watermark ahead of reality.
+   */
+  async markRead(companyId: string, sessionId: string, rawInput: unknown = {}): Promise<ChatSession> {
+    const parsed = chatSessionMarkReadSchema.safeParse(rawInput ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid mark-read payload",
+        code: "INVALID_CHAT_SESSION_MARK_READ",
+        issues: parsed.error.flatten(),
+      });
+    }
+
+    const session = await prisma.chatSession.findFirst({ where: { id: sessionId, companyId } });
+    if (!session) {
+      throw new NotFoundException({ message: "Chat session not found", code: "CHAT_SESSION_NOT_FOUND" });
+    }
+
+    const now = new Date();
+    const requested = parsed.data.readUpTo ? new Date(parsed.data.readUpTo) : now;
+    const candidate = requested > now ? now : requested;
+    const next =
+      session.lastReadByAdminAt && session.lastReadByAdminAt > candidate ? session.lastReadByAdminAt : candidate;
+
+    return prisma.chatSession.update({
+      where: { id: sessionId },
+      data: { lastReadByAdminAt: next },
     });
   }
 }

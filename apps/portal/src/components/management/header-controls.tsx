@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { apiFetch } from "@medcal/shared";
 import { SignOutButton } from "../sign-out-button";
+import { useUnreadChatSessionsCount, useUnreadContactMessagesCount } from "../../lib/use-unread-count";
 import { ChatIcon, EmailIcon, MessagesIcon } from "./icons";
 
 const iconButton =
@@ -19,23 +19,8 @@ function Badge({ count }: { count: number }) {
 }
 
 function ContactMessagesControl() {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    apiFetch<unknown[]>("/leads/needs-review")
-      .then((items) => {
-        if (!cancelled) setCount(Array.isArray(items) ? items.length : 0);
-      })
-      .catch(() => {
-        if (!cancelled) setCount(0);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const label = count > 0 ? `Contact Messages, ${count} need review` : "Contact Messages";
+  const count = useUnreadContactMessagesCount();
+  const label = count > 0 ? `Contact Messages, ${count} unread` : "Contact Messages";
 
   return (
     <Link href="/leads" className={iconButton} title={label} aria-label={label}>
@@ -46,25 +31,8 @@ function ContactMessagesControl() {
 }
 
 function WebChatControl() {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    apiFetch<{ status: string }[]>("/chat-sessions")
-      .then((sessions) => {
-        if (!cancelled) {
-          setCount(Array.isArray(sessions) ? sessions.filter((session) => session.status === "OPEN").length : 0);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setCount(0);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const label = count > 0 ? `Web Chat, ${count} open sessions` : "Web Chat";
+  const count = useUnreadChatSessionsCount();
+  const label = count > 0 ? `Web Chat, ${count} unread` : "Web Chat";
 
   return (
     <Link href="/chat" className={iconButton} title={label} aria-label={label}>

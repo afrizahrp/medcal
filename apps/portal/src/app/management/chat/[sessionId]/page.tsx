@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ApiError, apiFetch } from "@medcal/shared";
 import { useChatSocket, type ChatWireMessage } from "../../../../lib/use-chat-socket";
+import { notifyUnreadCountChanged } from "../../../../lib/use-unread-count";
 
 type ChatSessionStatus = "OPEN" | "CLOSED";
 
@@ -57,12 +58,45 @@ export default function ChatConversationPage() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
 
+  // Opening the conversation is the admin's acknowledgement — mirrors the
+  // explicit ContactMessage PENDING->READ action, just triggered by viewing
+  // the thread instead of a separate button (a whole-session read marker
+  // has no natural per-item granularity to attach a button to). Fire-and-
+  // forget: a failure here shouldn't block viewing the conversation.
+  //
+  // `readUpTo` ties the read watermark to a specific message's createdAt —
+  // the newest one the caller actually fetched/rendered — rather than
+  // wall-clock "now". That's what lets callers below represent "read up to
+  // exactly what I saw," instead of "read as of whenever this request
+  // happened to land" (2026-08-17 audit, Gap B).
+  const markRead = useCallback(
+    (readUpTo?: string) => {
+      apiFetch(`/chat-sessions/${sessionId}/read`, {
+        method: "PATCH",
+        body: JSON.stringify(readUpTo ? { readUpTo } : {}),
+      })
+        .then(() => {
+          // Header badge is mount-fetched only; revalidate after server-confirmed markRead.
+          notifyUnreadCountChanged("chat");
+        })
+        .catch(() => {});
+    },
+    [sessionId],
+  );
+
   const load = useCallback(async () => {
     setError(null);
     setNotFound(false);
     try {
       const data = await apiFetch<ChatSessionDetail>(`/chat-sessions/${sessionId}`);
       setSession(data);
+      // Mark read only AFTER the initial fetch has resolved, and only up to
+      // the newest message that fetch actually returned — so a visitor
+      // message that arrives in the window between this GET and the
+      // mark-read PATCH landing is never swallowed just because the PATCH
+      // happens to complete slightly later (Gap B).
+      const latest = data.messages[data.messages.length - 1];
+      if (latest) markRead(latest.createdAt);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         setNotFound(true);
@@ -70,13 +104,31 @@ export default function ChatConversationPage() {
         setError("Gagal memuat percakapan.");
       }
     }
-  }, [sessionId]);
+  }, [sessionId, markRead]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const { connectionState, liveMessages, sessionClosed, sendMessage, closeSession } = useChatSocket(sessionId);
+
+  // Keep an actively viewed conversation read: every newly received VISITOR
+  // message that gets rendered live via the existing chat socket advances
+  // the read watermark to that message, so it can't later reappear as
+  // unread just because the initial markRead() above already fired (Gap A).
+  // ADMIN's own messages never advance it. Message ids are unique (cuid),
+  // so tracking "already marked" here is safe without resetting on session
+  // change. The server-side monotonic-forward-only update in
+  // ChatSessionsService.markRead makes this safe regardless of whether this
+  // fires before or after the initial load's own markRead call resolves.
+  const markedLiveMessageIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const message of liveMessages) {
+      if (markedLiveMessageIds.current.has(message.id)) continue;
+      markedLiveMessageIds.current.add(message.id);
+      if (message.senderType === "VISITOR") markRead(message.createdAt);
+    }
+  }, [liveMessages, markRead]);
 
   const messages = useMemo(
     () => (session ? mergeMessages(session.messages, liveMessages) : []),

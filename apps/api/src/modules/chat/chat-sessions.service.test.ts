@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@medcal/db";
 import { ContactMessagesService } from "../contact-messages/contact-messages.service";
 import { ChatSessionsService } from "./chat-sessions.service";
@@ -26,11 +26,46 @@ async function createSession(overrides: Record<string, unknown> = {}) {
   return result;
 }
 
+// countUnread's before/after assertions read a company-wide COUNT, which
+// realCompanyId ("PKM") cannot safely support — vitest runs test FILES in
+// parallel, and chat.gateway.security.test.ts also creates ChatSessions for
+// "PKM" concurrently, so a global count taken there is inherently racy. A
+// dedicated throwaway company (untouched by every other test file) makes
+// those counts deterministic. Company.id is `@db.Char(3)`, same constraint
+// as "PKM".
+const countCompanyId = "CHT";
+const countCompanySessionIds: string[] = [];
+const countCompanyContactMessageIds: string[] = [];
+
+async function createSessionForCompany(companyId: string, overrides: Record<string, unknown> = {}) {
+  const result = await service.createSession(companyId, {
+    name: "Chat Visitor",
+    email: `chat-${randomUUID().slice(0, 8)}@example.com`,
+    message: "Halo, saya butuh info kalibrasi.",
+    ...overrides,
+  });
+  countCompanySessionIds.push(result.id);
+  if (result.contactMessageId) countCompanyContactMessageIds.push(result.contactMessageId);
+  return result;
+}
+
+beforeAll(async () => {
+  await prisma.company.upsert({
+    where: { id: countCompanyId },
+    create: { id: countCompanyId, name: "Unread Count Test Co", status: "ACTIVE" },
+    update: {},
+  });
+});
+
 afterAll(async () => {
   await prisma.chatMessage.deleteMany({ where: { sessionId: { in: createdSessionIds } } });
   await prisma.chatSession.deleteMany({ where: { id: { in: createdSessionIds } } });
   await prisma.contactMessage.deleteMany({ where: { id: { in: createdContactMessageIds } } });
   await prisma.lead.deleteMany({ where: { id: { in: createdLeadIds } } });
+  // Cascade-deletes any leftover ChatSession/ChatMessage/ContactMessage rows
+  // under this company too (Company -> ChatSession/ContactMessage is
+  // onDelete: Cascade).
+  await prisma.company.delete({ where: { id: countCompanyId } }).catch(() => {});
 });
 
 describe("ChatSessionsService.createSession", () => {
@@ -410,5 +445,155 @@ describe("Web Chat -> Lead pipeline integration: subsequent messages never creat
       where: { id: session.contactMessageId! },
     });
     expect(linkedCount).toBe(1);
+  });
+});
+
+describe("ChatSessionsService.countUnread — Management header badge (2026-08-17 audit)", () => {
+  it("a freshly created session (VISITOR message, never read) counts as unread", async () => {
+    const before = await service.countUnread(countCompanyId);
+    await createSessionForCompany(countCompanyId);
+    const after = await service.countUnread(countCompanyId);
+    expect(after).toBe(before + 1);
+  });
+
+  it("markRead clears the unread state — no VISITOR message newer than lastReadByAdminAt", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    const before = await service.countUnread(countCompanyId);
+
+    await service.markRead(countCompanyId, session.id);
+
+    const after = await service.countUnread(countCompanyId);
+    expect(after).toBe(before - 1);
+  });
+
+  it("an ADMIN-authored latest message does not create unread after markRead", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await service.markRead(countCompanyId, session.id);
+    const before = await service.countUnread(countCompanyId);
+
+    await service.addMessage(countCompanyId, session.id, { senderType: "ADMIN", body: "Balasan admin" });
+
+    const after = await service.countUnread(countCompanyId);
+    expect(after).toBe(before);
+  });
+
+  it("a VISITOR message after admin has read the session makes it unread again", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await service.markRead(countCompanyId, session.id);
+    await service.addMessage(countCompanyId, session.id, { senderType: "ADMIN", body: "Balasan admin" });
+    const before = await service.countUnread(countCompanyId);
+
+    await service.addMessage(countCompanyId, session.id, { senderType: "VISITOR", body: "Follow-up visitor" });
+
+    const after = await service.countUnread(countCompanyId);
+    expect(after).toBe(before + 1);
+  });
+
+  it("scopes the count to the given companyId only", async () => {
+    const before = await service.countUnread("ZZZ-UNKNOWN");
+    await createSessionForCompany(countCompanyId);
+    const after = await service.countUnread("ZZZ-UNKNOWN");
+    expect(after).toBe(before);
+  });
+});
+
+describe("ChatSessionsService.markRead — timing/concurrency (2026-08-17 audit fix)", () => {
+  it("throws NotFoundException marking a session in a different company", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await expect(service.markRead("ZZZ-UNKNOWN", session.id)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("rejects a malformed readUpTo", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await expect(
+      service.markRead(countCompanyId, session.id, { readUpTo: "not-a-date" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("stamps lastReadByAdminAt to an explicit readUpTo instead of always using wall-clock now", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    const readUpTo = session.messages[0]!.createdAt;
+
+    const updated = await service.markRead(countCompanyId, session.id, { readUpTo: readUpTo.toISOString() });
+
+    expect(updated.lastReadByAdminAt).not.toBeNull();
+    expect(updated.lastReadByAdminAt!.getTime()).toBe(readUpTo.getTime());
+  });
+
+  it("clamps a future readUpTo to now instead of trusting the client", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    const future = new Date(Date.now() + 60_000);
+
+    const updated = await service.markRead(countCompanyId, session.id, { readUpTo: future.toISOString() });
+
+    expect(updated.lastReadByAdminAt!.getTime()).toBeLessThan(future.getTime());
+    expect(updated.lastReadByAdminAt!.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("never regresses lastReadByAdminAt backward when an older readUpTo arrives after a newer one", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    const t1 = new Date();
+    const t0 = new Date(t1.getTime() - 60_000);
+
+    await service.markRead(countCompanyId, session.id, { readUpTo: t1.toISOString() });
+    const updated = await service.markRead(countCompanyId, session.id, { readUpTo: t0.toISOString() });
+
+    expect(updated.lastReadByAdminAt!.getTime()).toBe(t1.getTime());
+  });
+
+  // Gap B regression: the initial conversation fetch and the mark-read PATCH
+  // are no longer racing on the frontend, but this asserts the invariant
+  // that makes that fix actually work — a readUpTo snapshot taken BEFORE a
+  // new VISITOR message existed must never swallow that later message, no
+  // matter when the markRead request actually lands relative to it.
+  it("Gap B: a readUpTo snapshot never swallows a VISITOR message created after that snapshot", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    const initialReadUpTo = session.messages[0]!.createdAt.toISOString();
+
+    // A new VISITOR message arrives AFTER the snapshot was taken (simulating
+    // the race window between the initial GET and the mark-read PATCH)...
+    await service.addMessage(countCompanyId, session.id, { senderType: "VISITOR", body: "Race message" });
+
+    // ...and only THEN does markRead for the ORIGINAL (now-stale) snapshot land.
+    const before = await service.countUnread(countCompanyId);
+    await service.markRead(countCompanyId, session.id, { readUpTo: initialReadUpTo });
+    const after = await service.countUnread(countCompanyId);
+
+    // The race message must still count as unread.
+    expect(after).toBe(before);
+  });
+
+  // Gap A regression: a message actually rendered live (via the socket)
+  // while the conversation is open advances the read position using its
+  // own createdAt, past whatever the initial load's snapshot was.
+  it("Gap A: a live VISITOR message's own createdAt advances the read position past the initial snapshot", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    const initialReadUpTo = session.messages[0]!.createdAt.toISOString();
+    await service.markRead(countCompanyId, session.id, { readUpTo: initialReadUpTo });
+
+    const live = await service.addMessage(countCompanyId, session.id, {
+      senderType: "VISITOR",
+      body: "Live message while conversation open",
+    });
+    const before = await service.countUnread(countCompanyId);
+
+    await service.markRead(countCompanyId, session.id, { readUpTo: live.createdAt.toISOString() });
+
+    const after = await service.countUnread(countCompanyId);
+    expect(after).toBe(before - 1);
+  });
+
+  // Do not regress: a visitor message after the admin leaves/reopens (no
+  // live delivery involved at all, just a later markRead call) still
+  // becomes unread again, same as the plain countUnread behavior above.
+  it("a VISITOR message arriving after the admin closed the tab (no live mark-read) is unread on reopen", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await service.markRead(countCompanyId, session.id);
+    const before = await service.countUnread(countCompanyId);
+
+    await service.addMessage(countCompanyId, session.id, { senderType: "VISITOR", body: "While admin was away" });
+
+    const after = await service.countUnread(countCompanyId);
+    expect(after).toBe(before + 1);
   });
 });

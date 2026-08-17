@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ApiError, apiFetch } from "@medcal/shared";
+import { notifyUnreadCountChanged } from "../../../../lib/use-unread-count";
 
 type LeadStatus = "NEW" | "CONTACTED" | "QUALIFIED" | "REJECTED" | "CONVERTED";
 type ContactStatus = "PENDING" | "READ" | "REPLIED" | "CLOSED";
@@ -101,6 +102,9 @@ export default function LeadDetailPage() {
         body: JSON.stringify({ status: "READ" }),
       });
       await load();
+      // Header badge uses the canonical unread-count hook (mount-only fetch).
+      // Signal a revalidation only after the server confirmed PENDING → READ.
+      notifyUnreadCountChanged("contact");
     } catch {
       setError("Gagal menandai pesan sebagai terbaca.");
     } finally {

@@ -22,6 +22,18 @@ export class ContactMessagesQueryController {
     return this.service.findAll(companyId);
   }
 
+  // Declared before ":id"-shaped routes are ever added so "unread-count" is
+  // never captured as a ContactMessage id (same precedent as
+  // leads.controller.ts's "needs-review"). Canonical unread count for the
+  // Management header's Contact Messages badge — see
+  // ContactMessagesService.countUnread for the PENDING-status definition.
+  @Get("unread-count")
+  @RequirePermission("contactMessage", "read")
+  async unreadCount(@CompanyId() companyId: string): Promise<{ count: number }> {
+    const count = await this.service.countUnread(companyId);
+    return { count };
+  }
+
   // Unread tracking reuses ContactStatus.PENDING→READ (Lead Inbox design
   // review §5/§10, Decision 4) — no separate unread field.
   @Patch(":id/status")

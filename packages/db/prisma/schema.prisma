@@ -520,6 +520,17 @@ model ChatSession {
   status           ChatSessionStatus @default(OPEN)
   contactMessageId String?           @unique
   closedAt         DateTime?
+  // Unread tracking (Management header notification audit, 2026-08-17):
+  // null = admin has never read this session, or a VISITOR message has
+  // arrived since the last time they did. Set only via the explicit
+  // PATCH /chat-sessions/:id/read action (ChatSessionsService.markRead) —
+  // mirrors ContactMessage's PENDING->READ convention (see
+  // contact-messages-query.controller.ts) rather than inventing a new
+  // unread mechanism. A session is "unread" when its latest VISITOR
+  // ChatMessage.createdAt is newer than this timestamp (see
+  // ChatSessionsService.countUnread) — deliberately NOT the same thing as
+  // status=OPEN, which only tracks whether the conversation has ended.
+  lastReadByAdminAt DateTime?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 

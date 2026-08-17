@@ -236,4 +236,14 @@ export class ContactMessagesService {
     }
     return prisma.contactMessage.update({ where: { id }, data: { status } });
   }
+
+  // Management header badge (notification audit, 2026-08-17) — reuses the
+  // same PENDING->READ status already set by updateStatus() above, per the
+  // Lead Inbox design review's "no separate unread field" decision. Every
+  // getFrom channel (Contact Form, WhatsApp, Web Chat first-touch, ...)
+  // shares this one status, so this single count already covers all of
+  // them — no per-channel combining needed.
+  async countUnread(companyId: string): Promise<number> {
+    return prisma.contactMessage.count({ where: { companyId, status: "PENDING" } });
+  }
 }

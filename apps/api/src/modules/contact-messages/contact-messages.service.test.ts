@@ -34,6 +34,22 @@ function basePayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// countUnread's before/after assertions read a company-wide COUNT, which
+// realCompanyId ("PKM") cannot safely support — vitest runs test FILES in
+// parallel, and every other file in this suite also writes ContactMessage
+// rows for "PKM" concurrently, so a global count taken there is inherently
+// racy. A dedicated throwaway company (untouched by every other test file)
+// makes those counts deterministic. Company.id is `@db.Char(3)`, same
+// constraint as "PKM".
+const countCompanyId = "CNT";
+
+async function createForCompany(companyId: string, payload: Record<string, unknown>) {
+  const result = await service.create(companyId, payload);
+  createdMessageIds.push(result.id);
+  if (result.leadId) createdLeadIds.push(result.leadId);
+  return result;
+}
+
 beforeAll(async () => {
   const topic = await prisma.contactTopic.findFirst({ where: { isActive: true } });
   if (!topic) throw new Error("Expected at least one active ContactTopic to be seeded already");
@@ -43,12 +59,21 @@ beforeAll(async () => {
     data: { name: `inactive-${randomUUID().slice(0, 8)}`, isActive: false },
   });
   inactiveTopicId = inactive.id;
+
+  await prisma.company.upsert({
+    where: { id: countCompanyId },
+    create: { id: countCompanyId, name: "Unread Count Test Co", status: "ACTIVE" },
+    update: {},
+  });
 });
 
 afterAll(async () => {
   await prisma.contactMessage.deleteMany({ where: { id: { in: createdMessageIds } } });
   await prisma.lead.deleteMany({ where: { id: { in: createdLeadIds } } });
   await prisma.contactTopic.delete({ where: { id: inactiveTopicId } });
+  // Cascade-deletes any leftover ContactMessage/Lead rows under this
+  // company too (Company -> ContactMessage/Lead is onDelete: Cascade).
+  await prisma.company.delete({ where: { id: countCompanyId } }).catch(() => {});
 });
 
 describe("ContactMessagesService.create — validation", () => {
@@ -154,5 +179,51 @@ describe("ContactMessagesService.updateStatus — unread tracking (Lead Inbox, l
       status: 404,
       response: { code: "CONTACT_MESSAGE_NOT_FOUND" },
     });
+  });
+});
+
+describe("ContactMessagesService.countUnread — Management header badge (2026-08-17 audit)", () => {
+  it("counts a PENDING message as unread", async () => {
+    const before = await service.countUnread(countCompanyId);
+    await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    const after = await service.countUnread(countCompanyId);
+    expect(after).toBe(before + 1);
+  });
+
+  it("does not count a READ message as unread", async () => {
+    const created = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    const before = await service.countUnread(countCompanyId);
+
+    await service.updateStatus(countCompanyId, created.id, "READ");
+
+    const after = await service.countUnread(countCompanyId);
+    expect(after).toBe(before - 1);
+  });
+
+  it("does not count a REPLIED message as unread", async () => {
+    const created = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    const before = await service.countUnread(countCompanyId);
+
+    await service.updateStatus(countCompanyId, created.id, "REPLIED");
+
+    const after = await service.countUnread(countCompanyId);
+    expect(after).toBe(before - 1);
+  });
+
+  it("does not count a CLOSED message as unread", async () => {
+    const created = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    const before = await service.countUnread(countCompanyId);
+
+    await service.updateStatus(countCompanyId, created.id, "CLOSED");
+
+    const after = await service.countUnread(countCompanyId);
+    expect(after).toBe(before - 1);
+  });
+
+  it("scopes the count to the given companyId only", async () => {
+    const before = await service.countUnread("ZZZ-UNKNOWN");
+    await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    const after = await service.countUnread("ZZZ-UNKNOWN");
+    expect(after).toBe(before);
   });
 });
