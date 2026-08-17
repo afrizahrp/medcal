@@ -19,5 +19,5 @@
    radial-gradient(...) — nested ')' truncates the class and throws
    Runtime SyntaxError: Unexpected end of input. */
 .auth-canvas {
-  background: radial-gradient(ellipse at top, #38bdf8, #093a63);
+  background: radial-gradient(ellipse at top, #8ab8df, #eef1f5);
 }
