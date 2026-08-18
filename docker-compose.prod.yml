@@ -14,9 +14,29 @@
 # Does NOT touch: existing PM2 apps, existing Nginx config, existing Docker
 # SQL Server container, existing native PostgreSQL config, UFW rules.
 #
-# apps/web-api, apps/web, apps/portal, apps/tech-pwa are intentionally not
-# included yet — containerize each when its own implementation reaches the
-# appropriate stage (per F5.2 scope), not merely for symmetry.
+# apps/tech-pwa is intentionally not included yet — containerize it when its
+# own implementation reaches the appropriate stage (per F5.2 scope), not
+# merely for symmetry. apps/web-api, apps/web, and apps/portal are included
+# below, per the approved production topology:
+#   kalibrasimedika.co.id            -> web    (3000)
+#   kalibrasimedika.co.id/public/*   -> web-api (3002)
+#   api.kalibrasimedika.co.id        -> api     (3001)
+#   apps.kalibrasimedika.co.id       -> portal  (3003)
+# All four app containers are published to 127.0.0.1 only, never 0.0.0.0 —
+# reachable from Nginx on the same host, never directly from the Internet.
+#
+# IMPORTANT — build-arg substitution vs. runtime env are DIFFERENT mechanisms:
+# the ${NEXT_PUBLIC_*} references in web/portal's `build.args` below are resolved
+# by Compose's own variable substitution, which reads a `.env` file (or
+# --env-file) in the CURRENT WORKING DIRECTORY / passed explicitly — NOT the
+# `env_file:` entries used elsewhere in this same file (those only inject
+# runtime env into a container, and are never visible to `docker build`).
+# The repo's root `.env` (dev) would otherwise be picked up by Compose's
+# default `.env` lookup and silently bake localhost values into the
+# production web/portal images. ALWAYS build with:
+#   docker compose --env-file .env.production -f docker-compose.prod.yml build
+# never a bare `docker compose build` on a machine where the repo's dev
+# `.env` is also present.
 
 name: medcal
 
@@ -40,6 +60,84 @@ services:
       - medcal_net
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  web-api:
+    build:
+      context: .
+      dockerfile: apps/web-api/Dockerfile
+    image: medcal-web-api:latest
+    container_name: medcal-web-api
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    ports:
+      - "127.0.0.1:3002:3002"
+    networks:
+      - medcal_net
+    # Real container-level dependency: every web-api route forwards to apps/api
+    # over HTTP (API_URL + INTERNAL_API_SECRET) — wait for it to be healthy so
+    # a cold-start deploy doesn't serve 502s from web-api's very first requests.
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3002/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # NEXT_PUBLIC_* must be build args, not just runtime env — Next.js
+        # inlines them into the client bundle at `next build` time. Real
+        # production values are supplied at build time from the deploy
+        # environment; see .env.production.example's NEXT_PUBLIC_* section
+        # for the values these should be set to.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_WEB_API_URL: ${NEXT_PUBLIC_WEB_API_URL}
+        NEXT_PUBLIC_RECAPTCHA_SITE_KEY: ${NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
+    image: medcal-web:latest
+    container_name: medcal-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - medcal_net
+    # No container-level dependency on api/web-api: apps/web's calls to both
+    # originate from the visitor's browser, not from this container.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  portal:
+    build:
+      context: .
+      dockerfile: apps/portal/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    image: medcal-portal:latest
+    container_name: medcal-portal
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3003:3003"
+    networks:
+      - medcal_net
+    # No container-level dependency on api: portal's session/API calls
+    # originate from the visitor's browser directly to api.kalibrasimedika.co.id,
+    # never from this container.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3003/"]
       interval: 15s
       timeout: 5s
       retries: 5

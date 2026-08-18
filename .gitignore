@@ -12,6 +12,13 @@ coverage/
 .env
 .env.local
 .env.*.local
+# The real production env file docker-compose.prod.yml's `env_file:` expects
+# (contains INTERNAL_API_SECRET, CHAT_SESSION_TOKEN_SECRET, DATABASE_URL,
+# etc.) — was not previously ignored, meaning a real .env.production created
+# at the repo root would have been eligible for accidental commit. Only
+# .env.production.example (the template, no real secrets) should ever be
+# tracked.
+.env.production
 
 # Logs
 *.log

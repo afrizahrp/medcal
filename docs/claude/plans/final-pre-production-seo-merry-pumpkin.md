@@ -1,122 +1,72 @@
-# apps/web-api Build Readiness Audit
+# Implementation Plan — Production Containerization (web, api, web-api, portal)
 
-**Type:** Read-only diagnosis. No files were modified. Build commands were run (read-only) to reproduce/verify; nothing else changed.
+## Context
 
-## Verdict
-
-## GREEN
-
-`apps/web-api` builds cleanly today, both in isolation and as part of the full monorepo build. The previously-documented failure was real at the time it was recorded, but was already fixed by a later commit — before any of the current WhatsApp/chat feature work existed. It is stale information, not a live defect.
-
----
-
-## Exact build command(s)
-
-Run against the current working tree (commit `b97dd36`, clean, no uncommitted changes):
+Three forensic audits (already completed in this session, not repeated here) established the approved topology:
 
 ```
-pnpm --filter @medcal/web-api build      → tsc -p tsconfig.json → exit 0
-pnpm --filter @medcal/web-api typecheck  → tsc --noEmit         → exit 0
-pnpm --filter @medcal/notifications typecheck → tsc --noEmit    → exit 0
-pnpm turbo run build --filter=@medcal/web-api → 1/1 tasks successful
-pnpm turbo run build --continue --force  (full repo, cache bypassed) → 5/5 tasks successful, including @medcal/api and @medcal/web-api
+kalibrasimedika.co.id            → apps/web            (port 3000)
+kalibrasimedika.co.id/public/*   → apps/web-api         (port 3002)
+api.kalibrasimedika.co.id        → apps/api             (port 3001)
+apps.kalibrasimedika.co.id       → apps/portal           (port 3003)
 ```
 
-All five produced clean exits with zero TypeScript errors and zero build failures. The `--force` full-repo run specifically rules out a stale-cache false positive — it recompiled every package from scratch, `@medcal/notifications` included, and everything still passed.
+`apps/api` already has a working, verified Dockerfile and a `docker-compose.prod.yml` entry. `apps/web-api`, `apps/web`, and `apps/portal` have none. PostgreSQL stays native/external — never containerized. This plan implements the three missing Dockerfiles, extends compose/env/Nginx, fixes the previously-identified web-api `trust proxy` gap, then validates everything **locally** (Docker Desktop needs to be running — its engine is currently not started; will start it before the build step) before handing off a separate, not-executed VPS deployment procedure.
 
----
+Key facts already verified in the prior audits (not re-derived):
+- `apps/web-api`'s own `tsc`-compiled `dist/index.js` would likely fail at runtime (`ERR_MODULE_NOT_FOUND`) because its workspace deps (`@medcal/config`, `@medcal/notifications`, `@medcal/shared`) are raw TypeScript with no build step — same root cause `apps/api/Dockerfile` already works around by running via `tsx` instead of compiled JS. Web-api's Dockerfile must follow the same `tsx`-runtime pattern, not `node dist/index.js`.
+- `apps/web-api` has zero database/Prisma access — no `prisma generate` stage needed in its image.
+- `apps/web` has no `output: "standalone"` in `next.config.js` — ships a normal `.next` + `node_modules` image, run via `next start`.
+- `apps/portal` is host-header-routed (`apps/portal/src/proxy.ts`) — `apps.` prefix → management, `portal.` prefix → client. We are only wiring up `apps.kalibrasimedika.co.id` per the approved topology; `portal.*` is not being deployed in this pass (not in scope, no DNS for it).
+- `apps/web-api/src/index.ts`'s `app.listen(port)` has no `trust proxy` configured — behind Nginx, `express-rate-limit`'s IP-keying would misattribute all traffic to Nginx's loopback IP.
+- `.env.production.example` today only documents `apps/api`'s contract — needs extending for web-api/web/portal's variables (all already known from source, none invented).
+- `INTERNAL_API_SECRET` and `CHAT_SESSION_TOKEN_SECRET` must be byte-identical between apps/api and apps/web-api — enforced by using the same `.env.production` file for both services (single env file, like `apps/api` already does).
 
-## Root error
+## Files to create
 
-**There is no current error.** No error to report from today's build. What follows is the trace of the error that *used to exist*, per the task's request to independently verify the previously-documented failure.
+1. **`apps/web-api/Dockerfile`** — multi-stage, modeled on `apps/api/Dockerfile`'s `turbo prune`/`pnpm install --frozen-lockfile` pattern, **no Prisma-generate stage** (web-api has zero DB access), non-root user, `EXPOSE 3002`, `CMD ["node_modules/.bin/tsx", "src/index.ts"]` (tsx runtime, not compiled JS — see rationale above).
+2. **`apps/web/Dockerfile`** — same prune/install pattern for `@medcal/web`, build stage runs `pnpm --filter=@medcal/web build` with `ARG`/`ENV` for `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WEB_API_URL`, `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` (declared before the build so Next.js's build-time inlining picks them up), runtime `CMD` = `next start -p 3000` (via the package's own `start` script), `EXPOSE 3000`.
+3. **`apps/portal/Dockerfile`** — same pattern for `@medcal/portal`, one build arg (`NEXT_PUBLIC_API_URL` only — portal has no web-api/reCAPTCHA dependency, confirmed in the delta audit), runtime `next start -p 3003`, `EXPOSE 3003`.
+4. **`infra/nginx/kalibrasimedika.co.id.conf.example`** — new file, same documented-but-unapplied pattern as the existing `api.*` example: HTTP→HTTPS redirect + ACME challenge + HTTPS block with two `location` blocks (`/` → `127.0.0.1:3000`, `/public/` → `127.0.0.1:3002`, trailing slash stripped correctly so `/public/whatsapp-lead` etc. reach web-api's own `/public/whatsapp-lead` route unchanged).
+5. **`infra/nginx/apps.kalibrasimedika.co.id.conf.example`** — new file, same pattern, single `location /` → `127.0.0.1:3003`, with `proxy_set_header Host $host;` called out in a comment as load-bearing (portal's own routing logic reads it).
+6. **A local-only compose override** (e.g. `docker-compose.local-prod-test.yml` or reusing `docker-compose.prod.yml` directly with a local `.env.production`-shaped file) for local validation — will decide exact mechanism during implementation depending on what's cleanest; will NOT touch real `.env.production` (doesn't exist) or commit secrets.
 
----
+## Files to modify
 
-## Evidence
+1. **`docker-compose.prod.yml`** — add `web-api`, `web`, `portal` service blocks (loopback-only ports per §6 of the request, `medcal_net`, `restart: unless-stopped`, `env_file: .env.production`, healthchecks). Add `depends_on: api: condition: service_healthy` only to `web-api` (the one real container-level dependency) — not to `web` or `portal`, per the request's explicit instruction.
+2. **`apps/web-api/src/index.ts`** — add `app.set("trust proxy", ...)`. Precise setting to be determined from the actual Nginx topology: since Nginx and the app container communicate over the loopback interface (`127.0.0.1`) on the same host, the safe, precise configuration is `app.set("trust proxy", "loopback")` (Express's built-in preset trusting only `127.0.0.1`/`::1`/link-local — not `true`, which would trust any `X-Forwarded-For` from anywhere, including a spoofed one from the public internet if the container were ever reachable directly). This will be explained in the final report.
+3. **`.env.production.example`** — extend with the currently-missing variables identified in the forensic audit: `WEB_API_PORT`, web-api's own `API_URL` (pointing at `https://api.kalibrasimedika.co.id`), `CHAT_SESSION_TOKEN_SECRET`, `CHAT_SESSION_TOKEN_TTL_MS`, `CHAT_WIDGET_ORIGINS`, `RECAPTCHA_SECRET_KEY`, `RECAPTCHA_MIN_SCORE`, all rate-limit vars (contact form, web-chat legacy, chat session, whatsapp lead), and a new `NEXT_PUBLIC_*` section for `apps/web`/`apps/portal` build args (`NEXT_PUBLIC_API_URL=https://api.kalibrasimedika.co.id`, `NEXT_PUBLIC_WEB_API_URL=https://kalibrasimedika.co.id/public`, `NEXT_PUBLIC_RECAPTCHA_SITE_KEY=<production value>`). `TRUSTED_ORIGINS` already includes `apps.kalibrasimedika.co.id` — verified already correct, no change needed there. No real secrets — placeholders only, consistent with the file's existing style.
 
-Git history on `apps/web-api/src/index.ts` (newest → oldest):
-```
-b97dd36  feat(whatsapp): implement WhatsApp identity dialog and related rate limiting
-54ec9cc  feat(chat): implement chat module with real-time messaging and session management
-8fc70e3  feat: add Web Chat bubble component and backend schema
-4796b7f  feat: add ContactTopic model with seeding script and foreign key relationship  ← import fixed here
-c09247e  Add F5 Audit report for infrastructure and deployment topology                 ← broken import, and the commit where the F5/F6 doc's build-failure note was written
-```
+## What is explicitly NOT changed
 
-At commit `c09247e` (the commit that added the F5 audit doc, dated 2026-08-14), `apps/web-api/src/index.ts` line 6 read:
-```ts
-import { buildWhatsAppDeepLink } from "@medcal/notifications";
-```
-This is a **named import of `buildWhatsAppDeepLink` directly from the package root**. But `packages/notifications/src/index.ts` (unchanged since the repo's initial commit `9207a06`) has only ever exported:
-```ts
-export * as contact from "./contact";
-export * as email from "./email";
-export * as push from "./push";
-export * as whatsapp from "./whatsapp";
-```
-— i.e., a **namespace re-export** (`whatsapp.buildWhatsAppDeepLink(...)`), not a flat re-export of `buildWhatsAppDeepLink` itself. `import { buildWhatsAppDeepLink } from "@medcal/notifications"` genuinely does not resolve against that barrel — this is exactly the "missing export" TypeScript error the implementation-plan doc recorded.
+- `apps/portal/src/proxy.ts` — not touched, per the request's explicit instruction to preserve existing `apps.*` routing as-is.
+- `packages/auth/src/index.ts`, `packages/config/src/index.ts` — cookie domain / trusted-origins logic already correctly supports this topology (verified in the delta audit); no code change needed, only the env value itself (already correct in the template).
+- `apps/api/Dockerfile` — reused as-is; verified already production-ready (proven build, non-root, tsx runtime, correct port/health).
+- No PostgreSQL containerization, no Kubernetes/Swarm, no new hostname, no DNS change, no UI/Hero/Web-Chat/Portal redesign.
 
-The very next commit that touched this file, `4796b7f` ("feat: add ContactTopic model..."), corrected it:
-```diff
-- import { buildWhatsAppDeepLink } from "@medcal/notifications";
-+ import { whatsapp } from "@medcal/notifications";
-...
-- res.json({ url: buildWhatsAppDeepLink(phone, text) });
-+ res.json({ url: whatsapp.buildWhatsAppDeepLink(phone, text) });
-```
-This fix has been in place for 3 commits now (`4796b7f` → `8fc70e3` → `54ec9cc` → `b97dd36`, the current `HEAD`) and the current file (verified by direct read) still uses `import { whatsapp } from "@medcal/notifications";` at line 6, with `whatsapp.buildWhatsAppDeepLink(phone, text)` at its one call site (line 127, inside the `GET /public/whatsapp-link` route).
+## Local validation plan
 
----
+1. Start Docker Desktop's engine (currently not running — `docker version` succeeded for the client but the daemon pipe isn't up).
+2. `docker compose -f docker-compose.prod.yml build` (or targeted per-service builds) against a throwaway local `.env.production`-shaped file with dev-safe placeholder secrets (never the real committed dev `.env` values, to keep the test honest about "production-shaped" env wiring) — confirm all four images build.
+3. Bring the stack up locally (`docker compose ... up -d`), pointed at the local native/dev Postgres via `host.docker.internal` (same mechanism `apps/api`'s F5.6 verification already used), confirm all four containers report healthy.
+4. Curl-based checks: `api`'s `/health`, `web-api`'s `/health`, `web`'s `/`, `portal`'s `/`.
+5. Inspect each container's logs for startup errors, missing env vars, Prisma errors, module-resolution errors, port conflicts.
+6. Integration smoke tests **without real DNS/TLS** — using `curl -H "Host: ..."` against the loopback ports (or a local hosts-file entry / `Host` header override) to simulate each hostname's routing, since production certs won't be issued locally per the request's explicit instruction:
+   - `kalibrasimedika.co.id` (web) loads.
+   - A safe `/public/*` web-api route responds (e.g. `GET /public/contact-topics`, read-only, no side effects).
+   - Web Chat: open a chat session against `api`'s Socket.IO gateway directly (port 3001), confirm connect → session start → message round-trip.
+   - Contact Form path: `web-api` → `api` `/internal/contact-messages` forwarding works (using a test payload, not a real lead).
+   - Portal: sign-in, `/me`, a protected management route, sign-out, sign-in again — against the real dev database's test/whitelisted account (same style of throwaway verification the F5/F6 docs already used, cleaned up after).
+7. Tear down local containers/images used purely for this validation once confirmed (or leave running if the user wants to keep testing — will confirm rather than assume).
 
-## @medcal/notifications trace
+## Production deployment plan (write-up only, not executed)
 
-1. **Symbol imported today:** `whatsapp` (a namespace object), not `buildWhatsAppDeepLink` directly.
-2. **Where it's exported from:** `packages/notifications/src/index.ts:4` — `export * as whatsapp from "./whatsapp";`.
-3. **Does the source file exist:** Yes — `packages/notifications/src/whatsapp/index.ts` exists and exports `buildWhatsAppDeepLink(phoneE164, text)`, a simple `wa.me` deep-link builder. Content verified directly, matches the function signature used at the call site.
-4. **Does the barrel export it:** Yes, via the namespace re-export described above — `whatsapp.buildWhatsAppDeepLink` resolves correctly.
-5. **Does `package.json`'s `exports` field permit it:** `packages/notifications/package.json` has no `exports` field at all (only `"main": "./src/index.ts"` and `"types": "./src/index.ts"`) — the whole package resolves through its single entry point, which is exactly the barrel checked above. No export-map restriction is in play.
-6. **Does the package build/typecheck on its own:** Yes — `pnpm --filter @medcal/notifications typecheck` passes cleanly (exit 0).
-7. **Is build order relevant:** Not in a way that matters here — `@medcal/notifications`'s `package.json` has no `build` script at all (only `typecheck`), and like every other workspace package in this repo it's consumed as raw TypeScript (`"main": "./src/index.ts"`) rather than a compiled artifact — so there's no separate build step whose ordering could go stale.
-8. **Is the import stale/unused:** The import that *was* stale (`buildWhatsAppDeepLink` as a flat named import) has been corrected. The current import (`whatsapp` namespace) is live and actively used, not dead code.
+Will be delivered as a separate documented procedure at the end (backup → git pull → prepare `.env.production` → build → compose up → Nginx conf install/`nginx -t`/reload → Certbot → health checks → smoke tests → rollback procedure), matching the same manual-install discipline already established by the existing `api.kalibrasimedika.co.id.conf.example` file (never auto-reloads live Nginx, never overwrites the 5 unrelated existing sites).
 
----
+## Verification
 
-## Whether the issue is pre-existing or feature-related
-
-**Pre-existing and already resolved — unrelated to the current WhatsApp/chat feature work.** The broken import existed only in the commit that introduced the F5 infrastructure audit doc (`c09247e`, 2026-08-14) and was corrected in the very next commit that touched the file (`4796b7f`, part of unrelated Contact Form/ContactTopic work — the fix looks incidental to that commit's real purpose, not a deliberate "fix the notifications import" commit). The current WhatsApp identity dialog feature (`b97dd36`, the most recent commit) did not introduce any new dependency on `@medcal/notifications` beyond the same single `whatsapp.buildWhatsAppDeepLink` call that already existed and already worked — confirmed by checking `apps/web-api/src/public-whatsapp-lead-schema.ts` and the WhatsApp-lead route in `index.ts`, neither of which reference `@medcal/notifications` at all (the lead endpoint's WhatsApp-specific logic is just a hardcoded `WHATSAPP_DEFAULT_MESSAGE` constant and a `getFrom: "WHATSAPP"` tag, no deep-link building happens server-side for that flow — the deep link is built client-side in `apps/web`'s `whatsapp-identity-dialog.tsx` via its own `waLink()` helper in `apps/web/src/data/site.ts`, not through this package at all).
-
-So: the F5/F6 implementation-plan doc's build-failure note is an accurate historical record of a real, transient bug — not a symptom of anything still wrong today, and not something the WhatsApp feature work re-broke or depends on.
-
----
-
-## Production impact
-
-None currently. `apps/web-api` is fully buildable today with the standard `tsc` compile (`pnpm --filter @medcal/web-api build` → `dist/index.js`, matching its own `"start": "node dist/index.js"` script). This removes what would have been a real prerequisite blocker for containerizing `apps/web-api` (identified as a dependency in the prior production-env/Docker-wiring audit's §9 and §13 "smallest corrections needed" list, step 2). That step can now be considered satisfied — the remaining blockers for `apps/web-api`'s production deployment are the ones already identified in that prior audit: no chosen hostname, no Dockerfile, no compose service, no `.env.production` section — none of which are build-correctness issues, all of which are deployment-topology decisions/artifacts that don't exist yet.
-
----
-
-## Minimal conceptual fix
-
-Not applicable — nothing to fix. (For completeness, had the bug still existed, the conceptual fix would have been exactly what commit `4796b7f` already did: import the `whatsapp` namespace object and call `whatsapp.buildWhatsAppDeepLink(...)` instead of trying to import `buildWhatsAppDeepLink` as a flat named export that the barrel never provided.)
-
----
-
-## Dependencies before production deployment
-
-Build correctness is no longer one of them. What remains, per the prior production-env/Docker-wiring audit, is unchanged by this finding:
-1. Choose `apps/web-api`'s production hostname (must be a subdomain of `kalibrasimedika.co.id`, per the ChatSessionToken cross-origin cookie requirement already traced in that audit).
-2. Create `apps/web-api`'s Dockerfile (no existing template for it beyond reusing `apps/api/Dockerfile`'s prune/install pattern).
-3. Add a `web-api` service to `docker-compose.prod.yml` and a `.env.production` section for its own variables (`WEB_API_PORT`, `API_URL` pointed at production `apps/api`, `INTERNAL_API_SECRET`, `CHAT_SESSION_TOKEN_SECRET`, `CHAT_WIDGET_ORIGINS`, per-route rate-limit vars, `COOKIE_DOMAIN`) — none of which exist yet.
-4. Only after those exist does wiring `apps/web`'s own `NEXT_PUBLIC_WEB_API_URL`/`NEXT_PUBLIC_API_URL` build-time values (from the prior audit) become meaningful.
-
----
-
-## Exact files/commands reviewed
-
-`apps/web-api/src/index.ts`, `packages/notifications/package.json`, `packages/notifications/src/index.ts`, `packages/notifications/src/whatsapp/index.ts`, `apps/web-api/package.json`, `apps/web-api/src/public-whatsapp-lead-schema.ts`, `apps/web/src/components/whatsapp-identity-dialog.tsx`, `apps/web/src/data/site.ts`; git log/diff on `apps/web-api/src/index.ts` and `packages/notifications/src/index.ts` across commits `9207a06`→`b97dd36`; live command runs: `pnpm --filter @medcal/web-api build`, `pnpm --filter @medcal/web-api typecheck`, `pnpm --filter @medcal/notifications typecheck`, `pnpm turbo run build --filter=@medcal/web-api`, `pnpm turbo run build --continue --force`.
-
-## Evidence classification
-
-- **VERIFIED BY BUILD/TEST**: the current-state build/typecheck success (all five command runs above, including a forced full-repo rebuild).
-- **VERIFIED FROM REPOSITORY**: the git history tracing the original bug (commit `c09247e`) and its fix (commit `4796b7f`), and the confirmation that the current WhatsApp feature (`b97dd36`) doesn't touch `@medcal/notifications` beyond the already-working call.
-- No INFERENCE or REQUIRES-BROWSER-TEST items in this report — every claim here was directly reproduced or read from source/history.
+- All four `docker build`s succeed.
+- All four containers reach a healthy/responsive state locally.
+- Logs show no errors.
+- Web Chat, Contact Form, and Portal login/session flows work end-to-end against the local stack.
+- Final report explicitly separates what was validated locally from what remains for the real VPS (nothing is deployed there in this task).

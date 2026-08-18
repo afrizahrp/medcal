@@ -16,6 +16,16 @@ import { verifyRecaptcha } from "./recaptcha";
  * Business persistence happens in Nest (@medcal/api).
  */
 const app = express();
+// Behind Nginx on the same host (production), the only hop between the
+// visitor and this process is the loopback interface — "loopback" trusts
+// X-Forwarded-For/X-Forwarded-Proto only from 127.0.0.1/::1/link-local, so
+// express-rate-limit keys off the real visitor IP forwarded by Nginx rather
+// than misattributing every visitor to Nginx's own loopback address. Not
+// `true`: that would trust X-Forwarded-For from ANY source, which would let
+// a caller spoof their rate-limit identity if this port were ever reachable
+// directly (it isn't today — published loopback-only — but "loopback" is
+// correct regardless of that, not contingent on it).
+app.set("trust proxy", "loopback");
 const port = Number(process.env.WEB_API_PORT ?? 3002);
 const apiUrl = process.env.API_URL ?? "http://localhost:3001";
 const companyId = process.env.COMPANY_ID;

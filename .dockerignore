@@ -13,5 +13,9 @@ node_modules
 coverage
 **/coverage
 docs
-public
+# Anchored to repo root only — apps/web/public and apps/portal/public are real
+# Next.js static asset directories (favicons, logo, marketing video) that the
+# web/portal Docker builds need in their build context. A bare "public" pattern
+# would have excluded those too, silently shipping images with missing assets.
+/public
 *.log

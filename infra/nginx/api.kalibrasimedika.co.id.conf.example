@@ -29,9 +29,13 @@
 #   6. systemctl reload nginx   (reload, not restart — does not drop existing
 #      connections to bipmed/bumiindah)
 #
-# The other four MedCal hostnames (kalibrasimedika.co.id, apps.*, portal.*,
-# technician.*) get their own equivalent blocks once those apps are
-# containerized (F5.2 scope is apps/api only) — not included here yet.
+# kalibrasimedika.co.id (apps/web + apps/web-api under /public/*) and
+# apps.kalibrasimedika.co.id (apps/portal) now have their own equivalent
+# blocks: infra/nginx/kalibrasimedika.co.id.conf.example and
+# infra/nginx/apps.kalibrasimedika.co.id.conf.example. portal.* and
+# technician.* are not part of the current approved topology — apps/portal
+# is deployed under apps.* only in this pass (see apps/portal/src/proxy.ts's
+# host-based routing, unmodified).
 
 server {
     listen 80;
