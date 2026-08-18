@@ -15,9 +15,9 @@ export function Hero() {
         aria-hidden="true"
       />
 
-      {/* Mobile: dark-to-transparent from the top, behind the text, revealing the video lower down */}
+      {/* Mobile: dark-to-transparent from the top, strongest behind the headline through the trust list */}
       <div
-        className="absolute inset-0 -z-10 bg-gradient-to-b from-brand-950/88 via-brand-950/50 to-brand-950/20 motion-reduce:hidden sm:hidden"
+        className="absolute inset-0 -z-10 bg-gradient-to-b from-brand-950/88 via-brand-950/58 to-brand-950/34 motion-reduce:hidden sm:hidden"
         aria-hidden="true"
       />
       {/* Tablet: intermediate left-to-right blend */}
@@ -37,26 +37,27 @@ export function Hero() {
             Kalibrasi Alat Kesehatan
           </p>
 
-          <h1 className="mt-3 max-w-[320px] text-[31px] font-bold leading-[1.12] tracking-[-0.015em] text-white sm:mt-3 sm:max-w-none sm:text-4xl sm:leading-tight sm:tracking-tight sm:[text-shadow:0_2px_16px_rgba(6,27,48,0.45)] lg:text-5xl">
+          <h1 className="mt-3 max-w-[340px] text-[28px] font-bold leading-[1.12] tracking-[-0.015em] text-white sm:mt-3 sm:max-w-none sm:text-4xl sm:leading-tight sm:tracking-tight sm:[text-shadow:0_2px_16px_rgba(6,27,48,0.45)] lg:text-5xl">
             Layanan Terbaik Dimulai dari Alat yang Akurat
           </h1>
 
           <p className="mt-4 max-w-[320px] text-[15px] font-normal leading-[1.5] text-white/85 sm:max-w-lg sm:text-lg">
-            Pastikan setiap pengukuran dapat diandalkan dengan layanan
-            kalibrasi yang tertelusur dan terdokumentasi.
+            Pastikan setiap pengukuran dapat diandalkan dengan layanan kalibrasi
+            yang tertelusur dan terdokumentasi
           </p>
 
           <SectionCta
             variant="actions"
             align="center-start"
+            ctaSize="compact"
             ctaLabel="Konsultasikan Kebutuhan Anda"
-            ctaClassName="min-w-[220px] max-w-[calc(100%-2.5rem)]"
+            ctaClassName="min-w-[220px] sm:min-w-0 sm:px-6 sm:py-3.5 sm:text-base"
             className="mt-5 sm:mt-7"
           />
 
           <TrustBadges
             variant="compact"
-            className="mt-6 max-w-[300px] sm:mt-8 sm:max-w-lg"
+            className="mt-7 max-w-[300px] sm:mt-8 sm:max-w-lg"
           />
         </div>
       </div>
