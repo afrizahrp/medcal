@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { prisma } from "@medcal/db";
 import type { ContactMessage, Lead, LeadStatus, Prisma } from "@medcal/db";
+import { LEAD_SORTABLE_FIELDS } from "@medcal/shared";
 import type { LeadListQuery } from "@medcal/shared";
+import { resolveSortOrder } from "../../common/sort-query";
 import { findLeadMatchCandidates } from "./lead-matching";
 
-const DEFAULT_PAGE_SIZE = 20;
+// Canonical default (Management List pattern, 2026-08-18) — see the matching
+// comment in contact-messages.service.ts; kept identical across siblings.
+const DEFAULT_PAGE_SIZE = 10;
 
 // A Lead can have MANY ContactMessages (Lead Inbox design review §1) — Topic/
 // Source/interaction-date are not permanent Lead attributes, so the list view
@@ -25,6 +29,7 @@ export interface LeadListResult {
   page: number;
   pageSize: number;
   total: number;
+  totalPages: number;
 }
 
 export type LeadWithTimeline = Prisma.LeadGetPayload<{
@@ -67,11 +72,18 @@ export class LeadsService {
         : {}),
     };
 
+    const { field: sortField, dir: sortDir } = resolveSortOrder(
+      LEAD_SORTABLE_FIELDS,
+      query.sortBy,
+      query.sortDir,
+      "createdAt",
+    );
+
     const [total, data] = await Promise.all([
       prisma.lead.count({ where }),
       prisma.lead.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { [sortField]: sortDir },
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
@@ -84,7 +96,7 @@ export class LeadsService {
       }),
     ]);
 
-    return { data, page, pageSize, total };
+    return { data, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
   }
 
   async findOne(companyId: string, id: string): Promise<LeadWithTimeline> {

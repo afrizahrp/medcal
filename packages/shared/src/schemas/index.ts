@@ -33,19 +33,38 @@ const leadStatusValues = [
 
 const contactStatusValues = ["PENDING", "READ", "REPLIED", "CLOSED"] as const;
 
-/** GET /leads query params (Lead Inbox, locked 2026-08-16) */
-export const leadListQuerySchema = z.object({
+/**
+ * Common mechanics shared by every server-paginated management list
+ * (Management List canonical pattern, 2026-08-18 — see
+ * docs/claude/plans/forensic-analysis-search-crispy-leaf.md). `sortBy` is
+ * intentionally a plain optional string here, not validated against a
+ * per-resource field enum: Zod only shapes the wire format, the *service*
+ * layer is the trust boundary that whitelists it (see
+ * apps/api/src/common/sort-query.ts) — mirrors the forensic report's finding
+ * that server-bi-erp's sales_invoiceHd trusts `orderBy` no further than a
+ * service-level allow-list either.
+ */
+const baseListQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
+  sortBy: z.string().optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+/** GET /leads query params (Lead Inbox, locked 2026-08-16) */
+export const leadListQuerySchema = baseListQuerySchema.extend({
   status: z.enum(leadStatusValues).optional(),
   getFrom: z
     .enum(["CONTACTFORM", "WHATSAPP", "CHAT_AI", "CHAT_PERSON", "EMAIL"])
     .optional(),
   topicId: z.coerce.number().int().optional(),
-  page: z.coerce.number().int().min(1).optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).optional(),
 });
 
 export type LeadListQuery = z.infer<typeof leadListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /leads — see resolveSortOrder. */
+export const LEAD_SORTABLE_FIELDS = ["createdAt", "name", "status"] as const;
 
 /** PATCH /leads/:id/status body */
 export const leadStatusUpdateSchema = z.object({
@@ -55,22 +74,22 @@ export const leadStatusUpdateSchema = z.object({
 /**
  * GET /contact-messages query params (Contact Messages status/filter/count
  * correction, 2026-08-18). ContactMessage is the source of truth for this
- * list — `status` here is ContactStatus, never LeadStatus. Mirrors
- * leadListQuerySchema's shape (search/getFrom/topicId/page/pageSize) since
- * both lists filter comparable fields, but each carries its own status enum.
+ * list — `status` here is ContactStatus, never LeadStatus. Extends
+ * baseListQuerySchema (search/sortBy/sortDir/page/pageSize) since both lists
+ * share those mechanics, but each carries its own status enum.
  */
-export const contactMessageListQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
+export const contactMessageListQuerySchema = baseListQuerySchema.extend({
   status: z.enum(contactStatusValues).optional(),
   getFrom: z
     .enum(["CONTACTFORM", "WHATSAPP", "CHAT_AI", "CHAT_PERSON", "EMAIL"])
     .optional(),
   topicId: z.coerce.number().int().optional(),
-  page: z.coerce.number().int().min(1).optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).optional(),
 });
 
 export type ContactMessageListQuery = z.infer<typeof contactMessageListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /contact-messages — see resolveSortOrder. */
+export const CONTACT_MESSAGE_SORTABLE_FIELDS = ["createdAt", "name", "status"] as const;
 
 /** PATCH /contact-messages/:id/status body */
 export const contactMessageStatusUpdateSchema = z.object({

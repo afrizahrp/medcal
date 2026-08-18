@@ -1,5 +1,6 @@
 import type { Viewport } from "next";
 import "./globals.css";
+import { Providers } from "./providers";
 
 export const metadata = {
   title: "medcal Portal",
@@ -24,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="id">
       <body className="min-h-screen min-w-0 max-w-full bg-white text-slate-900 antialiased">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

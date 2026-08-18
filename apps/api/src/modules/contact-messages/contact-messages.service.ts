@@ -7,11 +7,18 @@ import {
   isPublicEmailDomain,
   normalizePhone,
 } from "@medcal/shared";
+import { CONTACT_MESSAGE_SORTABLE_FIELDS } from "@medcal/shared";
 import type { ContactMessageLeadResolution, ContactMessageListQuery } from "@medcal/shared";
+import { resolveSortOrder } from "../../common/sort-query";
 import { classifyLeadMatch, findLeadMatchCandidates } from "../leads/lead-matching";
 import type { Db } from "../leads/lead-matching";
 
-const DEFAULT_PAGE_SIZE = 20;
+// Canonical default (Management List pattern, 2026-08-18) — matches the
+// frontend's own initial pageSize (apps/portal/.../leads/page.tsx), so this
+// value is never actually reached by the current UI, but is now the single
+// source of truth for any other caller (e.g. calibration management) that
+// omits pageSize.
+const DEFAULT_PAGE_SIZE = 10;
 
 // Contact Messages page (status/filter/count correction, 2026-08-18) — each
 // row IS a ContactMessage, with its Lead joined for display fields
@@ -30,6 +37,7 @@ export interface ContactMessageListResult {
   page: number;
   pageSize: number;
   total: number;
+  totalPages: number;
 }
 
 @Injectable()
@@ -257,18 +265,25 @@ export class ContactMessagesService {
         : {}),
     };
 
+    const { field: sortField, dir: sortDir } = resolveSortOrder(
+      CONTACT_MESSAGE_SORTABLE_FIELDS,
+      query.sortBy,
+      query.sortDir,
+      "createdAt",
+    );
+
     const [total, data] = await Promise.all([
       prisma.contactMessage.count({ where }),
       prisma.contactMessage.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { [sortField]: sortDir },
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: { topic: true, lead: { select: { id: true, status: true } } },
       }),
     ]);
 
-    return { data, page, pageSize, total };
+    return { data, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
   }
 
   async findActiveTopics(): Promise<ContactTopic[]> {

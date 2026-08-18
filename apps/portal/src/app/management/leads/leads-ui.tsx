@@ -148,6 +148,17 @@ const SOURCE_ICON_CLASS: Record<GetMessageFrom, string> = {
   EMAIL: "bg-blue-600 text-white",
 };
 
+/** Sortable columns for GET /contact-messages — mirrors CONTACT_MESSAGE_SORTABLE_FIELDS in packages/shared. */
+export type SortField = "createdAt" | "name" | "status";
+export type SortDir = "asc" | "desc";
+
+export const SORT_OPTIONS: { value: `${SortField}-${SortDir}`; label: string }[] = [
+  { value: "createdAt-desc", label: "Tanggal (Terbaru)" },
+  { value: "createdAt-asc", label: "Tanggal (Terlama)" },
+  { value: "name-asc", label: "Nama (A-Z)" },
+  { value: "name-desc", label: "Nama (Z-A)" },
+];
+
 export const selectClassName =
   "h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-none outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring";
 
@@ -391,10 +402,13 @@ export function MessageFilters({
   source,
   topicId,
   topics,
+  sortBy,
+  sortDir,
   onSearchChange,
   onStatusChange,
   onSourceChange,
   onTopicChange,
+  onSortChange,
   variant = "desktop",
 }: {
   search: string;
@@ -402,12 +416,20 @@ export function MessageFilters({
   source: GetMessageFrom | "";
   topicId: string;
   topics: ContactTopic[];
+  sortBy: SortField;
+  sortDir: SortDir;
   onSearchChange: (value: string) => void;
   onStatusChange: (value: ContactStatus | "") => void;
   onSourceChange: (value: GetMessageFrom | "") => void;
   onTopicChange: (value: string) => void;
+  onSortChange: (sortBy: SortField, sortDir: SortDir) => void;
   variant?: "desktop" | "mobile";
 }) {
+  const sortValue = `${sortBy}-${sortDir}` as (typeof SORT_OPTIONS)[number]["value"];
+  function handleSortSelect(value: string) {
+    const [field, dir] = value.split("-") as [SortField, SortDir];
+    onSortChange(field, dir);
+  }
   if (variant === "mobile") {
     return (
       <div className="space-y-3">
@@ -465,9 +487,18 @@ export function MessageFilters({
         <div className="flex items-center gap-2 text-sm text-slate-400">
           <ArrowUpDown className="h-4 w-4 shrink-0" />
           <span className="shrink-0">Urutkan:</span>
-          <span className={cn(selectClassName, "flex flex-1 items-center text-slate-500")} aria-hidden="true">
-            Tanggal (Terbaru)
-          </span>
+          <select
+            value={sortValue}
+            onChange={(e) => handleSortSelect(e.target.value)}
+            className={cn(selectClassName, "flex-1")}
+            aria-label="Urutkan pesan"
+          >
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
     );
@@ -525,6 +556,18 @@ export function MessageFilters({
             </option>
           ))}
         </select>
+        <select
+          value={sortValue}
+          onChange={(e) => handleSortSelect(e.target.value)}
+          className={cn(selectClassName, "col-span-2 w-full sm:col-span-1 lg:w-44")}
+          aria-label="Urutkan pesan"
+        >
+          {SORT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
     </div>
   );
@@ -558,11 +601,17 @@ function ClampedText({
 export function MessageInboxTable({
   messages,
   loading,
+  fetching = false,
+  error,
   showing,
   total,
 }: {
   messages: ContactMessageRow[];
   loading: boolean;
+  /** Background refetch while previous rows are still shown (placeholderData) — lighter indicator than `loading`. */
+  fetching?: boolean;
+  /** Distinct from an empty result — a fetch failure, rendered as its own row. */
+  error?: string | null;
   showing: number;
   total: number;
 }) {
@@ -571,7 +620,12 @@ export function MessageInboxTable({
       <p className="mb-3 text-sm text-slate-400">
         Menampilkan {showing} dari {total} pesan
       </p>
-      <div className="overflow-x-auto rounded-md border border-slate-200">
+      <div
+        className={cn(
+          "overflow-x-auto rounded-md border border-slate-200 transition-opacity",
+          fetching && !loading && "opacity-60",
+        )}
+      >
         <table className="w-full min-w-[960px] text-left text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -593,6 +647,12 @@ export function MessageInboxTable({
               <tr>
                 <td className="px-4 py-8 text-slate-400" colSpan={9}>
                   Memuat…
+                </td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td className="px-4 py-8 text-red-600" colSpan={9}>
+                  {error}
                 </td>
               </tr>
             ) : messages.length > 0 ? (
@@ -706,12 +766,16 @@ function MessageCardBody({ message, compact }: { message: ContactMessageRow; com
 export function MessageInboxList({
   messages,
   loading,
+  fetching = false,
+  error,
   showing,
   total,
   variant = "desktop",
 }: {
   messages: ContactMessageRow[];
   loading: boolean;
+  fetching?: boolean;
+  error?: string | null;
   showing: number;
   total: number;
   variant?: "desktop" | "mobile";
@@ -720,12 +784,16 @@ export function MessageInboxList({
     return <p className="py-8 text-center text-sm text-slate-400">Memuat…</p>;
   }
 
+  if (error) {
+    return <p className="py-8 text-center text-sm text-red-600">{error}</p>;
+  }
+
   if (messages.length === 0) {
     return <p className="py-8 text-center text-sm text-slate-400">Tidak ada pesan.</p>;
   }
 
   return (
-    <div>
+    <div className={cn("transition-opacity", fetching && "opacity-60")}>
       <p className="mb-3 text-sm text-slate-400">
         Menampilkan {showing} dari {total} pesan
       </p>

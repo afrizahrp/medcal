@@ -296,6 +296,40 @@ describe("ContactMessagesService.findAll — status filter/pagination (Contact M
     const result = await service.findAll(countCompanyId, { search: uniqueName });
     expect(result.data.some((m) => m.name === uniqueName)).toBe(true);
   });
+
+  it("computes totalPages from total and pageSize", async () => {
+    for (let i = 0; i < 3; i += 1) {
+      await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    }
+
+    const result = await service.findAll(countCompanyId, { pageSize: 2 });
+    expect(result.totalPages).toBe(Math.max(1, Math.ceil(result.total / 2)));
+  });
+});
+
+describe("ContactMessagesService.findAll — sortBy/sortDir (Management List canonical pattern, 2026-08-18)", () => {
+  it("sorts by name ascending when requested", async () => {
+    const aName = `AAA-${randomUUID().slice(0, 6)}`;
+    const zName = `ZZZ-${randomUUID().slice(0, 6)}`;
+    await createForCompany(countCompanyId, basePayload({ name: zName, topicId: activeTopicId }));
+    await createForCompany(countCompanyId, basePayload({ name: aName, topicId: activeTopicId }));
+
+    const result = await service.findAll(countCompanyId, {
+      search: undefined,
+      sortBy: "name",
+      sortDir: "asc",
+      pageSize: 100,
+    });
+    const names = result.data.map((m) => m.name).filter((n) => n === aName || n === zName);
+    expect(names).toEqual([aName, zName]);
+  });
+
+  it("falls back to createdAt desc for an unwhitelisted sortBy", async () => {
+    const created = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+
+    const result = await service.findAll(countCompanyId, { sortBy: "companyId", pageSize: 1 });
+    expect(result.data[0]?.id).toBe(created.id);
+  });
 });
 
 describe("ContactMessagesService.getStatistics — global tenant summary", () => {
