@@ -3,7 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { NavItem } from "../../app/management/nav-config";
-import logo from "../../../public/logo.jpeg";
+import logo from "../../../public/logo.png";
+import shortLogo from "../../../public/short-logo.png";
 import { PinIcon } from "./icons";
 import { SidebarNav } from "./sidebar-nav";
 
@@ -28,7 +29,9 @@ export function ManagementSidebar({
       <div
         className={[
           "relative flex shrink-0 items-center border-b border-slate-200",
-          collapsed ? "h-14 justify-center gap-1 px-1" : "h-20 justify-center px-3",
+          collapsed
+            ? "h-14 justify-center gap-1 px-1"
+            : "h-20 justify-center px-3",
         ].join(" ")}
       >
         <Link
@@ -37,14 +40,14 @@ export function ManagementSidebar({
           title="MedCal Management"
         >
           <Image
-            src={logo}
+            src={collapsed ? shortLogo : logo}
             alt="MedCal"
-            width={collapsed ? 36 : 72}
+            width={collapsed ? 36 : 160}
             height={collapsed ? 36 : 72}
             className={
               collapsed
                 ? "h-9 w-9 shrink-0 rounded object-contain"
-                : "h-[72px] w-[72px] shrink-0 rounded object-contain"
+                : "h-[72px] w-auto max-w-[160px] shrink-0 rounded object-contain"
             }
             priority
           />

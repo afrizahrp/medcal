@@ -24,22 +24,22 @@ export function TrustBadges({ className = "", variant = "pill" }: TrustBadgesPro
   if (variant === "compact") {
     return (
       <ul
-        className={`flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-2 ${className}`}
+        className={`grid w-full grid-cols-3 gap-2 sm:gap-4 lg:gap-6 ${className}`}
         aria-label="Sertifikasi dan legalitas"
       >
         {badges.map((badge) => (
-          <li key={badge.title} className="flex items-start gap-2">
+          <li key={badge.title} className="flex min-w-0 items-start gap-1 sm:gap-1.5">
             <span
               aria-hidden
-              className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/15 text-[9px] font-bold text-white ring-1 ring-inset ring-white/40"
+              className="mt-[1px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-white/15 text-[7px] font-bold text-white ring-1 ring-inset ring-white/40 sm:h-4 sm:w-4 sm:text-[8px] lg:h-5 lg:w-5 lg:text-[10px]"
             >
               ✓
             </span>
-            <span className="min-w-0 text-left leading-snug">
-              <span className="block text-[13px] font-semibold text-white sm:text-sm">
+            <span className="min-w-0">
+              <span className="block text-[10px] font-semibold leading-tight text-white sm:text-xs lg:text-sm">
                 {badge.title}
               </span>
-              <span className="block text-[11px] text-white/70 sm:text-xs">
+              <span className="block text-[9px] leading-tight text-white/70 sm:text-[11px] lg:text-xs">
                 {badge.detail}
               </span>
             </span>

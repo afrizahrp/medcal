@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Image from "next/image";
 import Link from "next/link";
 import type { NavItem } from "../../app/management/nav-config";
-import logo from "../../../public/logo.jpeg";
+import logo from "../../../public/logo.png";
 import { CloseIcon } from "./icons";
 import { SidebarNav } from "./sidebar-nav";
 
@@ -22,12 +22,17 @@ function getFocusable(container: HTMLElement): HTMLElement[] {
     '[tabindex]:not([tabindex="-1"])',
   ].join(",");
 
-  return Array.from(container.querySelectorAll<HTMLElement>(selector)).filter((element) => {
-    if (element.hasAttribute("disabled") || element.getAttribute("aria-hidden") === "true") {
-      return false;
-    }
-    return element.getClientRects().length > 0;
-  });
+  return Array.from(container.querySelectorAll<HTMLElement>(selector)).filter(
+    (element) => {
+      if (
+        element.hasAttribute("disabled") ||
+        element.getAttribute("aria-hidden") === "true"
+      ) {
+        return false;
+      }
+      return element.getClientRects().length > 0;
+    },
+  );
 }
 
 export function MobileDrawer({
@@ -165,7 +170,12 @@ export function MobileDrawer({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
-            <SidebarNav items={items} collapsed={false} onNavigate={onClose} touch />
+            <SidebarNav
+              items={items}
+              collapsed={false}
+              onNavigate={onClose}
+              touch
+            />
           </div>
         </aside>
       </div>

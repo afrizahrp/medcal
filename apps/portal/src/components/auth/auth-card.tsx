@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import logo from "../../../public/logo.jpeg";
+import logo from "../../../public/logo.png";
 
 export function AuthCard({
   title,
@@ -29,12 +29,17 @@ export function AuthCard({
           className="h-20 w-20 object-contain"
           priority
         />
-        <h1 className="-mt-1 text-base font-semibold text-brand-800">{title}</h1>
+        <h1 className="-mt-1 text-base font-semibold text-brand-800">
+          {title}
+        </h1>
       </div>
       {children}
       <p className="mt-5 text-center text-sm text-slate-600">
         {footerLabel}{" "}
-        <Link href={footerHref} className="font-medium text-brand-700 hover:underline">
+        <Link
+          href={footerHref}
+          className="font-medium text-brand-700 hover:underline"
+        >
           {footerLinkText}
         </Link>
       </p>

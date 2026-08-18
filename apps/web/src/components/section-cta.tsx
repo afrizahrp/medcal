@@ -6,10 +6,8 @@ type SectionCtaProps = {
   ctaLabel?: string;
   href?: string;
   variant?: "plain" | "banner" | "card" | "actions" | "nav";
-  align?: "center" | "start" | "center-start";
-  ctaSize?: "default" | "compact";
+  align?: "center" | "start";
   className?: string;
-  ctaClassName?: string;
   onCtaClick?: () => void;
 };
 
@@ -52,9 +50,7 @@ export function SectionCta({
   href = "/kontak",
   variant = "plain",
   align = "center",
-  ctaSize = "default",
   className,
-  ctaClassName,
   onCtaClick,
 }: SectionCtaProps) {
   if (variant === "nav") {
@@ -78,9 +74,7 @@ export function SectionCta({
           "flex flex-col gap-3 sm:flex-row",
           align === "start"
             ? "items-start sm:justify-start"
-            : align === "center-start"
-              ? "items-center sm:justify-start"
-              : "items-center sm:justify-center",
+            : "items-center sm:justify-center",
           className,
         )}
       >
@@ -88,12 +82,7 @@ export function SectionCta({
           href={href}
           onClick={onCtaClick}
           label={ctaLabel}
-          className={joinClasses(
-            ctaSize === "compact"
-              ? "inline-flex items-center justify-center rounded-full bg-brand-600 px-6 py-3 text-[15px] font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
-              : "inline-flex items-center justify-center rounded-full bg-brand-600 px-6 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-700",
-            ctaClassName,
-          )}
+          className="inline-flex items-center justify-center rounded-full bg-brand-600 px-6 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
         />
       </div>
     );
