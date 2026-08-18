@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "@medcal/auth/client";
+import { signIn, useSession } from "@medcal/auth/client";
 import { AuthCard } from "../../components/auth/auth-card";
 
 const fieldClass =
@@ -10,11 +10,24 @@ const fieldClass =
 
 export default function SignInPage() {
   const router = useRouter();
+  // Mounting useSession() here (rather than only downstream in
+  // useRequireSession) subscribes to Better Auth's client session store
+  // before signIn.email() runs, so the store's post-sign-in signal refresh
+  // has a listener attached in time instead of racing an onMount fetch on
+  // the destination route.
+  const { data: session } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (session) {
+      router.replace("/");
+      router.refresh();
+    }
+  }, [session, router]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -23,14 +36,15 @@ export default function SignInPage() {
 
     const { error: signInError } = await signIn.email({ email, password });
 
-    setSubmitting(false);
     if (signInError) {
+      setSubmitting(false);
       setError(signInError.message ?? "Sign-in failed");
       return;
     }
 
-    router.push("/");
-    router.refresh();
+    // Success: leave submitting=true. Navigation is driven by the session
+    // effect above once Better Auth's store confirms the new session,
+    // rather than navigating optimistically before the store settles.
   }
 
   return (

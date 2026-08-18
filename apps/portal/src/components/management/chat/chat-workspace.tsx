@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { apiFetch } from "@medcal/shared";
 import { subscribeUnreadCount } from "../../../lib/use-unread-count";
+import { PageHeader } from "../page-header";
 import { ChatConversationList } from "./chat-conversation-list";
 import type { ChatSessionListItem } from "./chat-session-types";
 
@@ -50,6 +51,15 @@ export function ChatWorkspace({ children }: { children: React.ReactNode }) {
     });
   }, [loadSessions]);
 
+  const selectedSession = sessions?.find((session) => session.id === selectedId) ?? null;
+  const crumbs = selectedSession
+    ? [
+        { href: "/", label: "Dashboard" },
+        { href: "/chat", label: "Chat" },
+        { label: selectedSession.visitorName },
+      ]
+    : [{ href: "/", label: "Dashboard" }, { label: "Chat" }];
+
   const listPaneClass = [
     "flex min-h-0 flex-1 flex-col border-slate-200 bg-white",
     selectedId
@@ -64,11 +74,11 @@ export function ChatWorkspace({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-canvas lg:p-3">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white lg:flex-row lg:rounded-shell lg:border lg:border-slate-200">
+      <div className="shrink-0 border-b bg-white px-4 py-4 lg:mx-3 lg:mt-3 lg:rounded-t-shell lg:border lg:border-b-0 lg:border-slate-200">
+        <PageHeader title="Chat" crumbs={crumbs} />
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white lg:mx-3 lg:mb-3 lg:flex-row lg:rounded-b-shell lg:border lg:border-t lg:border-slate-200">
         <section className={listPaneClass} aria-label="Daftar percakapan">
-          <div className="shrink-0 border-b px-3 py-3">
-            <h1 className="text-base font-semibold text-foreground">Chat</h1>
-          </div>
           <ChatConversationList sessions={sessions} selectedId={selectedId} error={error} />
         </section>
 

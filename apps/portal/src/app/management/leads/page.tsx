@@ -3,84 +3,44 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@medcal/shared";
+import {
+  type ContactMessageRow,
+  type ContactTopic,
+  type ContactMessageStatistics,
+  type ContactStatus,
+  type GetMessageFrom,
+  type NeedsReviewItem,
+  MessageFilters,
+  MessageInboxList,
+  MessageInboxTable,
+  MessageSummaryCards,
+  NeedsReviewAccordion,
+  PageHeader,
+  PaginationBar,
+  Surface,
+} from "./leads-ui";
 
-type LeadStatus = "NEW" | "CONTACTED" | "QUALIFIED" | "REJECTED" | "CONVERTED";
-type GetMessageFrom = "CONTACTFORM" | "WHATSAPP" | "CHAT_AI" | "CHAT_PERSON" | "EMAIL";
-
-interface ContactTopic {
-  id: number;
-  name: string;
-}
-
-// A Lead can have MANY ContactMessages — Topic/Source/interaction-date are
-// not permanent Lead attributes, so the API returns each Lead's single
-// latest ContactMessage (see apps/api LeadsService.findAll) for display,
-// not an assumption baked into the Lead row itself.
-interface LatestContactMessage {
-  id: string;
-  getFrom: GetMessageFrom;
-  createdAt: string;
-  topic: ContactTopic | null;
-}
-
-interface Lead {
-  id: string;
-  status: LeadStatus;
-  name: string;
-  email: string;
-  phone: string | null;
-  organizationName: string | null;
-  createdAt: string;
-  contactMessages: LatestContactMessage[];
-}
-
-interface LeadListResponse {
-  data: Lead[];
+interface ContactMessageListResponse {
+  data: ContactMessageRow[];
   page: number;
   pageSize: number;
   total: number;
 }
 
-interface NeedsReviewMessage {
-  id: string;
-  name: string;
-  email: string;
-  phone: string | null;
-  organizationName: string | null;
-}
-
-interface NeedsReviewItem {
-  message: NeedsReviewMessage;
-  candidates: Lead[];
-}
-
-const STATUS_OPTIONS: LeadStatus[] = ["NEW", "CONTACTED", "QUALIFIED", "REJECTED", "CONVERTED"];
-
-const SOURCE_OPTIONS: GetMessageFrom[] = ["CONTACTFORM", "WHATSAPP", "CHAT_AI", "CHAT_PERSON", "EMAIL"];
-
-const SOURCE_LABELS: Record<GetMessageFrom, string> = {
-  CONTACTFORM: "Contact Form",
-  WHATSAPP: "WhatsApp",
-  CHAT_AI: "Chat AI",
-  CHAT_PERSON: "Web Chat",
-  EMAIL: "Email",
-};
-
 export default function LeadsPage() {
-  const [result, setResult] = useState<LeadListResponse | null>(null);
+  const [result, setResult] = useState<ContactMessageListResponse | null>(null);
+  const [stats, setStats] = useState<ContactMessageStatistics | null>(null);
   const [needsReview, setNeedsReview] = useState<NeedsReviewItem[] | null>(null);
   const [topics, setTopics] = useState<ContactTopic[]>([]);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<LeadStatus | "">("");
+  const [status, setStatus] = useState<ContactStatus | "">("");
   const [source, setSource] = useState<GetMessageFrom | "">("");
   const [topicId, setTopicId] = useState<string>("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
-  // Staff stays on this page after resolving a Needs Review item (so they
-  // can resolve more than one in a row) — this just points at where the
-  // message went, so "Attach" no longer looks like the message vanished.
   const [lastResolved, setLastResolved] = useState<{ name: string; leadId: string } | null>(null);
 
   useEffect(() => {
@@ -98,19 +58,22 @@ export default function LeadsPage() {
     if (source) params.set("getFrom", source);
     if (topicId) params.set("topicId", topicId);
     params.set("page", String(page));
+    params.set("pageSize", String(pageSize));
     try {
-      const [leads, review] = await Promise.all([
-        apiFetch<LeadListResponse>(`/leads?${params.toString()}`),
+      const [messages, review, statistics] = await Promise.all([
+        apiFetch<ContactMessageListResponse>(`/contact-messages?${params.toString()}`),
         apiFetch<NeedsReviewItem[]>("/leads/needs-review"),
+        apiFetch<ContactMessageStatistics>("/contact-messages/statistics"),
       ]);
-      setResult(leads);
+      setResult(messages);
       setNeedsReview(review);
+      setStats(statistics);
     } catch {
-      setError("Gagal memuat daftar lead.");
+      setError("Gagal memuat daftar pesan.");
     } finally {
       setLoading(false);
     }
-  }, [search, status, source, topicId, page]);
+  }, [search, status, source, topicId, page, pageSize]);
 
   useEffect(() => {
     load();
@@ -141,207 +104,95 @@ export default function LeadsPage() {
 
   const totalPages = result ? Math.max(1, Math.ceil(result.total / result.pageSize)) : 1;
 
-  return (
-    <main className="mx-auto max-w-6xl px-4 py-10">
-      <h1 className="text-xl font-semibold">Lead Inbox</h1>
+  const filterProps = {
+    search,
+    status,
+    source,
+    topicId,
+    topics,
+    onSearchChange: (value: string) => {
+      setPage(1);
+      setSearch(value);
+    },
+    onStatusChange: (value: ContactStatus | "") => {
+      setPage(1);
+      setStatus(value);
+    },
+    onSourceChange: (value: GetMessageFrom | "") => {
+      setPage(1);
+      setSource(value);
+    },
+    onTopicChange: (value: string) => {
+      setPage(1);
+      setTopicId(value);
+    },
+  };
 
-      <section className="mt-6 rounded border border-amber-300 bg-amber-50 p-4">
-        <h2 className="text-sm font-semibold text-amber-900">
-          Needs Review{needsReview && needsReview.length > 0 ? ` (${needsReview.length})` : ""}
-        </h2>
-        {!needsReview ? (
-          <p className="mt-2 text-sm text-amber-800">Memuat…</p>
-        ) : needsReview.length === 0 ? (
-          <p className="mt-2 text-sm text-amber-800">No messages require review.</p>
-        ) : (
-          <ul className="mt-3 space-y-3">
-            {needsReview.map(({ message, candidates }) => (
-              <li key={message.id} className="rounded border border-amber-200 bg-white p-3 text-sm">
-                <p className="font-medium">
-                  {message.name} {message.organizationName ? `· ${message.organizationName}` : ""}
-                </p>
-                <p className="text-slate-500">{message.phone ?? message.email}</p>
-                <div className="mt-2 space-y-1">
-                  {candidates.map((candidate) => (
-                    <p key={candidate.id} className="text-xs text-slate-500">
-                      Possible existing Lead: {candidate.name}
-                      {candidate.organizationName ? ` · ${candidate.organizationName}` : ""} · #{candidate.id.slice(-6)}
-                    </p>
-                  ))}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {candidates.map((candidate) => (
-                    <button
-                      key={candidate.id}
-                      type="button"
-                      disabled={resolvingId === message.id}
-                      onClick={() => resolve(message.id, message.name, { action: "ATTACH", leadId: candidate.id })}
-                      className="rounded border border-slate-300 bg-white px-2 py-1 text-xs disabled:opacity-50"
-                    >
-                      Attach to #{candidate.id.slice(-6)}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    disabled={resolvingId === message.id}
-                    onClick={() => resolve(message.id, message.name, { action: "CREATE_NEW" })}
-                    className="rounded border border-slate-300 bg-white px-2 py-1 text-xs disabled:opacity-50"
-                  >
-                    Create New Lead
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+  const listProps = {
+    messages: result?.data ?? [],
+    loading,
+    showing: result?.data.length ?? 0,
+    total: result?.total ?? 0,
+  };
+
+  const paginationProps = {
+    page: result?.page ?? page,
+    totalPages,
+    total: result?.total ?? 0,
+    pageSize: result?.pageSize ?? pageSize,
+    onPageChange: setPage,
+    onPageSizeChange: (value: number) => {
+      setPage(1);
+      setPageSize(value);
+    },
+  };
+
+  return (
+    <div className="w-full px-4 py-6 md:px-6 md:py-6">
+      <PageHeader
+        title="Contact Messages"
+        crumbs={[
+          { href: "/", label: "Dashboard" },
+          { label: "Contact Messages" },
+        ]}
+      />
+
+      <div className="mt-6">
+        <MessageSummaryCards stats={stats} loading={loading && stats == null} />
+      </div>
+
+      {needsReview && needsReview.length > 0 ? (
+        <NeedsReviewAccordion items={needsReview} resolvingId={resolvingId} onResolve={resolve} />
+      ) : null}
 
       {lastResolved && (
-        <p className="mt-3 rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">
+        <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900">
           {lastResolved.name} berhasil dihubungkan.{" "}
-          <Link href={`/leads/${lastResolved.leadId}`} className="underline">
-            Lihat Lead →
+          <Link href={`/leads/${lastResolved.leadId}`} className="font-medium underline">
+            Lihat detail →
           </Link>
         </p>
       )}
 
-      <div className="mt-6 flex flex-wrap gap-3">
-        <input
-          type="text"
-          placeholder="Cari nama, email, telepon, perusahaan…"
-          value={search}
-          onChange={(e) => {
-            setPage(1);
-            setSearch(e.target.value);
-          }}
-          className="min-w-64 rounded border border-slate-300 px-3 py-2 text-sm"
-        />
-        <select
-          value={status}
-          onChange={(e) => {
-            setPage(1);
-            setStatus(e.target.value as LeadStatus | "");
-          }}
-          className="rounded border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="">Semua status</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <select
-          value={source}
-          onChange={(e) => {
-            setPage(1);
-            setSource(e.target.value as GetMessageFrom | "");
-          }}
-          className="rounded border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="">Semua sumber</option>
-          {SOURCE_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {SOURCE_LABELS[s]}
-            </option>
-          ))}
-        </select>
-        <select
-          value={topicId}
-          onChange={(e) => {
-            setPage(1);
-            setTopicId(e.target.value);
-          }}
-          className="rounded border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="">Semua topik</option>
-          {topics.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
-      <div className="mt-6 overflow-x-auto rounded border border-slate-200">
-        <table className="w-full min-w-[920px] text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500">
-            <tr>
-              <th className="px-3 py-2">Tanggal</th>
-              <th className="px-3 py-2">Nama</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2">Telepon</th>
-              <th className="px-3 py-2">Perusahaan</th>
-              <th className="px-3 py-2">Topik</th>
-              <th className="px-3 py-2">Sumber</th>
-              <th className="px-3 py-2">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td className="px-3 py-4 text-slate-400" colSpan={8}>
-                  Memuat…
-                </td>
-              </tr>
-            ) : result && result.data.length > 0 ? (
-              result.data.map((lead) => {
-                const latest = lead.contactMessages[0];
-                return (
-                  <tr key={lead.id} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="px-3 py-2">
-                      <Link href={`/leads/${lead.id}`} className="block text-brand-700 underline">
-                        {new Date(latest?.createdAt ?? lead.createdAt).toLocaleDateString()}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2">{lead.name}</td>
-                    <td className="px-3 py-2">{lead.email}</td>
-                    <td className="px-3 py-2">{lead.phone ?? "—"}</td>
-                    <td className="px-3 py-2">{lead.organizationName ?? "—"}</td>
-                    <td className="px-3 py-2">{latest?.topic?.name ?? "—"}</td>
-                    <td className="px-3 py-2">{latest ? SOURCE_LABELS[latest.getFrom] : "—"}</td>
-                    <td className="px-3 py-2">{lead.status}</td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td className="px-3 py-4 text-slate-400" colSpan={8}>
-                  Tidak ada lead.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {result && result.total > 0 && (
-        <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
-          <span>
-            Halaman {result.page} dari {totalPages} · {result.total} lead
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="rounded border border-slate-300 px-3 py-1 disabled:opacity-40"
-            >
-              Sebelumnya
-            </button>
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              className="rounded border border-slate-300 px-3 py-1 disabled:opacity-40"
-            >
-              Berikutnya
-            </button>
-          </div>
+      <Surface className="mt-6 hidden p-6 md:block">
+        <MessageFilters {...filterProps} variant="desktop" />
+        <div className="mt-4">
+          <MessageInboxTable {...listProps} />
         </div>
-      )}
-    </main>
+        <PaginationBar {...paginationProps} />
+      </Surface>
+
+      <div className="mt-5 md:hidden">
+        <Surface className="p-4">
+          <MessageFilters {...filterProps} variant="mobile" />
+        </Surface>
+        <div className="mt-4">
+          <MessageInboxList {...listProps} variant="mobile" />
+        </div>
+        <PaginationBar {...paginationProps} className="mt-4" />
+      </div>
+    </div>
   );
 }

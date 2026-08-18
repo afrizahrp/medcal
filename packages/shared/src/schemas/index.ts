@@ -52,6 +52,26 @@ export const leadStatusUpdateSchema = z.object({
   status: z.enum(leadStatusValues),
 });
 
+/**
+ * GET /contact-messages query params (Contact Messages status/filter/count
+ * correction, 2026-08-18). ContactMessage is the source of truth for this
+ * list — `status` here is ContactStatus, never LeadStatus. Mirrors
+ * leadListQuerySchema's shape (search/getFrom/topicId/page/pageSize) since
+ * both lists filter comparable fields, but each carries its own status enum.
+ */
+export const contactMessageListQuerySchema = z.object({
+  search: z.string().trim().min(1).optional(),
+  status: z.enum(contactStatusValues).optional(),
+  getFrom: z
+    .enum(["CONTACTFORM", "WHATSAPP", "CHAT_AI", "CHAT_PERSON", "EMAIL"])
+    .optional(),
+  topicId: z.coerce.number().int().optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export type ContactMessageListQuery = z.infer<typeof contactMessageListQuerySchema>;
+
 /** PATCH /contact-messages/:id/status body */
 export const contactMessageStatusUpdateSchema = z.object({
   status: z.enum(contactStatusValues),

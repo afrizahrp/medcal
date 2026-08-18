@@ -227,3 +227,103 @@ describe("ContactMessagesService.countUnread — Management header badge (2026-0
     expect(after).toBe(before);
   });
 });
+
+describe("ContactMessagesService.findAll — status filter/pagination (Contact Messages status/filter/count correction, 2026-08-18)", () => {
+  it("filters by ContactStatus, not LeadStatus, and reconciles with getStatistics", async () => {
+    const pending = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    const read = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    await service.updateStatus(countCompanyId, read.id, "READ");
+    const replied = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    await service.updateStatus(countCompanyId, replied.id, "REPLIED");
+    const closed = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    await service.updateStatus(countCompanyId, closed.id, "CLOSED");
+
+    const stats = await service.getStatistics(countCompanyId);
+
+    const [pendingResult, readResult, repliedResult, closedResult] = await Promise.all([
+      service.findAll(countCompanyId, { status: "PENDING", pageSize: 1 }),
+      service.findAll(countCompanyId, { status: "READ", pageSize: 1 }),
+      service.findAll(countCompanyId, { status: "REPLIED", pageSize: 1 }),
+      service.findAll(countCompanyId, { status: "CLOSED", pageSize: 1 }),
+    ]);
+
+    // Filtered `total` reconciles with the global card count for that status
+    // — even though pageSize:1 means `data` itself only has 1 row.
+    expect(pendingResult.total).toBe(stats.pending);
+    expect(readResult.total).toBe(stats.read);
+    expect(repliedResult.total).toBe(stats.replied);
+    expect(closedResult.total).toBe(stats.closed);
+
+    expect(pendingResult.data.every((m) => m.status === "PENDING")).toBe(true);
+    expect(readResult.data.every((m) => m.status === "READ")).toBe(true);
+    expect(repliedResult.data.every((m) => m.status === "REPLIED")).toBe(true);
+    expect(closedResult.data.every((m) => m.status === "CLOSED")).toBe(true);
+    expect(pendingResult.data.some((m) => m.id === pending.id) || pendingResult.total > 1).toBe(true);
+  });
+
+  it("total (no status filter) equals getStatistics().total", async () => {
+    await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+
+    const stats = await service.getStatistics(countCompanyId);
+    const all = await service.findAll(countCompanyId, { pageSize: 1 });
+
+    expect(all.total).toBe(stats.total);
+  });
+
+  it("pagination does not change the total, and moving pages does not affect status counts", async () => {
+    for (let i = 0; i < 3; i += 1) {
+      await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    }
+
+    const page1 = await service.findAll(countCompanyId, { page: 1, pageSize: 2 });
+    const page2 = await service.findAll(countCompanyId, { page: 2, pageSize: 2 });
+
+    expect(page1.total).toBe(page2.total);
+    expect(page1.data.length).toBeLessThanOrEqual(2);
+  });
+
+  it("scopes results to the given companyId only", async () => {
+    await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    const other = await service.findAll("ZZZ-UNKNOWN", {});
+    expect(other.total).toBe(0);
+    expect(other.data).toEqual([]);
+  });
+
+  it("search matches ContactMessage fields directly, not Lead fields", async () => {
+    const uniqueName = `Search-${randomUUID().slice(0, 8)}`;
+    await createForCompany(countCompanyId, basePayload({ name: uniqueName, topicId: activeTopicId }));
+
+    const result = await service.findAll(countCompanyId, { search: uniqueName });
+    expect(result.data.some((m) => m.name === uniqueName)).toBe(true);
+  });
+});
+
+describe("ContactMessagesService.getStatistics — global tenant summary", () => {
+  it("returns global status counts scoped to companyId", async () => {
+    const before = await service.getStatistics(countCompanyId);
+
+    const pending = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    const read = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    await service.updateStatus(countCompanyId, read.id, "READ");
+    const replied = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    await service.updateStatus(countCompanyId, replied.id, "REPLIED");
+    const closed = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    await service.updateStatus(countCompanyId, closed.id, "CLOSED");
+
+    const after = await service.getStatistics(countCompanyId);
+
+    expect(after.total).toBe(before.total + 4);
+    expect(after.pending).toBe(before.pending + 1);
+    expect(after.read).toBe(before.read + 1);
+    expect(after.replied).toBe(before.replied + 1);
+    expect(after.closed).toBe(before.closed + 1);
+    expect(after.pending + after.read + after.replied + after.closed).toBe(after.total);
+  });
+
+  it("does not include another company's messages", async () => {
+    const before = await service.getStatistics("ZZZ-UNKNOWN");
+    await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+    const after = await service.getStatistics("ZZZ-UNKNOWN");
+    expect(after).toEqual(before);
+  });
+});

@@ -1,15 +1,36 @@
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { prisma } from "@medcal/db";
-import type { ContactMessage, ContactStatus, ContactTopic } from "@medcal/db";
+import type { ContactMessage, ContactStatus, ContactTopic, Prisma } from "@medcal/db";
 import {
   contactMessageCreateSchema,
   emailDomain,
   isPublicEmailDomain,
   normalizePhone,
 } from "@medcal/shared";
-import type { ContactMessageLeadResolution } from "@medcal/shared";
+import type { ContactMessageLeadResolution, ContactMessageListQuery } from "@medcal/shared";
 import { classifyLeadMatch, findLeadMatchCandidates } from "../leads/lead-matching";
 import type { Db } from "../leads/lead-matching";
+
+const DEFAULT_PAGE_SIZE = 20;
+
+// Contact Messages page (status/filter/count correction, 2026-08-18) — each
+// row IS a ContactMessage, with its Lead joined for display fields
+// (name/email/phone/organizationName already live on ContactMessage itself
+// too, so no join is strictly required for those, but `lead` is included so
+// the UI can link out to the Lead detail page). Deliberately NOT deduped to
+// "latest message per Lead" (contrast leads.service.ts's LeadListRow) — that
+// dedup is what made the old /leads-backed list unable to reconcile with
+// ContactMessagesService.getStatistics's per-message global counts.
+export type ContactMessageListRow = Prisma.ContactMessageGetPayload<{
+  include: { topic: true; lead: { select: { id: true; status: true } } };
+}>;
+
+export interface ContactMessageListResult {
+  data: ContactMessageListRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
 
 @Injectable()
 export class ContactMessagesService {
@@ -215,11 +236,39 @@ export class ContactMessagesService {
     return prisma.contactMessage.findUniqueOrThrow({ where: { id: messageId } });
   }
 
-  async findAll(companyId: string): Promise<ContactMessage[]> {
-    return prisma.contactMessage.findMany({
-      where: { companyId },
-      orderBy: { createdAt: "desc" },
-    });
+  async findAll(companyId: string, query: ContactMessageListQuery = {}): Promise<ContactMessageListResult> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
+
+    const where: Prisma.ContactMessageWhereInput = {
+      companyId,
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.getFrom ? { getFrom: query.getFrom } : {}),
+      ...(query.topicId !== undefined ? { topicId: query.topicId } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { name: { contains: query.search, mode: "insensitive" } },
+              { email: { contains: query.search, mode: "insensitive" } },
+              { phone: { contains: query.search, mode: "insensitive" } },
+              { organizationName: { contains: query.search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, data] = await Promise.all([
+      prisma.contactMessage.count({ where }),
+      prisma.contactMessage.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: { topic: true, lead: { select: { id: true, status: true } } },
+      }),
+    ]);
+
+    return { data, page, pageSize, total };
   }
 
   async findActiveTopics(): Promise<ContactTopic[]> {
@@ -245,5 +294,33 @@ export class ContactMessagesService {
   // them — no per-channel combining needed.
   async countUnread(companyId: string): Promise<number> {
     return prisma.contactMessage.count({ where: { companyId, status: "PENDING" } });
+  }
+
+  /** Global tenant-scoped ContactMessage counts by status (one groupBy query). */
+  async getStatistics(companyId: string): Promise<{
+    total: number;
+    pending: number;
+    read: number;
+    replied: number;
+    closed: number;
+  }> {
+    const grouped = await prisma.contactMessage.groupBy({
+      by: ["status"],
+      where: { companyId },
+      _count: { _all: true },
+    });
+
+    const counts = { PENDING: 0, READ: 0, REPLIED: 0, CLOSED: 0 };
+    for (const row of grouped) {
+      counts[row.status] = row._count._all;
+    }
+
+    return {
+      total: counts.PENDING + counts.READ + counts.REPLIED + counts.CLOSED,
+      pending: counts.PENDING,
+      read: counts.READ,
+      replied: counts.REPLIED,
+      closed: counts.CLOSED,
+    };
   }
 }

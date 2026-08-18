@@ -1,10 +1,14 @@
-import { BadRequestException, Body, Controller, Get, Inject, Param, Patch, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Inject, Param, Patch, Query, UseGuards } from "@nestjs/common";
 import type { ContactMessage } from "@medcal/db";
-import { contactMessageLeadResolutionSchema, contactMessageStatusUpdateSchema } from "@medcal/shared";
+import {
+  contactMessageLeadResolutionSchema,
+  contactMessageListQuerySchema,
+  contactMessageStatusUpdateSchema,
+} from "@medcal/shared";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
-import { ContactMessagesService } from "./contact-messages.service";
+import { ContactMessagesService, type ContactMessageListResult } from "./contact-messages.service";
 
 // Session-based route, distinct from the internal-secret-trusted
 // internal/contact-messages controller — separate path/prefix on purpose.
@@ -18,8 +22,16 @@ export class ContactMessagesQueryController {
 
   @Get()
   @RequirePermission("contactMessage", "read")
-  async list(@CompanyId() companyId: string): Promise<ContactMessage[]> {
-    return this.service.findAll(companyId);
+  async list(@CompanyId() companyId: string, @Query() rawQuery: unknown): Promise<ContactMessageListResult> {
+    const parsed = contactMessageListQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid contact message list query",
+        code: "INVALID_CONTACT_MESSAGE_QUERY",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.findAll(companyId, parsed.data);
   }
 
   // Declared before ":id"-shaped routes are ever added so "unread-count" is
@@ -32,6 +44,12 @@ export class ContactMessagesQueryController {
   async unreadCount(@CompanyId() companyId: string): Promise<{ count: number }> {
     const count = await this.service.countUnread(companyId);
     return { count };
+  }
+
+  @Get("statistics")
+  @RequirePermission("contactMessage", "read")
+  async statistics(@CompanyId() companyId: string) {
+    return this.service.getStatistics(companyId);
   }
 
   // Unread tracking reuses ContactStatus.PENDING→READ (Lead Inbox design
