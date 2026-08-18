@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Script from "next/script";
 import { company } from "@/data/site";
-import { Breadcrumb } from "@/components/breadcrumb";
 import { WhatsAppIdentityDialog } from "@/components/whatsapp-identity-dialog";
 
 interface ContactTopic {
@@ -97,7 +96,7 @@ export function KontakForm() {
     "w-full rounded-xl border border-ink-200 px-4 py-3 text-base text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100";
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+    <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
       {RECAPTCHA_SITE_KEY ? (
         <Script
           src={`https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`}
@@ -105,26 +104,7 @@ export function KontakForm() {
         />
       ) : null}
 
-      <div className="mx-auto mt-6 max-w-2xl text-center">
-        <div className="flex justify-center">
-          <Breadcrumb
-            items={[
-              { label: "Beranda", href: "/" },
-              { label: "Kontak", href: "/kontak" },
-            ]}
-          />
-        </div>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900 sm:text-4xl">
-          Konsultasi Kebutuhan Kalibrasi
-        </h1>
-        <p className="mt-3 text-base leading-relaxed text-ink-600">
-          Ceritakan alat, jadwal akreditasi, atau kebutuhan informasi biaya
-          dan penawaran kalibrasi Anda — tim kami akan menghubungi untuk
-          membantu proses yang jelas dan tepat waktu.
-        </p>
-      </div>
-
-      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
         <form
           className="flex flex-col gap-4 rounded-2xl border border-ink-100 bg-white p-5 shadow-sm sm:p-6 lg:col-span-3"
           onSubmit={onSubmit}
