@@ -3,6 +3,7 @@ import { Hero } from "@/components/hero";
 import { PainPointSection } from "@/components/pain-point-section";
 import { FeaturedCategoriesSection } from "@/components/featured-categories-section";
 import { ProcessSteps } from "@/components/process-steps";
+import { PrecisionSection } from "@/components/precision-section";
 import { AccreditationSection } from "@/components/accreditation-section";
 import { SectionCta } from "@/components/section-cta";
 import { JsonLd } from "@/components/json-ld";
@@ -27,6 +28,7 @@ export default function HomePage() {
       <PainPointSection />
       <FeaturedCategoriesSection />
       <ProcessSteps />
+      <PrecisionSection />
       <AccreditationSection />
       <SectionCta variant="banner" />
     </>
