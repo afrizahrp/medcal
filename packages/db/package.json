@@ -10,7 +10,8 @@
     "migrate:deploy": "prisma migrate deploy",
     "studio": "prisma studio",
     "format": "prisma format",
-    "seed:contact-topics": "tsx prisma/seed-contact-topics.ts"
+    "seed:contact-topics": "tsx prisma/seed-contact-topics.ts",
+    "seed:menu": "tsx prisma/seed-menu.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0"

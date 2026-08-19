@@ -72,3 +72,43 @@ describe("hasPermission — membership resource (User Management, locked 2026-08
     expect(hasPermission("CUSTOMER", "membership", "manage")).toBe(false);
   });
 });
+
+describe("hasPermission — menu resource (Menu Registry, locked 2026-08-19)", () => {
+  it("grants SUPERADMIN menu:manage", () => {
+    expect(hasPermission("SUPERADMIN", "menu", "manage")).toBe(true);
+  });
+
+  it("denies ADMIN and every other role menu:manage", () => {
+    expect(hasPermission("ADMIN", "menu", "manage")).toBe(false);
+    expect(hasPermission("SUPERVISOR", "menu", "manage")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "menu", "manage")).toBe(false);
+    expect(hasPermission("FINANCE", "menu", "manage")).toBe(false);
+    expect(hasPermission("CUSTOMER", "menu", "manage")).toBe(false);
+  });
+});
+
+describe("hasPermission — managementDashboard/customerDashboard (Menu Registry, locked 2026-08-19)", () => {
+  it("grants managementDashboard:read to SUPERADMIN, ADMIN, SUPERVISOR, TECHNICIAN, FINANCE", () => {
+    expect(hasPermission("SUPERADMIN", "managementDashboard", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "managementDashboard", "read")).toBe(true);
+    expect(hasPermission("SUPERVISOR", "managementDashboard", "read")).toBe(true);
+    expect(hasPermission("TECHNICIAN", "managementDashboard", "read")).toBe(true);
+    expect(hasPermission("FINANCE", "managementDashboard", "read")).toBe(true);
+  });
+
+  it("denies managementDashboard:read to CUSTOMER", () => {
+    expect(hasPermission("CUSTOMER", "managementDashboard", "read")).toBe(false);
+  });
+
+  it("grants customerDashboard:read to CUSTOMER, SUPERADMIN, ADMIN", () => {
+    expect(hasPermission("CUSTOMER", "customerDashboard", "read")).toBe(true);
+    expect(hasPermission("SUPERADMIN", "customerDashboard", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "customerDashboard", "read")).toBe(true);
+  });
+
+  it("denies customerDashboard:read to SUPERVISOR, TECHNICIAN, FINANCE", () => {
+    expect(hasPermission("SUPERVISOR", "customerDashboard", "read")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "customerDashboard", "read")).toBe(false);
+    expect(hasPermission("FINANCE", "customerDashboard", "read")).toBe(false);
+  });
+});

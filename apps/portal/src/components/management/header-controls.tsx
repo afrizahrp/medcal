@@ -55,11 +55,17 @@ function EmailControl() {
   );
 }
 
-export function NotificationControls({ showInbound }: { showInbound: boolean }) {
+export function NotificationControls({
+  showMessages,
+  showChat,
+}: {
+  showMessages: boolean;
+  showChat: boolean;
+}) {
   return (
     <div className="flex shrink-0 flex-nowrap items-center gap-0.5">
-      {showInbound ? <ContactMessagesControl /> : null}
-      {showInbound ? <WebChatControl /> : null}
+      {showMessages ? <ContactMessagesControl /> : null}
+      {showChat ? <WebChatControl /> : null}
       <EmailControl />
     </div>
   );

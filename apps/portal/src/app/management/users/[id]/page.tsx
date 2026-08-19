@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
-import { ApiError, apiFetch } from "@medcal/shared";
+import { ApiError, apiFetch, isForbidden } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AccessDenied } from "../../../../components/access-denied";
 
 type UserStatus = "INVITED" | "ACTIVE" | "DISABLED";
 type MembershipRole = "SUPERADMIN" | "ADMIN" | "SUPERVISOR" | "TECHNICIAN" | "FINANCE" | "CUSTOMER";
@@ -50,6 +51,7 @@ export default function UserDetailPage() {
   const router = useRouter();
   const [user, setUser] = useState<UserDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -62,6 +64,7 @@ export default function UserDetailPage() {
   const load = useCallback(async () => {
     setError(null);
     setNotFound(false);
+    setForbidden(false);
     try {
       const data = await apiFetch<UserDetail>(`/users/${params.id}`);
       setUser(data);
@@ -72,6 +75,8 @@ export default function UserDetailPage() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         setNotFound(true);
+      } else if (isForbidden(err)) {
+        setForbidden(true);
       } else {
         setError("Gagal memuat detail user.");
       }
@@ -146,6 +151,10 @@ export default function UserDetailPage() {
   }
 
   const isSuperadmin = user?.membership?.role === "SUPERADMIN";
+
+  if (forbidden) {
+    return <AccessDenied />;
+  }
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-6 md:px-8 md:py-8">

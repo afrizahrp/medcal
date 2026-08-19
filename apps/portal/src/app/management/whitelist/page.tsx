@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle, Mail, Plus, ShieldX, XCircle } from "lucide-react";
-import { ApiError, apiFetch } from "@medcal/shared";
+import { ApiError, apiFetch, isForbidden } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccessDenied } from "../../../components/access-denied";
 
 type WhitelistStatus = "ACTIVE" | "REVOKED";
 
@@ -26,6 +27,7 @@ export default function WhitelistPage() {
   const [entries, setEntries] = useState<WhitelistEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
@@ -36,11 +38,16 @@ export default function WhitelistPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setForbidden(false);
     try {
       const data = await apiFetch<WhitelistEntry[]>("/whitelist");
       setEntries(data);
-    } catch {
-      setError("Gagal memuat daftar whitelist.");
+    } catch (err) {
+      if (isForbidden(err)) {
+        setForbidden(true);
+      } else {
+        setError("Gagal memuat daftar whitelist.");
+      }
     } finally {
       setLoading(false);
     }
@@ -49,6 +56,10 @@ export default function WhitelistPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  if (forbidden) {
+    return <AccessDenied />;
+  }
 
   async function addEntry() {
     if (!newEmail.trim()) return;

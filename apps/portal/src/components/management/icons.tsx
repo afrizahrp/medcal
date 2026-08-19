@@ -140,6 +140,8 @@ export function NavIcon({
       return <UsersIcon {...props} />;
     case "whitelist":
       return <WhitelistIcon {...props} />;
+    case "menu":
+      return <MenuIcon {...props} />;
     default:
       return null;
   }

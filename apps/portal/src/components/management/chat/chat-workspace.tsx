@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { apiFetch } from "@medcal/shared";
+import { apiFetch, isForbidden } from "@medcal/shared";
 import { subscribeUnreadCount } from "../../../lib/use-unread-count";
+import { AccessDenied } from "../../access-denied";
 import { PageHeader } from "../page-header";
 import { ChatConversationList } from "./chat-conversation-list";
 import type { ChatSessionListItem } from "./chat-session-types";
@@ -28,15 +29,22 @@ export function ChatWorkspace({ children }: { children: React.ReactNode }) {
   const selectedId = selectedSessionIdFromPath(pathname);
   const [sessions, setSessions] = useState<ChatSessionListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
 
   const loadSessions = useCallback((isInitial: boolean) => {
     apiFetch<ChatSessionListItem[]>("/chat-sessions")
       .then((data) => {
         setSessions(data);
         setError(null);
+        setForbidden(false);
       })
-      .catch(() => {
-        if (isInitial) setError("Gagal memuat Chat Inbox.");
+      .catch((err) => {
+        if (!isInitial) return;
+        if (isForbidden(err)) {
+          setForbidden(true);
+        } else {
+          setError("Gagal memuat Chat Inbox.");
+        }
       });
   }, []);
 
@@ -50,6 +58,10 @@ export function ChatWorkspace({ children }: { children: React.ReactNode }) {
       loadSessions(false);
     });
   }, [loadSessions]);
+
+  if (forbidden) {
+    return <AccessDenied />;
+  }
 
   const selectedSession = sessions?.find((session) => session.id === selectedId) ?? null;
   const crumbs = selectedSession

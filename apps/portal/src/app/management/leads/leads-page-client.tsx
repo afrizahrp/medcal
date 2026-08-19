@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { isForbidden } from "@medcal/shared";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
+import { AccessDenied } from "../../../components/access-denied";
 import {
   type ContactStatus,
   type GetMessageFrom,
@@ -77,7 +79,8 @@ export default function LeadsPageClient() {
   const result = messagesQuery.data;
   const loading = messagesQuery.isLoading;
   const fetching = messagesQuery.isFetching && !loading;
-  const error = messagesQuery.isError ? "Gagal memuat daftar pesan." : null;
+  const forbidden = isForbidden(messagesQuery.error);
+  const error = messagesQuery.isError && !forbidden ? "Gagal memuat daftar pesan." : null;
   const totalPages = result ? Math.max(1, result.totalPages) : 1;
 
   async function resolve(
@@ -132,6 +135,10 @@ export default function LeadsPageClient() {
     onPageChange: (value: number) => setParams({ page: String(value) }),
     onPageSizeChange: (value: number) => setParams({ pageSize: String(value), page: undefined }),
   };
+
+  if (forbidden) {
+    return <AccessDenied />;
+  }
 
   return (
     <div className="w-full px-4 py-6 md:px-6 md:py-6">

@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { MessageCircle, Save, Send } from "lucide-react";
-import { ApiError, apiFetch, normalizePhone } from "@medcal/shared";
+import { ApiError, apiFetch, isForbidden, normalizePhone } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AccessDenied } from "../../../../components/access-denied";
 import { notifyUnreadCountChanged } from "../../../../lib/use-unread-count";
 import {
   type ContactStatus,
@@ -65,6 +66,7 @@ export default function LeadDetailPage() {
   const params = useParams<{ id: string }>();
   const [lead, setLead] = useState<LeadDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingLeadStatus, setUpdatingLeadStatus] = useState(false);
   const [updatingMessageStatusId, setUpdatingMessageStatusId] = useState<string | null>(null);
@@ -74,6 +76,7 @@ export default function LeadDetailPage() {
   const load = useCallback(async () => {
     setError(null);
     setNotFound(false);
+    setForbidden(false);
     try {
       const data = await apiFetch<LeadDetail>(`/leads/${params.id}`);
       setLead(data);
@@ -84,6 +87,8 @@ export default function LeadDetailPage() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         setNotFound(true);
+      } else if (isForbidden(err)) {
+        setForbidden(true);
       } else {
         setError("Gagal memuat detail pesan.");
       }
@@ -130,6 +135,10 @@ export default function LeadDetailPage() {
     } finally {
       setUpdatingLeadStatus(false);
     }
+  }
+
+  if (forbidden) {
+    return <AccessDenied />;
   }
 
   return (

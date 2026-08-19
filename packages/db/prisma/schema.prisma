@@ -40,6 +40,12 @@ enum MembershipRole {
   CUSTOMER
 }
 
+enum MenuApplication {
+  MANAGEMENT
+  TECHNICIAN
+  CUSTOMER
+}
+
 enum EmailWhitelistStatus {
   ACTIVE
   REVOKED
@@ -286,6 +292,8 @@ model User {
   accounts              Account[]
   emailWhitelistCreated EmailWhitelist[]      @relation("EmailWhitelistCreator")
   emailWhitelistRevoked EmailWhitelist[]      @relation("EmailWhitelistRevoker")
+  menusCreated          Menu[]                @relation("MenuCreatedBy")
+  menusUpdated          Menu[]                @relation("MenuUpdatedBy")
 }
 
 // =============================================================================
@@ -353,6 +361,43 @@ model UserMembership {
 
   @@unique([userId, companyId])
   @@index([companyId])
+}
+
+// Menu Registry (locked 2026-08-19: DB-backed menu definitions, permission-
+// derived visibility). Menu is navigation/config only — NOT a second
+// authorization source. A leaf's viewResource/viewAction is looked up via the
+// existing hasPermission(role, resource, action) catalog at read time; this
+// model never stores role/permission grants itself. No companyId/branchId:
+// company is deployment-scoped via COMPANY_ID, branch does not exist in this
+// schema (see file header). Sibling `order` uniqueness within
+// (application, parentId) is validated in the service layer, not here —
+// Postgres treats NULL parentId values as distinct, which would defeat a
+// root-level DB uniqueness constraint.
+model Menu {
+  id              String           @id @default(cuid())
+  application     MenuApplication
+  code            String
+  parentId        String?
+  label           String
+  href            String?
+  icon            String?
+  order           Int              @default(0)
+  isGroup         Boolean          @default(false)
+  isActive        Boolean          @default(true)
+  viewResource    String?
+  viewAction      String?
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  parent    Menu?  @relation("MenuHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children  Menu[] @relation("MenuHierarchy")
+  createdBy User?  @relation("MenuCreatedBy", fields: [createdByUserId], references: [id])
+  updatedBy User?  @relation("MenuUpdatedBy", fields: [updatedByUserId], references: [id])
+
+  @@unique([application, code])
+  @@index([application, parentId])
 }
 
 // Registration gate (F4, locked): reusable, not consumed — a revoked row still

@@ -9,6 +9,8 @@ import type { MembershipRole } from "@medcal/shared";
 export interface Me {
   user: { id: string; email: string; name: string };
   membership: { role: MembershipRole; companyId: string };
+  /** Minimal capability signal for non-menu UI surfaces — see MeController. */
+  capabilities: { leadRead: boolean; chatRead: boolean };
 }
 
 export type SessionStatus = "loading" | "ready" | "forbidden";

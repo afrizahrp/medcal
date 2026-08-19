@@ -36,9 +36,7 @@ export function ManagementHeader({
         <span className="hidden truncate text-sm font-semibold text-slate-900 lg:inline">Management</span>
       </div>
       <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-0.5 sm:gap-1">
-        <NotificationControls
-          showInbound={me.membership.role === "SUPERADMIN" || me.membership.role === "ADMIN"}
-        />
+        <NotificationControls showMessages={me.capabilities.leadRead} showChat={me.capabilities.chatRead} />
         <UserMenu name={me.user.name} email={me.user.email} role={me.membership.role} />
       </div>
     </header>

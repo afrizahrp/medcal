@@ -47,7 +47,7 @@ export function ManagementSidebar({
             className={
               collapsed
                 ? "h-9 w-9 shrink-0 rounded object-contain"
-                : "h-[72px] w-auto max-w-[160px] shrink-0 rounded object-contain"
+                : "h-[72px] w-auto max-w-[110px] shrink-0 rounded object-contain"
             }
             priority
           />

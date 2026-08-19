@@ -1,26 +1,21 @@
 "use client";
 
 import { useRequireSession } from "../../lib/use-require-session";
+import { useNav } from "../../lib/use-nav";
 import { SignOutButton } from "../../components/sign-out-button";
-import { clientNav } from "./nav-config";
+import { AccessDenied } from "../../components/access-denied";
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const { me, status } = useRequireSession();
+  const { nav, loading: navLoading } = useNav("CUSTOMER", status === "ready");
 
-  if (status === "loading") {
+  if (status === "loading" || (status === "ready" && navLoading)) {
     return <main className="p-8 text-slate-500">Loading…</main>;
   }
 
   if (status === "forbidden" || !me) {
-    return (
-      <main className="mx-auto max-w-md px-4 py-16 text-center">
-        <h1 className="text-2xl font-semibold">Forbidden</h1>
-        <p className="mt-2 text-slate-600">Your account does not have access to this application.</p>
-      </main>
-    );
+    return <AccessDenied message="Your account does not have access to this application." />;
   }
-
-  const nav = clientNav.filter((item) => item.roles.includes(me.membership.role));
 
   return (
     <div className="min-h-screen">
@@ -29,7 +24,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           <span className="font-semibold">medcal Portal</span>
           <nav className="flex gap-4 text-sm text-slate-600">
             {nav.map((item) => (
-              <a key={item.href} href={item.href}>
+              <a key={item.id ?? item.href} href={item.href}>
                 {item.label}
               </a>
             ))}

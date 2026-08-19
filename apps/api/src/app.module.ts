@@ -8,6 +8,7 @@ import { WhitelistModule } from "./modules/whitelist/whitelist.module";
 import { MeModule } from "./modules/me/me.module";
 import { ChatModule } from "./modules/chat/chat.module";
 import { UsersModule } from "./modules/users/users.module";
+import { MenuModule } from "./modules/menu/menu.module";
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { UsersModule } from "./modules/users/users.module";
     MeModule,
     ChatModule,
     UsersModule,
+    MenuModule,
   ],
   controllers: [HealthController],
 })

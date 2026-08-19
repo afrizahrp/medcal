@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Search, UserPlus, Users } from "lucide-react";
-import { apiFetch } from "@medcal/shared";
+import { apiFetch, isForbidden } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccessDenied } from "../../../components/access-denied";
 
 type UserStatus = "INVITED" | "ACTIVE" | "DISABLED";
 type MembershipRole = "SUPERADMIN" | "ADMIN" | "SUPERVISOR" | "TECHNICIAN" | "FINANCE" | "CUSTOMER";
@@ -56,6 +57,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -64,6 +66,7 @@ export default function UsersPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setForbidden(false);
     try {
       const params = new URLSearchParams();
       params.set("page", String(page));
@@ -74,8 +77,12 @@ export default function UsersPage() {
       setUsers(result.data);
       setTotalPages(result.totalPages);
       setTotal(result.total);
-    } catch {
-      setError("Gagal memuat daftar user.");
+    } catch (err) {
+      if (isForbidden(err)) {
+        setForbidden(true);
+      } else {
+        setError("Gagal memuat daftar user.");
+      }
     } finally {
       setLoading(false);
     }
@@ -84,6 +91,10 @@ export default function UsersPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  if (forbidden) {
+    return <AccessDenied />;
+  }
 
   return (
     <div className="w-full px-4 py-6 md:px-6 md:py-6">
