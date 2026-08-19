@@ -14,12 +14,20 @@ import type { MembershipRole } from "@medcal/db";
  *   lead:* precedent — chat:read gates reading/subscribing to sessions,
  *   chat:reply gates sending ADMIN messages, chat:close gates closing a
  *   session. No chat:assign (assignment is explicitly out of Phase 2 scope).
+ * - users:read/users:manage (User Management, locked 2026-08-19 G1-G4):
+ *   users:read for listing/viewing users, users:manage for status changes
+ *   (activate/disable). SUPERADMIN-only for manage; ADMIN can read.
+ * - membership:manage (User Management, locked 2026-08-19 G1-G4):
+ *   assign/change/remove membership+role. G2 lock: SUPERADMIN role cannot be
+ *   assigned via API — bootstrap CLI only.
  */
 const ac = createAccessControl({
   contactMessage: ["read"],
   whitelist: ["manage"],
   lead: ["read", "update"],
   chat: ["read", "reply", "close"],
+  users: ["read", "manage"],
+  membership: ["manage"],
 } as const);
 
 const roleStatements: Record<MembershipRole, ReturnType<typeof ac.newRole>> = {
@@ -28,11 +36,15 @@ const roleStatements: Record<MembershipRole, ReturnType<typeof ac.newRole>> = {
     whitelist: ["manage"],
     lead: ["read", "update"],
     chat: ["read", "reply", "close"],
+    users: ["read", "manage"],
+    membership: ["manage"],
   }),
   ADMIN: ac.newRole({
     contactMessage: ["read"],
     lead: ["read", "update"],
     chat: ["read", "reply", "close"],
+    users: ["read"],
+    membership: ["manage"],
   }),
   SUPERVISOR: ac.newRole({}),
   TECHNICIAN: ac.newRole({}),

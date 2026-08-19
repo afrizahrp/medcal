@@ -112,6 +112,17 @@ async function main() {
       console.log(`[bootstrap] Account created for "${email}" (id: ${user.id}).`);
     }
 
+    // G3 lock: User.status is now enforced in guards. Bootstrap SUPERADMIN must
+    // be ACTIVE to access the application. Better Auth creates users as INVITED
+    // by default, so we explicitly activate them here.
+    if (user.status !== "ACTIVE") {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { status: "ACTIVE" },
+      });
+      console.log(`[bootstrap] User status set to ACTIVE.`);
+    }
+
     const existingMembership = await prisma.userMembership.findUnique({
       where: { userId_companyId: { userId: user!.id, companyId } },
     });

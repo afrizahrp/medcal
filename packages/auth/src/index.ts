@@ -55,7 +55,8 @@ export const auth = betterAuth({
   trustedOrigins: parseTrustedOrigins(process.env.TRUSTED_ORIGINS),
   emailAndPassword: {
     enabled: true,
-    // Locked decision: whitelist-gated registration, no email verification step.
+    // G4: company-domain registration is still EmailWhitelist-gated; external
+    // emails may self-register. No email verification step.
     requireEmailVerification: false,
   },
   advanced: {

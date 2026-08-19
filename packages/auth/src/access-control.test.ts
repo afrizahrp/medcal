@@ -36,3 +36,39 @@ describe("hasPermission — existing contactMessage/whitelist grants unchanged",
     expect(hasPermission("ADMIN", "whitelist", "manage")).toBe(false);
   });
 });
+
+describe("hasPermission — users resource (User Management, locked 2026-08-19 G1-G4)", () => {
+  it("grants SUPERADMIN users:read and users:manage", () => {
+    expect(hasPermission("SUPERADMIN", "users", "read")).toBe(true);
+    expect(hasPermission("SUPERADMIN", "users", "manage")).toBe(true);
+  });
+
+  it("grants ADMIN users:read but NOT users:manage", () => {
+    expect(hasPermission("ADMIN", "users", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "users", "manage")).toBe(false);
+  });
+
+  it("denies roles with no users grant", () => {
+    expect(hasPermission("SUPERVISOR", "users", "read")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "users", "read")).toBe(false);
+    expect(hasPermission("FINANCE", "users", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER", "users", "read")).toBe(false);
+  });
+});
+
+describe("hasPermission — membership resource (User Management, locked 2026-08-19 G1-G4)", () => {
+  it("grants SUPERADMIN membership:manage", () => {
+    expect(hasPermission("SUPERADMIN", "membership", "manage")).toBe(true);
+  });
+
+  it("grants ADMIN membership:manage", () => {
+    expect(hasPermission("ADMIN", "membership", "manage")).toBe(true);
+  });
+
+  it("denies roles with no membership grant", () => {
+    expect(hasPermission("SUPERVISOR", "membership", "manage")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "membership", "manage")).toBe(false);
+    expect(hasPermission("FINANCE", "membership", "manage")).toBe(false);
+    expect(hasPermission("CUSTOMER", "membership", "manage")).toBe(false);
+  });
+});

@@ -96,9 +96,18 @@ async function resolveAdminIdentity(headers: IncomingHttpHeaders, companyId: str
 
   const membership = await prisma.userMembership.findUnique({
     where: { userId_companyId: { userId: session.user.id, companyId } },
+    include: { user: { select: { status: true } } },
   });
   if (!membership) {
     throw new ChatSocketAuthError("NO_MEMBERSHIP", "User has no membership in this company");
+  }
+
+  // G5: access requires ACTIVE + membership. INVITED is not authorized.
+  if (membership.user.status !== "ACTIVE") {
+    throw new ChatSocketAuthError(
+      membership.user.status === "DISABLED" ? "USER_DISABLED" : "USER_NOT_ACTIVE",
+      "User account is not active",
+    );
   }
 
   return { type: "ADMIN", userId: session.user.id, companyId: membership.companyId, role: membership.role };

@@ -25,8 +25,14 @@ export class MeController {
 
     const membership = await prisma.userMembership.findUnique({
       where: { userId_companyId: { userId: session.user.id, companyId } },
+      include: { user: { select: { status: true } } },
     });
     if (!membership) {
+      throw new ForbiddenException(FORBIDDEN_MESSAGE);
+    }
+
+    // G5: access requires ACTIVE + membership. INVITED is not authorized.
+    if (membership.user.status !== "ACTIVE") {
       throw new ForbiddenException(FORBIDDEN_MESSAGE);
     }
 

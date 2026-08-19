@@ -7,7 +7,8 @@ export function emailDomain(email: string): string {
   return parts.length === 2 ? parts[1]! : "";
 }
 
-// Locked business rule: only this domain may register (backend-enforced, not UI-only).
+// Internal company domain. Staff registration still requires this domain plus
+// an ACTIVE EmailWhitelist row (G4). External domains may self-register.
 export const COMPANY_EMAIL_DOMAIN = "kalibrasimedika.co.id";
 
 // Structural check (exact match on the parsed domain, not substring/endsWith) so

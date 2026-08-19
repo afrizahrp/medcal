@@ -30,10 +30,7 @@ export function DashboardIcon(props: IconProps) {
 export function LeadsIcon(props: IconProps) {
   return (
     <svg {...baseProps(props)}>
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      <path d="M3.4 4.4A1 1 0 0 1 4.2 3h15.6a1 1 0 0 1 .8 1.6L14 12.5V19a1 1 0 0 1-1.45.9l-3-1.5A1 1 0 0 1 9 17.5v-5L3.4 4.4z" />
     </svg>
   );
 }
@@ -57,9 +54,7 @@ export function MessagesIcon(props: IconProps) {
 export function ChatIcon(props: IconProps) {
   return (
     <svg {...baseProps(props)}>
-      <path d="M7 8h10" />
-      <path d="M7 12h6" />
-      <path d="M21 15a2 2 0 0 1-2 2H8l-5 3V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z" />
     </svg>
   );
 }
@@ -101,6 +96,26 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+export function UsersIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+export function WhitelistIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  );
+}
+
 export function NavIcon({
   name,
   className,
@@ -121,6 +136,10 @@ export function NavIcon({
       return <ChatIcon {...props} />;
     case "email":
       return <EmailIcon {...props} />;
+    case "users":
+      return <UsersIcon {...props} />;
+    case "whitelist":
+      return <WhitelistIcon {...props} />;
     default:
       return null;
   }

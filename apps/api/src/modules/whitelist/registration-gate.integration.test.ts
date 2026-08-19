@@ -75,16 +75,19 @@ describe("isRegistrationAllowed", () => {
     await expect(isRegistrationAllowed(email)).resolves.toBe(false);
   });
 
-  it("rejects a non-company domain even with a matching ACTIVE whitelist entry", async () => {
+  it("allows an external Gmail address without a whitelist entry (G4)", async () => {
     const email = `outside-${randomUUID()}@gmail.com`;
-    await seedWhitelist(email, "ACTIVE");
-    await expect(isRegistrationAllowed(email)).resolves.toBe(false);
+    await expect(isRegistrationAllowed(email)).resolves.toBe(true);
   });
 
-  it("rejects the subdomain-suffix trick even with a matching ACTIVE whitelist entry", async () => {
+  it("allows an external institutional domain without a whitelist entry (G4)", async () => {
+    const email = `hospital-${randomUUID()}@hospital.co.id`;
+    await expect(isRegistrationAllowed(email)).resolves.toBe(true);
+  });
+
+  it("treats a subdomain-suffix trick as external and allows it without whitelist (G4 exact-domain staff gate)", async () => {
     const email = `trick-${randomUUID()}@kalibrasimedika.co.id.evil.com`;
-    await seedWhitelist(email, "ACTIVE");
-    await expect(isRegistrationAllowed(email)).resolves.toBe(false);
+    await expect(isRegistrationAllowed(email)).resolves.toBe(true);
   });
 
   it("normalizes mixed-case/whitespace before the whitelist lookup", async () => {
@@ -101,10 +104,14 @@ describe("getRegistrationRejectionReason", () => {
     await prisma.emailWhitelist.deleteMany({ where: { email: { in: cleanupEmails } } });
   });
 
-  it("reports INVALID_DOMAIN for a non-company domain, even with a matching ACTIVE whitelist entry", async () => {
+  it("reports null (allowed) for an external Gmail address without a whitelist entry (G4)", async () => {
     const email = `reason-outside-${randomUUID()}@gmail.com`;
-    await seedWhitelistNoFk(email, "ACTIVE");
-    await expect(getRegistrationRejectionReason(email)).resolves.toBe("INVALID_DOMAIN");
+    await expect(getRegistrationRejectionReason(email)).resolves.toBeNull();
+  });
+
+  it("reports null (allowed) for an external institutional domain without a whitelist entry (G4)", async () => {
+    const email = `reason-hospital-${randomUUID()}@hospital.co.id`;
+    await expect(getRegistrationRejectionReason(email)).resolves.toBeNull();
   });
 
   it("reports NOT_WHITELISTED for a company-domain email with no whitelist entry", async () => {
@@ -142,16 +149,17 @@ describe("registration gate — real sign-up rejection (RegistrationGateHook via
     await prisma.emailWhitelist.deleteMany({ where: { email: { in: cleanupEmails } } });
   });
 
-  it("rejects an invalid-domain sign-up with REGISTRATION_INVALID_DOMAIN and creates zero User rows", async () => {
-    // User.email is @db.VarChar(50) — short id, matching the file's existing convention.
+  it("allows an external Gmail sign-up without whitelist and creates a User with zero UserMembership rows (G4)", async () => {
     const email = `sg-out-${randomUUID().slice(0, 8)}@gmail.com`;
-    await expect(
-      auth.api.signUpEmail({ body: { email, password: "Password123!", name: "Reject Domain" } }),
-    ).rejects.toMatchObject({
-      status: "FORBIDDEN",
-      body: { code: "REGISTRATION_INVALID_DOMAIN" },
+    const result = await auth.api.signUpEmail({
+      body: { email, password: "Password123!", name: "External Customer" },
     });
-    await expect(prisma.user.findUnique({ where: { email } })).resolves.toBeNull();
+    expect(result.user.email).toBe(email);
+    const memberships = await prisma.userMembership.findMany({ where: { userId: result.user.id } });
+    expect(memberships).toHaveLength(0);
+    await prisma.session.deleteMany({ where: { userId: result.user.id } });
+    await prisma.account.deleteMany({ where: { userId: result.user.id } });
+    await prisma.user.delete({ where: { id: result.user.id } });
   });
 
   it("rejects a not-whitelisted company-domain sign-up with REGISTRATION_NOT_WHITELISTED and creates zero User rows", async () => {

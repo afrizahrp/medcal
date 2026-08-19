@@ -7,6 +7,7 @@ import { LeadsModule } from "./modules/leads/leads.module";
 import { WhitelistModule } from "./modules/whitelist/whitelist.module";
 import { MeModule } from "./modules/me/me.module";
 import { ChatModule } from "./modules/chat/chat.module";
+import { UsersModule } from "./modules/users/users.module";
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ChatModule } from "./modules/chat/chat.module";
     WhitelistModule,
     MeModule,
     ChatModule,
+    UsersModule,
   ],
   controllers: [HealthController],
 })

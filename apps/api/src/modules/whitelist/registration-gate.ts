@@ -10,8 +10,10 @@ import { isAllowedRegistrationDomain, normalizeEmail } from "@medcal/shared";
 export type RegistrationRejectionReason = "INVALID_DOMAIN" | "NOT_WHITELISTED";
 
 async function evaluateRegistration(rawEmail: string): Promise<RegistrationRejectionReason | null> {
+  // G4: company-domain staff still require ACTIVE EmailWhitelist.
+  // External domains may self-register without whitelist (no role/membership).
   if (!isAllowedRegistrationDomain(rawEmail)) {
-    return "INVALID_DOMAIN";
+    return null;
   }
   const email = normalizeEmail(rawEmail);
   const entry = await prisma.emailWhitelist.findUnique({ where: { email } });
@@ -22,10 +24,11 @@ async function evaluateRegistration(rawEmail: string): Promise<RegistrationRejec
 }
 
 /**
- * Registration gate (F4, locked): both must hold —
- *  - normalized email domain === kalibrasimedika.co.id (structural check, see
- *    isAllowedRegistrationDomain — not a substring/endsWith check)
- *  - normalized email has a matching ACTIVE EmailWhitelist entry
+ * Registration gate (G4):
+ *  - company domain (kalibrasimedika.co.id, exact match via
+ *    isAllowedRegistrationDomain) → require a matching ACTIVE EmailWhitelist
+ *  - any other domain → allow (no whitelist)
+ * Does not create UserMembership or assign a role.
  * Extracted as a plain function so it's testable without a NestJS/Better Auth
  * harness; apps/api/src/modules/whitelist/registration-gate.hook.ts wires it
  * into Better Auth's databaseHooks.user.create.before.
@@ -34,7 +37,7 @@ export async function isRegistrationAllowed(rawEmail: string): Promise<boolean> 
   return (await evaluateRegistration(rawEmail)) === null;
 }
 
-/** Same two checks as isRegistrationAllowed, but reports which one failed. */
+/** Same checks as isRegistrationAllowed, but reports which one failed. */
 export async function getRegistrationRejectionReason(
   rawEmail: string,
 ): Promise<RegistrationRejectionReason | null> {

@@ -1,6 +1,6 @@
 import type { MembershipRole } from "@medcal/shared";
 
-export type ManagementNavIcon = "dashboard" | "leads" | "messages" | "chat" | "email";
+export type ManagementNavIcon = "dashboard" | "leads" | "messages" | "chat" | "email" | "users" | "whitelist";
 
 export interface NavItem {
   label: string;
@@ -22,6 +22,8 @@ export interface NavItem {
  *   ├── Messages
  *   ├── Chat
  *   └── Email (disabled)
+ * Users (SUPERADMIN, ADMIN)
+ * Whitelist (SUPERADMIN only)
  *
  * UX only — apps/api's CompanyRoleGuard is the real enforcement boundary.
  */
@@ -63,6 +65,20 @@ export const managementNav: NavItem[] = [
         disabled: true,
       },
     ],
+  },
+  {
+    id: "users",
+    label: "Users",
+    href: "/users",
+    icon: "users",
+    roles: ["SUPERADMIN", "ADMIN"],
+  },
+  {
+    id: "whitelist",
+    label: "Whitelist",
+    href: "/whitelist",
+    icon: "whitelist",
+    roles: ["SUPERADMIN"],
   },
 ];
 
