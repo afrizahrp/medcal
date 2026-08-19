@@ -10,6 +10,7 @@ export class ApiError extends AppError {
   constructor(
     public readonly status: number,
     message: string,
+    public readonly data?: { code?: string; message?: string } & Record<string, unknown>,
   ) {
     super("API_ERROR", message, status);
   }
@@ -24,7 +25,8 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   });
 
   if (!response.ok) {
-    throw new ApiError(response.status, response.statusText);
+    const data = await response.json().catch(() => undefined);
+    throw new ApiError(response.status, data?.message ?? response.statusText, data);
   }
 
   return (await response.json()) as T;
