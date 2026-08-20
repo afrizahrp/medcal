@@ -13,7 +13,7 @@
 # five-package build pipeline just for containerization. See F5.2 note in
 # docs/Architecture/02-foundation-implementation-plan.md.
 
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 RUN apk add --no-cache libc6-compat openssl
 RUN corepack enable
 

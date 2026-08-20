@@ -50,6 +50,11 @@ export const envSchema = z.object({
     .string()
     .transform((v) => v !== "false")
     .default("true"),
+
+  // Firebase Admin SDK configuration (FCM Web Push, locked Phase 1)
+  // Service account JSON string — NEVER expose via NEXT_PUBLIC_* or client code.
+  // Load from environment variable, not from file path, for Docker/production.
+  FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
 });
 
 export type MedcalEnv = z.infer<typeof envSchema>;

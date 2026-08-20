@@ -11,6 +11,7 @@ import { UsersModule } from "./modules/users/users.module";
 import { MenuModule } from "./modules/menu/menu.module";
 import { EmailsModule } from "./modules/emails/emails.module";
 import { PermissionsModule } from "./modules/permissions/permissions.module";
+import { PushTokensModule } from "./modules/push-tokens/push-tokens.module";
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { PermissionsModule } from "./modules/permissions/permissions.module";
     MenuModule,
     EmailsModule,
     PermissionsModule,
+    PushTokensModule,
   ],
   controllers: [HealthController],
 })
