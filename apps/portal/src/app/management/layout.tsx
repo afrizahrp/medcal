@@ -4,6 +4,7 @@ import { useRequireSession } from "../../lib/use-require-session";
 import { useNav } from "../../lib/use-nav";
 import { ManagementShell } from "../../components/management/management-shell";
 import { AccessDenied } from "../../components/access-denied";
+import { PendingAuthorization } from "../../components/pending-authorization";
 
 export default function ManagementLayout({ children }: { children: React.ReactNode }) {
   const { me, status } = useRequireSession();
@@ -11,6 +12,10 @@ export default function ManagementLayout({ children }: { children: React.ReactNo
 
   if (status === "loading" || (status === "ready" && navLoading)) {
     return <main className="p-8 text-slate-500">Loading…</main>;
+  }
+
+  if (status === "pending") {
+    return <PendingAuthorization />;
   }
 
   if (status === "forbidden" || !me) {

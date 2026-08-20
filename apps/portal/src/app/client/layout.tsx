@@ -4,6 +4,7 @@ import { useRequireSession } from "../../lib/use-require-session";
 import { useNav } from "../../lib/use-nav";
 import { SignOutButton } from "../../components/sign-out-button";
 import { AccessDenied } from "../../components/access-denied";
+import { PendingAuthorization } from "../../components/pending-authorization";
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const { me, status } = useRequireSession();
@@ -11,6 +12,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   if (status === "loading" || (status === "ready" && navLoading)) {
     return <main className="p-8 text-slate-500">Loading…</main>;
+  }
+
+  if (status === "pending") {
+    return <PendingAuthorization />;
   }
 
   if (status === "forbidden" || !me) {

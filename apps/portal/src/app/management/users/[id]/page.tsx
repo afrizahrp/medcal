@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
-import { ApiError, apiFetch, isForbidden } from "@medcal/shared";
+import { ApiError, apiFetch, isAllowedRegistrationDomain, isForbidden } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
@@ -121,6 +121,8 @@ export default function UserDetailPage() {
     } catch (err) {
       if (err instanceof ApiError && err.data?.code === "SUPERADMIN_PROTECTED") {
         setError("Role SUPERADMIN tidak dapat diubah via aplikasi.");
+      } else if (err instanceof ApiError && err.data?.code === "INTERNAL_STAFF_DOMAIN_REQUIRED") {
+        setError("Role internal (Admin/Supervisor/Teknisi/Keuangan) hanya untuk email @kalibrasimedika.co.id.");
       } else {
         setError("Gagal memperbarui role.");
       }
@@ -151,6 +153,22 @@ export default function UserDetailPage() {
   }
 
   const isSuperadmin = user?.membership?.role === "SUPERADMIN";
+  // Same domain policy the backend enforces (isAllowedRegistrationDomain,
+  // shared from @medcal/shared) — a UX hint only; the server rejects the
+  // request regardless of what's shown here.
+  const staffEligible = user ? isAllowedRegistrationDomain(user.email) : true;
+  // Ineligible users only get CUSTOMER as a selectable target, but the
+  // dropdown still includes the current role (if it's an internal one) so
+  // an already-grandfathered assignment isn't silently forced to change
+  // just by opening this page.
+  const roleOptions = staffEligible
+    ? EDITABLE_ROLES
+    : Array.from(
+        new Set<MembershipRole>([
+          ...(user?.membership?.role && user.membership.role !== "SUPERADMIN" ? [user.membership.role] : []),
+          "CUSTOMER",
+        ]),
+      );
 
   if (forbidden) {
     return <AccessDenied />;
@@ -233,6 +251,12 @@ export default function UserDetailPage() {
                   <p className="mt-1 text-xs text-slate-400">
                     Ubah role user di company ini.
                   </p>
+                  {!staffEligible && (
+                    <p className="mt-1 text-xs text-slate-400">
+                      User ini memakai email di luar domain @kalibrasimedika.co.id, jadi hanya role
+                      Customer yang tersedia.
+                    </p>
+                  )}
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
                     <select
                       value={draftRole}
@@ -240,7 +264,7 @@ export default function UserDetailPage() {
                       onChange={(e) => setDraftRole(e.target.value as MembershipRole)}
                       className={`${selectClassName} sm:max-w-xs`}
                     >
-                      {EDITABLE_ROLES.map((r) => (
+                      {roleOptions.map((r) => (
                         <option key={r} value={r}>
                           {ROLE_LABELS[r]}
                         </option>

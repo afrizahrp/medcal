@@ -27,13 +27,21 @@ export class MeController {
       where: { userId_companyId: { userId: session.user.id, companyId } },
       include: { user: { select: { status: true } } },
     });
+    // No membership yet, or membership not yet ACTIVE: this is the G1/G5
+    // "registered but not provisioned" lifecycle state, not a permission
+    // denial. `code` lets the frontend show a Pending Authorization UX
+    // instead of the generic Access Denied one, without changing the 403
+    // enforcement itself. DISABLED keeps its own code so it is never
+    // reinterpreted as pending (G3).
     if (!membership) {
-      throw new ForbiddenException(FORBIDDEN_MESSAGE);
+      throw new ForbiddenException({ message: FORBIDDEN_MESSAGE, code: "ACCOUNT_PENDING" });
     }
-
+    if (membership.user.status === "DISABLED") {
+      throw new ForbiddenException({ message: FORBIDDEN_MESSAGE, code: "ACCOUNT_DISABLED" });
+    }
     // G5: access requires ACTIVE + membership. INVITED is not authorized.
     if (membership.user.status !== "ACTIVE") {
-      throw new ForbiddenException(FORBIDDEN_MESSAGE);
+      throw new ForbiddenException({ message: FORBIDDEN_MESSAGE, code: "ACCOUNT_PENDING" });
     }
 
     // Minimal, narrowly-scoped client-safe capability signal — NOT a general

@@ -7,7 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AccessDenied } from "../../../components/access-denied";
 
-type Role = "SUPERADMIN" | "ADMIN" | "SUPERVISOR" | "TECHNICIAN" | "FINANCE" | "CUSTOMER";
+type Role =
+  | "SUPERADMIN"
+  | "SUPERVISOR"
+  | "ADMIN"
+  | "TECHNICIAN"
+  | "FINANCE"
+  | "CUSTOMER";
 
 interface Grant {
   resource: string;
@@ -20,7 +26,14 @@ interface RoleGrantSummary {
   readOnly: boolean;
 }
 
-const ROLES: Role[] = ["SUPERADMIN", "ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER"];
+const ROLES: Role[] = [
+  "SUPERADMIN",
+  "SUPERVISOR",
+  "ADMIN",
+  "TECHNICIAN",
+  "FINANCE",
+  "CUSTOMER",
+];
 
 // Human-readable labels for the code-defined permission catalog's resources.
 // The underlying resource identifiers never change — this is display only.
@@ -73,7 +86,9 @@ export default function PermissionManagementPage() {
     setForbidden(false);
     setSavedAt(null);
     try {
-      const data = await apiFetch<RoleGrantSummary>(`/permissions/roles/${targetRole}`);
+      const data = await apiFetch<RoleGrantSummary>(
+        `/permissions/roles/${targetRole}`,
+      );
       setSummary(data);
       setChecked(new Set(data.grants.map(grantKey)));
     } catch (err) {
@@ -90,7 +105,9 @@ export default function PermissionManagementPage() {
   useEffect(() => {
     async function init() {
       try {
-        const catalogData = await apiFetch<Record<string, readonly string[]>>("/permissions/catalog");
+        const catalogData = await apiFetch<Record<string, readonly string[]>>(
+          "/permissions/catalog",
+        );
         setCatalog(catalogData);
       } catch (err) {
         if (isForbidden(err)) {
@@ -129,10 +146,13 @@ export default function PermissionManagementPage() {
         const [resource, action] = key.split(":");
         return { resource, action };
       });
-      const updated = await apiFetch<RoleGrantSummary>(`/permissions/roles/${role}`, {
-        method: "PUT",
-        body: JSON.stringify({ grants }),
-      });
+      const updated = await apiFetch<RoleGrantSummary>(
+        `/permissions/roles/${role}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ grants }),
+        },
+      );
       setSummary(updated);
       setChecked(new Set(updated.grants.map(grantKey)));
       setSavedAt(Date.now());
@@ -153,16 +173,22 @@ export default function PermissionManagementPage() {
     <div className="w-full px-4 py-6 md:px-6 md:py-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Permission Management</h1>
+          <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+            Permission Management
+          </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Atur permission yang dimiliki setiap role. Perubahan berlaku langsung tanpa deploy — memengaruhi
-            akses backend dan tampilan menu secara real-time.
+            Atur permission yang dimiliki setiap role. Perubahan berlaku
+            langsung tanpa deploy — memengaruhi akses backend dan tampilan menu
+            secara real-time.
           </p>
         </div>
       </div>
 
       <div className="mt-6 flex items-center gap-3">
-        <label htmlFor="role-select" className="text-sm font-medium text-slate-700">
+        <label
+          htmlFor="role-select"
+          className="text-sm font-medium text-slate-700"
+        >
           Role
         </label>
         <select
@@ -186,7 +212,9 @@ export default function PermissionManagementPage() {
       </div>
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-      {savedAt && <p className="mt-4 text-sm text-emerald-600">Perubahan tersimpan.</p>}
+      {savedAt && (
+        <p className="mt-4 text-sm text-emerald-600">Perubahan tersimpan.</p>
+      )}
 
       {loading ? (
         <div className="mt-6 flex items-center justify-center py-12">
@@ -208,7 +236,10 @@ export default function PermissionManagementPage() {
                           const grant = { resource, action };
                           const key = grantKey(grant);
                           return (
-                            <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
+                            <label
+                              key={key}
+                              className="flex items-center gap-2 text-sm text-slate-700"
+                            >
                               <input
                                 type="checkbox"
                                 className="h-4 w-4 rounded border-slate-300"
@@ -229,7 +260,10 @@ export default function PermissionManagementPage() {
           </div>
 
           <div className="flex justify-end border-t border-slate-200 p-4">
-            <Button onClick={save} disabled={saving || Boolean(summary?.readOnly)}>
+            <Button
+              onClick={save}
+              disabled={saving || Boolean(summary?.readOnly)}
+            >
               <Save className="h-4 w-4" />
               Save Changes
             </Button>

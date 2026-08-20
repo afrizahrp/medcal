@@ -1,6 +1,18 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { prisma } from "@medcal/db";
 import type { MembershipRole, Prisma, User, UserMembership, UserStatus } from "@medcal/db";
+import { isAllowedRegistrationDomain } from "@medcal/shared";
+
+// Internal staff roles (everything except CUSTOMER/SUPERADMIN) may only be
+// granted to users on the approved company domain — see forensic audit
+// "Customer vs Internal Staff Registration Discriminator". Reuses the same
+// domain policy signup already enforces (isAllowedRegistrationDomain);
+// deliberately not a stored flag, since email is already the source of
+// truth and a flag could drift out of sync with it.
+const INTERNAL_STAFF_DOMAIN_ERROR = {
+  message: "Internal staff roles require a @kalibrasimedika.co.id email address",
+  code: "INTERNAL_STAFF_DOMAIN_REQUIRED",
+};
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -167,6 +179,10 @@ export class UsersService {
       throw new NotFoundException({ message: "User not found", code: "USER_NOT_FOUND" });
     }
 
+    if (role !== "CUSTOMER" && !isAllowedRegistrationDomain(user.email)) {
+      throw new ForbiddenException(INTERNAL_STAFF_DOMAIN_ERROR);
+    }
+
     const existingMembership = await prisma.userMembership.findUnique({
       where: { userId_companyId: { userId, companyId } },
     });
@@ -207,6 +223,7 @@ export class UsersService {
 
     const membership = await prisma.userMembership.findUnique({
       where: { userId_companyId: { userId, companyId } },
+      include: { user: { select: { email: true } } },
     });
 
     if (!membership) {
@@ -221,6 +238,10 @@ export class UsersService {
         message: "Cannot change SUPERADMIN role via API",
         code: "SUPERADMIN_PROTECTED",
       });
+    }
+
+    if (role !== "CUSTOMER" && !isAllowedRegistrationDomain(membership.user.email)) {
+      throw new ForbiddenException(INTERNAL_STAFF_DOMAIN_ERROR);
     }
 
     return prisma.userMembership.update({

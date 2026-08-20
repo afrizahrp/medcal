@@ -216,6 +216,34 @@ describe("UsersService.assignMembership", () => {
       service.assignMembership(realCompanyId, "non-existent-id", "ADMIN"),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  describe("internal staff domain guard", () => {
+    const internalStaffRoles = ["ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE"] as const;
+
+    for (const role of internalStaffRoles) {
+      it(`allows assigning ${role} to a @kalibrasimedika.co.id user`, async () => {
+        const user = await makeUser();
+        const membership = await service.assignMembership(realCompanyId, user.id, role);
+        createdMembershipKeys.push({ userId: user.id, companyId: realCompanyId });
+        expect(membership.role).toBe(role);
+      });
+
+      it(`rejects assigning ${role} to an external-domain user (INTERNAL_STAFF_DOMAIN_REQUIRED)`, async () => {
+        const user = await makeUser({ email: `deden-${randomUUID().slice(0, 8)}@bipmed.co.id` });
+        await expect(service.assignMembership(realCompanyId, user.id, role)).rejects.toMatchObject({
+          status: 403,
+          response: expect.objectContaining({ code: "INTERNAL_STAFF_DOMAIN_REQUIRED" }),
+        });
+      });
+    }
+
+    it("still allows assigning CUSTOMER to an external-domain user (G4 preserved)", async () => {
+      const user = await makeUser({ email: `customer-${randomUUID().slice(0, 8)}@gmail.com` });
+      const membership = await service.assignMembership(realCompanyId, user.id, "CUSTOMER");
+      createdMembershipKeys.push({ userId: user.id, companyId: realCompanyId });
+      expect(membership.role).toBe("CUSTOMER");
+    });
+  });
 });
 
 describe("UsersService.updateMembershipRole", () => {
@@ -254,6 +282,36 @@ describe("UsersService.updateMembershipRole", () => {
     await expect(
       service.updateMembershipRole(realCompanyId, user.id, "ADMIN"),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  describe("internal staff domain guard", () => {
+    it("rejects changing an external-domain user's role into an internal staff role", async () => {
+      const user = await makeUser({ email: `deden-${randomUUID().slice(0, 8)}@bipmed.co.id` });
+      await makeMembership(user.id, realCompanyId, "CUSTOMER");
+
+      await expect(
+        service.updateMembershipRole(realCompanyId, user.id, "SUPERVISOR"),
+      ).rejects.toMatchObject({
+        status: 403,
+        response: expect.objectContaining({ code: "INTERNAL_STAFF_DOMAIN_REQUIRED" }),
+      });
+    });
+
+    it("allows changing an internal-domain user's role between internal staff roles", async () => {
+      const user = await makeUser();
+      await makeMembership(user.id, realCompanyId, "SUPERVISOR");
+
+      const updated = await service.updateMembershipRole(realCompanyId, user.id, "FINANCE");
+      expect(updated.role).toBe("FINANCE");
+    });
+
+    it("still allows changing an external-domain user's role to CUSTOMER (G4 preserved)", async () => {
+      const user = await makeUser({ email: `customer-${randomUUID().slice(0, 8)}@gmail.com` });
+      await makeMembership(user.id, realCompanyId, "CUSTOMER");
+
+      const updated = await service.updateMembershipRole(realCompanyId, user.id, "CUSTOMER");
+      expect(updated.role).toBe("CUSTOMER");
+    });
   });
 });
 

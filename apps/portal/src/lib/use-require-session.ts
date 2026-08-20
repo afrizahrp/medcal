@@ -20,7 +20,7 @@ export interface Me {
   };
 }
 
-export type SessionStatus = "loading" | "ready" | "forbidden";
+export type SessionStatus = "loading" | "ready" | "forbidden" | "pending";
 
 /**
  * Client-side session check. Session cookies in dev are host-scoped
@@ -56,6 +56,12 @@ export function useRequireSession(): { me: Me | null; status: SessionStatus } {
         if (cancelled) return;
         if (error instanceof ApiError && error.status === 401) {
           router.replace("/sign-in");
+          return;
+        }
+        // ACCOUNT_PENDING = registered but not yet provisioned (G1/G5) —
+        // distinct from a real permission denial, which stays "forbidden".
+        if (error instanceof ApiError && error.data?.code === "ACCOUNT_PENDING") {
+          setStatus("pending");
           return;
         }
         setStatus("forbidden");

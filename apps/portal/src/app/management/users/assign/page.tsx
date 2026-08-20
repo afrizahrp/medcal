@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, UserPlus, Users } from "lucide-react";
-import { ApiError, apiFetch } from "@medcal/shared";
+import { ApiError, apiFetch, isAllowedRegistrationDomain } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
 
 type MembershipRole = "ADMIN" | "SUPERVISOR" | "TECHNICIAN" | "FINANCE" | "CUSTOMER";
@@ -57,6 +57,19 @@ export default function AssignUserPage() {
     load();
   }, [load]);
 
+  const selectedUser = users.find((user) => user.id === selectedUserId) ?? null;
+  // Same domain policy the backend enforces (isAllowedRegistrationDomain,
+  // shared from @medcal/shared) — a UX hint only; the server rejects the
+  // request regardless of what's shown here.
+  const staffEligible = selectedUser ? isAllowedRegistrationDomain(selectedUser.email) : true;
+  const roleOptions = staffEligible ? ROLE_OPTIONS : (["CUSTOMER"] as MembershipRole[]);
+
+  useEffect(() => {
+    if (!staffEligible && selectedRole !== "CUSTOMER") {
+      setSelectedRole("CUSTOMER");
+    }
+  }, [staffEligible, selectedRole]);
+
   async function assignMembership() {
     if (!selectedUserId) return;
     setAssigning(true);
@@ -70,6 +83,8 @@ export default function AssignUserPage() {
     } catch (err) {
       if (err instanceof ApiError && err.data?.code === "MEMBERSHIP_EXISTS") {
         setError("User sudah memiliki membership di company ini.");
+      } else if (err instanceof ApiError && err.data?.code === "INTERNAL_STAFF_DOMAIN_REQUIRED") {
+        setError("Role internal (Admin/Supervisor/Teknisi/Keuangan) hanya untuk email @kalibrasimedika.co.id.");
       } else {
         setError("Gagal assign membership.");
       }
@@ -131,7 +146,7 @@ export default function AssignUserPage() {
                 className={`${selectClassName} mt-1.5`}
                 disabled={assigning}
               >
-                {ROLE_OPTIONS.map((role) => (
+                {roleOptions.map((role) => (
                   <option key={role} value={role}>
                     {ROLE_LABELS[role]}
                   </option>
@@ -140,6 +155,12 @@ export default function AssignUserPage() {
               <p className="mt-1.5 text-xs text-slate-400">
                 Role SUPERADMIN hanya bisa dibuat melalui bootstrap CLI.
               </p>
+              {!staffEligible && (
+                <p className="mt-1 text-xs text-slate-400">
+                  User ini memakai email di luar domain @kalibrasimedika.co.id, jadi hanya role Customer
+                  yang tersedia.
+                </p>
+              )}
             </div>
 
             <Button onClick={assignMembership} disabled={assigning || !selectedUserId} className="w-full">
