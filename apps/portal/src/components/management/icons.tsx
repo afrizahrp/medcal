@@ -171,6 +171,15 @@ export function WhitelistIcon(props: IconProps) {
   );
 }
 
+export function PermissionIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M12 2 4 5v6c0 5 3.4 8.7 8 11 4.6-2.3 8-6 8-11V5z" />
+      <path d="m9.5 12 1.8 1.8L15 10" />
+    </svg>
+  );
+}
+
 export function NavIcon({
   name,
   className,
@@ -197,6 +206,8 @@ export function NavIcon({
       return <WhitelistIcon {...props} />;
     case "menu":
       return <MenuIcon {...props} />;
+    case "permission":
+      return <PermissionIcon {...props} />;
     default:
       return null;
   }

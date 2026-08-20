@@ -1,4 +1,5 @@
 import { createAccessControl } from "better-auth/plugins/access";
+import { prisma } from "@medcal/db";
 import type { MembershipRole } from "@medcal/db";
 
 /**
@@ -31,6 +32,11 @@ import type { MembershipRole } from "@medcal/db";
  *   than one "dashboard" resource) because the Management-app Dashboard and
  *   Customer-app Dashboard have different, non-overlapping role sets today —
  *   this preserves that exactly instead of collapsing them into one grant.
+ * - permission:manage (Permission Management, locked 2026-08-20): gates the
+ *   Permission Management API/UI that edits RolePermission rows below.
+ *   SUPERADMIN-only by default (see hasPermission's hardcoded bypass) —
+ *   granting it to another role is a deliberate, explicit admin action, not
+ *   something this catalog entry does on its own.
  */
 const ac = createAccessControl({
   contactMessage: ["read"],
@@ -48,47 +54,63 @@ const ac = createAccessControl({
   // email:delete = trash, restore, permanent delete
   // email:manage = confirm/change/remove Lead association
   email: ["read", "send", "delete", "manage"],
+  permission: ["manage"],
 } as const);
 
-const roleStatements: Record<MembershipRole, ReturnType<typeof ac.newRole>> = {
-  SUPERADMIN: ac.newRole({
-    contactMessage: ["read"],
-    whitelist: ["manage"],
-    lead: ["read", "update"],
-    chat: ["read", "reply", "close"],
-    users: ["read", "manage"],
-    membership: ["manage"],
-    menu: ["manage"],
-    managementDashboard: ["read"],
-    customerDashboard: ["read"],
-    email: ["read", "send", "delete", "manage"],
-  }),
-  ADMIN: ac.newRole({
-    contactMessage: ["read"],
-    lead: ["read", "update"],
-    chat: ["read", "reply", "close"],
-    users: ["read"],
-    membership: ["manage"],
-    managementDashboard: ["read"],
-    customerDashboard: ["read"],
-    email: ["read", "send", "delete", "manage"],
-  }),
-  SUPERVISOR: ac.newRole({ managementDashboard: ["read"] }),
-  TECHNICIAN: ac.newRole({ managementDashboard: ["read"] }),
-  FINANCE: ac.newRole({ managementDashboard: ["read"] }),
-  CUSTOMER: ac.newRole({ customerDashboard: ["read"] }),
-};
+/**
+ * DB-driven role -> permission grants (locked 2026-08-20). Role/permission
+ * assignment is now data in the RolePermission table, not a hardcoded map —
+ * an authorized administrator changes it through the Permission Management
+ * UI, with no code change or deploy required. This module keeps a
+ * synchronous, in-memory read model (`cache`) so hasPermission's signature
+ * and every one of its call sites (CompanyRoleGuard, MenuService.getNavTree,
+ * MeController, chat-socket-auth, EmailsService) stay completely unchanged —
+ * converting hasPermission to async would ripple into a recursive tree walk
+ * and a Socket.IO auth helper, where a missed `await` silently becomes an
+ * always-true security check. The cache is primed once at API boot
+ * (apps/api/src/main.ts, before the server accepts traffic) and explicitly
+ * refreshed by the Permission Management API after every write, so an
+ * admin's own save is immediately reflected (read-your-writes), with a
+ * defensive periodic refresh as self-healing insurance.
+ */
+let cache: Map<MembershipRole, Set<string>> | null = null;
+
+function grantKey(resource: string, action: string): string {
+  return `${resource}:${action}`;
+}
+
+export async function loadRolePermissionCache(): Promise<void> {
+  const rows = await prisma.rolePermission.findMany();
+  const next = new Map<MembershipRole, Set<string>>();
+  for (const row of rows) {
+    const set = next.get(row.role) ?? new Set<string>();
+    set.add(grantKey(row.resource, row.action));
+    next.set(row.role, set);
+  }
+  cache = next;
+}
+
+export async function refreshRolePermissionCache(): Promise<void> {
+  await loadRolePermissionCache();
+}
 
 export function hasPermission(
   role: MembershipRole,
   resource: keyof typeof ac.statements,
   action: string,
 ): boolean {
-  return roleStatements[role].authorize({ [resource]: [action] } as never).success;
+  // SUPERADMIN bypass is unconditional and never consults the DB: it must
+  // never be lockable out of its own Permission Management UI, including by
+  // mistake. SUPERADMIN intentionally has no RolePermission rows.
+  if (role === "SUPERADMIN") return true;
+  // Cache must be primed at boot; a null cache here indicates a startup
+  // ordering bug. Fail closed, never open.
+  if (!cache) return false;
+  return cache.get(role)?.has(grantKey(resource, action)) ?? false;
 }
 
 // Read-only catalog metadata (resource -> its valid actions), for the Menu
-// Management UI's resource/action picker. Never expose roleStatements or ac
-// itself — this is the only piece of access-control.ts's internals meant to
-// leave the server boundary as data.
+// Management and Permission Management UIs' resource/action pickers. Never
+// expose ac itself, and roleStatements no longer exists — RolePermission is
+// the only role-grant source now.
 export const permissionCatalog: Record<string, readonly string[]> = ac.statements;

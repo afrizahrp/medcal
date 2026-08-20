@@ -1,12 +1,85 @@
-import { describe, expect, it } from "vitest";
-import { hasPermission } from "./access-control";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { prisma } from "@medcal/db";
+import type { MembershipRole } from "@medcal/db";
+import { hasPermission, loadRolePermissionCache } from "./access-control";
+
+// hasPermission is now backed by the real RolePermission table (DB-driven
+// grants) via an in-memory cache — no mocking, consistent with this
+// project's existing no-mocking testing convention (see
+// registration-gate.integration.test.ts). To keep this suite deterministic
+// and independent of whatever seed-role-permissions.ts has produced in the
+// shared dev DB, the non-SUPERADMIN roles under test are reset to a known
+// fixture in beforeAll and the DB's original rows are restored in afterAll.
+
+const TEST_ROLES: MembershipRole[] = ["ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER"];
+
+interface GrantRow {
+  role: MembershipRole;
+  resource: string;
+  action: string;
+}
+
+// Mirrors packages/db/prisma/seed-role-permissions.ts exactly — the
+// preserved-behavior baseline (former roleStatements, verbatim) plus the
+// SUPERVISOR additions business decision.
+const FIXTURE: GrantRow[] = [
+  { role: "ADMIN", resource: "contactMessage", action: "read" },
+  { role: "ADMIN", resource: "lead", action: "read" },
+  { role: "ADMIN", resource: "lead", action: "update" },
+  { role: "ADMIN", resource: "chat", action: "read" },
+  { role: "ADMIN", resource: "chat", action: "reply" },
+  { role: "ADMIN", resource: "chat", action: "close" },
+  { role: "ADMIN", resource: "users", action: "read" },
+  { role: "ADMIN", resource: "membership", action: "manage" },
+  { role: "ADMIN", resource: "managementDashboard", action: "read" },
+  { role: "ADMIN", resource: "customerDashboard", action: "read" },
+  { role: "ADMIN", resource: "email", action: "read" },
+  { role: "ADMIN", resource: "email", action: "send" },
+  { role: "ADMIN", resource: "email", action: "delete" },
+  { role: "ADMIN", resource: "email", action: "manage" },
+  { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
+  { role: "SUPERVISOR", resource: "users", action: "read" },
+  { role: "SUPERVISOR", resource: "membership", action: "manage" },
+  { role: "SUPERVISOR", resource: "whitelist", action: "manage" },
+  { role: "TECHNICIAN", resource: "managementDashboard", action: "read" },
+  { role: "FINANCE", resource: "managementDashboard", action: "read" },
+  { role: "CUSTOMER", resource: "customerDashboard", action: "read" },
+];
+
+let backup: GrantRow[] = [];
+
+beforeAll(async () => {
+  backup = (await prisma.rolePermission.findMany({ where: { role: { in: TEST_ROLES } } })).map((row) => ({
+    role: row.role,
+    resource: row.resource,
+    action: row.action,
+  }));
+
+  await prisma.rolePermission.deleteMany({ where: { role: { in: TEST_ROLES } } });
+  await prisma.rolePermission.createMany({ data: FIXTURE });
+  await loadRolePermissionCache();
+});
+
+afterAll(async () => {
+  await prisma.rolePermission.deleteMany({ where: { role: { in: TEST_ROLES } } });
+  if (backup.length > 0) {
+    await prisma.rolePermission.createMany({ data: backup });
+  }
+  await loadRolePermissionCache();
+  await prisma.$disconnect();
+});
+
+describe("hasPermission — SUPERADMIN bypass (locked 2026-08-20)", () => {
+  it("grants SUPERADMIN everything unconditionally, without consulting the DB", () => {
+    expect(hasPermission("SUPERADMIN", "lead", "read")).toBe(true);
+    expect(hasPermission("SUPERADMIN", "whitelist", "manage")).toBe(true);
+    expect(hasPermission("SUPERADMIN", "users", "manage")).toBe(true);
+    expect(hasPermission("SUPERADMIN", "menu", "manage")).toBe(true);
+    expect(hasPermission("SUPERADMIN", "permission", "manage")).toBe(true);
+  });
+});
 
 describe("hasPermission — lead resource (Lead Inbox, locked 2026-08-16 Decision 5: per-verb)", () => {
-  it("grants SUPERADMIN lead:read and lead:update", () => {
-    expect(hasPermission("SUPERADMIN", "lead", "read")).toBe(true);
-    expect(hasPermission("SUPERADMIN", "lead", "update")).toBe(true);
-  });
-
   it("grants ADMIN lead:read and lead:update", () => {
     expect(hasPermission("ADMIN", "lead", "read")).toBe(true);
     expect(hasPermission("ADMIN", "lead", "update")).toBe(true);
@@ -20,36 +93,28 @@ describe("hasPermission — lead resource (Lead Inbox, locked 2026-08-16 Decisio
   });
 
   it("has no lead:assign action in the catalog — assignment is out of scope for v1 (Decision 3)", () => {
-    expect(hasPermission("SUPERADMIN", "lead", "assign")).toBe(false);
+    expect(hasPermission("ADMIN", "lead", "assign")).toBe(false);
   });
 });
 
 describe("hasPermission — existing contactMessage/whitelist grants unchanged", () => {
-  it("still grants contactMessage:read to SUPERADMIN and ADMIN only", () => {
-    expect(hasPermission("SUPERADMIN", "contactMessage", "read")).toBe(true);
+  it("still grants contactMessage:read to ADMIN only among non-SUPERADMIN roles", () => {
     expect(hasPermission("ADMIN", "contactMessage", "read")).toBe(true);
     expect(hasPermission("SUPERVISOR", "contactMessage", "read")).toBe(false);
   });
 
-  it("still grants whitelist:manage to SUPERADMIN only", () => {
-    expect(hasPermission("SUPERADMIN", "whitelist", "manage")).toBe(true);
+  it("whitelist:manage: ADMIN still denied", () => {
     expect(hasPermission("ADMIN", "whitelist", "manage")).toBe(false);
   });
 });
 
 describe("hasPermission — users resource (User Management, locked 2026-08-19 G1-G4)", () => {
-  it("grants SUPERADMIN users:read and users:manage", () => {
-    expect(hasPermission("SUPERADMIN", "users", "read")).toBe(true);
-    expect(hasPermission("SUPERADMIN", "users", "manage")).toBe(true);
-  });
-
   it("grants ADMIN users:read but NOT users:manage", () => {
     expect(hasPermission("ADMIN", "users", "read")).toBe(true);
     expect(hasPermission("ADMIN", "users", "manage")).toBe(false);
   });
 
-  it("denies roles with no users grant", () => {
-    expect(hasPermission("SUPERVISOR", "users", "read")).toBe(false);
+  it("denies TECHNICIAN/FINANCE/CUSTOMER any users grant", () => {
     expect(hasPermission("TECHNICIAN", "users", "read")).toBe(false);
     expect(hasPermission("FINANCE", "users", "read")).toBe(false);
     expect(hasPermission("CUSTOMER", "users", "read")).toBe(false);
@@ -57,16 +122,11 @@ describe("hasPermission — users resource (User Management, locked 2026-08-19 G
 });
 
 describe("hasPermission — membership resource (User Management, locked 2026-08-19 G1-G4)", () => {
-  it("grants SUPERADMIN membership:manage", () => {
-    expect(hasPermission("SUPERADMIN", "membership", "manage")).toBe(true);
-  });
-
   it("grants ADMIN membership:manage", () => {
     expect(hasPermission("ADMIN", "membership", "manage")).toBe(true);
   });
 
-  it("denies roles with no membership grant", () => {
-    expect(hasPermission("SUPERVISOR", "membership", "manage")).toBe(false);
+  it("denies TECHNICIAN/FINANCE/CUSTOMER membership:manage", () => {
     expect(hasPermission("TECHNICIAN", "membership", "manage")).toBe(false);
     expect(hasPermission("FINANCE", "membership", "manage")).toBe(false);
     expect(hasPermission("CUSTOMER", "membership", "manage")).toBe(false);
@@ -74,11 +134,7 @@ describe("hasPermission — membership resource (User Management, locked 2026-08
 });
 
 describe("hasPermission — menu resource (Menu Registry, locked 2026-08-19)", () => {
-  it("grants SUPERADMIN menu:manage", () => {
-    expect(hasPermission("SUPERADMIN", "menu", "manage")).toBe(true);
-  });
-
-  it("denies ADMIN and every other role menu:manage", () => {
+  it("denies ADMIN and every other non-SUPERADMIN role menu:manage", () => {
     expect(hasPermission("ADMIN", "menu", "manage")).toBe(false);
     expect(hasPermission("SUPERVISOR", "menu", "manage")).toBe(false);
     expect(hasPermission("TECHNICIAN", "menu", "manage")).toBe(false);
@@ -88,8 +144,7 @@ describe("hasPermission — menu resource (Menu Registry, locked 2026-08-19)", (
 });
 
 describe("hasPermission — managementDashboard/customerDashboard (Menu Registry, locked 2026-08-19)", () => {
-  it("grants managementDashboard:read to SUPERADMIN, ADMIN, SUPERVISOR, TECHNICIAN, FINANCE", () => {
-    expect(hasPermission("SUPERADMIN", "managementDashboard", "read")).toBe(true);
+  it("grants managementDashboard:read to ADMIN, SUPERVISOR, TECHNICIAN, FINANCE", () => {
     expect(hasPermission("ADMIN", "managementDashboard", "read")).toBe(true);
     expect(hasPermission("SUPERVISOR", "managementDashboard", "read")).toBe(true);
     expect(hasPermission("TECHNICIAN", "managementDashboard", "read")).toBe(true);
@@ -100,9 +155,8 @@ describe("hasPermission — managementDashboard/customerDashboard (Menu Registry
     expect(hasPermission("CUSTOMER", "managementDashboard", "read")).toBe(false);
   });
 
-  it("grants customerDashboard:read to CUSTOMER, SUPERADMIN, ADMIN", () => {
+  it("grants customerDashboard:read to CUSTOMER and ADMIN", () => {
     expect(hasPermission("CUSTOMER", "customerDashboard", "read")).toBe(true);
-    expect(hasPermission("SUPERADMIN", "customerDashboard", "read")).toBe(true);
     expect(hasPermission("ADMIN", "customerDashboard", "read")).toBe(true);
   });
 
@@ -110,5 +164,17 @@ describe("hasPermission — managementDashboard/customerDashboard (Menu Registry
     expect(hasPermission("SUPERVISOR", "customerDashboard", "read")).toBe(false);
     expect(hasPermission("TECHNICIAN", "customerDashboard", "read")).toBe(false);
     expect(hasPermission("FINANCE", "customerDashboard", "read")).toBe(false);
+  });
+});
+
+describe("hasPermission — SUPERVISOR grants (Permission Management, business decision 2026-08-20)", () => {
+  it("grants SUPERVISOR users:read, membership:manage, whitelist:manage", () => {
+    expect(hasPermission("SUPERVISOR", "users", "read")).toBe(true);
+    expect(hasPermission("SUPERVISOR", "membership", "manage")).toBe(true);
+    expect(hasPermission("SUPERVISOR", "whitelist", "manage")).toBe(true);
+  });
+
+  it("does NOT grant SUPERVISOR users:manage — matches ADMIN's shape exactly, not broader", () => {
+    expect(hasPermission("SUPERVISOR", "users", "manage")).toBe(false);
   });
 });

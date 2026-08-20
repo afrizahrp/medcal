@@ -309,6 +309,8 @@ model User {
   menusCreated          Menu[]                @relation("MenuCreatedBy")
   menusUpdated          Menu[]                @relation("MenuUpdatedBy")
   sentEmails            Email[]               @relation("EmailSender")
+  rolePermissionsCreated RolePermission[]     @relation("RolePermissionCreatedBy")
+  rolePermissionsUpdated RolePermission[]     @relation("RolePermissionUpdatedBy")
 }
 
 // =============================================================================
@@ -413,6 +415,36 @@ model Menu {
 
   @@unique([application, code])
   @@index([application, parentId])
+}
+
+// DB-driven Role -> Permission grants (locked 2026-08-20). Role/permission
+// assignment is now data, not code: hasPermission(role, resource, action)
+// reads from this table (via an in-memory cache) instead of a hardcoded
+// per-role statement map. The set of valid (resource, action) pairs itself
+// stays code-defined in packages/auth/src/access-control.ts's permission
+// catalog — a pair is only meaningful once some route actually enforces it,
+// so this table stores which roles hold which of those pairs, not the pairs
+// themselves. SUPERADMIN intentionally has NO rows here: hasPermission
+// hardcodes an unconditional bypass for SUPERADMIN so it can never be locked
+// out via this table (including by mistake through the admin UI). No
+// isActive flag — a missing row simply means "not granted". No
+// companyId/branchId/applicationId, matching Menu's precedent: this
+// deployment is company-scoped via COMPANY_ID, not per-row.
+model RolePermission {
+  id              String         @id @default(cuid())
+  role            MembershipRole
+  resource        String
+  action          String
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  createdBy User? @relation("RolePermissionCreatedBy", fields: [createdByUserId], references: [id])
+  updatedBy User? @relation("RolePermissionUpdatedBy", fields: [updatedByUserId], references: [id])
+
+  @@unique([role, resource, action])
+  @@index([role])
 }
 
 // Registration gate (F4, locked): reusable, not consumed — a revoked row still

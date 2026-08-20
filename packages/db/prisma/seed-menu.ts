@@ -105,6 +105,16 @@ const ROWS: MenuSeedRow[] = [
     viewResource: "menu",
     viewAction: "manage",
   },
+  {
+    application: "MANAGEMENT",
+    code: "permission-management",
+    label: "Permission Management",
+    href: "/permission-management",
+    icon: "permission",
+    order: 5,
+    viewResource: "permission",
+    viewAction: "manage",
+  },
   // CUSTOMER — mirrors apps/portal/src/app/client/nav-config.ts
   {
     application: "CUSTOMER",

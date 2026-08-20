@@ -6,7 +6,8 @@ export type ManagementNavIcon =
   | "email"
   | "users"
   | "whitelist"
-  | "menu";
+  | "menu"
+  | "permission";
 
 export interface NavItem {
   label: string;

@@ -10,6 +10,7 @@ import { ChatModule } from "./modules/chat/chat.module";
 import { UsersModule } from "./modules/users/users.module";
 import { MenuModule } from "./modules/menu/menu.module";
 import { EmailsModule } from "./modules/emails/emails.module";
+import { PermissionsModule } from "./modules/permissions/permissions.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { EmailsModule } from "./modules/emails/emails.module";
     UsersModule,
     MenuModule,
     EmailsModule,
+    PermissionsModule,
   ],
   controllers: [HealthController],
 })

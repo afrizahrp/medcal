@@ -5,7 +5,12 @@ import { APIError, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@medcal/db";
 
-export { hasPermission, permissionCatalog } from "./access-control";
+export {
+  hasPermission,
+  permissionCatalog,
+  loadRolePermissionCache,
+  refreshRolePermissionCache,
+} from "./access-control";
 // Re-exported so callers throw the exact APIError class this betterAuth()
 // instance's internals check `instanceof` against — apps/api also declares
 // its own direct "better-auth" dependency, which pnpm can resolve to a
