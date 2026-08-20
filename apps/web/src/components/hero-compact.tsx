@@ -23,7 +23,7 @@ export function HeroCompact({ content }: { content: HeroContent }) {
             {content.eyebrow}
           </p>
 
-          <h1 className="mt-3 max-w-[340px] text-[28px] font-bold leading-[1.12] tracking-[-0.015em] text-white sm:max-w-none sm:text-[34px] sm:leading-[1.15] md:text-4xl">
+          <h1 className="mt-3 max-w-[340px] text-[24px] font-semibold leading-[1.15] tracking-[-0.015em] text-white sm:max-w-none sm:text-[34px] sm:leading-[1.15] md:text-4xl">
             {content.headline}
           </h1>
 

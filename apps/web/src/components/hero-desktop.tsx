@@ -22,11 +22,11 @@ export function HeroDesktop({ content }: { content: HeroContent }) {
             {content.eyebrow}
           </p>
 
-          <h1 className="mt-3 text-5xl font-bold leading-tight tracking-tight text-white [text-shadow:0_2px_16px_rgba(6,27,48,0.45)]">
+          <h1 className="mt-3 text-4xl font-bold leading-tight tracking-tight text-white [text-shadow:0_2px_16px_rgba(6,27,48,0.45)]">
             {content.headline}
           </h1>
 
-          <p className="mt-4 max-w-lg text-lg font-normal leading-[1.5] text-white/85">
+          <p className="mt-4 max-w-2xl text-lg font-normal leading-[1.5] text-white/85">
             {content.description}
           </p>
 

@@ -2,10 +2,15 @@ import { HeroDesktop } from "@/components/hero-desktop";
 import { HeroCompact } from "@/components/hero-compact";
 
 const heroContent = {
-  eyebrow: "Kalibrasi Alat Kesehatan",
-  headline: "Layanan Terbaik Dimulai dari Alat yang Akurat",
-  description:
-    "Pastikan setiap pengukuran dapat diandalkan dengan layanan kalibrasi yang tertelusur dan terdokumentasi.",
+  eyebrow: "Laboratorium Kalibrasi Alat Kesehatan",
+  headline: "Kalibrasi Alat Kesehatan dengan Dokumentasi Siap Audit",
+  description: (
+    <>
+      Kalibrasi tertelusur dan terdokumentasi sesuai SNI ISO/IEC 17025:2017.
+      <br className="hidden lg:block" />
+      Tiga jenis alat tercakup dalam akreditasi KAN LK-521-IDN.
+    </>
+  ),
   ctaLabel: "Konsultasikan Kebutuhan Anda",
   ctaHref: "/kontak",
 } as const;
