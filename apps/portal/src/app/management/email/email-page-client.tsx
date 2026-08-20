@@ -178,7 +178,7 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
               disabled={syncMutation.isPending}
               onClick={handleSync}
             >
-              {syncMutation.isPending ? "Menyinkronkan…" : "Sinkronkan Inbox"}
+              {syncMutation.isPending ? "Synchronizing..." : "Synchronize Inbox"}
             </Button>
           ) : null}
         </div>

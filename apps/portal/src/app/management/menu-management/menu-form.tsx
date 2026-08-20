@@ -24,8 +24,21 @@ interface MenuRow {
   viewAction: string | null;
 }
 
-const APPLICATIONS: MenuApplication[] = ["MANAGEMENT", "TECHNICIAN", "CUSTOMER"];
-const ICONS = ["dashboard", "leads", "messages", "chat", "email", "users", "whitelist", "menu"] as const;
+const APPLICATIONS: MenuApplication[] = [
+  "MANAGEMENT",
+  "TECHNICIAN",
+  "CUSTOMER",
+];
+const ICONS = [
+  "dashboard",
+  "leads",
+  "messages",
+  "chat",
+  "email",
+  "users",
+  "whitelist",
+  "menu",
+] as const;
 
 const selectClassName =
   "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
@@ -52,10 +65,13 @@ export function MenuForm({ menuId }: { menuId?: string }) {
   const [viewResource, setViewResource] = useState<string>("");
   const [viewAction, setViewAction] = useState<string>("");
 
-  const loadParentOptions = useCallback(async (app: MenuApplication) => {
-    const all = await apiFetch<MenuRow[]>(`/menu?application=${app}`);
-    setParentOptions(all.filter((m) => m.isGroup && m.id !== menuId));
-  }, [menuId]);
+  const loadParentOptions = useCallback(
+    async (app: MenuApplication) => {
+      const all = await apiFetch<MenuRow[]>(`/menu?application=${app}`);
+      setParentOptions(all.filter((m) => m.isGroup && m.id !== menuId));
+    },
+    [menuId],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -63,7 +79,9 @@ export function MenuForm({ menuId }: { menuId?: string }) {
       setLoading(true);
       setError(null);
       try {
-        const catalogData = await apiFetch<Record<string, readonly string[]>>("/menu/permissions-catalog");
+        const catalogData = await apiFetch<Record<string, readonly string[]>>(
+          "/menu/permissions-catalog",
+        );
         if (cancelled) return;
         setCatalog(catalogData);
 
@@ -105,7 +123,7 @@ export function MenuForm({ menuId }: { menuId?: string }) {
   }
 
   const resourceOptions = Object.keys(catalog).sort();
-  const actionOptions = viewResource ? catalog[viewResource] ?? [] : [];
+  const actionOptions = viewResource ? (catalog[viewResource] ?? []) : [];
 
   async function submit() {
     setSaving(true);
@@ -125,13 +143,21 @@ export function MenuForm({ menuId }: { menuId?: string }) {
         viewAction: isGroup ? null : viewAction || null,
       };
       if (isEdit) {
-        await apiFetch(`/menu/${menuId}`, { method: "PATCH", body: JSON.stringify(payload) });
+        await apiFetch(`/menu/${menuId}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
       } else {
-        await apiFetch("/menu", { method: "POST", body: JSON.stringify(payload) });
+        await apiFetch("/menu", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
       }
       router.push("/menu-management");
     } catch {
-      setError("Gagal menyimpan menu. Periksa kembali code, parent, dan urutan.");
+      setError(
+        "Gagal menyimpan menu. Periksa kembali code, parent, dan urutan.",
+      );
     } finally {
       setSaving(false);
     }
@@ -142,15 +168,20 @@ export function MenuForm({ menuId }: { menuId?: string }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* Baris 1: Aplikasi | Code */}
+      <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="block text-sm font-medium text-slate-700">Aplikasi</label>
+          <label className="block text-sm font-medium text-slate-700">
+            Aplikasi
+          </label>
           <select
             value={application}
-            onChange={(e) => handleApplicationChange(e.target.value as MenuApplication)}
+            onChange={(e) =>
+              handleApplicationChange(e.target.value as MenuApplication)
+            }
             className={`${selectClassName} mt-1.5`}
             disabled={isEdit}
           >
@@ -163,17 +194,36 @@ export function MenuForm({ menuId }: { menuId?: string }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700">Code</label>
-          <Input value={code} onChange={(e) => setCode(e.target.value)} className="mt-1.5" placeholder="mis. leads.chat" />
+          <label className="block text-sm font-medium text-slate-700">
+            Code
+          </label>
+          <Input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className="mt-1.5"
+            placeholder="mis. leads.chat"
+          />
         </div>
+      </div>
 
-        <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-slate-700">Label</label>
-          <Input value={label} onChange={(e) => setLabel(e.target.value)} className="mt-1.5" />
-        </div>
+      {/* Baris 2: Label full width */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700">
+          Label
+        </label>
+        <Input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className="mt-1.5"
+        />
+      </div>
 
+      {/* Baris 3: Parent | Urutan */}
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
         <div>
-          <label className="block text-sm font-medium text-slate-700">Parent (group)</label>
+          <label className="block text-sm font-medium text-slate-700">
+            Parent (group)
+          </label>
           <select
             value={parentId}
             onChange={(e) => setParentId(e.target.value)}
@@ -189,19 +239,31 @@ export function MenuForm({ menuId }: { menuId?: string }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700">Urutan</label>
+          <label className="block text-sm font-medium text-slate-700">
+            Urutan
+          </label>
           <Input
             type="number"
             value={order}
             onChange={(e) => setOrder(e.target.value)}
-            className="mt-1.5"
-            placeholder="otomatis jika kosong"
+            className="mt-1.5 w-full"
+            placeholder="auto"
+            min={0}
           />
         </div>
+      </div>
 
+      {/* Baris 4: Icon | Checkbox group */}
+      <div className="grid gap-3 sm:grid-cols-2 sm:items-end">
         <div>
-          <label className="block text-sm font-medium text-slate-700">Icon</label>
-          <select value={icon} onChange={(e) => setIcon(e.target.value)} className={`${selectClassName} mt-1.5`}>
+          <label className="block text-sm font-medium text-slate-700">
+            Icon
+          </label>
+          <select
+            value={icon}
+            onChange={(e) => setIcon(e.target.value)}
+            className={`${selectClassName} mt-1.5`}
+          >
             <option value="">— Tidak ada —</option>
             {ICONS.map((i) => (
               <option key={i} value={i}>
@@ -211,7 +273,7 @@ export function MenuForm({ menuId }: { menuId?: string }) {
           </select>
         </div>
 
-        <div className="flex items-center gap-2 pt-6">
+        <div className="flex min-h-9 items-center gap-2 sm:pb-0.5">
           <input
             id="isGroup"
             type="checkbox"
@@ -222,28 +284,47 @@ export function MenuForm({ menuId }: { menuId?: string }) {
             Ini adalah group (tidak punya route/permission sendiri)
           </label>
         </div>
-
-        <div className="flex items-center gap-2 pt-6">
-          <input id="isActive" type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-          <label htmlFor="isActive" className="text-sm text-slate-700">
-            Aktif (tampil di navigasi)
-          </label>
-        </div>
       </div>
 
+      {/* Baris 5: Checkbox Aktif */}
+      <div className="flex items-center gap-2">
+        <input
+          id="isActive"
+          type="checkbox"
+          checked={isActive}
+          onChange={(e) => setIsActive(e.target.checked)}
+        />
+        <label htmlFor="isActive" className="text-sm text-slate-700">
+          Aktif (tampil di navigasi)
+        </label>
+      </div>
+
+      {/* Route & Permission: Href | Resource | Action */}
       {!isGroup && (
-        <div className="rounded-lg border border-slate-200 p-4">
-          <h3 className="text-sm font-semibold text-slate-900">Route &amp; Permission</h3>
+        <div className="rounded-lg border border-slate-200 p-3 sm:p-4">
+          <h3 className="text-sm font-semibold text-slate-900">
+            Route &amp; Permission
+          </h3>
           <p className="mt-1 text-xs text-slate-400">
-            Menu ini akan tampil hanya untuk role yang memiliki permission berikut (hasPermission).
+            Menu ini akan tampil hanya untuk role yang memiliki permission
+            berikut (hasPermission).
           </p>
-          <div className="mt-3 grid gap-4 sm:grid-cols-3">
-            <div className="sm:col-span-1">
-              <label className="block text-sm font-medium text-slate-700">Href</label>
-              <Input value={href} onChange={(e) => setHref(e.target.value)} className="mt-1.5" placeholder="/leads" />
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">
+                Href
+              </label>
+              <Input
+                value={href}
+                onChange={(e) => setHref(e.target.value)}
+                className="mt-1.5"
+                placeholder="/leads"
+              />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700">Resource</label>
+              <label className="block text-sm font-medium text-slate-700">
+                Resource
+              </label>
               <select
                 value={viewResource}
                 onChange={(e) => {
@@ -260,8 +341,10 @@ export function MenuForm({ menuId }: { menuId?: string }) {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Action</label>
+            <div className="sm:col-span-2 md:col-span-1">
+              <label className="block text-sm font-medium text-slate-700">
+                Action
+              </label>
               <select
                 value={viewAction}
                 onChange={(e) => setViewAction(e.target.value)}
@@ -280,10 +363,16 @@ export function MenuForm({ menuId }: { menuId?: string }) {
         </div>
       )}
 
-      <Button onClick={submit} disabled={saving || !code || !label} className="w-full sm:w-auto">
-        <Save className="h-4 w-4" />
-        {isEdit ? "Simpan Perubahan" : "Buat Menu"}
-      </Button>
+      <div className="mt-4 flex justify-end border-t border-slate-200 pt-4">
+        <Button
+          onClick={submit}
+          disabled={saving || !code || !label}
+          className="w-full sm:w-auto"
+        >
+          <Save className="h-4 w-4" />
+          {isEdit ? "Save Changes" : "Create Menu"}
+        </Button>
+      </div>
     </div>
   );
 }

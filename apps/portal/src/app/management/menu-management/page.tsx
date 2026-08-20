@@ -25,7 +25,11 @@ interface MenuRow {
   viewAction: string | null;
 }
 
-const APPLICATIONS: MenuApplication[] = ["MANAGEMENT", "TECHNICIAN", "CUSTOMER"];
+const APPLICATIONS: MenuApplication[] = [
+  "MANAGEMENT",
+  "TECHNICIAN",
+  "CUSTOMER",
+];
 
 export default function MenuManagementPage() {
   const [rows, setRows] = useState<MenuRow[]>([]);
@@ -77,7 +81,9 @@ export default function MenuManagementPage() {
       await load();
     } catch (err) {
       if (err instanceof ApiError && err.status === 400) {
-        setError("Menu ini masih memiliki sub-menu — hapus atau pindahkan sub-menu terlebih dahulu.");
+        setError(
+          "Menu ini masih memiliki sub-menu — hapus atau pindahkan sub-menu terlebih dahulu.",
+        );
       } else {
         setError("Gagal menghapus menu.");
       }
@@ -96,16 +102,19 @@ export default function MenuManagementPage() {
     <div className="w-full px-4 py-6 md:px-6 md:py-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Menu Management</h1>
+          <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+            Menu Management
+          </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Kelola struktur navigasi per aplikasi. Visibilitas tetap ditentukan oleh permission RBAC —
-            halaman ini hanya mengatur struktur/label/urutan.
+            Kelola struktur navigasi per aplikasi. Visibilitas tetap ditentukan
+            oleh permission RBAC — halaman ini hanya mengatur
+            struktur/label/urutan.
           </p>
         </div>
         <Link href="/menu-management/new">
           <Button>
             <Plus className="h-4 w-4" />
-            Tambah Menu
+            Add New
           </Button>
         </Link>
       </div>
@@ -120,18 +129,29 @@ export default function MenuManagementPage() {
         APPLICATIONS.map((application) => {
           const appRows = rows
             .filter((r) => r.application === application)
-            .sort((a, b) => (a.parentId ?? "").localeCompare(b.parentId ?? "") || a.order - b.order);
+            .sort(
+              (a, b) =>
+                (a.parentId ?? "").localeCompare(b.parentId ?? "") ||
+                a.order - b.order,
+            );
 
           return (
-            <div key={application} className="mt-6 rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div
+              key={application}
+              className="mt-6 rounded-xl border border-slate-200 bg-white shadow-sm"
+            >
               <div className="flex items-center gap-2 border-b border-slate-200 p-4">
                 <ListTree className="h-4 w-4 text-slate-400" />
-                <h2 className="text-sm font-semibold text-slate-900">{application}</h2>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  {application}
+                </h2>
                 <Badge variant="secondary">{appRows.length} menu</Badge>
               </div>
 
               {appRows.length === 0 ? (
-                <p className="p-4 text-sm text-slate-400">Belum ada menu untuk aplikasi ini.</p>
+                <p className="p-4 text-sm text-slate-400">
+                  Belum ada menu untuk aplikasi ini.
+                </p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -150,21 +170,42 @@ export default function MenuManagementPage() {
                     <tbody className="divide-y divide-slate-100">
                       {appRows.map((row) => (
                         <tr key={row.id} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 font-medium text-slate-900">{row.label}</td>
-                          <td className="px-4 py-3 text-sm text-slate-500">{row.code}</td>
-                          <td className="px-4 py-3 text-sm text-slate-500">
-                            {row.parentId ? byLabel.get(row.parentId) ?? "—" : "—"}
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge variant="outline">{row.isGroup ? "Group" : "Leaf"}</Badge>
+                          <td className="px-4 py-3 font-medium text-slate-900">
+                            {row.label}
                           </td>
                           <td className="px-4 py-3 text-sm text-slate-500">
-                            {row.viewResource ? `${row.viewResource}:${row.viewAction}` : "—"}
+                            {row.code}
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-500">{row.order}</td>
+                          <td className="px-4 py-3 text-sm text-slate-500">
+                            {row.parentId
+                              ? (byLabel.get(row.parentId) ?? "—")
+                              : "—"}
+                          </td>
                           <td className="px-4 py-3">
-                            <button type="button" onClick={() => toggleActive(row)}>
-                              <Badge className={row.isActive ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}>
+                            <Badge variant="outline">
+                              {row.isGroup ? "Group" : "Leaf"}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-500">
+                            {row.viewResource
+                              ? `${row.viewResource}:${row.viewAction}`
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-500">
+                            {row.order}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => toggleActive(row)}
+                            >
+                              <Badge
+                                className={
+                                  row.isActive
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-slate-100 text-slate-600"
+                                }
+                              >
                                 {row.isActive ? "Aktif" : "Nonaktif"}
                               </Badge>
                             </button>

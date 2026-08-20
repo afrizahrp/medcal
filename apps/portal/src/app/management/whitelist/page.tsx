@@ -109,14 +109,16 @@ export default function WhitelistPage() {
     <div className="w-full px-4 py-6 md:px-6 md:py-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Email Whitelist</h1>
+          <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+            Email Whitelist
+          </h1>
           <p className="mt-1 text-sm text-slate-500">
             Kelola email yang diizinkan untuk mendaftar
           </p>
         </div>
         <Button onClick={() => setShowForm(true)} disabled={showForm}>
           <Plus className="h-4 w-4" />
-          Tambah Email
+          Add New
         </Button>
       </div>
 
@@ -127,7 +129,9 @@ export default function WhitelistPage() {
               <CheckCircle className="h-5 w-5 text-emerald-600" />
             </div>
             <div>
-              <p className="text-2xl font-semibold text-slate-900">{activeCount}</p>
+              <p className="text-2xl font-semibold text-slate-900">
+                {activeCount}
+              </p>
               <p className="text-sm text-slate-500">Email Aktif</p>
             </div>
           </div>
@@ -138,7 +142,9 @@ export default function WhitelistPage() {
               <XCircle className="h-5 w-5 text-red-600" />
             </div>
             <div>
-              <p className="text-2xl font-semibold text-slate-900">{revokedCount}</p>
+              <p className="text-2xl font-semibold text-slate-900">
+                {revokedCount}
+              </p>
               <p className="text-sm text-slate-500">Email Dicabut</p>
             </div>
           </div>
@@ -147,7 +153,9 @@ export default function WhitelistPage() {
 
       {showForm && (
         <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-900">Tambah Email Baru</h2>
+          <h2 className="text-base font-semibold text-slate-900">
+            Add New Email
+          </h2>
           <p className="mt-1 text-sm text-slate-500">
             Email yang ditambahkan akan bisa mendaftar ke aplikasi.
           </p>
@@ -163,7 +171,7 @@ export default function WhitelistPage() {
             <div className="flex gap-2">
               <Button onClick={addEntry} disabled={adding || !newEmail.trim()}>
                 <Plus className="h-4 w-4" />
-                Tambah
+                Add New
               </Button>
               <Button
                 variant="outline"
@@ -173,7 +181,7 @@ export default function WhitelistPage() {
                 }}
                 disabled={adding}
               >
-                Batal
+                Cancel
               </Button>
             </div>
           </div>
@@ -191,7 +199,9 @@ export default function WhitelistPage() {
         ) : entries.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12">
             <Mail className="h-12 w-12 text-slate-300" />
-            <p className="mt-3 text-sm text-slate-500">Belum ada email di whitelist</p>
+            <p className="mt-3 text-sm text-slate-500">
+              Belum ada email di whitelist
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -208,7 +218,9 @@ export default function WhitelistPage() {
                 {entries.map((entry) => (
                   <tr key={entry.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3">
-                      <p className="font-medium text-slate-900">{entry.email}</p>
+                      <p className="font-medium text-slate-900">
+                        {entry.email}
+                      </p>
                     </td>
                     <td className="px-4 py-3">
                       <Badge className={STATUS_COLORS[entry.status]}>
