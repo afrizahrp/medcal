@@ -57,6 +57,7 @@ export class CompanyRoleGuard implements CanActivate {
 
     request.companyId = membership.companyId;
     request.membershipRole = membership.role;
+    request.userId = session.user.id;
     return true;
   }
 }

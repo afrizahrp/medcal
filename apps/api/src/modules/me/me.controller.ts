@@ -46,6 +46,10 @@ export class MeController {
     const capabilities = {
       leadRead: hasPermission(membership.role, "lead", "read"),
       chatRead: hasPermission(membership.role, "chat", "read"),
+      emailRead: hasPermission(membership.role, "email", "read"),
+      emailSend: hasPermission(membership.role, "email", "send"),
+      emailDelete: hasPermission(membership.role, "email", "delete"),
+      emailManage: hasPermission(membership.role, "email", "manage"),
     };
 
     return {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { MessageCircle, Save, Send } from "lucide-react";
 import { ApiError, apiFetch, isForbidden, normalizePhone } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,9 @@ import {
   formatDetailTimestamp,
   selectClassName,
 } from "../leads-ui";
+
+import type { EmailListResponse, EmailListRow } from "../../email/use-emails-query";
+import { formatListDateTime } from "../../email/email-ui";
 
 interface ContactTopic {
   id: number;
@@ -68,6 +72,8 @@ export default function LeadDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [leadEmails, setLeadEmails] = useState<EmailListRow[] | null>(null);
+  const [leadEmailsError, setLeadEmailsError] = useState<string | null>(null);
   const [updatingLeadStatus, setUpdatingLeadStatus] = useState(false);
   const [updatingMessageStatusId, setUpdatingMessageStatusId] = useState<string | null>(null);
   const [draftLeadStatus, setDraftLeadStatus] = useState<LeadStatus>("NEW");
@@ -77,6 +83,8 @@ export default function LeadDetailPage() {
     setError(null);
     setNotFound(false);
     setForbidden(false);
+    setLeadEmails(null);
+    setLeadEmailsError(null);
     try {
       const data = await apiFetch<LeadDetail>(`/leads/${params.id}`);
       setLead(data);
@@ -84,6 +92,20 @@ export default function LeadDetailPage() {
       setDraftMessageStatuses(
         Object.fromEntries(data.contactMessages.map((message) => [message.id, message.status])),
       );
+
+      // Lead email history (confirmed association only) — Phase 3 completion pass.
+      try {
+        const emailData = await apiFetch<EmailListResponse>(`/leads/${params.id}/emails`);
+        setLeadEmails(emailData.data);
+      } catch (err) {
+        if (isForbidden(err)) {
+          // Keep page renderable; just hide lead history section.
+          setLeadEmailsError("Anda tidak memiliki izin untuk melihat riwayat email lead ini.");
+        } else {
+          setLeadEmailsError("Gagal memuat riwayat email lead.");
+        }
+        setLeadEmails([]);
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         setNotFound(true);
@@ -337,6 +359,55 @@ export default function LeadDetailPage() {
               </Button>
               <LeadStatusBadge status={lead.status} />
             </div>
+          </Surface>
+
+          <Surface className="mt-4 p-4 md:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-base font-semibold text-slate-900">Email History</h2>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">Email yang terasosiasi (confirmed) dengan lead ini.</p>
+
+            {leadEmailsError ? (
+              <p className="mt-3 text-sm text-red-600">{leadEmailsError}</p>
+            ) : leadEmails === null ? (
+              <p className="mt-3 text-sm text-slate-400">Memuat…</p>
+            ) : leadEmails.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-400">Belum ada email terasosiasi.</p>
+            ) : (
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400">
+                      <th className="py-2 pr-3">Subjek</th>
+                      <th className="py-2 pr-3">Dari</th>
+                      <th className="py-2 pr-3">Waktu</th>
+                      <th className="py-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leadEmails.map((email) => (
+                      <tr key={email.id} className="border-b border-slate-50">
+                        <td className="py-2 pr-3">
+                          <Link
+                            href={`/email/${email.id}`}
+                            className="font-medium text-brand-800 underline hover:text-brand-900"
+                          >
+                            {email.subject || "(tanpa subjek)"}
+                          </Link>
+                        </td>
+                        <td className="py-2 pr-3 text-slate-700">{email.fromName || email.fromEmail}</td>
+                        <td className="py-2 pr-3 text-slate-500">
+                          {formatListDateTime(email.sentAt ?? email.receivedAt ?? email.createdAt)}
+                        </td>
+                        <td className="py-2 text-slate-500">
+                          {email.status === "UNREAD" ? "Belum dibaca" : "Sudah dibaca"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Surface>
         </>
       )}

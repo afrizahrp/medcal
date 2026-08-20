@@ -10,7 +10,8 @@ import { ChatIcon, EmailIcon, MessagesIcon } from "../../components/management/i
  * actually protects its destination — via Me.capabilities, computed
  * server-side in MeController — not by role name and not by Menu Registry
  * structure (Menu is navigation config, not an authorization source).
- * Email remains a disabled coming-soon affordance regardless of permission.
+ * Email shortcut is gated by email:read via Me.capabilities (same pattern as
+ * Messages / Web Chat) — Menu Registry still owns sidebar navigation.
  */
 export default function ManagementHome() {
   const { me } = useRequireSession();
@@ -40,15 +41,11 @@ export default function ManagementHome() {
                 <ChatIcon className="h-7 w-7" strokeWidth={1.6} />
               </ChannelLink>
             ) : null}
-            <div className="flex flex-col items-center gap-2 opacity-40" aria-disabled="true">
-              <span
-                className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-slate-400 md:h-20 md:w-20"
-                title="Segera hadir"
-              >
+            {me?.capabilities.emailRead ? (
+              <ChannelLink href="/email/inbox" label="Email">
                 <EmailIcon className="h-7 w-7" strokeWidth={1.6} />
-              </span>
-              <span className="text-sm font-medium text-slate-400">Email</span>
-            </div>
+              </ChannelLink>
+            ) : null}
           </div>
         </div>
       </section>

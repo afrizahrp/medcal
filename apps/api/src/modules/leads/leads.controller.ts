@@ -4,6 +4,7 @@ import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import { LeadsService, type LeadListResult, type LeadWithTimeline, type NeedsReviewItem } from "./leads.service";
+import { EmailsService } from "../emails/emails.service";
 
 @Controller("leads")
 @UseGuards(CompanyRoleGuard)
@@ -11,6 +12,8 @@ export class LeadsController {
   constructor(
     @Inject(LeadsService)
     private readonly service: LeadsService,
+    @Inject(EmailsService)
+    private readonly emails: EmailsService,
   ) {}
 
   @Get()
@@ -32,6 +35,12 @@ export class LeadsController {
   @RequirePermission("lead", "read")
   async needsReview(@CompanyId() companyId: string): Promise<NeedsReviewItem[]> {
     return this.service.findNeedsReview(companyId);
+  }
+
+  @Get(":id/emails")
+  @RequirePermission("lead", "read")
+  async listEmails(@CompanyId() companyId: string, @Param("id") id: string) {
+    return this.emails.listForLead(companyId, id);
   }
 
   @Get(":id")

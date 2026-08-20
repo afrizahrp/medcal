@@ -18,6 +18,38 @@ export const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
+
+  // IMAP configuration (Email → Lead Management, locked plan)
+  IMAP_HOST: z.string().optional(),
+  IMAP_PORT: z.coerce.number().default(993),
+  IMAP_TLS: z
+    .string()
+    .transform((v) => v === "true")
+    .default("true"),
+  IMAP_USER: z.string().optional(),
+  IMAP_PASS: z.string().optional(),
+  // TLS certificate verification — enabled by default for production security.
+  // Only set to "false" in controlled environments with documented justification.
+  IMAP_TLS_REJECT_UNAUTHORIZED: z
+    .string()
+    .transform((v) => v !== "false")
+    .default("true"),
+
+  // SMTP configuration (Email → Lead Management, locked plan)
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().default(465),
+  SMTP_SECURE: z
+    .string()
+    .transform((v) => v === "true")
+    .default("true"),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
+  // TLS certificate verification — enabled by default for production security.
+  SMTP_TLS_REJECT_UNAUTHORIZED: z
+    .string()
+    .transform((v) => v !== "false")
+    .default("true"),
 });
 
 export type MedcalEnv = z.infer<typeof envSchema>;

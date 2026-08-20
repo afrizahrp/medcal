@@ -155,3 +155,58 @@ export const chatSessionMarkReadSchema = z.object({
 });
 
 export type ChatSessionMarkReadInput = z.infer<typeof chatSessionMarkReadSchema>;
+
+// =============================================================================
+// Email → Lead Management (locked plan)
+// =============================================================================
+
+const emailFolderValues = ["INBOX", "SENT", "DRAFTS", "TRASH"] as const;
+const emailStatusValues = ["UNREAD", "READ"] as const;
+
+export const emailListQuerySchema = baseListQuerySchema.extend({
+  folder: z.enum(emailFolderValues).optional(),
+  status: z.enum(emailStatusValues).optional(),
+  isStarred: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+  leadId: z.string().optional(),
+});
+
+export type EmailListQuery = z.infer<typeof emailListQuerySchema>;
+
+export const EMAIL_SORTABLE_FIELDS = ["createdAt", "sentAt", "receivedAt", "subject"] as const;
+
+export const emailComposeSchema = z.object({
+  to: z.string().email().max(255),
+  cc: z.string().max(500).optional(),
+  bcc: z.string().max(500).optional(),
+  subject: z.string().min(1).max(500),
+  body: z.string().min(1),
+  parentEmailId: z.string().optional(),
+  contactMessageId: z.string().optional(),
+  leadId: z.string().optional(),
+});
+
+export type EmailComposeInput = z.infer<typeof emailComposeSchema>;
+
+export const emailDraftSchema = z.object({
+  to: z.string().max(255).optional(),
+  cc: z.string().max(500).optional(),
+  bcc: z.string().max(500).optional(),
+  subject: z.string().max(500).optional(),
+  body: z.string().optional(),
+  parentEmailId: z.string().optional(),
+  contactMessageId: z.string().optional(),
+});
+
+export type EmailDraftInput = z.infer<typeof emailDraftSchema>;
+
+export const emailUpdateSchema = z.object({
+  status: z.enum(emailStatusValues).optional(),
+  isStarred: z.boolean().optional(),
+  leadId: z.string().nullable().optional(),
+  suggestedLeadId: z.string().nullable().optional(),
+});
+
+export type EmailUpdateInput = z.infer<typeof emailUpdateSchema>;

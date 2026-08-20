@@ -68,6 +68,61 @@ export function EmailIcon(props: IconProps) {
   );
 }
 
+/** Inbox tray — for Email folder nav */
+export function InboxFolderIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+    </svg>
+  );
+}
+
+/** Sent / outbound — for Email folder nav */
+export function SentFolderIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="m22 2-7 20-4-9-9-4Z" />
+      <path d="M22 2 11 13" />
+    </svg>
+  );
+}
+
+/** Draft / file edit — for Email folder nav */
+export function DraftsFolderIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M10 13h4" />
+      <path d="M10 17h4" />
+    </svg>
+  );
+}
+
+/** Trash — for Email folder nav */
+export function TrashFolderIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  );
+}
+
+/** Restore / undo — Email trash row action */
+export function RestoreIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+    </svg>
+  );
+}
+
 export function PinIcon(props: IconProps) {
   return (
     <svg {...baseProps(props)}>

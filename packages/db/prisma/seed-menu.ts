@@ -71,8 +71,8 @@ const ROWS: MenuSeedRow[] = [
     href: "/email",
     icon: "email",
     order: 2,
-    isActive: false,
-    viewResource: "lead",
+    isActive: true,
+    viewResource: "email",
     viewAction: "read",
   },
   {

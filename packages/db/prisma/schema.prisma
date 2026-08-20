@@ -234,6 +234,19 @@ enum FileOwnerType {
   OTHER
 }
 
+// Email → Lead Management (locked plan)
+enum EmailFolder {
+  INBOX
+  SENT
+  DRAFTS
+  TRASH
+}
+
+enum EmailStatus {
+  UNREAD
+  READ
+}
+
 // =============================================================================
 // Organization & IAM
 // =============================================================================
@@ -267,6 +280,7 @@ model Company {
   reminderEvents      ReminderEvent[]
   fileObjects         FileObject[]
   fcmTokens           FCMToken[]
+  emails              Email[]
 }
 
 model User {
@@ -294,6 +308,7 @@ model User {
   emailWhitelistRevoked EmailWhitelist[]      @relation("EmailWhitelistRevoker")
   menusCreated          Menu[]                @relation("MenuCreatedBy")
   menusUpdated          Menu[]                @relation("MenuUpdatedBy")
+  sentEmails            Email[]               @relation("EmailSender")
 }
 
 // =============================================================================
@@ -374,22 +389,22 @@ model UserMembership {
 // Postgres treats NULL parentId values as distinct, which would defeat a
 // root-level DB uniqueness constraint.
 model Menu {
-  id              String           @id @default(cuid())
+  id              String          @id @default(cuid())
   application     MenuApplication
   code            String
   parentId        String?
   label           String
   href            String?
   icon            String?
-  order           Int              @default(0)
-  isGroup         Boolean          @default(false)
-  isActive        Boolean          @default(true)
+  order           Int             @default(0)
+  isGroup         Boolean         @default(false)
+  isActive        Boolean         @default(true)
   viewResource    String?
   viewAction      String?
   createdByUserId String?
   updatedByUserId String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   parent    Menu?  @relation("MenuHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   children  Menu[] @relation("MenuHierarchy")
@@ -491,6 +506,7 @@ model ContactMessage {
   // created by a Web Chat ChatSession (see ChatSession.contactMessageId) —
   // null for every other channel (CONTACTFORM, WHATSAPP, EMAIL, etc.).
   chatSession     ChatSession?
+  emails          Email[]
 
   @@index([companyId, createdAt])
   @@index([companyId, email])
@@ -538,6 +554,8 @@ model Lead {
   assignedTo          User?                @relation("LeadAssignee", fields: [assignedToUserId], references: [id])
   customer            Customer?            @relation(fields: [customerId], references: [id])
   calibrationRequests CalibrationRequest[]
+  suggestedInEmails   Email[]              @relation("EmailSuggestion")
+  emails              Email[]              @relation("EmailAssociation")
 
   @@index([companyId, status])
   @@index([companyId, createdAt])
@@ -558,13 +576,13 @@ model Lead {
 // matching Lead's own deferred assignment decision. No auto-close/expiry
 // state — OPEN/CLOSED only.
 model ChatSession {
-  id               String            @id @default(cuid())
-  companyId        String
-  visitorName      String
-  visitorEmail     String
-  status           ChatSessionStatus @default(OPEN)
-  contactMessageId String?           @unique
-  closedAt         DateTime?
+  id                String            @id @default(cuid())
+  companyId         String
+  visitorName       String
+  visitorEmail      String
+  status            ChatSessionStatus @default(OPEN)
+  contactMessageId  String?           @unique
+  closedAt          DateTime?
   // Unread tracking (Management header notification audit, 2026-08-17):
   // null = admin has never read this session, or a VISITOR message has
   // arrived since the last time they did. Set only via the explicit
@@ -576,8 +594,8 @@ model ChatSession {
   // ChatSessionsService.countUnread) — deliberately NOT the same thing as
   // status=OPEN, which only tracks whether the conversation has ended.
   lastReadByAdminAt DateTime?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   contactMessage ContactMessage? @relation(fields: [contactMessageId], references: [id])
@@ -600,7 +618,7 @@ model ChatMessage {
   id              String         @id @default(cuid())
   companyId       String
   sessionId       String
-  seq             Int         @default(autoincrement())
+  seq             Int            @default(autoincrement())
   senderType      ChatSenderType
   senderUserId    String?
   body            String
@@ -611,6 +629,78 @@ model ChatMessage {
 
   @@unique([sessionId, clientMessageId])
   @@index([sessionId, seq])
+}
+
+// Email → Lead Management (locked plan): single Email model for all folders.
+// STRICT AUTO-SUGGEST ONLY: leadId is NEVER automatically set — always null
+// until staff action. suggestedLeadId holds the system suggestion.
+model Email {
+  id        String @id @default(cuid())
+  companyId String
+
+  // IMAP deduplication — RFC Message-ID header
+  messageId String? @unique
+
+  // Sender/Recipients
+  fromEmail String
+  fromName  String?
+  toEmail   String
+  toName    String?
+  ccEmail   String?
+  bccEmail  String?
+
+  // Content
+  subject  String
+  body     String  @db.Text
+  textBody String? @db.Text
+
+  // Mailbox state
+  folder    EmailFolder @default(INBOX)
+  status    EmailStatus @default(UNREAD)
+  isStarred Boolean     @default(false)
+
+  // Internal reply chain (MedCal cuid, NOT RFC header)
+  parentEmailId String?
+
+  // RFC metadata (for protocol behavior, NOT for internal threading)
+  rfcInReplyTo  String? @db.Text
+  rfcReferences String? @db.Text
+
+  // Lead association - STRICT AUTO-SUGGEST
+  suggestedLeadId String? // System suggestion only
+  leadId          String? // Staff-confirmed only
+
+  // ContactMessage link
+  contactMessageId String?
+
+  // Sender user (outbound)
+  sentByUserId String?
+
+  // Timestamps
+  sentAt     DateTime?
+  receivedAt DateTime?
+  readAt     DateTime?
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Relations
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  suggestedLead  Lead?           @relation("EmailSuggestion", fields: [suggestedLeadId], references: [id], onDelete: SetNull)
+  lead           Lead?           @relation("EmailAssociation", fields: [leadId], references: [id], onDelete: SetNull)
+  contactMessage ContactMessage? @relation(fields: [contactMessageId], references: [id], onDelete: SetNull)
+  sentBy         User?           @relation("EmailSender", fields: [sentByUserId], references: [id])
+  parentEmail    Email?          @relation("EmailThread", fields: [parentEmailId], references: [id], onDelete: SetNull)
+  replies        Email[]         @relation("EmailThread")
+
+  @@index([companyId, folder])
+  @@index([companyId, status])
+  @@index([companyId, leadId])
+  @@index([companyId, suggestedLeadId])
+  @@index([companyId, createdAt])
+  @@index([messageId])
+  @@index([contactMessageId])
+  @@index([parentEmailId])
 }
 
 model Customer {

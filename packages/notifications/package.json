@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "@medcal/shared": "workspace:*",
-    "@medcal/config": "workspace:*"
+    "@medcal/config": "workspace:*",
+    "nodemailer": "^6.9.16"
   },
   "devDependencies": {
     "typescript": "^5.8.2",
-    "@medcal/typescript-config": "workspace:*"
+    "@medcal/typescript-config": "workspace:*",
+    "@types/nodemailer": "^6.4.17"
   }
 }

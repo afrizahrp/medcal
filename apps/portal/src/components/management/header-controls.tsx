@@ -44,29 +44,26 @@ function WebChatControl() {
 
 function EmailControl() {
   return (
-    <span
-      className={`${iconButton} cursor-not-allowed opacity-40 hover:bg-transparent hover:text-slate-600`}
-      title="Segera hadir"
-      aria-disabled="true"
-      aria-label="Email, Segera hadir"
-    >
+    <Link href="/email/inbox" className={iconButton} title="Email" aria-label="Email">
       <EmailIcon className="h-5 w-5" />
-    </span>
+    </Link>
   );
 }
 
 export function NotificationControls({
   showMessages,
   showChat,
+  showEmail,
 }: {
   showMessages: boolean;
   showChat: boolean;
+  showEmail?: boolean;
 }) {
   return (
     <div className="flex shrink-0 flex-nowrap items-center gap-0.5">
       {showMessages ? <ContactMessagesControl /> : null}
       {showChat ? <WebChatControl /> : null}
-      <EmailControl />
+      {showEmail ? <EmailControl /> : null}
     </div>
   );
 }

@@ -42,6 +42,12 @@ const ac = createAccessControl({
   menu: ["manage"],
   managementDashboard: ["read"],
   customerDashboard: ["read"],
+  // Email → Lead Management (locked plan): exactly four permissions.
+  // email:read = view, sync, read/unread, star, dismiss suggestion
+  // email:send = compose, send, reply, draft
+  // email:delete = trash, restore, permanent delete
+  // email:manage = confirm/change/remove Lead association
+  email: ["read", "send", "delete", "manage"],
 } as const);
 
 const roleStatements: Record<MembershipRole, ReturnType<typeof ac.newRole>> = {
@@ -55,6 +61,7 @@ const roleStatements: Record<MembershipRole, ReturnType<typeof ac.newRole>> = {
     menu: ["manage"],
     managementDashboard: ["read"],
     customerDashboard: ["read"],
+    email: ["read", "send", "delete", "manage"],
   }),
   ADMIN: ac.newRole({
     contactMessage: ["read"],
@@ -64,6 +71,7 @@ const roleStatements: Record<MembershipRole, ReturnType<typeof ac.newRole>> = {
     membership: ["manage"],
     managementDashboard: ["read"],
     customerDashboard: ["read"],
+    email: ["read", "send", "delete", "manage"],
   }),
   SUPERVISOR: ac.newRole({ managementDashboard: ["read"] }),
   TECHNICIAN: ac.newRole({ managementDashboard: ["read"] }),

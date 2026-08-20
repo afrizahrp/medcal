@@ -10,7 +10,14 @@ export interface Me {
   user: { id: string; email: string; name: string };
   membership: { role: MembershipRole; companyId: string };
   /** Minimal capability signal for non-menu UI surfaces — see MeController. */
-  capabilities: { leadRead: boolean; chatRead: boolean };
+  capabilities: {
+    leadRead: boolean;
+    chatRead: boolean;
+    emailRead: boolean;
+    emailSend: boolean;
+    emailDelete: boolean;
+    emailManage: boolean;
+  };
 }
 
 export type SessionStatus = "loading" | "ready" | "forbidden";
