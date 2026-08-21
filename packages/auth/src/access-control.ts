@@ -55,6 +55,10 @@ const ac = createAccessControl({
   // email:manage = confirm/change/remove Lead association
   email: ["read", "send", "delete", "manage"],
   permission: ["manage"],
+  // FCM Push notifications (Phase 3): test endpoint for verifying backend->FCM
+  // sending. notification:test is SUPERADMIN-only by default (no RolePermission
+  // rows seeded) — send to production tokens requires explicit admin action.
+  notification: ["test"],
 } as const);
 
 /**
