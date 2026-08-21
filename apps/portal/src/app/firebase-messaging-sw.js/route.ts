@@ -21,7 +21,15 @@ export function GET() {
 importScripts('https://www.gstatic.com/firebasejs/${FIREBASE_COMPAT_VERSION}/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/${FIREBASE_COMPAT_VERSION}/firebase-messaging-compat.js');
 firebase.initializeApp(${JSON.stringify(firebaseConfig)});
-firebase.messaging();
+const messaging = firebase.messaging();
+messaging.onBackgroundMessage((payload) => {
+  const title = payload.notification?.title || "MedCal";
+  const options = {
+    body: payload.notification?.body || "",
+    data: payload.data || {},
+  };
+  return self.registration.showNotification(title, options);
+});
 `;
 
   return new Response(body, {
