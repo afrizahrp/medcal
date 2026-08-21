@@ -1,0 +1,52 @@
+[1mdiff --git a/apps/portal/src/proxy.test.ts b/apps/portal/src/proxy.test.ts[m
+[1mnew file mode 100644[m
+[1mindex 0000000..237fdb8[m
+[1m--- /dev/null[m
+[1m+++ b/apps/portal/src/proxy.test.ts[m
+[36m@@ -0,0 +1,33 @@[m
+[32m+[m[32mimport { describe, expect, it } from "vitest";[m
+[32m+[m[32mimport { config } from "./proxy";[m
+[32m+[m
+[32m+[m[32m/**[m
+[32m+[m[32m * Next.js matcher form: /((?!a|b|c).*)[m
+[32m+[m[32m * A path is matched (and therefore rewritten by proxy) when the segment after[m
+[32m+[m[32m * the leading slash is NOT excluded by the negative lookahead.[m
+[32m+[m[32m */[m
+[32m+[m[32mfunction isMatchedByProxy(pathname: string): boolean {[m
+[32m+[m[32m  const matcher = config.matcher[0];[m
+[32m+[m[32m  const pattern = matcher.startsWith("/") ? matcher.slice(1) : matcher;[m
+[32m+[m[32m  const re = new RegExp(`^${pattern}$`);[m
+[32m+[m[32m  const path = pathname.startsWith("/") ? pathname.slice(1) : pathname;[m
+[32m+[m[32m  return re.test(path);[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mdescribe("portal proxy matcher", () => {[m
+[32m+[m[32m  it("excludes /firebase-messaging-sw.js from host-group rewrite", () => {[m
+[32m+[m[32m    expect(isMatchedByProxy("/firebase-messaging-sw.js")).toBe(false);[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("still matches management app routes", () => {[m
+[32m+[m[32m    expect(isMatchedByProxy("/leads")).toBe(true);[m
+[32m+[m[32m    expect(isMatchedByProxy("/")).toBe(true);[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("still excludes existing bypass paths", () => {[m
+[32m+[m[32m    expect(isMatchedByProxy("/_next/static/chunk.js")).toBe(false);[m
+[32m+[m[32m    expect(isMatchedByProxy("/favicon.ico")).toBe(false);[m
+[32m+[m[32m    expect(isMatchedByProxy("/manifest.webmanifest")).toBe(false);[m
+[32m+[m[32m    expect(isMatchedByProxy("/sign-in")).toBe(false);[m
+[32m+[m[32m  });[m
+[32m+[m[32m});[m
+[1mdiff --git a/apps/portal/src/proxy.ts b/apps/portal/src/proxy.ts[m
+[1mindex d041913..7c53a21 100644[m
+[1m--- a/apps/portal/src/proxy.ts[m
+[1m+++ b/apps/portal/src/proxy.ts[m
+[36m@@ -31,5 +31,7 @@[m [mexport function proxy(request: NextRequest) {[m
+ }[m
+ [m
+ export const config = {[m
+[31m-  matcher: ["/((?!_next|favicon.ico|manifest.webmanifest|sign-in).*)"],[m
+[32m+[m[32m  // firebase-messaging-sw.js is a root App Router route handler — must not be[m
+[32m+[m[32m  // rewritten to /management/... or /client/... (host-group prefix).[m
+[32m+[m[32m  matcher: ["/((?!_next|favicon.ico|manifest.webmanifest|firebase-messaging-sw.js|sign-in).*)"],[m
+ };[m

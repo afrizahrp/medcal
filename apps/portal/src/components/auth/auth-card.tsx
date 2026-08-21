@@ -23,10 +23,10 @@ export function AuthCard({
       <div className="mb-4 flex flex-col items-center text-center">
         <Image
           src={logo}
-          alt="MedCal"
-          width={80}
-          height={80}
-          className="h-20 w-20 object-contain"
+          alt="pkm"
+          width={110}
+          height={110}
+          className="h-32 w-32 object-contain"
           priority
         />
         <h1 className="-mt-1 text-base font-semibold text-brand-800">
