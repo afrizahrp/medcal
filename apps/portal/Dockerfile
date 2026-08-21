@@ -63,6 +63,7 @@ ENV NODE_ENV=production
 RUN addgroup -S medcal && adduser -S medcal -G medcal
 WORKDIR /app
 COPY --from=builder /app .
+RUN chown -R medcal:medcal /app
 USER medcal
 WORKDIR /app/apps/portal
 EXPOSE 3003
