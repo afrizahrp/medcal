@@ -8,6 +8,7 @@ import { getFirebaseWebConfig, getFirebaseVapidKey } from "./config";
 
 const SW_PATH = "/firebase-messaging-sw.js";
 const LAST_TOKEN_KEY = "medcal:portal:fcm:lastRegisteredToken";
+const SW_ACTIVATION_TIMEOUT_MS = 30_000;
 
 let messagingInstance: Messaging | null = null;
 
@@ -56,6 +57,79 @@ export async function registerMessagingServiceWorker(): Promise<ServiceWorkerReg
   }
 }
 
+function waitForWorkerActivation(worker: ServiceWorker): Promise<void> {
+  if (worker.state === "activated") {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(
+        new Error(`Service worker activation timed out after ${SW_ACTIVATION_TIMEOUT_MS}ms`),
+      );
+    }, SW_ACTIVATION_TIMEOUT_MS);
+
+    worker.addEventListener("statechange", () => {
+      if (worker.state === "activated") {
+        clearTimeout(timeoutId);
+        resolve();
+        return;
+      }
+      if (worker.state === "redundant") {
+        clearTimeout(timeoutId);
+        reject(new Error("Service worker became redundant before activation"));
+      }
+    });
+  });
+}
+
+/**
+ * Wait until the given registration has an active worker.
+ * Returns the same registration object once registration.active is set.
+ */
+async function waitForActiveServiceWorkerRegistration(
+  registration: ServiceWorkerRegistration,
+): Promise<ServiceWorkerRegistration | null> {
+  if (registration.active) {
+    return registration;
+  }
+
+  const pendingWorker = registration.installing ?? registration.waiting;
+  if (pendingWorker) {
+    try {
+      await waitForWorkerActivation(pendingWorker);
+    } catch (error) {
+      console.error(
+        "[fcm] Service worker activation failed:",
+        error instanceof Error ? error.message : "Unknown error",
+      );
+      return null;
+    }
+    return registration.active ? registration : null;
+  }
+
+  try {
+    await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(
+            new Error(`Service worker ready timed out after ${SW_ACTIVATION_TIMEOUT_MS}ms`),
+          );
+        }, SW_ACTIVATION_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    console.error(
+      "[fcm] Service worker ready wait failed:",
+      error instanceof Error ? error.message : "Unknown error",
+    );
+    return null;
+  }
+
+  return registration.active ? registration : null;
+}
+
 export function detectDeviceType(): string {
   if (typeof navigator === "undefined") return "web";
   const ua = navigator.userAgent;
@@ -96,10 +170,23 @@ export async function obtainFcmToken(): Promise<string | null> {
   if (!registration) return null;
 
   try {
-    await navigator.serviceWorker.ready;
+    const activeRegistration = await waitForActiveServiceWorkerRegistration(registration);
+    if (!activeRegistration?.active) {
+      console.error("[fcm] Service worker is not active; cannot obtain FCM token");
+      return null;
+    }
+
+    console.log("[fcm] pre-getToken", {
+      scope: activeRegistration.scope,
+      active: !!activeRegistration.active,
+      activeState: activeRegistration.active?.state,
+      installing: activeRegistration.installing?.state,
+      waiting: activeRegistration.waiting?.state,
+    });
+
     const token = await getToken(messaging, {
       vapidKey,
-      serviceWorkerRegistration: registration,
+      serviceWorkerRegistration: activeRegistration,
     });
     if (!token) {
       console.error("[fcm] getToken() returned empty token");
