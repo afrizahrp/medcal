@@ -9,11 +9,12 @@
 #     -t medcal-portal .
 # (docker-compose.prod.yml already sets context/dockerfile/build.args this way.)
 #
-# NEXT_PUBLIC_API_URL is inlined into the client bundle by `next build` — verified as the
-# ONLY NEXT_PUBLIC_* variable apps/portal reads (Better Auth client baseURL, apiFetch base,
-# management chat socket target all use this single value). Portal has no dependency on
-# apps/web-api, Prisma, or reCAPTCHA anywhere in its source — confirmed by inspection, so
-# none of those are wired into this image.
+# NEXT_PUBLIC_* client config is inlined into the client bundle by `next build`:
+# - NEXT_PUBLIC_API_URL — Better Auth client baseURL, apiFetch base, management chat socket
+# - NEXT_PUBLIC_FIREBASE_* / NEXT_PUBLIC_FIREBASE_VAPID_KEY — Firebase Web SDK + FCM
+# Portal has no dependency on apps/web-api, Prisma, or reCAPTCHA anywhere in its source —
+# confirmed by inspection, so none of those are wired into this image. Firebase Admin /
+# service-account credentials must NEVER be passed into this image.
 #
 # No `output: "standalone"` is set in next.config.js — runs via `next start`, same as
 # apps/web's image.
@@ -36,10 +37,24 @@ COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile
 COPY --from=pruner /app/out/full/ .
 
-# ---- Build (NEXT_PUBLIC_API_URL must be visible to `next build` here) ----
+# ---- Build (NEXT_PUBLIC_* must be visible to `next build` here) ----
 FROM installer AS builder
 ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_FIREBASE_API_KEY
+ARG NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+ARG NEXT_PUBLIC_FIREBASE_PROJECT_ID
+ARG NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+ARG NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+ARG NEXT_PUBLIC_FIREBASE_APP_ID
+ARG NEXT_PUBLIC_FIREBASE_VAPID_KEY
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_FIREBASE_API_KEY=$NEXT_PUBLIC_FIREBASE_API_KEY
+ENV NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+ENV NEXT_PUBLIC_FIREBASE_PROJECT_ID=$NEXT_PUBLIC_FIREBASE_PROJECT_ID
+ENV NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=$NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+ENV NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=$NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+ENV NEXT_PUBLIC_FIREBASE_APP_ID=$NEXT_PUBLIC_FIREBASE_APP_ID
+ENV NEXT_PUBLIC_FIREBASE_VAPID_KEY=$NEXT_PUBLIC_FIREBASE_VAPID_KEY
 RUN pnpm --filter=@medcal/portal run build
 
 # ---- Runtime image ----

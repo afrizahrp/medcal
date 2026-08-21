@@ -12,6 +12,12 @@ const FORBIDDEN_MESSAGE = "Forbidden";
  * the caller's own UserMembership for this deployment's bound COMPANY_ID —
  * never from a client-supplied header/param (the Adoption Matrix explicitly
  * calls out client-supplied company_id trust as a Do-Not-Copy anti-pattern).
+ *
+ * Always enforces: session + ACTIVE membership for COMPANY_ID, and injects
+ * request.userId / request.companyId / request.membershipRole.
+ * When @RequirePermission is present, also checks the catalog grant.
+ * When absent (e.g. own-resource routes like push-token registration),
+ * authentication + ACTIVE status alone are sufficient.
  */
 @Injectable()
 export class CompanyRoleGuard implements CanActivate {
@@ -22,9 +28,6 @@ export class CompanyRoleGuard implements CanActivate {
       REQUIRE_PERMISSION_KEY,
       [context.getHandler(), context.getClass()],
     );
-    if (!required) {
-      return true;
-    }
 
     const request = context.switchToHttp().getRequest();
 
@@ -51,7 +54,7 @@ export class CompanyRoleGuard implements CanActivate {
       throw new ForbiddenException(FORBIDDEN_MESSAGE);
     }
 
-    if (!hasPermission(membership.role, required.resource as never, required.action)) {
+    if (required && !hasPermission(membership.role, required.resource as never, required.action)) {
       throw new ForbiddenException(FORBIDDEN_MESSAGE);
     }
 

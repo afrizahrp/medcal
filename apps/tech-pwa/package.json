@@ -13,6 +13,7 @@
     "@medcal/auth": "workspace:*",
     "@medcal/shared": "workspace:*",
     "@medcal/ui": "workspace:*",
+    "firebase": "^12.18.0",
     "next": "16.2.12",
     "react": "19.2.8",
     "react-dom": "19.2.8"

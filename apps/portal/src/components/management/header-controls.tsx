@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { SignOutButton } from "../sign-out-button";
+import { usePushNotifications } from "../../lib/fcm";
 import { useUnreadChatSessionsCount, useUnreadContactMessagesCount } from "../../lib/use-unread-count";
 import { ChatIcon, EmailIcon, MessagesIcon } from "./icons";
 
@@ -64,6 +65,56 @@ export function NotificationControls({
       {showMessages ? <ContactMessagesControl /> : null}
       {showChat ? <WebChatControl /> : null}
       {showEmail ? <EmailControl /> : null}
+    </div>
+  );
+}
+
+function PushNotificationsMenuItem() {
+  const { status, errorMessage, enable } = usePushNotifications({ authenticated: true });
+
+  if (status === "unconfigured" || status === "unsupported" || status === "idle") {
+    return null;
+  }
+
+  if (status === "enabled") {
+    return (
+      <p className="px-2 py-2 text-xs text-slate-500" role="status">
+        Notifications enabled
+      </p>
+    );
+  }
+
+  if (status === "denied") {
+    return (
+      <p className="px-2 py-2 text-xs text-slate-500" role="status">
+        Notifications blocked in browser settings
+      </p>
+    );
+  }
+
+  if (status === "enabling") {
+    return (
+      <p className="px-2 py-2 text-xs text-slate-500" role="status">
+        Enabling notifications…
+      </p>
+    );
+  }
+
+  return (
+    <div className="px-2 py-1">
+      <button
+        type="button"
+        role="menuitem"
+        className="w-full min-h-10 rounded-shell px-2 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+        onClick={() => void enable()}
+      >
+        Enable notifications
+      </button>
+      {status === "error" && errorMessage ? (
+        <p className="px-2 pb-1 text-xs text-red-600" role="status">
+          {errorMessage}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -155,8 +206,11 @@ export function UserMenu({
               <p className="truncate text-xs text-slate-500">{role}</p>
             </div>
           </div>
-          <div className="mt-1 border-t border-slate-100 px-2 pt-1">
-            <SignOutButton className="w-full min-h-10 rounded-shell px-2 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 hover:no-underline" />
+          <div className="mt-1 border-t border-slate-100 pt-1">
+            <PushNotificationsMenuItem />
+            <div className="px-2">
+              <SignOutButton className="w-full min-h-10 rounded-shell px-2 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 hover:no-underline" />
+            </div>
           </div>
         </div>
       )}
