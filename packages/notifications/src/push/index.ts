@@ -101,6 +101,12 @@ export async function sendPush(input: SendPushInput): Promise<SendPushResult> {
       title: input.notification.title,
       body: input.notification.body,
     },
+    webpush: {
+      notification: {
+        title: input.notification.title,
+        body: input.notification.body,
+      },
+    },
     ...(input.data ? { data: input.data } : {}),
   };
 
@@ -162,6 +168,12 @@ export async function sendPushBatch(
     notification: {
       title: input.notification.title,
       body: input.notification.body,
+    },
+    webpush: {
+      notification: {
+        title: input.notification.title,
+        body: input.notification.body,
+      },
     },
     ...(input.data ? { data: input.data } : {}),
   }));
