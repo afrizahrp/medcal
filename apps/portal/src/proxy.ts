@@ -31,5 +31,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next|favicon.ico|manifest.webmanifest|sign-in).*)"],
+  // firebase-messaging-sw.js is a root App Router route handler — must not be
+  // rewritten to /management/... or /client/... (host-group prefix).
+  matcher: ["/((?!_next|favicon.ico|manifest.webmanifest|firebase-messaging-sw.js|sign-in).*)"],
 };
