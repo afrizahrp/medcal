@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-  ArrowUpDown,
   Building2,
   Calendar,
   CheckCircle2,
@@ -109,17 +109,17 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
 };
 
 export const CONTACT_STATUS_LABELS: Record<ContactStatus, string> = {
-  PENDING: "Pending",
-  READ: "Read",
-  REPLIED: "Replied",
-  CLOSED: "Closed",
+  PENDING: "Menunggu",
+  READ: "Dibaca",
+  REPLIED: "Dibalas",
+  CLOSED: "Ditutup",
 };
 
 /** easy-app reference palette — ContactMessage status semantics (authoritative domain). */
 const CONTACT_STATUS_BADGE_CLASS: Record<ContactStatus, string> = {
   PENDING: "border-transparent bg-orange-400 text-white hover:bg-orange-400",
   READ: "border-transparent bg-blue-600 text-white hover:bg-blue-600",
-  REPLIED: "border-transparent bg-blue-600 text-white hover:bg-blue-600",
+  REPLIED: "border border-emerald-600 bg-emerald-50 text-emerald-800 hover:bg-emerald-50",
   CLOSED: "border-transparent bg-slate-600 text-white hover:bg-slate-600",
 };
 
@@ -204,15 +204,24 @@ export function formatDetailTimestamp(iso: string): string {
   return `${absolute} / ${formatRelativeTime(iso)}`;
 }
 
-export function ContactStatusBadge({ status, className }: { status: ContactStatus; className?: string }) {
+export function ContactStatusBadge({
+  status,
+  className,
+  showIcon = false,
+}: {
+  status: ContactStatus;
+  className?: string;
+  showIcon?: boolean;
+}) {
   return (
     <Badge
       className={cn(
-        "inline-flex min-w-fit shrink-0 whitespace-nowrap rounded-md border-0 px-3 py-1 text-xs font-semibold normal-case tracking-normal shadow-none",
+        "inline-flex min-w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-3 py-1 text-xs font-semibold normal-case tracking-normal shadow-none",
         CONTACT_STATUS_BADGE_CLASS[status],
         className,
       )}
     >
+      {showIcon ? <ContactStatusIcon status={status} /> : null}
       {CONTACT_STATUS_LABELS[status]}
     </Badge>
   );
@@ -258,6 +267,7 @@ export function SourceIcon({ source, className }: { source: GetMessageFrom; clas
         className,
       )}
       title={SOURCE_LABELS[source]}
+      aria-label={SOURCE_LABELS[source]}
     >
       {source === "WHATSAPP" ? (
         <MessageCircle className={iconClass} />
@@ -343,51 +353,64 @@ export function NeedsReviewAccordion({
           <AccordionTrigger className="px-4 hover:no-underline md:px-5">
             <span className="flex items-center gap-2 text-sm font-semibold text-amber-900">
               <AlertTriangle className="h-4 w-4 shrink-0" />
-              Needs Review ({items.length})
+              Perlu Ditinjau ({items.length})
             </span>
           </AccordionTrigger>
           <AccordionContent className="border-t border-amber-200 px-4 md:px-5">
-            <ul className="space-y-3">
-              {items.map(({ message, candidates }) => (
-                <li key={message.id} className="rounded-lg border border-amber-200 bg-white p-3 text-sm">
-                  <p className="font-semibold text-slate-900">
-                    {message.name} {message.organizationName ? `· ${message.organizationName}` : ""}
-                  </p>
-                  <p className="text-slate-500">{message.phone ?? message.email}</p>
-                  <div className="mt-2 space-y-1">
-                    {candidates.map((candidate) => (
-                      <p key={candidate.id} className="text-xs text-slate-500">
-                        Possible existing Lead: {candidate.name}
-                        {candidate.organizationName ? ` · ${candidate.organizationName}` : ""} · #
-                        {candidate.id.slice(-6)}
-                      </p>
-                    ))}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {candidates.map((candidate) => (
+            <ul className="space-y-3 pb-4">
+              {items.map(({ message, candidates }) => {
+                const isResolving = resolvingId === message.id;
+                return (
+                  <li key={message.id} className="rounded-lg border border-amber-200 bg-white p-3 text-sm">
+                    <p className="font-semibold text-slate-900">
+                      {message.name} {message.organizationName ? `· ${message.organizationName}` : ""}
+                    </p>
+                    <p className="text-slate-500">{message.phone ?? message.email}</p>
+                    {candidates.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                          Kemungkinan Lead yang sudah ada
+                        </p>
+                        {candidates.map((candidate) => (
+                          <div
+                            key={candidate.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-slate-800">{candidate.name}</p>
+                              <p className="truncate text-xs text-slate-500">
+                                {candidate.organizationName ?? candidate.email} · #{candidate.id.slice(-6)}
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={isResolving}
+                              onClick={() =>
+                                onResolve(message.id, message.name, { action: "ATTACH", leadId: candidate.id })
+                              }
+                            >
+                              {isResolving ? "Memproses…" : `Hubungkan ke #${candidate.id.slice(-6)}`}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="mt-3">
                       <Button
-                        key={candidate.id}
                         type="button"
                         variant="outline"
                         size="sm"
-                        disabled={resolvingId === message.id}
-                        onClick={() => onResolve(message.id, message.name, { action: "ATTACH", leadId: candidate.id })}
+                        disabled={isResolving}
+                        onClick={() => onResolve(message.id, message.name, { action: "CREATE_NEW" })}
                       >
-                        Attach to #{candidate.id.slice(-6)}
+                        {isResolving ? "Memproses…" : "Buat Lead Baru"}
                       </Button>
-                    ))}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={resolvingId === message.id}
-                      onClick={() => onResolve(message.id, message.name, { action: "CREATE_NEW" })}
-                    >
-                      Create New Lead
-                    </Button>
-                  </div>
-                </li>
-              ))}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </AccordionContent>
         </AccordionItem>
@@ -484,22 +507,18 @@ export function MessageFilters({
             </option>
           ))}
         </select>
-        <div className="flex items-center gap-2 text-sm text-slate-400">
-          <ArrowUpDown className="h-4 w-4 shrink-0" />
-          <span className="shrink-0">Urutkan:</span>
-          <select
-            value={sortValue}
-            onChange={(e) => handleSortSelect(e.target.value)}
-            className={cn(selectClassName, "flex-1")}
-            aria-label="Urutkan pesan"
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={sortValue}
+          onChange={(e) => handleSortSelect(e.target.value)}
+          className={cn(selectClassName, "w-full")}
+          aria-label="Urutkan pesan"
+        >
+          {SORT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
     );
   }
@@ -598,6 +617,137 @@ function ClampedText({
   );
 }
 
+function InboxListHeader({ showing, total }: { showing: number; total: number }) {
+  return (
+    <p className="mb-3 text-sm text-slate-400">
+      Menampilkan {showing} dari {total} pesan
+    </p>
+  );
+}
+
+function MessageInboxSkeleton({ variant = "table" }: { variant?: "table" | "list" }) {
+  if (variant === "list") {
+    return (
+      <ul className="space-y-3" aria-hidden>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <li key={i} className="animate-pulse rounded-xl border border-slate-200 bg-white p-4">
+            <div className="h-4 w-1/3 rounded bg-slate-100" />
+            <div className="mt-2 h-3 w-1/2 rounded bg-slate-100" />
+            <div className="mt-4 h-3 w-full rounded bg-slate-100" />
+            <div className="mt-1 h-3 w-4/5 rounded bg-slate-100" />
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-md border border-slate-200" aria-hidden>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex animate-pulse gap-4 border-b border-slate-100 px-4 py-4 last:border-0">
+          <div className="h-10 w-[180px] shrink-0 rounded bg-slate-100" />
+          <div className="h-10 min-w-0 flex-1 rounded bg-slate-100" />
+          <div className="hidden h-10 w-[140px] rounded bg-slate-100 sm:block" />
+          <div className="hidden h-10 w-[100px] rounded bg-slate-100 md:block" />
+          <div className="h-10 w-[80px] shrink-0 rounded bg-slate-100" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function MessageInboxEmptyState({
+  hasActiveFilters,
+  onClearFilters,
+}: {
+  hasActiveFilters: boolean;
+  onClearFilters?: () => void;
+}) {
+  return (
+    <div className="px-4 py-8 text-center text-sm text-slate-400">
+      <p>{hasActiveFilters ? "Tidak ada pesan yang cocok dengan filter." : "Tidak ada pesan."}</p>
+      {hasActiveFilters && onClearFilters ? (
+        <Button type="button" variant="link" size="sm" className="mt-2 h-auto p-0" onClick={onClearFilters}>
+          Reset filter
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function MessageInboxTableRow({ message }: { message: ContactMessageRow }) {
+  const router = useRouter();
+  const isPending = message.status === "PENDING";
+  const leadHref = message.lead ? `/leads/${message.lead.id}` : null;
+
+  function handleRowClick() {
+    if (leadHref) router.push(leadHref);
+  }
+
+  function handleRowKeyDown(e: React.KeyboardEvent) {
+    if (leadHref && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      router.push(leadHref);
+    }
+  }
+
+  return (
+    <tr
+      className={cn(
+        "group border-b border-slate-100 last:border-0 transition-colors",
+        leadHref && "cursor-pointer hover:bg-slate-50/80",
+        isPending && "bg-orange-50/30",
+      )}
+      onClick={leadHref ? handleRowClick : undefined}
+      onKeyDown={leadHref ? handleRowKeyDown : undefined}
+      tabIndex={leadHref ? 0 : undefined}
+      aria-label={leadHref ? `Buka detail lead ${message.name}` : undefined}
+    >
+      <td className="min-w-[180px] align-middle px-4 py-3.5">
+        <div className="min-w-0">
+          <ClampedText
+            className={cn("text-slate-800", isPending ? "font-semibold" : "font-medium")}
+            lines={1}
+          >
+            {message.name}
+          </ClampedText>
+          <p className="mt-0.5 truncate text-xs text-slate-500">{message.email}</p>
+          {message.phone ? <p className="truncate text-xs text-slate-400">{message.phone}</p> : null}
+        </div>
+      </td>
+      <td className="min-w-[200px] max-w-[320px] align-middle px-4 py-3.5">
+        <ClampedText className="text-slate-600" lines={2}>
+          {message.message.trim() || "—"}
+        </ClampedText>
+      </td>
+      <td className="min-w-[140px] align-middle px-4 py-3.5 text-slate-600">
+        <ClampedText lines={1}>{message.topic?.name ?? "—"}</ClampedText>
+        {message.organizationName ? (
+          <ClampedText className="mt-0.5 text-xs text-slate-400" lines={1}>
+            {message.organizationName}
+          </ClampedText>
+        ) : null}
+      </td>
+      <td className="align-middle px-4 py-3.5">
+        <div className="flex items-center gap-2">
+          <SourceIcon source={message.getFrom} />
+          <ContactStatusBadge status={message.status} />
+        </div>
+      </td>
+      <td className="whitespace-nowrap align-middle px-4 py-3.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-slate-500" title={formatListDateTime(message.createdAt)}>
+            {formatRelativeTime(message.createdAt)}
+          </span>
+          <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+            <LeadRowMenu leadId={message.lead?.id} />
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export function MessageInboxTable({
   messages,
   loading,
@@ -605,127 +755,69 @@ export function MessageInboxTable({
   error,
   showing,
   total,
+  hasActiveFilters = false,
+  onClearFilters,
 }: {
   messages: ContactMessageRow[];
   loading: boolean;
-  /** Background refetch while previous rows are still shown (placeholderData) — lighter indicator than `loading`. */
   fetching?: boolean;
-  /** Distinct from an empty result — a fetch failure, rendered as its own row. */
   error?: string | null;
   showing: number;
   total: number;
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
 }) {
   return (
     <div>
-      <p className="mb-3 text-sm text-slate-400">
-        Menampilkan {showing} dari {total} pesan
-      </p>
+      {!loading ? <InboxListHeader showing={showing} total={total} /> : null}
       <div
         className={cn(
           "overflow-x-auto rounded-md border border-slate-200 transition-opacity",
           fetching && !loading && "opacity-60",
         )}
       >
-        <table className="w-full min-w-[960px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              <th className="whitespace-nowrap px-4 py-3">Tanggal</th>
-              <th className="min-w-[150px] px-4 py-3">Nama</th>
-              <th className="min-w-[220px] px-4 py-3">Email</th>
-              <th className="min-w-[130px] whitespace-nowrap px-4 py-3">Telepon</th>
-              <th className="min-w-[160px] px-4 py-3">Perusahaan</th>
-              <th className="min-w-[140px] px-4 py-3">Topik</th>
-              <th className="w-[88px] px-4 py-3">Sumber</th>
-              <th className="w-[120px] px-4 py-3">Status</th>
-              <th className="w-[56px] px-4 py-3">
-                <span className="sr-only">Aksi</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td className="px-4 py-8 text-slate-400" colSpan={9}>
-                  Memuat…
-                </td>
+        {loading ? (
+          <MessageInboxSkeleton variant="table" />
+        ) : error ? (
+          <p className="px-4 py-8 text-center text-sm text-red-600">{error}</p>
+        ) : messages.length > 0 ? (
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <th className="min-w-[180px] px-4 py-3">Kontak</th>
+                <th className="min-w-[200px] px-4 py-3">Pesan</th>
+                <th className="min-w-[140px] px-4 py-3">Topik / Perusahaan</th>
+                <th className="px-4 py-3">Sumber & Status</th>
+                <th className="whitespace-nowrap px-4 py-3">Waktu</th>
               </tr>
-            ) : error ? (
-              <tr>
-                <td className="px-4 py-8 text-red-600" colSpan={9}>
-                  {error}
-                </td>
-              </tr>
-            ) : messages.length > 0 ? (
-              messages.map((message) => (
-                <tr
-                  key={message.id}
-                  className={cn(
-                    "border-b border-slate-100 last:border-0 hover:bg-slate-50/70",
-                    message.status === "PENDING" && "bg-orange-50/30",
-                  )}
-                >
-                  <td className="whitespace-nowrap align-middle px-4 py-3.5 text-slate-500">
-                    {message.lead ? (
-                      <Link href={`/leads/${message.lead.id}`} className="hover:text-brand-700 hover:underline">
-                        {formatListDateTime(message.createdAt)}
-                      </Link>
-                    ) : (
-                      formatListDateTime(message.createdAt)
-                    )}
-                  </td>
-                  <td className="min-w-[150px] align-middle px-4 py-3.5">
-                    <ClampedText className="font-medium text-slate-800" lines={2}>
-                      {message.name}
-                    </ClampedText>
-                  </td>
-                  <td className="min-w-[220px] align-middle px-4 py-3.5">
-                    <span className="inline-flex max-w-full items-start gap-1.5 text-slate-600">
-                      <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <ClampedText lines={1}>{message.email}</ClampedText>
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap align-middle px-4 py-3.5 text-slate-600">{message.phone ?? "—"}</td>
-                  <td className="min-w-[160px] align-middle px-4 py-3.5 text-slate-600">
-                    {message.organizationName ? (
-                      <ClampedText lines={2}>{message.organizationName}</ClampedText>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="min-w-[140px] align-middle px-4 py-3.5 text-slate-600">
-                    {message.topic?.name ? <ClampedText lines={2}>{message.topic.name}</ClampedText> : "—"}
-                  </td>
-                  <td className="w-[88px] align-middle px-4 py-3.5">
-                    <SourceIcon source={message.getFrom} />
-                  </td>
-                  <td className="w-[120px] overflow-visible align-middle px-4 py-3.5">
-                    <ContactStatusBadge status={message.status} />
-                  </td>
-                  <td className="w-[56px] align-middle px-4 py-3.5 text-right">
-                    <LeadRowMenu leadId={message.lead?.id} />
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td className="px-4 py-8 text-slate-400" colSpan={9}>
-                  Tidak ada pesan.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {messages.map((message) => (
+                <MessageInboxTableRow key={message.id} message={message} />
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <MessageInboxEmptyState hasActiveFilters={hasActiveFilters} onClearFilters={onClearFilters} />
+        )}
       </div>
     </div>
   );
 }
 
 function MessageCardBody({ message, compact }: { message: ContactMessageRow; compact?: boolean }) {
+  const isPending = message.status === "PENDING";
   return (
     <>
       <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
         <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 font-semibold leading-snug text-slate-900" title={message.name}>
+          <p
+            className={cn(
+              "line-clamp-2 leading-snug text-slate-900",
+              isPending ? "font-semibold" : "font-medium",
+            )}
+            title={message.name}
+          >
             {message.name}
           </p>
           <p className="mt-0.5 truncate text-sm text-slate-400">{message.email}</p>
@@ -771,6 +863,8 @@ export function MessageInboxList({
   showing,
   total,
   variant = "desktop",
+  hasActiveFilters = false,
+  onClearFilters,
 }: {
   messages: ContactMessageRow[];
   loading: boolean;
@@ -779,9 +873,11 @@ export function MessageInboxList({
   showing: number;
   total: number;
   variant?: "desktop" | "mobile";
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
 }) {
   if (loading) {
-    return <p className="py-8 text-center text-sm text-slate-400">Memuat…</p>;
+    return <MessageInboxSkeleton variant="list" />;
   }
 
   if (error) {
@@ -789,29 +885,29 @@ export function MessageInboxList({
   }
 
   if (messages.length === 0) {
-    return <p className="py-8 text-center text-sm text-slate-400">Tidak ada pesan.</p>;
+    return <MessageInboxEmptyState hasActiveFilters={hasActiveFilters} onClearFilters={onClearFilters} />;
   }
 
   return (
     <div className={cn("transition-opacity", fetching && "opacity-60")}>
-      <p className="mb-3 text-sm text-slate-400">
-        Menampilkan {showing} dari {total} pesan
-      </p>
+      <InboxListHeader showing={showing} total={total} />
       <ul className={cn("space-y-3", variant === "desktop" && "lg:space-y-2")}>
         {messages.map((message) => {
           const body = <MessageCardBody message={message} compact={variant === "mobile"} />;
+          const isPending = message.status === "PENDING";
           return (
             <li
               key={message.id}
               className={cn(
                 "flex items-stretch overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm transition-colors",
                 "hover:border-slate-300",
-                message.status === "PENDING" && "border-l-4 border-l-orange-400",
+                isPending && "bg-orange-50/20",
               )}
             >
               {message.lead ? (
                 <Link
                   href={`/leads/${message.lead.id}`}
+                  aria-label={`Buka detail lead ${message.name}`}
                   className="min-w-0 flex-1 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   {body}

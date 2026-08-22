@@ -96,12 +96,25 @@ export default function LeadsPageClient() {
         setLastResolved({ name: messageName, leadId: updated.leadId });
       }
     } catch {
-      setResolveError("Gagal menyelesaikan Needs Review.");
+      setResolveError("Gagal menyelesaikan peninjauan.");
     }
   }
 
   const resolvingId =
     resolveMutation.isPending && resolveMutation.variables ? resolveMutation.variables.messageId : null;
+
+  const hasActiveFilters = Boolean(status || source || topicId || committedSearch);
+
+  function clearAllFilters() {
+    setSearchInput("");
+    setParams({
+      status: undefined,
+      source: undefined,
+      topicId: undefined,
+      search: undefined,
+      page: undefined,
+    });
+  }
 
   const filterProps = {
     search: searchInput,
@@ -125,6 +138,8 @@ export default function LeadsPageClient() {
     error,
     showing: result?.data.length ?? 0,
     total: result?.total ?? 0,
+    hasActiveFilters,
+    onClearFilters: clearAllFilters,
   };
 
   const paginationProps = {
@@ -143,10 +158,10 @@ export default function LeadsPageClient() {
   return (
     <div className="w-full px-4 py-6 md:px-6 md:py-6">
       <PageHeader
-        title="Contact Messages"
+        title="Pesan Kontak"
         crumbs={[
           { href: "/", label: "Dashboard" },
-          { label: "Contact Messages" },
+          { label: "Pesan Kontak" },
         ]}
       />
 
