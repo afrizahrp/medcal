@@ -108,7 +108,7 @@ services:
     container_name: medcal-web
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3010:3000"
     networks:
       - medcal_net
     # No container-level dependency on api/web-api: apps/web's calls to both
