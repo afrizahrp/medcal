@@ -33,5 +33,9 @@ export function proxy(request: NextRequest) {
 export const config = {
   // firebase-messaging-sw.js is a root App Router route handler — must not be
   // rewritten to /management/... or /client/... (host-group prefix).
-  matcher: ["/((?!_next|favicon.ico|manifest.webmanifest|firebase-messaging-sw.js|sign-in).*)"],
+  // Public assets (icons, manifest, media) must also bypass rewrite so
+  // /short-logo.png and PWA install icons resolve from /public at root.
+  matcher: [
+    "/((?!_next|favicon.ico|manifest.webmanifest|site.webmanifest|firebase-messaging-sw.js|sign-in|[^/]+\\.(?:png|ico|webmanifest|jpg|jpeg|svg|webp|mp4)).*)",
+  ],
 };

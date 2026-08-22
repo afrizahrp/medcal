@@ -139,6 +139,8 @@ services:
     image: medcal-portal:latest
     container_name: medcal-portal
     restart: unless-stopped
+    env_file:
+      - .env.production
     ports:
       - "127.0.0.1:3003:3003"
     networks:

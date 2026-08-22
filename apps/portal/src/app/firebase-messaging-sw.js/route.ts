@@ -17,6 +17,11 @@ export function GET() {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? "",
   };
 
+  const defaultIcon =
+    process.env.PUSH_NOTIFICATION_ICON_URL?.trim() ||
+    process.env.NEXT_PUBLIC_PUSH_ICON_URL?.trim() ||
+    "/short-logo.png";
+
   const body = `/* firebase-messaging-sw.js — Portal FCM background handler */
 importScripts('https://www.gstatic.com/firebasejs/${FIREBASE_COMPAT_VERSION}/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/${FIREBASE_COMPAT_VERSION}/firebase-messaging-compat.js');
@@ -29,7 +34,7 @@ messaging.onBackgroundMessage((payload) => {
   }
   const data = payload.data || {};
   const title = data.title || "MedCal";
-  const icon = data.icon || "/short-logo.png";
+  const icon = data.icon || ${JSON.stringify(defaultIcon)};
   const options = {
     body: data.body || "",
     icon,

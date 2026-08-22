@@ -28,6 +28,13 @@ describe("portal proxy matcher", () => {
     expect(isMatchedByProxy("/_next/static/chunk.js")).toBe(false);
     expect(isMatchedByProxy("/favicon.ico")).toBe(false);
     expect(isMatchedByProxy("/manifest.webmanifest")).toBe(false);
+    expect(isMatchedByProxy("/site.webmanifest")).toBe(false);
     expect(isMatchedByProxy("/sign-in")).toBe(false);
+  });
+
+  it("excludes public static assets from host-group rewrite", () => {
+    expect(isMatchedByProxy("/short-logo.png")).toBe(false);
+    expect(isMatchedByProxy("/android-chrome-192x192.png")).toBe(false);
+    expect(isMatchedByProxy("/apple-touch-icon.png")).toBe(false);
   });
 });

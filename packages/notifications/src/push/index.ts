@@ -55,8 +55,11 @@ function buildFcmMessage(input: SendPushInput): Message {
     title: input.notification.title,
     body: input.notification.body,
   };
+  const data: PushData = input.data ? { ...input.data } : {};
   if (input.icon) {
     webpushNotification.icon = input.icon;
+    webpushNotification.badge = input.icon;
+    data.icon = input.icon;
   }
 
   return {
@@ -68,7 +71,7 @@ function buildFcmMessage(input: SendPushInput): Message {
     webpush: {
       notification: webpushNotification,
     },
-    ...(input.data ? { data: input.data } : {}),
+    ...(Object.keys(data).length > 0 ? { data } : {}),
   };
 }
 
