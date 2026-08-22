@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
-import { WebChatBubble } from "@/components/web-chat-bubble";
+import { WebChatBubbleLazy } from "@/components/web-chat-bubble-lazy";
 import { JsonLd } from "@/components/json-ld";
 import { siteUrl } from "@/data/seo";
 import { professionalServiceJsonLd } from "@/data/structured-data";
@@ -49,7 +49,7 @@ export default function RootLayout({
         <SiteHeader />
         <main className="flex-1">{children}</main>
         <SiteFooter />
-        <WebChatBubble />
+        <WebChatBubbleLazy />
       </body>
     </html>
   );

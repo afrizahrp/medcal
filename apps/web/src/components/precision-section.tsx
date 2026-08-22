@@ -13,16 +13,16 @@ export function PrecisionSection() {
               Presisi di Setiap Pengukuran
             </h2>
             <p className="mt-3 text-base leading-relaxed text-ink-600 sm:text-lg">
-              Setiap alat dikalibrasi oleh teknisi berpengalaman menggunakan
-              instrumen dan probe kalibrasi yang terjaga ketertelusurannya,
-              mengikuti prosedur baku sesuai SNI ISO/IEC 17025:2017
+              Setiap alat dikalibrasi oleh teknisi berpengalaman menggunakan instrumen dan probe
+              kalibrasi yang terjaga ketertelusurannya, mengikuti prosedur baku sesuai SNI ISO/IEC
+              17025:2017
             </p>
           </div>
 
           <div className="order-1 lg:order-2">
             <div className="relative aspect-video overflow-hidden rounded-2xl border border-ink-100 bg-brand-50/40 shadow-sm">
               <LazyVideo
-                src="/single-technician.mp4"
+                src="/single-technician.webm"
                 className="absolute inset-0 h-full w-full object-cover motion-reduce:hidden"
               />
             </div>

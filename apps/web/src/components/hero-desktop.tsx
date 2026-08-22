@@ -7,7 +7,7 @@ export function HeroDesktop({ content }: { content: HeroContent }) {
   return (
     <section className="relative isolate hidden overflow-hidden border-b border-ink-100 bg-brand-950 lg:flex lg:min-h-[680px] lg:items-center">
       <LazyVideo
-        src="/technician-team.mp4"
+        src="/technician-team.webm"
         className="absolute inset-0 -z-20 h-full w-full object-cover object-center motion-reduce:hidden"
       />
 

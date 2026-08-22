@@ -85,10 +85,34 @@ export function WebChatBubble() {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
   }, [chat.messages]);
 
+  function waitForGrecaptcha(maxMs = 15_000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (window.grecaptcha) {
+        resolve();
+        return;
+      }
+
+      const deadline = Date.now() + maxMs;
+      const tick = () => {
+        if (window.grecaptcha) {
+          resolve();
+        } else if (Date.now() >= deadline) {
+          reject(new Error("Verifikasi keamanan belum siap, silakan coba lagi."));
+        } else {
+          setTimeout(tick, 50);
+        }
+      };
+      tick();
+    });
+  }
+
   async function getCaptchaToken(action: string): Promise<string> {
-    if (!RECAPTCHA_SITE_KEY || !window.grecaptcha) {
+    if (!RECAPTCHA_SITE_KEY) {
       throw new Error("Verifikasi keamanan belum siap, silakan coba lagi.");
     }
+
+    await waitForGrecaptcha();
+
     return new Promise((resolve, reject) => {
       window.grecaptcha!.ready(() => {
         window
@@ -143,7 +167,7 @@ export function WebChatBubble() {
       onOpenChange={handleOpenChange}
       modal="trap-focus"
     >
-      {RECAPTCHA_SITE_KEY ? (
+      {RECAPTCHA_SITE_KEY && everOpened ? (
         <Script
           src={`https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`}
           strategy="afterInteractive"

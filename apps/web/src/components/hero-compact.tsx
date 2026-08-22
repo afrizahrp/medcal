@@ -8,7 +8,7 @@ export function HeroCompact({ content }: { content: HeroContent }) {
     <section className="border-b border-ink-100 bg-brand-950 lg:hidden">
       <div className="relative h-[200px] w-full overflow-hidden bg-brand-900 sm:h-[260px] md:h-[320px]">
         <LazyVideo
-          src="/technician-team.mp4"
+          src="/technician-team.webm"
           className="absolute inset-0 h-full w-full object-cover object-[45%_32%] motion-reduce:hidden sm:object-[55%_32%] md:object-[60%_35%]"
         />
         <div
