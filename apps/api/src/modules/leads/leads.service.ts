@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { prisma } from "@medcal/db";
 import type { ContactMessage, Lead, LeadStatus, Prisma } from "@medcal/db";
 import { LEAD_SORTABLE_FIELDS } from "@medcal/shared";
 import type { LeadListQuery } from "@medcal/shared";
 import { resolveSortOrder } from "../../common/sort-query";
 import { findLeadMatchCandidates } from "./lead-matching";
+import { NotificationDispatchService } from "../push-tokens/notification-dispatch.service";
 
 // Canonical default (Management List pattern, 2026-08-18) — see the matching
 // comment in contact-messages.service.ts; kept identical across siblings.
@@ -43,6 +44,10 @@ export interface NeedsReviewItem {
 
 @Injectable()
 export class LeadsService {
+  constructor(
+    @Inject(NotificationDispatchService)
+    private readonly notificationDispatch: NotificationDispatchService,
+  ) {}
   async findAll(companyId: string, query: LeadListQuery): Promise<LeadListResult> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
@@ -153,5 +158,58 @@ export class LeadsService {
       throw new NotFoundException({ message: "Lead not found", code: "LEAD_NOT_FOUND" });
     }
     return prisma.lead.update({ where: { id }, data: { status } });
+  }
+
+  /**
+   * Assign or unassign a Lead to a specific user.
+   * Recipients are resolved per-user (not by role) when notifying assignees.
+   */
+  async assignToUser(
+    companyId: string,
+    id: string,
+    assignedToUserId: string | null,
+  ): Promise<Lead> {
+    const lead = await prisma.lead.findFirst({ where: { id, companyId } });
+    if (!lead) {
+      throw new NotFoundException({ message: "Lead not found", code: "LEAD_NOT_FOUND" });
+    }
+
+    if (assignedToUserId) {
+      const assignee = await prisma.user.findFirst({
+        where: {
+          id: assignedToUserId,
+          status: "ACTIVE",
+          memberships: { some: { companyId } },
+        },
+      });
+      if (!assignee) {
+        throw new BadRequestException({
+          message: "Assigned user must be an active member of this company",
+          code: "INVALID_LEAD_ASSIGNEE",
+        });
+      }
+    }
+
+    const updated = await prisma.lead.update({
+      where: { id },
+      data: { assignedToUserId },
+    });
+
+    if (assignedToUserId) {
+      await this.notificationDispatch.sendToUsers({
+        companyId,
+        userIds: [assignedToUserId],
+        notification: {
+          title: "Lead assigned to you",
+          body: `${updated.name} has been assigned to you`,
+        },
+        data: {
+          type: "LEAD_ASSIGNED",
+          leadId: updated.id,
+        },
+      });
+    }
+
+    return updated;
   }
 }

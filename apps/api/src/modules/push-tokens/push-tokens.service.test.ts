@@ -78,6 +78,11 @@ describe("PushTokensService.registerToken", () => {
     expect(dbToken!.isActive).toBe(true);
     expect(dbToken!.app).toBe("PORTAL");
     expect(dbToken!.deviceType).toBe("chrome/windows");
+
+    const membership = await prisma.userMembership.findFirst({
+      where: { userId: user.id, companyId: realCompanyId },
+    });
+    expect(membership?.receiveNotifications).toBe(true);
   });
 
   it("userId in database comes from server-side, not client input", async () => {
@@ -402,6 +407,38 @@ describe("PushTokensService.listUserTokens", () => {
     expect(tokensA.length).toBe(1);
     expect(tokensA[0].userId).toBe(userA.id);
     expect(tokensA.some((t) => t.userId === userB.id)).toBe(false);
+  });
+});
+
+describe("PushTokensService.getActiveTokensForUserIds", () => {
+  it("returns active tokens for the requested users only", async () => {
+    const userA = await makeUser();
+    const userB = await makeUser();
+    await makeMembership(userA.id);
+    await makeMembership(userB.id);
+    const tokenA = generateFCMToken();
+    const tokenB = generateFCMToken();
+
+    const rA = await service.registerToken(realCompanyId, userA.id, {
+      token: tokenA,
+      deviceType: "chrome/windows",
+      app: "PORTAL",
+    });
+    const rB = await service.registerToken(realCompanyId, userB.id, {
+      token: tokenB,
+      deviceType: "firefox/linux",
+      app: "PORTAL",
+    });
+    createdTokenIds.push(rA.id, rB.id);
+
+    const tokens = await service.getActiveTokensForUserIds(realCompanyId, [userA.id]);
+    expect(tokens.length).toBe(1);
+    expect(tokens[0].userId).toBe(userA.id);
+  });
+
+  it("returns an empty array when no user ids are provided", async () => {
+    const tokens = await service.getActiveTokensForUserIds(realCompanyId, []);
+    expect(tokens).toEqual([]);
   });
 });
 

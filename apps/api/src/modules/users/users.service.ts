@@ -28,6 +28,7 @@ export interface UserListRow {
   membership: {
     role: MembershipRole;
     isDefault: boolean;
+    receiveNotifications: boolean;
   } | null;
   createdAt: Date;
 }
@@ -89,7 +90,11 @@ export class UsersService {
       name: user.name,
       status: user.status,
       membership: user.memberships[0]
-        ? { role: user.memberships[0].role, isDefault: user.memberships[0].isDefault }
+        ? {
+            role: user.memberships[0].role,
+            isDefault: user.memberships[0].isDefault,
+            receiveNotifications: user.memberships[0].receiveNotifications,
+          }
         : null,
       createdAt: user.createdAt,
     }));
@@ -118,7 +123,11 @@ export class UsersService {
       name: user.name,
       status: user.status,
       membership: user.memberships[0]
-        ? { role: user.memberships[0].role, isDefault: user.memberships[0].isDefault }
+        ? {
+            role: user.memberships[0].role,
+            isDefault: user.memberships[0].isDefault,
+            receiveNotifications: user.memberships[0].receiveNotifications,
+          }
         : null,
       createdAt: user.createdAt,
     };
@@ -247,6 +256,28 @@ export class UsersService {
     return prisma.userMembership.update({
       where: { userId_companyId: { userId, companyId } },
       data: { role },
+    });
+  }
+
+  async updateMembershipNotificationSettings(
+    companyId: string,
+    userId: string,
+    receiveNotifications: boolean,
+  ): Promise<UserMembership> {
+    const membership = await prisma.userMembership.findUnique({
+      where: { userId_companyId: { userId, companyId } },
+    });
+
+    if (!membership) {
+      throw new NotFoundException({
+        message: "User membership not found",
+        code: "MEMBERSHIP_NOT_FOUND",
+      });
+    }
+
+    return prisma.userMembership.update({
+      where: { userId_companyId: { userId, companyId } },
+      data: { receiveNotifications },
     });
   }
 

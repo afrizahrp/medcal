@@ -23,10 +23,18 @@ importScripts('https://www.gstatic.com/firebasejs/${FIREBASE_COMPAT_VERSION}/fir
 firebase.initializeApp(${JSON.stringify(firebaseConfig)});
 const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
-  const title = payload.notification?.title || "MedCal";
+  // FCM auto-displays notification payload on web — skip manual show to avoid duplicates.
+  if (payload.notification?.title) {
+    return Promise.resolve();
+  }
+  const data = payload.data || {};
+  const title = data.title || "MedCal";
+  const icon = data.icon || "/short-logo.png";
   const options = {
-    body: payload.notification?.body || "",
-    data: payload.data || {},
+    body: data.body || "",
+    icon,
+    badge: icon,
+    data,
   };
   return self.registration.showNotification(title, options);
 });

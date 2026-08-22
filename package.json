@@ -10,9 +10,11 @@
     "test": "turbo run test",
     "db:generate": "pnpm --filter @medcal/db generate",
     "db:migrate": "pnpm --filter @medcal/db migrate:dev",
-    "format": "pnpm --filter @medcal/db format"
+    "format": "prettier --write . && pnpm --filter @medcal/db format",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "prettier": "^3.9.6",
     "turbo": "^2.5.0",
     "typescript": "^5.8.2"
   },

@@ -54,7 +54,9 @@ export class ChatSessionsService {
     }
     const input = parsed.data;
 
-    return prisma.$transaction(async (tx) => {
+    let contactMessageId: string | undefined;
+
+    const result = await prisma.$transaction(async (tx) => {
       const session = await tx.chatSession.create({
         data: {
           companyId,
@@ -85,11 +87,18 @@ export class ChatSessionsService {
         },
         tx,
       );
+      contactMessageId = contactMessage.id;
 
       const linked = await this.linkContactMessage(tx, session.id, contactMessage.id);
 
       return { ...linked, messages: [firstMessage] };
     });
+
+    if (contactMessageId) {
+      void this.contactMessagesService.notifyNewContactMessage(companyId, contactMessageId);
+    }
+
+    return result;
   }
 
   // Extracted so tests can simulate a failure specifically at the "link

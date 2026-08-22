@@ -8,9 +8,8 @@ import type { MembershipRole } from "@medcal/db";
  * chain per module. Extend per-module as needed.
  * - contactMessage:read (F3): proves the guard chain on ContactMessagesModule.
  * - whitelist:manage (F4, locked): EmailWhitelist CRUD, superadmin-only by default.
- * - lead:read/lead:update (Lead Inbox, locked 2026-08-16 Decision 5 — per-verb,
- *   not a blanket manage): no lead:assign — assignment is out of scope for v1
- *   (Decision 3).
+ * - lead:read/lead:update/lead:assign (Lead Inbox): per-verb grants; assign
+ *   writes Lead.assignedToUserId and triggers push to the assigned user.
  * - chat:read/chat:reply/chat:close (Web Chat Phase 2): per-verb, matching the
  *   lead:* precedent — chat:read gates reading/subscribing to sessions,
  *   chat:reply gates sending ADMIN messages, chat:close gates closing a
@@ -41,7 +40,7 @@ import type { MembershipRole } from "@medcal/db";
 const ac = createAccessControl({
   contactMessage: ["read"],
   whitelist: ["manage"],
-  lead: ["read", "update"],
+  lead: ["read", "update", "assign"],
   chat: ["read", "reply", "close"],
   users: ["read", "manage"],
   membership: ["manage"],

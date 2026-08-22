@@ -41,7 +41,12 @@ export function ManagementHeader({
           showChat={me.capabilities.chatRead}
           showEmail={me.capabilities.emailRead}
         />
-        <UserMenu name={me.user.name} email={me.user.email} role={me.membership.role} />
+        <UserMenu
+          name={me.user.name}
+          email={me.user.email}
+          role={me.membership.role}
+          userId={me.user.id}
+        />
       </div>
     </header>
   );

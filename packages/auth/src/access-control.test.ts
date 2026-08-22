@@ -26,6 +26,7 @@ const FIXTURE: GrantRow[] = [
   { role: "ADMIN", resource: "contactMessage", action: "read" },
   { role: "ADMIN", resource: "lead", action: "read" },
   { role: "ADMIN", resource: "lead", action: "update" },
+  { role: "ADMIN", resource: "lead", action: "assign" },
   { role: "ADMIN", resource: "chat", action: "read" },
   { role: "ADMIN", resource: "chat", action: "reply" },
   { role: "ADMIN", resource: "chat", action: "close" },
@@ -80,20 +81,18 @@ describe("hasPermission — SUPERADMIN bypass (locked 2026-08-20)", () => {
 });
 
 describe("hasPermission — lead resource (Lead Inbox, locked 2026-08-16 Decision 5: per-verb)", () => {
-  it("grants ADMIN lead:read and lead:update", () => {
+  it("grants ADMIN lead:read, lead:update, and lead:assign", () => {
     expect(hasPermission("ADMIN", "lead", "read")).toBe(true);
     expect(hasPermission("ADMIN", "lead", "update")).toBe(true);
+    expect(hasPermission("ADMIN", "lead", "assign")).toBe(true);
   });
 
   it("denies roles with no lead grant", () => {
     expect(hasPermission("SUPERVISOR", "lead", "read")).toBe(false);
+    expect(hasPermission("SUPERVISOR", "lead", "assign")).toBe(false);
     expect(hasPermission("TECHNICIAN", "lead", "read")).toBe(false);
     expect(hasPermission("FINANCE", "lead", "read")).toBe(false);
     expect(hasPermission("CUSTOMER", "lead", "read")).toBe(false);
-  });
-
-  it("has no lead:assign action in the catalog — assignment is out of scope for v1 (Decision 3)", () => {
-    expect(hasPermission("ADMIN", "lead", "assign")).toBe(false);
   });
 });
 

@@ -365,13 +365,16 @@ model Verification {
 }
 
 model UserMembership {
-  id        String         @id @default(cuid())
-  userId    String
-  companyId String
-  role      MembershipRole
-  isDefault Boolean        @default(false)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id                   String         @id @default(cuid())
+  userId               String
+  companyId            String
+  role                 MembershipRole
+  isDefault            Boolean        @default(false)
+  // Company-scoped push notification eligibility — NOT a permission/role grant.
+  // When false, dispatch must not send FCM to this user for this company.
+  receiveNotifications Boolean        @default(false)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)

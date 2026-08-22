@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { signOut } from "@medcal/auth/client";
+import { revokeRegisteredPushToken } from "../lib/fcm/register";
 
 export function SignOutButton() {
   const router = useRouter();
@@ -10,6 +11,7 @@ export function SignOutButton() {
     <button
       type="button"
       onClick={async () => {
+        await revokeRegisteredPushToken();
         await signOut();
         router.push("/sign-in");
         router.refresh();

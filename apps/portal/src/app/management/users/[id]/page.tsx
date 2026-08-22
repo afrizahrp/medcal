@@ -20,6 +20,7 @@ interface UserDetail {
   membership: {
     role: MembershipRole;
     isDefault: boolean;
+    receiveNotifications: boolean;
   } | null;
   createdAt: string;
 }
@@ -57,8 +58,10 @@ export default function UserDetailPage() {
 
   const [draftStatus, setDraftStatus] = useState<UserStatus>("ACTIVE");
   const [draftRole, setDraftRole] = useState<MembershipRole>("ADMIN");
+  const [draftReceiveNotifications, setDraftReceiveNotifications] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [updatingRole, setUpdatingRole] = useState(false);
+  const [updatingNotifications, setUpdatingNotifications] = useState(false);
   const [removingMembership, setRemovingMembership] = useState(false);
 
   const load = useCallback(async () => {
@@ -71,6 +74,7 @@ export default function UserDetailPage() {
       setDraftStatus(data.status);
       if (data.membership) {
         setDraftRole(data.membership.role);
+        setDraftReceiveNotifications(data.membership.receiveNotifications);
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
@@ -128,6 +132,26 @@ export default function UserDetailPage() {
       }
     } finally {
       setUpdatingRole(false);
+    }
+  }
+
+  async function updateNotificationSettings() {
+    if (!user?.membership) return;
+    if (draftReceiveNotifications === user.membership.receiveNotifications) return;
+    setUpdatingNotifications(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await apiFetch(`/users/${user.id}/memberships/notification-settings`, {
+        method: "PATCH",
+        body: JSON.stringify({ receiveNotifications: draftReceiveNotifications }),
+      });
+      setSuccess("Pengaturan notifikasi berhasil diperbarui.");
+      await load();
+    } catch {
+      setError("Gagal memperbarui pengaturan notifikasi.");
+    } finally {
+      setUpdatingNotifications(false);
     }
   }
 
@@ -280,6 +304,38 @@ export default function UserDetailPage() {
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {user.membership && (
+            <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-base font-semibold text-slate-900">Notifikasi</h2>
+              <p className="mt-1 text-xs text-slate-400">
+                User ini dapat menerima notifikasi push untuk assignment yang ditujukan kepadanya di
+                company ini.
+              </p>
+              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <label className="flex items-center gap-3 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={draftReceiveNotifications}
+                    disabled={updatingNotifications}
+                    onChange={(e) => setDraftReceiveNotifications(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-600"
+                  />
+                  Terima Notifikasi
+                </label>
+                <Button
+                  onClick={updateNotificationSettings}
+                  disabled={
+                    updatingNotifications ||
+                    draftReceiveNotifications === user.membership.receiveNotifications
+                  }
+                >
+                  <Save className="h-4 w-4" />
+                  Simpan
+                </Button>
+              </div>
             </div>
           )}
 

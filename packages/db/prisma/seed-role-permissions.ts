@@ -28,6 +28,7 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "ADMIN", resource: "contactMessage", action: "read" },
   { role: "ADMIN", resource: "lead", action: "read" },
   { role: "ADMIN", resource: "lead", action: "update" },
+  { role: "ADMIN", resource: "lead", action: "assign" },
   { role: "ADMIN", resource: "chat", action: "read" },
   { role: "ADMIN", resource: "chat", action: "reply" },
   { role: "ADMIN", resource: "chat", action: "close" },

@@ -34,11 +34,17 @@ export default function SignInPage() {
     setSubmitting(true);
     setError(null);
 
-    const { error: signInError } = await signIn.email({ email, password });
+    try {
+      const { error: signInError } = await signIn.email({ email, password });
 
-    if (signInError) {
+      if (signInError) {
+        setSubmitting(false);
+        setError(signInError.message ?? "Sign-in failed");
+        return;
+      }
+    } catch {
       setSubmitting(false);
-      setError(signInError.message ?? "Sign-in failed");
+      setError("Cannot reach the API. Make sure pnpm dev is running and http://localhost:3001 is up.");
       return;
     }
 

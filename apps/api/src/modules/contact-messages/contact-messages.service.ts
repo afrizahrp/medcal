@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, NotFoundException, Optional } from "@nestjs/common";
 import { prisma } from "@medcal/db";
 import type { ContactMessage, ContactStatus, ContactTopic, Prisma } from "@medcal/db";
+import { push } from "@medcal/notifications";
 import {
   contactMessageCreateSchema,
   emailDomain,
@@ -12,6 +13,7 @@ import type { ContactMessageLeadResolution, ContactMessageListQuery } from "@med
 import { resolveSortOrder } from "../../common/sort-query";
 import { classifyLeadMatch, findLeadMatchCandidates } from "../leads/lead-matching";
 import type { Db } from "../leads/lead-matching";
+import { NotificationDispatchService } from "../push-tokens/notification-dispatch.service";
 
 // Canonical default (Management List pattern, 2026-08-18) — matches the
 // frontend's own initial pageSize (apps/portal/.../leads/page.tsx), so this
@@ -42,6 +44,12 @@ export interface ContactMessageListResult {
 
 @Injectable()
 export class ContactMessagesService {
+  constructor(
+    @Optional()
+    @Inject(NotificationDispatchService)
+    private readonly notificationDispatch?: NotificationDispatchService,
+  ) {}
+
   /**
    * `tx` (optional) lets a caller run this entire method's statements
    * inside its own `prisma.$transaction` — added for ChatSessionsService.
@@ -173,7 +181,51 @@ export class ContactMessagesService {
       },
     });
 
-    return { id: created.id, matchStatus: created.matchStatus, leadId: created.leadId };
+    const result = { id: created.id, matchStatus: created.matchStatus, leadId: created.leadId };
+
+    // Push only after non-transactional create — chat sessions notify post-commit.
+    if (tx === prisma) {
+      void this.notifyNewContactMessage(companyId, created.id);
+    }
+
+    return result;
+  }
+
+  /**
+   * Dispatch FCM to company members opted in via UserMembership.receiveNotifications.
+   * No lead assignment required — eligibility is membership-level, not per-lead.
+   */
+  async notifyNewContactMessage(companyId: string, messageId: string): Promise<void> {
+    if (!this.notificationDispatch) {
+      return;
+    }
+
+    const message = await prisma.contactMessage.findFirst({
+      where: { id: messageId, companyId },
+      include: {
+        topic: { select: { name: true } },
+        company: { select: { name: true } },
+      },
+    });
+    if (!message) {
+      return;
+    }
+
+    const { notification, data } = push.formatContactMessagePush({
+      senderName: message.name,
+      topicName: message.topic?.name ?? null,
+      message: message.message,
+      companyName: message.company.name,
+      contactMessageId: message.id,
+      leadId: message.leadId,
+      companyId,
+    });
+
+    await this.notificationDispatch.sendToCompanyRecipients({
+      companyId,
+      notification,
+      data,
+    });
   }
 
   /**

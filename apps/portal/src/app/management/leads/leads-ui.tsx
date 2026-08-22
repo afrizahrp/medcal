@@ -109,10 +109,10 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
 };
 
 export const CONTACT_STATUS_LABELS: Record<ContactStatus, string> = {
-  PENDING: "Menunggu",
-  READ: "Dibaca",
-  REPLIED: "Dibalas",
-  CLOSED: "Ditutup",
+  PENDING: "Pending",
+  READ: "Read",
+  REPLIED: "Replied",
+  CLOSED: "Closed",
 };
 
 /** easy-app reference palette — ContactMessage status semantics (authoritative domain). */
@@ -353,7 +353,7 @@ export function NeedsReviewAccordion({
           <AccordionTrigger className="px-4 hover:no-underline md:px-5">
             <span className="flex items-center gap-2 text-sm font-semibold text-amber-900">
               <AlertTriangle className="h-4 w-4 shrink-0" />
-              Perlu Ditinjau ({items.length})
+              Perlu Follow Up ({items.length})
             </span>
           </AccordionTrigger>
           <AccordionContent className="border-t border-amber-200 px-4 md:px-5">

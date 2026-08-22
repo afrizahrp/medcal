@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Script from "next/script";
+import { Dialog } from "@base-ui/react/dialog";
 import { company } from "@/data/site";
 import { WhatsAppIdentityDialog } from "@/components/whatsapp-identity-dialog";
 
@@ -22,7 +23,8 @@ declare global {
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? "";
 
 export function KontakForm() {
-  const [status, setStatus] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<string | null>(null);
+  const [successOpen, setSuccessOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [topics, setTopics] = useState<ContactTopic[]>([]);
 
@@ -55,7 +57,7 @@ export function KontakForm() {
     // code after an `await` below (getCaptchaToken/fetch).
     const formEl = e.currentTarget;
     setPending(true);
-    setStatus(null);
+    setErrorStatus(null);
     const fd = new FormData(formEl);
     const topicIdRaw = String(fd.get("topicId") ?? "");
 
@@ -79,14 +81,14 @@ export function KontakForm() {
         body: JSON.stringify(payload),
       });
       const json = await res.json();
-      setStatus(
-        res.ok
-          ? "Terkirim! Tim kami akan segera menghubungi Anda."
-          : `Gagal: ${JSON.stringify(json.error ?? json)}`,
-      );
-      if (res.ok) formEl.reset();
+      if (res.ok) {
+        formEl.reset();
+        setSuccessOpen(true);
+      } else {
+        setErrorStatus(`Gagal: ${JSON.stringify(json.error ?? json)}`);
+      }
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Network error");
+      setErrorStatus(err instanceof Error ? err.message : "Network error");
     } finally {
       setPending(false);
     }
@@ -227,18 +229,36 @@ export function KontakForm() {
             </a>{" "}
             Google.
           </p>
-          {status ? (
-            <p className="text-sm text-ink-600" role="status">
-              {status}
+          {errorStatus ? (
+            <p className="text-sm text-red-600" role="status">
+              {errorStatus}
             </p>
           ) : null}
         </form>
 
+        <Dialog.Root open={successOpen} onOpenChange={setSuccessOpen}>
+          <Dialog.Portal>
+            <Dialog.Backdrop className="fixed inset-0 z-40 bg-ink-900/40" />
+            <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-ink-100 bg-white p-6 shadow-xl">
+              <Dialog.Title className="text-lg font-semibold text-ink-900">
+                Pesan Terkirim
+              </Dialog.Title>
+              <Dialog.Description className="mt-2 space-y-2 text-sm leading-relaxed text-ink-600">
+                <p>Terima kasih telah menghubungi</p>
+                <p>Tim kami akan segera menghubungi Anda</p>
+              </Dialog.Description>
+              <div className="mt-6 flex justify-end">
+                <Dialog.Close className="rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700">
+                  Tutup
+                </Dialog.Close>
+              </div>
+            </Dialog.Popup>
+          </Dialog.Portal>
+        </Dialog.Root>
+
         <div className="flex flex-col gap-4 lg:col-span-2">
           <div className="rounded-2xl border border-ink-100 bg-white p-5 shadow-sm sm:p-6">
-            <p className="text-sm font-semibold text-ink-900">
-              Hubungi Langsung
-            </p>
+            <p className="text-sm font-semibold text-ink-900">Hubungi Langsung</p>
             <WhatsAppIdentityDialog
               triggerLabel="Chat WhatsApp"
               triggerClassName="mt-3 flex w-full items-center justify-center rounded-full bg-[#25D366] px-4 py-3 text-sm font-semibold text-white"
@@ -253,9 +273,7 @@ export function KontakForm() {
 
           <div className="rounded-2xl border border-ink-100 bg-white p-5 shadow-sm sm:p-6">
             <p className="text-sm font-semibold text-ink-900">Alamat</p>
-            <p className="mt-2 text-sm leading-relaxed text-ink-500">
-              {company.address}
-            </p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-500">{company.address}</p>
             <p className="mt-3 text-sm font-semibold text-ink-900">Email</p>
             <a
               href={`mailto:${company.email}`}

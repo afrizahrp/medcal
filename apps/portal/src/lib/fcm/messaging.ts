@@ -8,6 +8,8 @@ import { getFirebaseWebConfig, getFirebaseVapidKey } from "./config";
 
 const SW_PATH = "/firebase-messaging-sw.js";
 const LAST_TOKEN_KEY = "medcal:portal:fcm:lastRegisteredToken";
+const LAST_TOKEN_ID_KEY = "medcal:portal:fcm:lastRegisteredTokenId";
+const LAST_USER_ID_KEY = "medcal:portal:fcm:lastRegisteredUserId";
 const SW_ACTIVATION_TIMEOUT_MS = 30_000;
 
 let messagingInstance: Messaging | null = null;
@@ -215,6 +217,53 @@ export function setLastRegisteredToken(token: string): void {
   if (typeof sessionStorage === "undefined") return;
   try {
     sessionStorage.setItem(LAST_TOKEN_KEY, token);
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+export function getLastRegisteredTokenId(): string | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    return sessionStorage.getItem(LAST_TOKEN_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setLastRegisteredTokenId(tokenId: string): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(LAST_TOKEN_ID_KEY, tokenId);
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+export function getLastRegisteredUserId(): string | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    return sessionStorage.getItem(LAST_USER_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setLastRegisteredUserId(userId: string): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(LAST_USER_ID_KEY, userId);
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+export function clearFcmRegistrationState(): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.removeItem(LAST_TOKEN_KEY);
+    sessionStorage.removeItem(LAST_TOKEN_ID_KEY);
+    sessionStorage.removeItem(LAST_USER_ID_KEY);
   } catch {
     // ignore quota / private mode
   }

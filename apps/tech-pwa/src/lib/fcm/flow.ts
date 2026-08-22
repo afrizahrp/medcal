@@ -23,7 +23,6 @@ export function shouldSkipBackendRegistration(input: {
 }): boolean {
   if (!input.token) return true;
   if (!input.currentUserId) return true;
-  // Re-register when a different user signs in on the same browser profile.
   if (input.lastRegisteredUserId !== input.currentUserId) return false;
   return input.lastRegisteredToken === input.token;
 }

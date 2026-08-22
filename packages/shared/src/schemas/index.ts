@@ -71,6 +71,13 @@ export const leadStatusUpdateSchema = z.object({
   status: z.enum(leadStatusValues),
 });
 
+/** PATCH /leads/:id/assign body */
+export const leadAssignSchema = z.object({
+  assignedToUserId: z.string().min(1).nullable(),
+});
+
+export type LeadAssignInput = z.infer<typeof leadAssignSchema>;
+
 /**
  * GET /contact-messages query params (Contact Messages status/filter/count
  * correction, 2026-08-18). ContactMessage is the source of truth for this

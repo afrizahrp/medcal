@@ -39,6 +39,37 @@ export interface SendPushInput {
   token: string;
   notification: PushNotification;
   data?: PushData;
+  /** Absolute URL for webpush notification icon (e.g. company short-logo). */
+  icon?: string;
+}
+
+export {
+  formatContactMessagePush,
+  resolvePushIconUrl,
+  PUSH_ICON_PATH,
+} from "./contact-message";
+export type { ContactMessagePushInput, ContactMessagePushPayload } from "./contact-message";
+
+function buildFcmMessage(input: SendPushInput): Message {
+  const webpushNotification: NonNullable<Message["webpush"]>["notification"] = {
+    title: input.notification.title,
+    body: input.notification.body,
+  };
+  if (input.icon) {
+    webpushNotification.icon = input.icon;
+  }
+
+  return {
+    token: input.token,
+    notification: {
+      title: input.notification.title,
+      body: input.notification.body,
+    },
+    webpush: {
+      notification: webpushNotification,
+    },
+    ...(input.data ? { data: input.data } : {}),
+  };
 }
 
 /**
@@ -59,7 +90,6 @@ export interface SendPushResult {
 const INVALID_TOKEN_ERROR_CODES = [
   "messaging/invalid-registration-token",
   "messaging/registration-token-not-registered",
-  "messaging/invalid-argument",
 ];
 
 /**
@@ -95,20 +125,7 @@ export async function sendPush(input: SendPushInput): Promise<SendPushResult> {
     }
   }
 
-  const message: Message = {
-    token: input.token,
-    notification: {
-      title: input.notification.title,
-      body: input.notification.body,
-    },
-    webpush: {
-      notification: {
-        title: input.notification.title,
-        body: input.notification.body,
-      },
-    },
-    ...(input.data ? { data: input.data } : {}),
-  };
+  const message = buildFcmMessage(input);
 
   try {
     const messageId = await getFirebaseMessaging().send(message);
@@ -163,20 +180,7 @@ export async function sendPushBatch(
     }
   }
 
-  const messages: Message[] = inputs.map((input) => ({
-    token: input.token,
-    notification: {
-      title: input.notification.title,
-      body: input.notification.body,
-    },
-    webpush: {
-      notification: {
-        title: input.notification.title,
-        body: input.notification.body,
-      },
-    },
-    ...(input.data ? { data: input.data } : {}),
-  }));
+  const messages: Message[] = inputs.map((input) => buildFcmMessage(input));
 
   try {
     const response: BatchResponse = await getFirebaseMessaging().sendEach(messages);

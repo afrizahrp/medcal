@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@medcal/db";
+import type { NotificationDispatchService } from "../push-tokens/notification-dispatch.service";
 import { LeadsService } from "./leads.service";
 
-const service = new LeadsService();
+const notificationDispatch = {
+  sendToUsers: async () => ({ tokens: 0, sent: 0, failed: 0, deactivated: 0 }),
+} as NotificationDispatchService;
+
+const service = new LeadsService(notificationDispatch);
 const realCompanyId = "PKM";
 const createdLeadIds: string[] = [];
 const createdContactMessageIds: string[] = [];
@@ -135,6 +140,56 @@ describe("LeadsService.updateStatus", () => {
 
     await expect(
       service.updateStatus(realCompanyId, otherLead.id, "CONTACTED"),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    await prisma.lead.delete({ where: { id: otherLead.id } });
+    await prisma.company.delete({ where: { id: otherCompanyId } });
+  });
+});
+
+describe("LeadsService.assignToUser", () => {
+  it("assigns a lead to an active company member", async () => {
+    const assignee = await prisma.user.create({
+      data: {
+        email: `assignee-${randomUUID().slice(0, 8)}@kalibrasimedika.co.id`,
+        name: "Assignee",
+        status: "ACTIVE",
+      },
+    });
+    await prisma.userMembership.create({
+      data: { userId: assignee.id, companyId: realCompanyId, role: "ADMIN", isDefault: false },
+    });
+
+    const lead = await makeLead();
+    const updated = await service.assignToUser(realCompanyId, lead.id, assignee.id);
+    expect(updated.assignedToUserId).toBe(assignee.id);
+
+    await prisma.userMembership.deleteMany({ where: { userId: assignee.id } });
+    await prisma.user.delete({ where: { id: assignee.id } });
+  });
+
+  it("clears assignment when assignedToUserId is null", async () => {
+    const lead = await makeLead();
+    const updated = await service.assignToUser(realCompanyId, lead.id, null);
+    expect(updated.assignedToUserId).toBeNull();
+  });
+
+  it("rejects invalid assignees", async () => {
+    const lead = await makeLead();
+    await expect(
+      service.assignToUser(realCompanyId, lead.id, "non-existent-user-id"),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects cross-company lead assignment lookups", async () => {
+    const otherCompanyId = `Z${randomUUID().slice(0, 2).toUpperCase()}`;
+    await prisma.company.create({ data: { id: otherCompanyId, name: "Other4", status: "ACTIVE" } });
+    const otherLead = await prisma.lead.create({
+      data: { companyId: otherCompanyId, name: "Foreign4", email: "foreign4@example.com" },
+    });
+
+    await expect(
+      service.assignToUser(realCompanyId, otherLead.id, null),
     ).rejects.toBeInstanceOf(NotFoundException);
 
     await prisma.lead.delete({ where: { id: otherLead.id } });

@@ -38,6 +38,10 @@ const membershipUpdateSchema = z.object({
   role: z.enum(["ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER"]),
 });
 
+const membershipNotificationSettingsSchema = z.object({
+  receiveNotifications: z.boolean(),
+});
+
 @Controller("users")
 @UseGuards(CompanyRoleGuard)
 export class UsersController {
@@ -124,6 +128,28 @@ export class UsersController {
       });
     }
     return this.service.updateMembershipRole(companyId, id, parsed.data.role);
+  }
+
+  @Patch(":id/memberships/notification-settings")
+  @RequirePermission("membership", "manage")
+  async updateMembershipNotificationSettings(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ) {
+    const parsed = membershipNotificationSettingsSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid notification settings",
+        code: "INVALID_NOTIFICATION_SETTINGS",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.updateMembershipNotificationSettings(
+      companyId,
+      id,
+      parsed.data.receiveNotifications,
+    );
   }
 
   @Delete(":id/memberships")

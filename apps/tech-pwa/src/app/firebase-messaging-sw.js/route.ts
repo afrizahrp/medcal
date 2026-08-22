@@ -21,7 +21,23 @@ export function GET() {
 importScripts('https://www.gstatic.com/firebasejs/${FIREBASE_COMPAT_VERSION}/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/${FIREBASE_COMPAT_VERSION}/firebase-messaging-compat.js');
 firebase.initializeApp(${JSON.stringify(firebaseConfig)});
-firebase.messaging();
+const messaging = firebase.messaging();
+messaging.onBackgroundMessage((payload) => {
+  // FCM auto-displays notification payload on web — skip manual show to avoid duplicates.
+  if (payload.notification?.title) {
+    return Promise.resolve();
+  }
+  const data = payload.data || {};
+  const title = data.title || "MedCal";
+  const icon = data.icon || "/short-logo.png";
+  const options = {
+    body: data.body || "",
+    icon,
+    badge: icon,
+    data,
+  };
+  return self.registration.showNotification(title, options);
+});
 `;
 
   return new Response(body, {

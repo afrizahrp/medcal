@@ -4,8 +4,14 @@ import { useRequireSession } from "../lib/use-require-session";
 import { SignOutButton } from "../components/sign-out-button";
 import { usePushNotifications } from "../lib/fcm/use-push-notifications";
 
-function PushNotificationsControl({ authenticated }: { authenticated: boolean }) {
-  const { status, errorMessage, enable } = usePushNotifications({ authenticated });
+function PushNotificationsControl({
+  authenticated,
+  userId,
+}: {
+  authenticated: boolean;
+  userId: string;
+}) {
+  const { status, errorMessage, enable } = usePushNotifications({ authenticated, userId });
 
   if (status === "unconfigured" || status === "unsupported" || status === "idle") {
     return null;
@@ -60,7 +66,7 @@ export default function TechHome() {
       <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
         <span className="font-semibold">Technician PWA</span>
         <div className="flex items-center gap-3 text-sm text-slate-600">
-          <PushNotificationsControl authenticated />
+          <PushNotificationsControl authenticated userId={me.user.id} />
           <span>
             {me.user.email} · {me.membership.role}
           </span>

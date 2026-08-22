@@ -1,5 +1,15 @@
 import { apiFetch } from "@medcal/shared";
-import { detectDeviceType, getLastRegisteredToken, setLastRegisteredToken } from "./messaging";
+import { shouldSkipBackendRegistration } from "./flow";
+import {
+  clearFcmRegistrationState,
+  detectDeviceType,
+  getLastRegisteredToken,
+  getLastRegisteredTokenId,
+  getLastRegisteredUserId,
+  setLastRegisteredToken,
+  setLastRegisteredTokenId,
+  setLastRegisteredUserId,
+} from "./messaging";
 
 export type RegisterPushTokenResult = {
   id: string;
@@ -22,18 +32,40 @@ export async function registerPushTokenWithBackend(token: string): Promise<Regis
   });
 }
 
+async function revokePushTokenWithBackend(tokenId: string): Promise<void> {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+  const response = await fetch(`${baseUrl}/notifications/push-tokens/${tokenId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!response.ok && response.status !== 404) {
+    console.error("[fcm] Backend token revoke failed:", response.status, response.statusText);
+  }
+}
+
 /**
- * Obtain-and-register if this session has not already registered the same token.
- * Avoids registration loops on re-render.
+ * Obtain-and-register if this authenticated user has not already synced this token.
  */
-export async function syncPushTokenIfNeeded(token: string): Promise<"synced" | "skipped" | "failed"> {
-  if (getLastRegisteredToken() === token) {
+export async function syncPushTokenIfNeeded(
+  token: string,
+  currentUserId: string,
+): Promise<"synced" | "skipped" | "failed"> {
+  if (
+    shouldSkipBackendRegistration({
+      token,
+      lastRegisteredToken: getLastRegisteredToken(),
+      lastRegisteredUserId: getLastRegisteredUserId(),
+      currentUserId,
+    })
+  ) {
     return "skipped";
   }
 
   try {
-    await registerPushTokenWithBackend(token);
+    const result = await registerPushTokenWithBackend(token);
     setLastRegisteredToken(token);
+    setLastRegisteredTokenId(result.id);
+    setLastRegisteredUserId(currentUserId);
     return "synced";
   } catch (error) {
     console.error(
@@ -42,4 +74,15 @@ export async function syncPushTokenIfNeeded(token: string): Promise<"synced" | "
     );
     return "failed";
   }
+}
+
+/**
+ * Revoke the backend token registered for this browser session and clear local FCM state.
+ */
+export async function revokeRegisteredPushToken(): Promise<void> {
+  const tokenId = getLastRegisteredTokenId();
+  if (tokenId) {
+    await revokePushTokenWithBackend(tokenId);
+  }
+  clearFcmRegistrationState();
 }

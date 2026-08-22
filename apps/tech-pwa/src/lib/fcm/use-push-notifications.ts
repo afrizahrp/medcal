@@ -21,8 +21,8 @@ export type PushNotificationStatus =
  * Requires an authenticated ACTIVE session (caller must only enable when /me is ready).
  * Does not auto-prompt on mount — user must call enable().
  */
-export function usePushNotifications(options: { authenticated: boolean }) {
-  const { authenticated } = options;
+export function usePushNotifications(options: { authenticated: boolean; userId?: string | null }) {
+  const { authenticated, userId } = options;
   const [status, setStatus] = useState<PushNotificationStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -44,7 +44,7 @@ export function usePushNotifications(options: { authenticated: boolean }) {
         if (!cancelled) setStatus("denied");
         return;
       }
-      if (permission === "granted" && authenticated) {
+      if (permission === "granted" && authenticated && userId) {
         if (!cancelled) setStatus("enabling");
         const token = await obtainFcmToken();
         if (!token) {
@@ -54,7 +54,7 @@ export function usePushNotifications(options: { authenticated: boolean }) {
           }
           return;
         }
-        const result = await syncPushTokenIfNeeded(token);
+        const result = await syncPushTokenIfNeeded(token, userId);
         if (!cancelled) {
           if (result === "failed") {
             setStatus("error");
@@ -68,7 +68,6 @@ export function usePushNotifications(options: { authenticated: boolean }) {
       }
 
       if (!cancelled) {
-        // Remaining cases: default, or granted while still unauthenticated
         setStatus("default");
       }
     }
@@ -77,10 +76,10 @@ export function usePushNotifications(options: { authenticated: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, [authenticated]);
+  }, [authenticated, userId]);
 
   const enable = useCallback(async () => {
-    if (!authenticated) {
+    if (!authenticated || !userId) {
       setStatus("error");
       setErrorMessage("Sign in required");
       return;
@@ -114,7 +113,7 @@ export function usePushNotifications(options: { authenticated: boolean }) {
       return;
     }
 
-    const result = await syncPushTokenIfNeeded(token);
+    const result = await syncPushTokenIfNeeded(token, userId);
     if (result === "failed") {
       setStatus("error");
       setErrorMessage("Token registration failed");
@@ -123,7 +122,7 @@ export function usePushNotifications(options: { authenticated: boolean }) {
 
     setStatus("enabled");
     setErrorMessage(null);
-  }, [authenticated]);
+  }, [authenticated, userId]);
 
   return { status, errorMessage, enable };
 }

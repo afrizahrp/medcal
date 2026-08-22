@@ -38,18 +38,46 @@ describe("FCM registration flow decisions", () => {
   });
 
   it("skips backend registration for empty token", () => {
-    expect(shouldSkipBackendRegistration({ token: null, lastRegisteredToken: null })).toBe(true);
+    expect(
+      shouldSkipBackendRegistration({
+        token: null,
+        lastRegisteredToken: null,
+        lastRegisteredUserId: null,
+        currentUserId: "user-1",
+      }),
+    ).toBe(true);
   });
 
-  it("skips backend registration when token already synced this session", () => {
+  it("skips backend registration when token already synced for the same user", () => {
     expect(
-      shouldSkipBackendRegistration({ token: "abc", lastRegisteredToken: "abc" }),
+      shouldSkipBackendRegistration({
+        token: "abc",
+        lastRegisteredToken: "abc",
+        lastRegisteredUserId: "user-1",
+        currentUserId: "user-1",
+      }),
     ).toBe(true);
+  });
+
+  it("does not skip backend registration when the authenticated user changed", () => {
+    expect(
+      shouldSkipBackendRegistration({
+        token: "abc",
+        lastRegisteredToken: "abc",
+        lastRegisteredUserId: "user-a",
+        currentUserId: "user-b",
+      }),
+    ).toBe(false);
   });
 
   it("does not skip backend registration for a new token", () => {
     expect(
-      shouldSkipBackendRegistration({ token: "new", lastRegisteredToken: "old" }),
+      shouldSkipBackendRegistration({
+        token: "new",
+        lastRegisteredToken: "old",
+        lastRegisteredUserId: "user-1",
+        currentUserId: "user-1",
+      }),
     ).toBe(false);
   });
 });

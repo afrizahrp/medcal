@@ -33,6 +33,20 @@ export interface RegisterTokenResult {
 @Injectable()
 export class PushTokensService {
   /**
+   * Opt the user into company push delivery when they register a device token.
+   * Membership eligibility is separate from lead assignment — no per-lead assign needed.
+   */
+  private async ensureMembershipReceivesNotifications(
+    companyId: string,
+    userId: string,
+  ): Promise<void> {
+    await prisma.userMembership.updateMany({
+      where: { companyId, userId },
+      data: { receiveNotifications: true },
+    });
+  }
+
+  /**
    * Register an FCM token for the authenticated user.
    *
    * Semantics:
@@ -77,6 +91,8 @@ export class PushTokensService {
         },
       });
 
+      await this.ensureMembershipReceivesNotifications(companyId, userId);
+
       return {
         id: existing.id,
         created: false,
@@ -96,6 +112,8 @@ export class PushTokensService {
         lastUsedAt: new Date(),
       },
     });
+
+    await this.ensureMembershipReceivesNotifications(companyId, userId);
 
     return {
       id: created.id,
@@ -148,6 +166,25 @@ export class PushTokensService {
       where: {
         companyId,
         userId,
+        isActive: true,
+      },
+      orderBy: { lastUsedAt: "desc" },
+    });
+  }
+
+  /**
+   * Look up all active FCM tokens for the given users within a company.
+   * Used by notification dispatch to resolve per-user recipients.
+   */
+  async getActiveTokensForUserIds(companyId: string, userIds: string[]): Promise<FCMToken[]> {
+    if (userIds.length === 0) {
+      return [];
+    }
+
+    return prisma.fCMToken.findMany({
+      where: {
+        companyId,
+        userId: { in: userIds },
         isActive: true,
       },
       orderBy: { lastUsedAt: "desc" },

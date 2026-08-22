@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Inject, Param, Patch, Query, UseGuards } from "@nestjs/common";
-import { leadListQuerySchema, leadStatusUpdateSchema } from "@medcal/shared";
+import { leadAssignSchema, leadListQuerySchema, leadStatusUpdateSchema } from "@medcal/shared";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
@@ -65,5 +65,23 @@ export class LeadsController {
       });
     }
     return this.service.updateStatus(companyId, id, parsed.data.status);
+  }
+
+  @Patch(":id/assign")
+  @RequirePermission("lead", "assign")
+  async assign(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ) {
+    const parsed = leadAssignSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid lead assignment",
+        code: "INVALID_LEAD_ASSIGNMENT",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.assignToUser(companyId, id, parsed.data.assignedToUserId);
   }
 }

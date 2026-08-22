@@ -315,6 +315,31 @@ describe("UsersService.updateMembershipRole", () => {
   });
 });
 
+describe("UsersService.updateMembershipNotificationSettings", () => {
+  it("updates receiveNotifications for an existing membership", async () => {
+    const user = await makeUser();
+    await makeMembership(user.id, realCompanyId, "ADMIN");
+
+    const updated = await service.updateMembershipNotificationSettings(
+      realCompanyId,
+      user.id,
+      true,
+    );
+    expect(updated.receiveNotifications).toBe(true);
+
+    const detail = await service.findOne(realCompanyId, user.id);
+    expect(detail.membership?.receiveNotifications).toBe(true);
+  });
+
+  it("throws NotFoundException when membership does not exist", async () => {
+    const user = await makeUser();
+
+    await expect(
+      service.updateMembershipNotificationSettings(realCompanyId, user.id, true),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
 describe("UsersService.removeMembership", () => {
   it("removes the membership", async () => {
     const user = await makeUser();
