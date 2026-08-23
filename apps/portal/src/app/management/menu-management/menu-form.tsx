@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Save } from "lucide-react";
 import { apiFetch } from "@medcal/shared";
+import { invalidateNavQuery } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -45,6 +47,7 @@ const selectClassName =
 
 export function MenuForm({ menuId }: { menuId?: string }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const isEdit = Boolean(menuId);
 
   const [catalog, setCatalog] = useState<Record<string, readonly string[]>>({});
@@ -153,6 +156,7 @@ export function MenuForm({ menuId }: { menuId?: string }) {
           body: JSON.stringify(payload),
         });
       }
+      await invalidateNavQuery(queryClient, application);
       router.push("/menu-management");
     } catch {
       setError(

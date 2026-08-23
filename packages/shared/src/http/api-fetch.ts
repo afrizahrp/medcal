@@ -25,7 +25,12 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   });
 
   if (!response.ok) {
-    const data = await response.json().catch(() => undefined);
+    let data: ({ code?: string; message?: string } & Record<string, unknown>) | undefined;
+    try {
+      data = (await response.json()) as typeof data;
+    } catch {
+      data = undefined;
+    }
     throw new ApiError(response.status, data?.message ?? response.statusText, data);
   }
 

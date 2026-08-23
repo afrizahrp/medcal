@@ -7,7 +7,7 @@ import { ApiError, isForbidden } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AccessDenied } from "../../../../components/access-denied";
-import { useRequireSession } from "../../../../lib/use-require-session";
+import { useRequireSession, useAuthz } from "@medcal/auth/client";
 import { EmailFolderNav, PageHeader, Surface } from "../email-ui";
 import {
   useEmailDetailQuery,
@@ -24,7 +24,8 @@ export default function EmailComposePageClient() {
   const replyToId = searchParams.get("replyTo") ?? "";
   const draftId = searchParams.get("draftId") ?? "";
   const isEditingDraft = Boolean(draftId);
-  const { me, status: sessionStatus } = useRequireSession();
+  const { status: sessionStatus } = useRequireSession();
+  const { capabilities } = useAuthz();
   const statsQuery = useEmailStatisticsQuery();
   const replyQuery = useEmailDetailQuery(replyToId);
   const draftQuery = useEmailDetailQuery(draftId);
@@ -69,7 +70,7 @@ export default function EmailComposePageClient() {
     return <p className="px-4 py-6 text-sm text-slate-400">Memuat…</p>;
   }
 
-  if (sessionStatus === "forbidden" || (me && !me.capabilities.emailSend)) {
+  if (sessionStatus === "forbidden" || (capabilities && !capabilities.emailSend)) {
     return <AccessDenied message="Anda tidak memiliki izin mengirim email." />;
   }
 

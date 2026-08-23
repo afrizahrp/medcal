@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@medcal/shared";
 import type { NavItem } from "../app/management/nav-config";
 
@@ -24,40 +24,26 @@ function toNavItem(node: NavApiNode): NavItem {
   };
 }
 
+async function fetchNav(application: MenuApplication): Promise<NavItem[]> {
+  const data = await apiFetch<NavApiNode[]>(`/menu/nav?application=${application}`);
+  return data.map(toNavItem);
+}
+
 /**
  * Fetches the server-side, permission-filtered nav tree for one application
- * (GET /menu/nav) — the tree returned is already authoritative for
- * visibility; the client never re-derives it. Only fetches once `ready` is
+ * (GET /menu/nav) — cached via React Query. Only fetches once `ready` is
  * true (the caller already has a resolved session); the endpoint
  * re-validates session/membership/ACTIVE itself regardless.
  */
 export function useNav(application: MenuApplication, ready: boolean): { nav: NavItem[]; loading: boolean } {
-  const [nav, setNav] = useState<NavItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const query = useQuery({
+    queryKey: ["nav", application],
+    queryFn: () => fetchNav(application),
+    enabled: ready,
+  });
 
-  useEffect(() => {
-    if (!ready) return;
-
-    let cancelled = false;
-    setLoading(true);
-    apiFetch<NavApiNode[]>(`/menu/nav?application=${application}`)
-      .then((data) => {
-        if (!cancelled) {
-          setNav(data.map(toNavItem));
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setNav([]);
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [application, ready]);
-
-  return { nav, loading };
+  return {
+    nav: query.data ?? [],
+    loading: ready && query.isPending,
+  };
 }

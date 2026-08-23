@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Save, ShieldCheck } from "lucide-react";
 import { apiFetch, isForbidden } from "@medcal/shared";
+import { invalidateAuthQueries } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AccessDenied } from "../../../components/access-denied";
@@ -70,6 +72,7 @@ function grantKey(grant: Grant): string {
 }
 
 export default function PermissionManagementPage() {
+  const queryClient = useQueryClient();
   const [catalog, setCatalog] = useState<Record<string, readonly string[]>>({});
   const [role, setRole] = useState<Role>("SUPERVISOR");
   const [summary, setSummary] = useState<RoleGrantSummary | null>(null);
@@ -156,6 +159,7 @@ export default function PermissionManagementPage() {
       setSummary(updated);
       setChecked(new Set(updated.grants.map(grantKey)));
       setSavedAt(Date.now());
+      await invalidateAuthQueries(queryClient, { allNav: true });
     } catch {
       setError("Gagal menyimpan perubahan permission.");
     } finally {

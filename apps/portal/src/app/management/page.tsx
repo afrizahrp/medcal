@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRequireSession } from "../../lib/use-require-session";
+import { useAuth, useAuthz } from "@medcal/auth/client";
 import { ChatIcon, EmailIcon, MessagesIcon } from "../../components/management/icons";
 
 /**
@@ -14,8 +14,9 @@ import { ChatIcon, EmailIcon, MessagesIcon } from "../../components/management/i
  * Messages / Web Chat) — Menu Registry still owns sidebar navigation.
  */
 export default function ManagementHome() {
-  const { me } = useRequireSession();
-  const firstName = me?.user.name?.trim().split(/\s+/)[0];
+  const { user } = useAuth();
+  const { capabilities } = useAuthz();
+  const firstName = user?.name?.trim().split(/\s+/)[0];
 
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-6 md:px-8 md:py-8">
@@ -31,17 +32,17 @@ export default function ManagementHome() {
 
         <div className="flex justify-center py-8">
           <div className="flex flex-wrap items-start justify-center gap-8 md:gap-12">
-            {me?.capabilities.leadRead ? (
+            {capabilities?.leadRead ? (
               <ChannelLink href="/leads" label="Messages">
                 <MessagesIcon className="h-7 w-7" strokeWidth={1.6} />
               </ChannelLink>
             ) : null}
-            {me?.capabilities.chatRead ? (
+            {capabilities?.chatRead ? (
               <ChannelLink href="/chat" label="Web Chat">
                 <ChatIcon className="h-7 w-7" strokeWidth={1.6} />
               </ChannelLink>
             ) : null}
-            {me?.capabilities.emailRead ? (
+            {capabilities?.emailRead ? (
               <ChannelLink href="/email/inbox" label="Email">
                 <EmailIcon className="h-7 w-7" strokeWidth={1.6} />
               </ChannelLink>

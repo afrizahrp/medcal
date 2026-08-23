@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@medcal/auth/client";
 import { SignOutButton } from "../sign-out-button";
 import { usePushNotifications } from "../../lib/fcm";
 import { useUnreadChatSessionsCount, useUnreadContactMessagesCount } from "../../lib/use-unread-count";
@@ -69,8 +70,12 @@ export function NotificationControls({
   );
 }
 
-function PushNotificationsMenuItem({ userId }: { userId: string }) {
-  const { status, errorMessage, enable } = usePushNotifications({ authenticated: true, userId });
+function PushNotificationsMenuItem() {
+  const { user, isAuthenticated } = useAuth();
+  const { status, errorMessage, enable } = usePushNotifications({
+    authenticated: isAuthenticated,
+    userId: user?.id,
+  });
 
   if (status === "unconfigured" || status === "unsupported" || status === "idle") {
     return null;
@@ -123,12 +128,10 @@ export function UserMenu({
   name,
   email,
   role,
-  userId,
 }: {
   name: string;
   email: string;
   role: string;
-  userId: string;
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, right: 8 });
@@ -209,7 +212,7 @@ export function UserMenu({
             </div>
           </div>
           <div className="mt-1 border-t border-slate-100 pt-1">
-            <PushNotificationsMenuItem userId={userId} />
+            <PushNotificationsMenuItem />
             <div className="px-2">
               <SignOutButton className="w-full min-h-10 rounded-shell px-2 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 hover:no-underline" />
             </div>

@@ -10,44 +10,78 @@ import { SidebarNav } from "./sidebar-nav";
 
 export function ManagementSidebar({
   items,
-  collapsed,
-  onToggleCollapsed,
+  expanded,
+  pinnedExpanded,
+  onTogglePin,
+  onHoverStart,
+  onHoverEnd,
 }: {
   items: NavItem[];
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
+  expanded: boolean;
+  pinnedExpanded: boolean;
+  onTogglePin: () => void;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
 }) {
+  const isHoverOverlay = expanded && !pinnedExpanded;
+
+  function handleMouseEnter() {
+    if (!pinnedExpanded) onHoverStart();
+  }
+
+  function handleMouseLeave() {
+    if (!pinnedExpanded) onHoverEnd();
+  }
+
+  function handleFocusCapture() {
+    if (!pinnedExpanded) onHoverStart();
+  }
+
+  function handleBlurCapture(event: React.FocusEvent<HTMLElement>) {
+    if (pinnedExpanded) return;
+    const next = event.relatedTarget;
+    if (next instanceof Node && event.currentTarget.contains(next)) return;
+    onHoverEnd();
+  }
+
   return (
     <aside
       className={[
-        "fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-slate-200 bg-white shadow-sm lg:flex",
-        "transition-[width] duration-200 ease-out",
-        collapsed ? "w-sidebar-collapsed" : "w-sidebar-expanded",
+        "fixed inset-y-0 left-0 hidden flex-col border-r border-slate-200 bg-white lg:flex",
+        "transition-[width,box-shadow] duration-200 ease-out",
+        expanded ? "w-sidebar-expanded" : "w-sidebar-collapsed",
+        isHoverOverlay ? "z-40 shadow-lg" : "z-30 shadow-sm",
       ].join(" ")}
       aria-label="Management sidebar"
+      aria-expanded={expanded}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onFocusCapture={handleFocusCapture}
+      onBlurCapture={handleBlurCapture}
     >
       <div
         className={[
-          "relative flex shrink-0 items-center border-b border-slate-200",
-          collapsed
-            ? "h-14 justify-center gap-1 px-1"
-            : "h-20 justify-center px-3",
+          "relative flex shrink-0 items-center border-b border-slate-200 px-2",
+          expanded ? "h-20" : "h-14",
         ].join(" ")}
       >
         <Link
           href="/"
-          className="flex items-center justify-center rounded-shell focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+          className={[
+            "absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-shell",
+            "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600",
+          ].join(" ")}
           title="MedCal Management"
         >
           <Image
-            src={collapsed ? shortLogo : logo}
+            src={expanded ? logo : shortLogo}
             alt="MedCal"
-            width={collapsed ? 36 : 160}
-            height={collapsed ? 36 : 72}
+            width={expanded ? 160 : 36}
+            height={expanded ? 72 : 36}
             className={
-              collapsed
-                ? "h-9 w-9 shrink-0 rounded object-contain"
-                : "h-[72px] w-auto max-w-[110px] shrink-0 rounded object-contain"
+              expanded
+                ? "h-[72px] w-auto max-w-[110px] shrink-0 rounded object-contain"
+                : "h-9 w-9 shrink-0 rounded object-contain"
             }
             priority
           />
@@ -55,24 +89,27 @@ export function ManagementSidebar({
 
         <button
           type="button"
-          onClick={onToggleCollapsed}
+          onClick={onTogglePin}
           className={[
-            "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-800 transition-colors",
+            "absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 shrink-0 items-center justify-center rounded-full border transition-colors",
             "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600",
-            collapsed
-              ? "border-slate-400 text-slate-600 hover:bg-slate-50"
-              : "absolute right-3 top-1/2 -translate-y-1/2 bg-brand-800 text-white hover:bg-brand-700",
+            !expanded && "hidden",
+            pinnedExpanded
+              ? "border-slate-800 bg-brand-800 text-white hover:bg-brand-700"
+              : "border-slate-400 text-slate-600 hover:bg-slate-50",
           ].join(" ")}
-          aria-pressed={!collapsed}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-pressed={pinnedExpanded}
+          aria-hidden={!expanded}
+          tabIndex={expanded ? 0 : -1}
+          aria-label={pinnedExpanded ? "Unpin sidebar" : "Pin sidebar open"}
+          title={pinnedExpanded ? "Unpin sidebar" : "Pin sidebar open"}
         >
           <PinIcon className="h-3.5 w-3.5" />
         </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        <SidebarNav items={items} collapsed={collapsed} />
+        <SidebarNav items={items} collapsed={!expanded} />
       </div>
     </aside>
   );

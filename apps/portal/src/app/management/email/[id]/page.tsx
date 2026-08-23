@@ -7,7 +7,7 @@ import { ApiError, isForbidden } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
 import { sanitizeEmailHtml } from "../../../../lib/sanitize-html";
-import { useRequireSession } from "../../../../lib/use-require-session";
+import { useRequireSession, useAuthz } from "@medcal/auth/client";
 import {
   EmailComposeFab,
   EmailFolderNav,
@@ -59,7 +59,8 @@ function folderTab(folder: string): "INBOX" | "SENT" | "DRAFTS" | "TRASH" {
 export default function EmailDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const { me, status: sessionStatus } = useRequireSession();
+  const { status: sessionStatus } = useRequireSession();
+  const { capabilities } = useAuthz();
   const detailQuery = useEmailDetailQuery(params.id);
   const statsQuery = useEmailStatisticsQuery();
   const markRead = useMarkEmailRead();
@@ -113,7 +114,7 @@ export default function EmailDetailPage() {
     return <p className="px-4 py-6 text-sm text-slate-400">Memuat…</p>;
   }
 
-  if (sessionStatus === "forbidden" || (me && !me.capabilities.emailRead) || forbidden) {
+  if (sessionStatus === "forbidden" || (capabilities && !capabilities.emailRead) || forbidden) {
     return <AccessDenied />;
   }
 
@@ -202,7 +203,7 @@ export default function EmailDetailPage() {
     email.subject?.toLowerCase().startsWith("re:") ? email.subject : `Re: ${email.subject || ""}`,
   )}`;
 
-  const canManageLead = Boolean(me?.capabilities.emailManage);
+  const canManageLead = Boolean(capabilities?.emailManage);
   const associatedLead = email.lead;
   const suggestedLead = email.suggestedLead;
   const candidates = email.leadCandidates ?? [];
@@ -276,12 +277,12 @@ export default function EmailDetailPage() {
           stats={statsQuery.data ?? null}
         />
         <div className="flex flex-wrap items-center gap-2">
-          {me?.capabilities.emailSend && email.folder === "INBOX" && !email.deletedAt ? (
+          {capabilities?.emailSend && email.folder === "INBOX" && !email.deletedAt ? (
             <Button asChild size="sm">
               <Link href={replyHref}>Reply</Link>
             </Button>
           ) : null}
-          {me?.capabilities.emailSend ? (
+          {capabilities?.emailSend ? (
             <Button asChild variant="outline" size="sm">
               <Link href="/email/compose">Compose</Link>
             </Button>
@@ -292,7 +293,7 @@ export default function EmailDetailPage() {
       {email.folder === "DRAFTS" && !email.deletedAt ? (
         <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
           Draft tersimpan.{" "}
-          {me?.capabilities.emailSend ? (
+          {capabilities?.emailSend ? (
             <Link
               href={`/email/compose?draftId=${encodeURIComponent(email.id)}`}
               className="font-medium text-brand-800 underline"
@@ -544,12 +545,12 @@ export default function EmailDetailPage() {
           <Button type="button" variant="outline" size="sm" onClick={toggleRead} disabled={markRead.isPending}>
             {email.status === "READ" ? "Tandai belum dibaca" : "Tandai sudah dibaca"}
           </Button>
-          {me?.capabilities.emailDelete && !email.deletedAt ? (
+          {capabilities?.emailDelete && !email.deletedAt ? (
             <Button type="button" variant="outline" size="sm" onClick={handleTrash} disabled={moveTrash.isPending}>
               Pindahkan ke Trash
             </Button>
           ) : null}
-          {me?.capabilities.emailDelete && email.deletedAt ? (
+          {capabilities?.emailDelete && email.deletedAt ? (
             <Button type="button" variant="outline" size="sm" onClick={handleRestore} disabled={restore.isPending}>
               Pulihkan
             </Button>
@@ -560,7 +561,7 @@ export default function EmailDetailPage() {
         </div>
       </Surface>
 
-      <EmailComposeFab visible={Boolean(me?.capabilities.emailSend)} />
+      <EmailComposeFab visible={Boolean(capabilities?.emailSend)} />
     </div>
   );
 }

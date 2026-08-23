@@ -1,22 +1,27 @@
 "use client";
 
 import type { RefObject } from "react";
-import type { Me } from "../../lib/use-require-session";
+import { useAuth, useAuthz } from "@medcal/auth/client";
 import { NotificationControls, UserMenu } from "./header-controls";
 import { MenuIcon } from "./icons";
 import { MOBILE_DRAWER_ID } from "./mobile-drawer";
 
 export function ManagementHeader({
-  me,
   mobileNavOpen,
   onOpenMobileNav,
   menuButtonRef,
 }: {
-  me: Me;
   mobileNavOpen: boolean;
   onOpenMobileNav: () => void;
   menuButtonRef: RefObject<HTMLButtonElement | null>;
 }) {
+  const { user } = useAuth();
+  const { membership, capabilities } = useAuthz();
+
+  if (!user || !membership || !capabilities) {
+    return null;
+  }
+
   return (
     <header className="sticky top-0 z-20 flex w-full min-w-0 max-w-full shrink-0 flex-nowrap items-center gap-2 border-b border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4">
       <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -37,15 +42,14 @@ export function ManagementHeader({
       </div>
       <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-0.5 sm:gap-1">
         <NotificationControls
-          showMessages={me.capabilities.leadRead}
-          showChat={me.capabilities.chatRead}
-          showEmail={me.capabilities.emailRead}
+          showMessages={capabilities.leadRead}
+          showChat={capabilities.chatRead}
+          showEmail={capabilities.emailRead}
         />
         <UserMenu
-          name={me.user.name}
-          email={me.user.email}
-          role={me.membership.role}
-          userId={me.user.id}
+          name={user.name}
+          email={user.email}
+          role={membership.role}
         />
       </div>
     </header>

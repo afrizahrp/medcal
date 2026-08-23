@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import type { Me } from "../../lib/use-require-session";
 import type { NavItem } from "../../app/management/nav-config";
 import { ManagementHeader } from "./header";
 import { MobileDrawer } from "./mobile-drawer";
@@ -25,17 +24,16 @@ function isChatWorkspacePath(pathname: string): boolean {
  * Management shell: desktop sidebar + mobile drawer + header notifications + user menu.
  */
 export function ManagementShell({
-  me,
   nav,
   children,
 }: {
-  me: Me;
   nav: NavItem[];
   children: React.ReactNode;
 }) {
   const pathname = usePathname() ?? "/";
   const lockChatHeight = isChatWorkspacePath(pathname);
   const [collapsed, setCollapsed] = useState(false);
+  const [hoverExpanded, setHoverExpanded] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -54,7 +52,8 @@ export function ManagementShell({
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  function toggleCollapsed() {
+  function togglePin() {
+    setHoverExpanded(false);
     setCollapsed((prev) => {
       const next = !prev;
       writeSidebarCollapsed(next);
@@ -64,6 +63,17 @@ export function ManagementShell({
 
   const openMobileNav = useCallback(() => setMobileOpen(true), []);
   const closeMobileNav = useCallback(() => setMobileOpen(false), []);
+
+  const startSidebarHover = useCallback(() => {
+    setHoverExpanded(true);
+  }, []);
+
+  const endSidebarHover = useCallback(() => {
+    setHoverExpanded(false);
+  }, []);
+
+  const pinnedExpanded = !collapsed;
+  const visuallyExpanded = pinnedExpanded || hoverExpanded;
 
   const contentOffset =
     hydrated && collapsed ? "lg:ml-sidebar-collapsed" : "lg:ml-sidebar-expanded";
@@ -78,8 +88,11 @@ export function ManagementShell({
       >
         <ManagementSidebar
           items={nav}
-          collapsed={hydrated ? collapsed : false}
-          onToggleCollapsed={toggleCollapsed}
+          expanded={hydrated ? visuallyExpanded : true}
+          pinnedExpanded={hydrated ? pinnedExpanded : true}
+          onTogglePin={togglePin}
+          onHoverStart={startSidebarHover}
+          onHoverEnd={endSidebarHover}
         />
 
         <MobileDrawer
@@ -98,7 +111,6 @@ export function ManagementShell({
           inert={mobileOpen ? true : undefined}
         >
           <ManagementHeader
-            me={me}
             mobileNavOpen={mobileOpen}
             onOpenMobileNav={openMobileNav}
             menuButtonRef={menuButtonRef}

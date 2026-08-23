@@ -1,17 +1,15 @@
 "use client";
 
-import { useRequireSession } from "../lib/use-require-session";
+import { useAuth, useRequireSession } from "@medcal/auth/client";
 import { SignOutButton } from "../components/sign-out-button";
 import { usePushNotifications } from "../lib/fcm/use-push-notifications";
 
-function PushNotificationsControl({
-  authenticated,
-  userId,
-}: {
-  authenticated: boolean;
-  userId: string;
-}) {
-  const { status, errorMessage, enable } = usePushNotifications({ authenticated, userId });
+function PushNotificationsControl() {
+  const { user, isAuthenticated } = useAuth();
+  const { status, errorMessage, enable } = usePushNotifications({
+    authenticated: isAuthenticated,
+    userId: user?.id,
+  });
 
   if (status === "unconfigured" || status === "unsupported" || status === "idle") {
     return null;
@@ -52,6 +50,15 @@ export default function TechHome() {
     return <main className="p-8 text-slate-500">Loading…</main>;
   }
 
+  if (status === "pending") {
+    return (
+      <main className="mx-auto max-w-md px-4 py-16 text-center">
+        <h1 className="text-2xl font-semibold">Pending authorization</h1>
+        <p className="mt-2 text-slate-600">Your account is registered but not yet provisioned.</p>
+      </main>
+    );
+  }
+
   if (status === "forbidden" || !me) {
     return (
       <main className="mx-auto max-w-md px-4 py-16 text-center">
@@ -66,7 +73,7 @@ export default function TechHome() {
       <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
         <span className="font-semibold">Technician PWA</span>
         <div className="flex items-center gap-3 text-sm text-slate-600">
-          <PushNotificationsControl authenticated userId={me.user.id} />
+          <PushNotificationsControl />
           <span>
             {me.user.email} · {me.membership.role}
           </span>

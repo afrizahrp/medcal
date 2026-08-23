@@ -8,6 +8,10 @@
     ".": "./src/index.ts",
     "./client": "./src/client.ts"
   },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.90.0",
+    "react": "^19.0.0"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "echo \"lint auth skipped\"",
@@ -19,6 +23,14 @@
     "better-auth": "^1.6.27"
   },
   "devDependencies": {
+    "@tanstack/react-query": "^5.90.2",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.2.14",
+    "@vitejs/plugin-react": "^4.7.0",
+    "jsdom": "^26.1.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "typescript": "^5.8.2",
     "@medcal/typescript-config": "workspace:*",
     "@types/node": "^22.13.10",

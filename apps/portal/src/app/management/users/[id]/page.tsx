@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import { ApiError, apiFetch, isAllowedRegistrationDomain, isForbidden } from "@medcal/shared";
+import { useAuth, invalidateAuthQueries } from "@medcal/auth/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
@@ -50,6 +52,8 @@ const selectClassName =
 export default function UserDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { user: currentUser } = useAuth();
   const [user, setUser] = useState<UserDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [forbidden, setForbidden] = useState(false);
@@ -122,6 +126,9 @@ export default function UserDetailPage() {
       });
       setSuccess("Role berhasil diperbarui.");
       await load();
+      if (user.id === currentUser?.id) {
+        await invalidateAuthQueries(queryClient, { allNav: true });
+      }
     } catch (err) {
       if (err instanceof ApiError && err.data?.code === "SUPERADMIN_PROTECTED") {
         setError("Role SUPERADMIN tidak dapat diubah via aplikasi.");
@@ -164,6 +171,9 @@ export default function UserDetailPage() {
     try {
       await apiFetch(`/users/${user.id}/memberships`, { method: "DELETE" });
       setSuccess("Membership berhasil dihapus.");
+      if (user.id === currentUser?.id) {
+        await invalidateAuthQueries(queryClient, { allNav: true });
+      }
       router.push("/users");
     } catch (err) {
       if (err instanceof ApiError && err.data?.code === "SUPERADMIN_PROTECTED") {

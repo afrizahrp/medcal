@@ -10,7 +10,7 @@ function isPublicAuthRoute(pathname: string | null): boolean {
   return pathname === "/sign-in" || pathname.startsWith("/sign-in/");
 }
 
-function PortalAuthProvider({ children }: { children: React.ReactNode }) {
+function TechPwaAuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
@@ -25,17 +25,6 @@ function PortalAuthProvider({ children }: { children: React.ReactNode }) {
   return <AuthProvider onNeedsSignIn={onNeedsSignIn}>{children}</AuthProvider>;
 }
 
-/**
- * Single application-level provider tree root (Management List canonical
- * pattern, 2026-08-18) — apps/portal/src/app/layout.tsx had zero providers
- * before this. `useState(() => new QueryClient(...))` (not a module-level
- * singleton) so each request/mount gets its own client, matching Next.js App
- * Router's guidance for client-side providers in a server-rendered tree.
- *
- * staleTime is short (15s) relative to easy-app's 60s sales-invoice
- * reference — contact messages/leads change more frequently (new inbound
- * messages, status updates) than sales invoices.
- */
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
@@ -51,7 +40,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <PortalAuthProvider>{children}</PortalAuthProvider>
+      <TechPwaAuthProvider>{children}</TechPwaAuthProvider>
     </QueryClientProvider>
   );
 }

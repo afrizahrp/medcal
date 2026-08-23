@@ -1,6 +1,6 @@
 "use client";
 
-import { useRequireSession } from "../../lib/use-require-session";
+import { useRequireSession, useAuth, useAuthz } from "@medcal/auth/client";
 import { useNav } from "../../lib/use-nav";
 import { SignOutButton } from "../../components/sign-out-button";
 import { AccessDenied } from "../../components/access-denied";
@@ -8,6 +8,8 @@ import { PendingAuthorization } from "../../components/pending-authorization";
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const { me, status } = useRequireSession();
+  const { user } = useAuth();
+  const { membership } = useAuthz();
   const { nav, loading: navLoading } = useNav("CUSTOMER", status === "ready");
 
   if (status === "loading" || (status === "ready" && navLoading)) {
@@ -37,7 +39,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-600">
           <span>
-            {me.user.email} · {me.membership.role}
+            {user?.email} · {membership?.role}
           </span>
           <SignOutButton />
         </div>

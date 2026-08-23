@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
 import { AccessDenied } from "../../../components/access-denied";
-import { useRequireSession } from "../../../lib/use-require-session";
+import { useRequireSession, useAuthz } from "@medcal/auth/client";
 import { PaginationBar } from "../leads/leads-ui";
 import {
   EmailComposeFab,
@@ -45,7 +45,8 @@ const TITLES: Record<EmailFolder, string> = {
 };
 
 export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
-  const { me, status: sessionStatus } = useRequireSession();
+  const { status: sessionStatus } = useRequireSession();
+  const { capabilities } = useAuthz();
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
   const statusFilter: EmailStatus | "" = (params.status as EmailStatus | undefined) ?? "";
@@ -147,7 +148,7 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
     return <p className="px-4 py-6 text-sm text-slate-400">Memuat…</p>;
   }
 
-  if (sessionStatus === "forbidden" || (me && !me.capabilities.emailRead) || forbidden) {
+  if (sessionStatus === "forbidden" || (capabilities && !capabilities.emailRead) || forbidden) {
     return <AccessDenied />;
   }
 
@@ -165,12 +166,12 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <EmailFolderNav active={folder} stats={statsQuery.data ?? null} />
         <div className="flex flex-wrap items-center gap-2">
-          {me?.capabilities.emailSend ? (
+          {capabilities?.emailSend ? (
             <Button asChild size="sm">
               <Link href="/email/compose">Compose</Link>
             </Button>
           ) : null}
-          {folder === "INBOX" && me?.capabilities.emailRead ? (
+          {folder === "INBOX" && capabilities?.emailRead ? (
             <Button
               type="button"
               variant="outline"
@@ -208,7 +209,7 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
             fetching={fetching}
             error={error}
             emptyLabel={EMPTY_LABELS[folder]}
-            canDelete={Boolean(me?.capabilities.emailDelete)}
+            canDelete={Boolean(capabilities?.emailDelete)}
             actionBusyId={actionBusyId}
             onDelete={folder === "TRASH" ? undefined : handleDelete}
             onRestore={folder === "TRASH" ? handleRestore : undefined}
@@ -233,7 +234,7 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
         ) : null}
       </Surface>
 
-      <EmailComposeFab visible={Boolean(me?.capabilities.emailSend)} />
+      <EmailComposeFab visible={Boolean(capabilities?.emailSend)} />
     </div>
   );
 }

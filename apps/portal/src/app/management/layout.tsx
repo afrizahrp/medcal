@@ -1,6 +1,6 @@
 "use client";
 
-import { useRequireSession } from "../../lib/use-require-session";
+import { useRequireSession } from "@medcal/auth/client";
 import { useNav } from "../../lib/use-nav";
 import { ManagementShell } from "../../components/management/management-shell";
 import { AccessDenied } from "../../components/access-denied";
@@ -23,7 +23,7 @@ export default function ManagementLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <ManagementShell me={me} nav={nav}>
+    <ManagementShell nav={nav}>
       {children}
     </ManagementShell>
   );
