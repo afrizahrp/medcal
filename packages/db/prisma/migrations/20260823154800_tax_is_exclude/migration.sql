@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Tax" ADD COLUMN "isExclude" BOOLEAN NOT NULL DEFAULT false;

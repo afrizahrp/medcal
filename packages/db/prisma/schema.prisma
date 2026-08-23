@@ -127,6 +127,21 @@ enum QuotationStatus {
   CANCELLED
 }
 
+enum PurchaseOrderStatus {
+  DRAFT
+  RECEIVED
+  CONFIRMED
+  FULFILLED
+  CANCELLED
+}
+
+enum PurchaseOrderItemStatus {
+  OPEN
+  ALLOCATED
+  FULFILLED
+  CANCELLED
+}
+
 enum WorkOrderStatus {
   PLANNED
   ASSIGNED
@@ -282,6 +297,7 @@ model Company {
   serviceTariffs          ServiceTariff[]
   taxes                   Tax[]
   quotations              Quotation[]
+  purchaseOrders          PurchaseOrder[]
   workOrders              WorkOrder[]
   certificates            Certificate[]
   invoices                Invoice[]
@@ -295,7 +311,7 @@ model Company {
 
 model DocumentNumberSequence {
   id           String       @id @default(cuid())
-  companyId    String
+  companyId    String       @db.Char(3)
   documentType DocumentType
   prefix       String       @db.Char(3)
   year         Int
@@ -784,6 +800,7 @@ model Customer {
   matchedMessages     ContactMessage[]     @relation("ContactMatchCandidate")
   calibrationRequests CalibrationRequest[]
   quotations          Quotation[]
+  purchaseOrders      PurchaseOrder[]
   workOrders          WorkOrder[]
   certificates        Certificate[]
   invoices            Invoice[]
@@ -834,10 +851,11 @@ model Device {
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
-  requestItems    CalibrationRequestItem[]
-  quotationItems  QuotationItem[]
-  calibrationJobs CalibrationJob[]
-  certificates    Certificate[]
+  requestItems       CalibrationRequestItem[]
+  quotationItems     QuotationItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  calibrationJobs    CalibrationJob[]
+  certificates       Certificate[]
 
   @@index([companyId, customerId])
   @@index([companyId, serialNumber])
@@ -898,8 +916,9 @@ model ServiceTariff {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  items   QuotationItem[]
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items              QuotationItem[]
+  purchaseOrderItems PurchaseOrderItem[]
 
   @@unique([companyId, code])
 }
@@ -927,9 +946,10 @@ model Quotation {
   company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer   Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   request    CalibrationRequest? @relation(fields: [requestId], references: [id])
-  tax        Tax?                @relation(fields: [taxId], references: [id])
-  items      QuotationItem[]
-  workOrders WorkOrder[]
+  tax            Tax?              @relation(fields: [taxId], references: [id])
+  items          QuotationItem[]
+  purchaseOrders PurchaseOrder[]
+  workOrders     WorkOrder[]
 
   @@unique([companyId, number])
   @@index([companyId, status])
@@ -950,40 +970,109 @@ model QuotationItem {
   lineTotal     Decimal  @db.Decimal(18, 2)
   createdAt     DateTime @default(now())
 
-  quotation   Quotation               @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  device      Device?                 @relation(fields: [deviceId], references: [id])
-  requestItem CalibrationRequestItem? @relation(fields: [requestItemId], references: [id])
-  tariff      ServiceTariff?          @relation(fields: [tariffId], references: [id])
+  quotation          Quotation            @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  device             Device?              @relation(fields: [deviceId], references: [id])
+  requestItem        CalibrationRequestItem? @relation(fields: [requestItemId], references: [id])
+  tariff             ServiceTariff?       @relation(fields: [tariffId], references: [id])
+  purchaseOrderItems PurchaseOrderItem[]
 
   @@index([quotationId])
 }
 
-model WorkOrder {
-  id             String          @id @default(cuid())
-  companyId      String
-  quotationId    String
-  customerId     String
-  number         String
-  serviceMode    ServiceMode
-  addressText    String?
-  geoLat         Float?
-  geoLng         Float?
-  locationNotes  String?
-  scheduledStart DateTime?
-  scheduledEnd   DateTime?
-  status         WorkOrderStatus @default(PLANNED)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+model PurchaseOrder {
+  id                   String              @id @default(cuid())
+  companyId            String              @db.Char(3)
+  customerId           String
+  quotationId          String
+  number               String
+  customerPoNumber     String
+  customerPoDate       DateTime
+  status               PurchaseOrderStatus @default(DRAFT)
+  subtotal             Decimal             @db.Decimal(18, 2)
+  headerDiscountAmount Decimal             @default(0) @db.Decimal(18, 2)
+  taxCode              String
+  taxRateSnapshot      Decimal             @db.Decimal(5, 4)
+  taxAmount            Decimal             @db.Decimal(18, 2)
+  totalAmount          Decimal             @db.Decimal(18, 2)
+  currency             String              @default("IDR")
+  receivedAt           DateTime?
+  confirmedAt          DateTime?
+  confirmedByUserId    String?
+  notes                String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
-  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  quotation   Quotation             @relation(fields: [quotationId], references: [id])
-  customer    Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  assignments WorkOrderAssignment[]
-  jobs        CalibrationJob[]
+  company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer   Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  quotation  Quotation           @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  items      PurchaseOrderItem[]
+  workOrders WorkOrder[]
+
+  @@unique([companyId, number])
+  @@unique([companyId, customerId, customerPoNumber])
+  @@index([companyId, status])
+  @@index([companyId, taxCode])
+  @@index([quotationId])
+}
+
+model PurchaseOrderItem {
+  id              String                  @id @default(cuid())
+  companyId       String                  @db.Char(3)
+  purchaseOrderId String
+  quotationItemId String
+  deviceId        String?
+  tariffId        String?
+  description     String
+  qty             Decimal                 @default(1) @db.Decimal(18, 4)
+  unitPrice       Decimal                 @db.Decimal(18, 2)
+  discountAmount  Decimal                 @default(0) @db.Decimal(18, 2)
+  lineTotal       Decimal                 @db.Decimal(18, 2)
+  workOrderId     String?
+  status          PurchaseOrderItemStatus @default(OPEN)
+  createdAt       DateTime                @default(now())
+
+  purchaseOrder   PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  quotationItem   QuotationItem    @relation(fields: [quotationItemId], references: [id], onDelete: Restrict)
+  device          Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  tariff          ServiceTariff?   @relation(fields: [tariffId], references: [id], onDelete: SetNull)
+  workOrder       WorkOrder?       @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  calibrationJobs CalibrationJob[]
+
+  @@unique([purchaseOrderId, quotationItemId])
+  @@index([purchaseOrderId])
+  @@index([workOrderId])
+}
+
+model WorkOrder {
+  id              String          @id @default(cuid())
+  companyId       String
+  quotationId     String
+  purchaseOrderId String?
+  customerId      String
+  number          String
+  serviceMode     ServiceMode
+  addressText     String?
+  geoLat          Float?
+  geoLng          Float?
+  locationNotes   String?
+  scheduledStart  DateTime?
+  scheduledEnd    DateTime?
+  status          WorkOrderStatus @default(PLANNED)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  company            Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  quotation          Quotation             @relation(fields: [quotationId], references: [id])
+  purchaseOrder      PurchaseOrder?        @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  customer           Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignments        WorkOrderAssignment[]
+  jobs               CalibrationJob[]
+  purchaseOrderItems PurchaseOrderItem[]
 
   @@unique([companyId, number])
   @@index([companyId, status])
   @@index([quotationId])
+  @@index([purchaseOrderId])
 }
 
 model WorkOrderAssignment {
@@ -1006,26 +1095,29 @@ model WorkOrderAssignment {
 // =============================================================================
 
 model CalibrationJob {
-  id          String               @id @default(cuid())
-  companyId   String
-  workOrderId String
-  deviceId    String
-  status      CalibrationJobStatus @default(PENDING)
-  startedAt   DateTime?
-  submittedAt DateTime?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id                  String               @id @default(cuid())
+  companyId           String
+  workOrderId         String
+  purchaseOrderItemId String?
+  deviceId            String
+  status              CalibrationJobStatus @default(PENDING)
+  startedAt           DateTime?
+  submittedAt         DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
-  workOrder   WorkOrder           @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  device      Device              @relation(fields: [deviceId], references: [id])
-  results     MeasurementResult[]
-  evidences   JobEvidence[]
-  signature   CustomerSignature?
-  reviews     QualityReview[]
-  certificate Certificate?
+  workOrder         WorkOrder           @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  purchaseOrderItem PurchaseOrderItem?  @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
+  device            Device              @relation(fields: [deviceId], references: [id])
+  results           MeasurementResult[]
+  evidences         JobEvidence[]
+  signature         CustomerSignature?
+  reviews           QualityReview[]
+  certificate       Certificate?
 
   @@unique([workOrderId, deviceId])
   @@index([companyId, status])
+  @@index([purchaseOrderItemId])
 }
 
 model MeasurementResult {
@@ -1143,6 +1235,7 @@ model Tax {
   taxRate     Decimal  @db.Decimal(5, 4)
   description String
   isActive    Boolean  @default(true)
+  isExclude   Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
