@@ -10,6 +10,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "studio": "prisma studio",
     "format": "prisma format",
+    "test": "vitest run",
     "seed:contact-topics": "tsx prisma/seed-contact-topics.ts",
     "seed:menu": "tsx prisma/seed-menu.ts",
     "seed:role-permissions": "tsx prisma/seed-role-permissions.ts"
@@ -18,8 +19,11 @@
     "@prisma/client": "^6.5.0"
   },
   "devDependencies": {
+    "@medcal/typescript-config": "workspace:*",
+    "@types/node": "^22.13.10",
     "prisma": "^6.5.0",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^4.1.10"
   }
 }

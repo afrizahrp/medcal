@@ -31,6 +31,13 @@ Common on almost all entities:
 ### FCMToken
 `userId`, `token`, `deviceType`, `isActive`, `lastUsedAt`, `app` (portal|tech-pwa|web)
 
+### DocumentNumberSequence
+`companyId`, `documentType`, `prefix` (3-char fixed), `year`, `lastSequence`  
+**Unique:** `(companyId, documentType, year)` — sequence resets yearly; month is display-only in formatted number  
+**Format:** `PREFIX/YYYY/MM/NNNNN` via `DocumentNumberService.allocate()`
+
+**Locked prefixes:** CUS (Customer), CRQ (CalibrationRequest), QUO (Quotation), PUR (PurchaseOrder), SPK (WorkOrder)
+
 ---
 
 ## Acquisition
@@ -49,7 +56,7 @@ Common on almost all entities:
 *(source/channel diambil dari ContactMessage.getFrom — jangan duplikasi enum)*
 
 ### Customer
-`name`, `legalName?`, `taxId?`, `address?`, `status` (active|inactive)
+`number`, `name`, `legalName?`, `taxId?`, `address?`, `status` (active|inactive)
 
 ### CustomerContact
 `customerId`, `name`, `email?`, `phone?`, `isPrimary?`, `title?`
@@ -62,7 +69,7 @@ Common on almost all entities:
 `customerId`, `brand?`, `model?`, `serialNumber?`, `category?`, `locationText?`, `status` (active|inactive)
 
 ### CalibrationRequest
-`customerId`, `leadId?`, `serviceMode` (on_site|send_to_lab), `desiredScheduleNote?`,  
+`number`, `customerId`, `leadId?`, `serviceMode` (on_site|send_to_lab), `desiredScheduleNote?`,  
 `status` (draft|submitted|in_quotation|cancelled|fulfilled), `notes?`
 
 ### CalibrationRequestItem
@@ -76,7 +83,7 @@ Common on almost all entities:
 `code`, `name`, `unitPrice`, `currency`, `isActive`
 
 ### Quotation
-`customerId`, `requestId?`, `source` (portal|phone|whatsapp|other),  
+`number`, `customerId`, `requestId?`, `source` (portal|phone|whatsapp|other),  
 `status` (draft|sent|approved|rejected|expired|cancelled),  
 `validUntil?`, `subtotal`, `taxAmount?`, `totalAmount`, `currency`,  
 `approvedAt?`, `approvedByUserId?` / `customerApprovedAt?`

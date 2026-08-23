@@ -149,7 +149,8 @@ flowchart LR
 | Entity | MVP | Purpose | Key relationships | Notes |
 | ------ | --- | ------- | ----------------- | ----- |
 | **Company** | Yes | Tenant / provider org | 1 → N most business entities | No Branch |
-| **CompanySettings** | Later | Prefix nomor dokumen, timezone, reminder defaults | N:1 Company | May start embedded on Company |
+| **DocumentNumberSequence** | Yes | Centralized yearly sequence counter per `(companyId, documentType, year)` | N:1 Company | Atomic allocator for business numbers |
+| **CompanySettings** | Later | Timezone, reminder defaults | N:1 Company | Document prefixes are **fixed** in app code (not per-company config) |
 
 **Lifecycle:** Company `active` \| `inactive`
 
@@ -257,7 +258,7 @@ Di medcal, **`LeadSubmission` = alias konseptual dari `ContactMessage`** (boleh 
 
 | Entity | MVP | Purpose | Key relationships | Notes |
 | ------ | --- | ------- | ----------------- | ----- |
-| **Customer** | Yes | Hospital/clinic org | N:1 Company; 1 → N Contact, Device, Request, Invoice | |
+| **Customer** | Yes | Hospital/clinic org | N:1 Company; 1 → N Contact, Device, Request, Invoice | Business number `number` via centralized `DocumentNumberService` (prefix `CUS`) |
 | **CustomerContact** | Yes | PIC / emails | N:1 Customer | Email used for lead match |
 | **CustomerSite** | Later | On-site address book | N:1 Customer | WO may use free-text location first |
 
@@ -287,7 +288,7 @@ Di medcal, **`LeadSubmission` = alias konseptual dari `ContactMessage`** (boleh 
 
 | Entity | MVP | Purpose | Key relationships | Notes |
 | ------ | --- | ------- | ----------------- | ----- |
-| **CalibrationRequest** | Yes | Service request | N:1 Customer, Company; optional ← Lead | |
+| **CalibrationRequest** | Yes | Service request | N:1 Customer, Company; optional ← Lead | Business number `number` (prefix `CRQ`) |
 | **CalibrationRequestItem** | Yes | Device lines on request | N:1 Request; N:1 Device | |
 
 **ServiceMode (enum):** `on_site` \| `send_to_lab`
@@ -303,7 +304,7 @@ Di medcal, **`LeadSubmission` = alias konseptual dari `ContactMessage`** (boleh 
 
 | Entity | MVP | Purpose | Key relationships | Notes |
 | ------ | --- | ------- | ----------------- | ----- |
-| **Quotation** | Yes | Priced offer (always recorded) | N:1 Customer, Company; optional N:1 Request; 1 → N Item; 1 → N WorkOrder (after approve) | Phone/WA = source only |
+| **Quotation** | Yes | Priced offer (always recorded) | N:1 Customer, Company; optional N:1 Request; 1 → N Item; 1 → N WorkOrder (after approve) | Business number `number` (prefix `QUO`); phone/WA = source only |
 | **QuotationItem** | Yes | Line pricing | N:1 Quotation; optional → Device / RequestItem | May include visit/surcharge lines that later flow to Certificate amounts |
 
 **QuotationSource (enum):** `portal` \| `phone` \| `whatsapp` \| `other`
@@ -376,8 +377,7 @@ Di medcal, **`LeadSubmission` = alias konseptual dari `ContactMessage`** (boleh 
 
 | Entity | MVP | Purpose | Key relationships | Notes |
 | ------ | --- | ------- | ----------------- | ----- |
-| **Certificate** | Yes | Legal/business certificate + **billable SoR** | N:1 Device, Customer, Company; ← QualityReview/Job; M:N Invoice via link | PDF in Vault |
-| **CertificateNumberSeries** | Later | Numbering config | N:1 Company | May be CompanySettings first |
+| **Certificate** | Yes | Legal/business certificate + **billable SoR** | N:1 Device, Customer, Company; ← QualityReview/Job; M:N Invoice via link | PDF in Vault; certificate `number` uses legacy field — centralized prefix TBD in later phase |
 
 **Certificate.status (operational):** `draft` \| `issued` \| `revoked` \| `superseded`
 
@@ -588,7 +588,7 @@ Express **never** writes these directly except by forwarding commands to Nest.
 Urutan bangun disarankan mengikuti funnel (jangan loncat ke WO dulu):
 
 **A. Acquisition (website → CRM)**  
-Company, **ContactMessage** (`GetMessageFrom`), Lead, Customer, CustomerContact, User, UserMembership, EmailWhitelist, **ChatSession / ChatMessage / ChatSessionToken** (Human Chat, human-only), FCMToken (admin notif)
+Company, **DocumentNumberSequence**, **ContactMessage** (`GetMessageFrom`), Lead, Customer, CustomerContact, User, UserMembership, EmailWhitelist, **ChatSession / ChatMessage / ChatSessionToken** (Human Chat, human-only), FCMToken (admin notif)
 
 **B. Delivery (request → certificate)**  
 Device, CalibrationRequest, CalibrationRequestItem, Quotation, QuotationItem, ServiceTariff (light), WorkOrder, WorkOrderAssignment, CalibrationJob, MeasurementResult, JobEvidence, CustomerSignature, QualityReview, Certificate, FileObject
@@ -597,7 +597,7 @@ Device, CalibrationRequest, CalibrationRequestItem, Quotation, QuotationItem, Se
 Invoice, InvoiceCertificate, InvoiceItem, Payment, **CreditNote**, ReminderEvent
 
 **Can wait:**  
-NewsletterSubscriber, CustomerSite, DeviceCategory, DeviceImportBatch, LeadActivity, CertificateNumberSeries, ReminderPolicy, StandardInstrument*, Folder, ShareLink, NotificationMessage, InvoiceWorkOrderRef, CompanySettings (as table)
+NewsletterSubscriber, CustomerSite, DeviceCategory, DeviceImportBatch, LeadActivity, ReminderPolicy, StandardInstrument*, Folder, ShareLink, NotificationMessage, InvoiceWorkOrderRef, CompanySettings (as table)
 
 ---
 

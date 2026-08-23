@@ -194,6 +194,14 @@ enum CreditNoteStatus {
   VOID
 }
 
+enum DocumentType {
+  CUSTOMER
+  CALIBRATION_REQUEST
+  QUOTATION
+  PURCHASE_ORDER
+  WORK_ORDER
+}
+
 enum ReminderChannel {
   EMAIL
   PUSH
@@ -264,24 +272,41 @@ model Company {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  memberships         UserMembership[]
-  contactMessages     ContactMessage[]
-  chatSessions        ChatSession[]
-  leads               Lead[]
-  customers           Customer[]
-  devices             Device[]
-  calibrationRequests CalibrationRequest[]
-  serviceTariffs      ServiceTariff[]
-  taxes               Tax[]
-  quotations          Quotation[]
-  workOrders          WorkOrder[]
-  certificates        Certificate[]
-  invoices            Invoice[]
-  creditNotes         CreditNote[]
-  reminderEvents      ReminderEvent[]
-  fileObjects         FileObject[]
-  fcmTokens           FCMToken[]
-  emails              Email[]
+  memberships             UserMembership[]
+  contactMessages         ContactMessage[]
+  chatSessions            ChatSession[]
+  leads                   Lead[]
+  customers               Customer[]
+  devices                 Device[]
+  calibrationRequests     CalibrationRequest[]
+  serviceTariffs          ServiceTariff[]
+  taxes                   Tax[]
+  quotations              Quotation[]
+  workOrders              WorkOrder[]
+  certificates            Certificate[]
+  invoices                Invoice[]
+  creditNotes             CreditNote[]
+  reminderEvents          ReminderEvent[]
+  fileObjects             FileObject[]
+  fcmTokens               FCMToken[]
+  emails                  Email[]
+  documentNumberSequences DocumentNumberSequence[]
+}
+
+model DocumentNumberSequence {
+  id           String       @id @default(cuid())
+  companyId    String
+  documentType DocumentType
+  prefix       String       @db.Char(3)
+  year         Int
+  lastSequence Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, documentType, year])
+  @@index([companyId, documentType])
 }
 
 model User {
@@ -296,22 +321,22 @@ model User {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  memberships           UserMembership[]
-  customerLinks         CustomerUserLink[]
-  fcmTokens             FCMToken[]
-  assignedLeads         Lead[]                @relation("LeadAssignee")
-  confirmedMatches      ContactMessage[]      @relation("MatchConfirmer")
-  workOrderAssignments  WorkOrderAssignment[]
-  qualityReviews        QualityReview[]       @relation("Reviewer")
-  sessions              Session[]
-  accounts              Account[]
-  emailWhitelistCreated EmailWhitelist[]      @relation("EmailWhitelistCreator")
-  emailWhitelistRevoked EmailWhitelist[]      @relation("EmailWhitelistRevoker")
-  menusCreated          Menu[]                @relation("MenuCreatedBy")
-  menusUpdated          Menu[]                @relation("MenuUpdatedBy")
-  sentEmails            Email[]               @relation("EmailSender")
-  rolePermissionsCreated RolePermission[]     @relation("RolePermissionCreatedBy")
-  rolePermissionsUpdated RolePermission[]     @relation("RolePermissionUpdatedBy")
+  memberships            UserMembership[]
+  customerLinks          CustomerUserLink[]
+  fcmTokens              FCMToken[]
+  assignedLeads          Lead[]                @relation("LeadAssignee")
+  confirmedMatches       ContactMessage[]      @relation("MatchConfirmer")
+  workOrderAssignments   WorkOrderAssignment[]
+  qualityReviews         QualityReview[]       @relation("Reviewer")
+  sessions               Session[]
+  accounts               Account[]
+  emailWhitelistCreated  EmailWhitelist[]      @relation("EmailWhitelistCreator")
+  emailWhitelistRevoked  EmailWhitelist[]      @relation("EmailWhitelistRevoker")
+  menusCreated           Menu[]                @relation("MenuCreatedBy")
+  menusUpdated           Menu[]                @relation("MenuUpdatedBy")
+  sentEmails             Email[]               @relation("EmailSender")
+  rolePermissionsCreated RolePermission[]      @relation("RolePermissionCreatedBy")
+  rolePermissionsUpdated RolePermission[]      @relation("RolePermissionUpdatedBy")
 }
 
 // =============================================================================
@@ -742,6 +767,7 @@ model Email {
 model Customer {
   id        String         @id @default(cuid())
   companyId String
+  number    String
   name      String
   legalName String?
   taxId     String?
@@ -765,6 +791,7 @@ model Customer {
   reminderEvents      ReminderEvent[]
   fileObjects         FileObject[]
 
+  @@unique([companyId, number])
   @@index([companyId, status])
   @@index([companyId, name])
 }
@@ -820,6 +847,7 @@ model CalibrationRequest {
   id                  String                   @id @default(cuid())
   companyId           String
   customerId          String
+  number              String
   leadId              String?
   serviceMode         ServiceMode
   desiredScheduleNote String?
@@ -835,6 +863,7 @@ model CalibrationRequest {
   items      CalibrationRequestItem[]
   quotations Quotation[]
 
+  @@unique([companyId, number])
   @@index([companyId, status])
   @@index([customerId])
 }
@@ -879,6 +908,7 @@ model Quotation {
   id                 String          @id @default(cuid())
   companyId          String
   customerId         String
+  number             String
   requestId          String?
   source             QuotationSource @default(PORTAL)
   status             QuotationStatus @default(DRAFT)
@@ -901,6 +931,7 @@ model Quotation {
   items      QuotationItem[]
   workOrders WorkOrder[]
 
+  @@unique([companyId, number])
   @@index([companyId, status])
   @@index([customerId])
   @@index([taxId])
