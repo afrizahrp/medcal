@@ -272,6 +272,7 @@ model Company {
   devices             Device[]
   calibrationRequests CalibrationRequest[]
   serviceTariffs      ServiceTariff[]
+  taxes               Tax[]
   quotations          Quotation[]
   workOrders          WorkOrder[]
   certificates        Certificate[]
@@ -883,6 +884,7 @@ model Quotation {
   status             QuotationStatus @default(DRAFT)
   validUntil         DateTime?
   subtotal           Decimal         @db.Decimal(18, 2)
+  taxId              String?
   taxAmount          Decimal?        @db.Decimal(18, 2)
   totalAmount        Decimal         @db.Decimal(18, 2)
   currency           String          @default("IDR")
@@ -895,11 +897,13 @@ model Quotation {
   company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer   Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   request    CalibrationRequest? @relation(fields: [requestId], references: [id])
+  tax        Tax?                @relation(fields: [taxId], references: [id])
   items      QuotationItem[]
   workOrders WorkOrder[]
 
   @@index([companyId, status])
   @@index([customerId])
+  @@index([taxId])
 }
 
 model QuotationItem {
@@ -1101,6 +1105,23 @@ model Certificate {
 // Billing
 // =============================================================================
 
+model Tax {
+  id          String   @id @default(cuid())
+  companyId   String
+  taxCode     String
+  taxRate     Decimal  @db.Decimal(5, 4)
+  description String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  quotations Quotation[]
+  invoices   Invoice[]
+
+  @@unique([companyId, taxCode])
+}
+
 model Invoice {
   id          String        @id @default(cuid())
   companyId   String
@@ -1110,6 +1131,7 @@ model Invoice {
   issueDate   DateTime?
   dueDate     DateTime?
   subtotal    Decimal       @db.Decimal(18, 2)
+  taxId       String?
   taxAmount   Decimal?      @db.Decimal(18, 2)
   totalAmount Decimal       @db.Decimal(18, 2)
   currency    String        @default("IDR")
@@ -1119,6 +1141,7 @@ model Invoice {
 
   company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer     Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tax          Tax?                 @relation(fields: [taxId], references: [id])
   certificates InvoiceCertificate[]
   items        InvoiceItem[]
   payments     Payment[]
@@ -1127,6 +1150,7 @@ model Invoice {
   @@unique([companyId, number])
   @@index([companyId, status])
   @@index([customerId])
+  @@index([taxId])
 }
 
 model InvoiceCertificate {
