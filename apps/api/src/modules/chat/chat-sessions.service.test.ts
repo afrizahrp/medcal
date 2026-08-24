@@ -511,6 +511,121 @@ describe("ChatSessionsService.closeSession — linked ContactMessage CLOSED sync
   });
 });
 
+describe("ChatSessionsService.markRead — linked ContactMessage PENDING → READ sync", () => {
+  it("transitions linked ContactMessage from PENDING to READ and updates lastReadByAdminAt", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    expect(session.contactMessageId).toBeTruthy();
+
+    const before = await prisma.contactMessage.findUniqueOrThrow({
+      where: { id: session.contactMessageId! },
+    });
+    expect(before.status).toBe("PENDING");
+
+    const updated = await service.markRead(countCompanyId, session.id);
+    expect(updated.lastReadByAdminAt).not.toBeNull();
+
+    const after = await prisma.contactMessage.findUniqueOrThrow({
+      where: { id: session.contactMessageId! },
+    });
+    expect(after.status).toBe("READ");
+  });
+
+  it("keeps ContactMessage READ when already READ", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await prisma.contactMessage.update({
+      where: { id: session.contactMessageId! },
+      data: { status: "READ" },
+    });
+
+    await service.markRead(countCompanyId, session.id);
+
+    const contactMessage = await prisma.contactMessage.findUniqueOrThrow({
+      where: { id: session.contactMessageId! },
+    });
+    expect(contactMessage.status).toBe("READ");
+  });
+
+  it("keeps ContactMessage REPLIED — must not regress to READ", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await prisma.contactMessage.update({
+      where: { id: session.contactMessageId! },
+      data: { status: "REPLIED" },
+    });
+
+    await service.markRead(countCompanyId, session.id);
+
+    const contactMessage = await prisma.contactMessage.findUniqueOrThrow({
+      where: { id: session.contactMessageId! },
+    });
+    expect(contactMessage.status).toBe("REPLIED");
+  });
+
+  it("keeps ContactMessage CLOSED — must not regress to READ", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await prisma.contactMessage.update({
+      where: { id: session.contactMessageId! },
+      data: { status: "CLOSED" },
+    });
+
+    await service.markRead(countCompanyId, session.id);
+
+    const contactMessage = await prisma.contactMessage.findUniqueOrThrow({
+      where: { id: session.contactMessageId! },
+    });
+    expect(contactMessage.status).toBe("CLOSED");
+  });
+
+  it("succeeds when contactMessageId is null without creating a ContactMessage", async () => {
+    const session = await prisma.chatSession.create({
+      data: {
+        companyId: countCompanyId,
+        visitorName: "No Intake",
+        visitorEmail: `no-intake-read-${randomUUID().slice(0, 8)}@example.com`,
+        status: "OPEN",
+      },
+    });
+    countCompanySessionIds.push(session.id);
+
+    const countBefore = await prisma.contactMessage.count({ where: { companyId: countCompanyId } });
+    const updated = await service.markRead(countCompanyId, session.id);
+    const countAfter = await prisma.contactMessage.count({ where: { companyId: countCompanyId } });
+
+    expect(updated.lastReadByAdminAt).not.toBeNull();
+    expect(countAfter).toBe(countBefore);
+  });
+
+  it("repeated markRead is idempotent — PENDING then READ stays READ", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+
+    await service.markRead(countCompanyId, session.id);
+    await service.markRead(countCompanyId, session.id);
+    await service.markRead(countCompanyId, session.id);
+
+    const contactMessage = await prisma.contactMessage.findUniqueOrThrow({
+      where: { id: session.contactMessageId! },
+    });
+    expect(contactMessage.status).toBe("READ");
+  });
+
+  it("updates ContactMessage statistics after PENDING → READ (ContactMessage.status source of truth)", async () => {
+    const contactMessagesService = new ContactMessagesService();
+    const before = await contactMessagesService.getStatistics(countCompanyId);
+
+    const session = await createSessionForCompany(countCompanyId);
+    const mid = await contactMessagesService.getStatistics(countCompanyId);
+    expect(mid.pending).toBe(before.pending + 1);
+    expect(mid.read).toBe(before.read);
+    expect(mid.closed).toBe(before.closed);
+
+    await service.markRead(countCompanyId, session.id);
+
+    const after = await contactMessagesService.getStatistics(countCompanyId);
+    expect(after.pending).toBe(mid.pending - 1);
+    expect(after.read).toBe(mid.read + 1);
+    expect(after.closed).toBe(mid.closed);
+  });
+});
+
 describe("ChatSessionsService.findById / findMessages — tenant isolation", () => {
   it("findById scopes to companyId — a session cannot be read via a foreign companyId", async () => {
     const session = await createSession();

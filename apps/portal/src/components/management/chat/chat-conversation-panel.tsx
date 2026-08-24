@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { notifyContactMessagesChanged } from "../../../lib/contact-messages-sync";
 import { useChatSocket, type ChatWireMessage } from "../../../lib/use-chat-socket";
 import { notifyUnreadCountChanged } from "../../../lib/use-unread-count";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,7 @@ export function ChatConversationPanel({ sessionId }: { sessionId: string }) {
       })
         .then(() => {
           notifyUnreadCountChanged("chat");
+          notifyContactMessagesChanged();
         })
         .catch(() => {});
     },

@@ -363,9 +363,24 @@ export class ChatSessionsService {
     const next =
       session.lastReadByAdminAt && session.lastReadByAdminAt > candidate ? session.lastReadByAdminAt : candidate;
 
-    return prisma.chatSession.update({
-      where: { id: sessionId },
-      data: { lastReadByAdminAt: next },
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.chatSession.update({
+        where: { id: sessionId },
+        data: { lastReadByAdminAt: next },
+      });
+
+      if (session.contactMessageId) {
+        await tx.contactMessage.updateMany({
+          where: {
+            id: session.contactMessageId,
+            companyId,
+            status: "PENDING",
+          },
+          data: { status: "READ" },
+        });
+      }
+
+      return updated;
     });
   }
 }
