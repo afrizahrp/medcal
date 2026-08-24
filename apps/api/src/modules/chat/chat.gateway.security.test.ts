@@ -92,6 +92,11 @@ async function createAdmin(role: MembershipRole): Promise<{ cookie: string; user
   const signUp = await auth.api.signUpEmail({ body: { email, password, name: "Chat Test Admin" } });
   cleanup.userIds.push(signUp.user.id);
 
+  await prisma.user.update({
+    where: { id: signUp.user.id },
+    data: { status: "ACTIVE" },
+  });
+
   await prisma.userMembership.create({
     data: { userId: signUp.user.id, companyId: COMPANY_ID, role },
   });
@@ -237,6 +242,45 @@ describe("Admin authorization (Attack F/G/H/I)", () => {
     socket.emit("close_session", { sessionId: session.id });
     const closed = await waitFor<{ sessionId: string }>(socket, "session_closed");
     expect(closed.sessionId).toBe(session.id);
+  });
+
+  it("ADMIN with coexisting CHAT_SESSION_TOKEN still resolves as ADMIN — reply reaches the requested customer session", async () => {
+    const customerSession = await createVisitorSession();
+    const adminWidgetSession = await createVisitorSession({
+      name: "Admin Widget Session",
+      email: `admin-widget-${randomUUID().slice(0, 8)}@example.com`,
+      message: "Earlier widget message",
+    });
+    const { cookie: adminCookie, userId } = await createAdmin("ADMIN");
+    const combinedCookie = `${cookieFor(adminWidgetSession.id)}; ${adminCookie}`;
+
+    const socket = connect(combinedCookie);
+    await waitFor(socket, "connect");
+
+    socket.emit("join_session", { sessionId: customerSession.id });
+    const history = await waitFor<{ sessionId: string }>(socket, "history");
+    expect(history.sessionId).toBe(customerSession.id);
+
+    const replyBody = "Admin reply with both cookies";
+    socket.emit("send_message", {
+      sessionId: customerSession.id,
+      body: replyBody,
+      clientMessageId: randomUUID(),
+    });
+    const ack = await waitFor<{ message: { senderType: string; sessionId: string; senderUserId: string | null } }>(
+      socket,
+      "message_ack",
+    );
+
+    expect(ack.message.senderType).toBe("ADMIN");
+    expect(ack.message.sessionId).toBe(customerSession.id);
+    expect(ack.message.senderUserId).toBe(userId);
+
+    const dbRow = await prisma.chatMessage.findFirstOrThrow({
+      where: { sessionId: customerSession.id, body: replyBody },
+    });
+    expect(dbRow.senderType).toBe("ADMIN");
+    expect(dbRow.senderUserId).toBe(userId);
   });
 
   it("Admin (company PKM) cannot join, read, send to, or close a foreign-company session", async () => {

@@ -1,4 +1,3 @@
-import type { IncomingHttpHeaders } from "node:http";
 import type { Socket } from "socket.io";
 import { fromNodeHeaders } from "better-auth/node";
 import { auth, hasPermission } from "@medcal/auth";
@@ -39,12 +38,17 @@ function parseCookies(header: string | undefined): Record<string, string> {
 
 /**
  * Resolves exactly ONE authenticated identity for a Socket.IO connection —
- * either a visitor (ChatSessionToken cookie) or staff (Better Auth session
+ * either staff (Better Auth session cookie) or a visitor (ChatSessionToken
  * cookie). Never both, never neither: any failure throws, and the caller
  * (ChatGateway.handleConnection) MUST disconnect the socket, not let it sit
- * connected-but-unidentified. This function does authentication only — it
- * never touches ChatSession rows beyond confirming the visitor's own token
- * still resolves to a real session in THIS deployment's company (Attack A/B/D).
+ * connected-but-unidentified.
+ *
+ * Precedence (admin-over-visitor fix, 2026-08-24): when BOTH credentials
+ * coexist in the same browser (admin tested the public widget, then opened
+ * Portal without clearing cookies), a valid Better Auth staff session MUST
+ * win over CHAT_SESSION_TOKEN — otherwise Portal sockets were misidentified
+ * as VISITOR. Visitor auth is only attempted when no Better Auth session
+ * resolves.
  */
 export async function resolveSocketIdentity(socket: Socket): Promise<SocketIdentity> {
   const companyId = process.env.COMPANY_ID;
@@ -52,14 +56,40 @@ export async function resolveSocketIdentity(socket: Socket): Promise<SocketIdent
     throw new ChatSocketAuthError("MISCONFIGURED", "COMPANY_ID not configured");
   }
 
-  const cookies = parseCookies(socket.handshake.headers.cookie);
-  const chatToken = cookies[CHAT_SESSION_TOKEN_COOKIE];
+  const headers = socket.handshake.headers;
+  const authSession = await auth.api.getSession({ headers: fromNodeHeaders(headers) });
 
+  if (authSession) {
+    return resolveAdminIdentityForUser(authSession.user.id, companyId);
+  }
+
+  const cookies = parseCookies(headers.cookie);
+  const chatToken = cookies[CHAT_SESSION_TOKEN_COOKIE];
   if (chatToken) {
     return resolveVisitorIdentity(chatToken, companyId);
   }
 
-  return resolveAdminIdentity(socket.handshake.headers, companyId);
+  throw new ChatSocketAuthError("UNAUTHENTICATED", "No authenticated identity");
+}
+
+async function resolveAdminIdentityForUser(userId: string, companyId: string): Promise<SocketIdentity> {
+  const membership = await prisma.userMembership.findUnique({
+    where: { userId_companyId: { userId, companyId } },
+    include: { user: { select: { status: true } } },
+  });
+  if (!membership) {
+    throw new ChatSocketAuthError("NO_MEMBERSHIP", "User has no membership in this company");
+  }
+
+  // G5: access requires ACTIVE + membership. INVITED is not authorized.
+  if (membership.user.status !== "ACTIVE") {
+    throw new ChatSocketAuthError(
+      membership.user.status === "DISABLED" ? "USER_DISABLED" : "USER_NOT_ACTIVE",
+      "User account is not active",
+    );
+  }
+
+  return { type: "ADMIN", userId, companyId: membership.companyId, role: membership.role };
 }
 
 async function resolveVisitorIdentity(token: string, companyId: string): Promise<SocketIdentity> {
@@ -86,31 +116,6 @@ async function resolveVisitorIdentity(token: string, companyId: string): Promise
   }
 
   return { type: "VISITOR", sessionId: session.id, companyId };
-}
-
-async function resolveAdminIdentity(headers: IncomingHttpHeaders, companyId: string): Promise<SocketIdentity> {
-  const session = await auth.api.getSession({ headers: fromNodeHeaders(headers) });
-  if (!session) {
-    throw new ChatSocketAuthError("UNAUTHENTICATED", "No Better Auth session");
-  }
-
-  const membership = await prisma.userMembership.findUnique({
-    where: { userId_companyId: { userId: session.user.id, companyId } },
-    include: { user: { select: { status: true } } },
-  });
-  if (!membership) {
-    throw new ChatSocketAuthError("NO_MEMBERSHIP", "User has no membership in this company");
-  }
-
-  // G5: access requires ACTIVE + membership. INVITED is not authorized.
-  if (membership.user.status !== "ACTIVE") {
-    throw new ChatSocketAuthError(
-      membership.user.status === "DISABLED" ? "USER_DISABLED" : "USER_NOT_ACTIVE",
-      "User account is not active",
-    );
-  }
-
-  return { type: "ADMIN", userId: session.user.id, companyId: membership.companyId, role: membership.role };
 }
 
 export function requireChatPermission(role: MembershipRole, action: "read" | "reply" | "close"): boolean {
