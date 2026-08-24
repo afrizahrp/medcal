@@ -49,6 +49,8 @@ const EDITABLE_ROLES: MembershipRole[] = ["ADMIN", "SUPERVISOR", "TECHNICIAN", "
 const selectClassName =
   "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
+const pageContainerClass = "mx-auto w-full max-w-[960px] px-4 py-6 md:px-8 md:py-8";
+
 export default function UserDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -63,9 +65,7 @@ export default function UserDetailPage() {
   const [draftStatus, setDraftStatus] = useState<UserStatus>("ACTIVE");
   const [draftRole, setDraftRole] = useState<MembershipRole>("ADMIN");
   const [draftReceiveNotifications, setDraftReceiveNotifications] = useState(false);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [updatingRole, setUpdatingRole] = useState(false);
-  const [updatingNotifications, setUpdatingNotifications] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [removingMembership, setRemovingMembership] = useState(false);
 
   const load = useCallback(async () => {
@@ -95,71 +95,85 @@ export default function UserDetailPage() {
     load();
   }, [load]);
 
-  async function updateStatus() {
-    if (!user || draftStatus === user.status) return;
-    setUpdatingStatus(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      await apiFetch(`/users/${user.id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: draftStatus }),
-      });
-      setSuccess("Status berhasil diperbarui.");
-      await load();
-    } catch {
-      setError("Gagal memperbarui status.");
-    } finally {
-      setUpdatingStatus(false);
+  function roleUpdateError(err: unknown): string {
+    if (err instanceof ApiError && err.data?.code === "SUPERADMIN_PROTECTED") {
+      return "Role SUPERADMIN tidak dapat diubah via aplikasi.";
     }
+    if (err instanceof ApiError && err.data?.code === "INTERNAL_STAFF_DOMAIN_REQUIRED") {
+      return "Role internal (Admin/Supervisor/Teknisi/Keuangan) hanya untuk email @kalibrasimedika.co.id.";
+    }
+    return "Gagal memperbarui role.";
   }
 
-  async function updateRole() {
-    if (!user || !user.membership || draftRole === user.membership.role) return;
-    setUpdatingRole(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      await apiFetch(`/users/${user.id}/memberships`, {
-        method: "PATCH",
-        body: JSON.stringify({ role: draftRole }),
-      });
-      setSuccess("Role berhasil diperbarui.");
-      await load();
-      if (user.id === currentUser?.id) {
-        await invalidateAuthQueries(queryClient, { allNav: true });
-      }
-    } catch (err) {
-      if (err instanceof ApiError && err.data?.code === "SUPERADMIN_PROTECTED") {
-        setError("Role SUPERADMIN tidak dapat diubah via aplikasi.");
-      } else if (err instanceof ApiError && err.data?.code === "INTERNAL_STAFF_DOMAIN_REQUIRED") {
-        setError("Role internal (Admin/Supervisor/Teknisi/Keuangan) hanya untuk email @kalibrasimedika.co.id.");
-      } else {
-        setError("Gagal memperbarui role.");
-      }
-    } finally {
-      setUpdatingRole(false);
-    }
-  }
+  async function saveChanges() {
+    if (!user) return;
 
-  async function updateNotificationSettings() {
-    if (!user?.membership) return;
-    if (draftReceiveNotifications === user.membership.receiveNotifications) return;
-    setUpdatingNotifications(true);
+    const statusChanged = draftStatus !== user.status;
+    const roleChanged =
+      !!user.membership && !isSuperadmin && draftRole !== user.membership.role;
+    const notificationChanged =
+      !!user.membership &&
+      draftReceiveNotifications !== user.membership.receiveNotifications;
+
+    if (!statusChanged && !roleChanged && !notificationChanged) return;
+
+    setSaving(true);
     setError(null);
     setSuccess(null);
-    try {
-      await apiFetch(`/users/${user.id}/memberships/notification-settings`, {
-        method: "PATCH",
-        body: JSON.stringify({ receiveNotifications: draftReceiveNotifications }),
-      });
-      setSuccess("Pengaturan notifikasi berhasil diperbarui.");
-      await load();
-    } catch {
-      setError("Gagal memperbarui pengaturan notifikasi.");
-    } finally {
-      setUpdatingNotifications(false);
+
+    const failures: string[] = [];
+    let savedCount = 0;
+
+    if (statusChanged) {
+      try {
+        await apiFetch(`/users/${user.id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: draftStatus }),
+        });
+        savedCount += 1;
+      } catch {
+        failures.push("Gagal memperbarui status.");
+      }
     }
+
+    if (roleChanged) {
+      try {
+        await apiFetch(`/users/${user.id}/memberships`, {
+          method: "PATCH",
+          body: JSON.stringify({ role: draftRole }),
+        });
+        savedCount += 1;
+        if (user.id === currentUser?.id) {
+          await invalidateAuthQueries(queryClient, { allNav: true });
+        }
+      } catch (err) {
+        failures.push(roleUpdateError(err));
+      }
+    }
+
+    if (notificationChanged) {
+      try {
+        await apiFetch(`/users/${user.id}/memberships/notification-settings`, {
+          method: "PATCH",
+          body: JSON.stringify({ receiveNotifications: draftReceiveNotifications }),
+        });
+        savedCount += 1;
+      } catch {
+        failures.push("Gagal memperbarui pengaturan notifikasi.");
+      }
+    }
+
+    await load();
+
+    if (failures.length === 0) {
+      setSuccess("Perubahan berhasil disimpan.");
+    } else if (savedCount > 0) {
+      setError(`Sebagian perubahan gagal disimpan. ${failures.join(" ")}`);
+    } else {
+      setError(failures.join(" "));
+    }
+
+    setSaving(false);
   }
 
   async function removeMembership() {
@@ -187,6 +201,12 @@ export default function UserDetailPage() {
   }
 
   const isSuperadmin = user?.membership?.role === "SUPERADMIN";
+  const hasUnsavedChanges =
+    !!user &&
+    (draftStatus !== user.status ||
+      (!!user.membership && !isSuperadmin && draftRole !== user.membership.role) ||
+      (!!user.membership &&
+        draftReceiveNotifications !== user.membership.receiveNotifications));
   // Same domain policy the backend enforces (isAllowedRegistrationDomain,
   // shared from @medcal/shared) — a UX hint only; the server rejects the
   // request regardless of what's shown here.
@@ -209,7 +229,7 @@ export default function UserDetailPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-6 md:px-8 md:py-8">
+    <div className={pageContainerClass}>
       <Link
         href="/users"
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
@@ -240,130 +260,123 @@ export default function UserDetailPage() {
               )}
               <Badge variant="outline">{STATUS_LABELS[user.status]}</Badge>
             </div>
+
+            <div className="mt-6 border-t border-slate-100 pt-6">
+              <h2 className="text-base font-semibold text-slate-900">Membership Settings</h2>
+              <p className="mt-1 text-xs text-slate-400">
+                Pengaturan status, role, dan notifikasi untuk membership user di company ini.
+              </p>
+
+              <div className="mt-5 space-y-4">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  {user.membership && (
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Role</p>
+                      {isSuperadmin ? (
+                        <>
+                          <p className="mt-2 text-sm text-slate-700">{ROLE_LABELS[user.membership.role]}</p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            Role SUPERADMIN tidak dapat diubah melalui aplikasi. Gunakan bootstrap CLI.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <select
+                            value={draftRole}
+                            disabled={saving}
+                            onChange={(e) => setDraftRole(e.target.value as MembershipRole)}
+                            className={`${selectClassName} mt-2`}
+                          >
+                            {roleOptions.map((r) => (
+                              <option key={r} value={r}>
+                                {ROLE_LABELS[r]}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="mt-1 text-xs text-slate-400">
+                            Ubah role user di company ini.
+                          </p>
+                          {!staffEligible && (
+                            <p className="mt-1 text-xs text-slate-400">
+                              User ini memakai email di luar domain @kalibrasimedika.co.id, jadi hanya
+                              role Customer yang tersedia.
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Status</p>
+                    <select
+                      value={draftStatus}
+                      disabled={saving}
+                      onChange={(e) => setDraftStatus(e.target.value as UserStatus)}
+                      className={`${selectClassName} mt-2`}
+                    >
+                      {STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>
+                          {STATUS_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Status DISABLED akan mencegah user mengakses aplikasi.
+                    </p>
+                  </div>
+                </div>
+
+                {user.membership && (
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Notifikasi</p>
+                    <label className="mt-2 flex items-center gap-3 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={draftReceiveNotifications}
+                        disabled={saving}
+                        onChange={(e) => setDraftReceiveNotifications(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-600"
+                      />
+                      Terima Notifikasi
+                    </label>
+                    <p className="mt-1 text-xs text-slate-400">
+                      User ini dapat menerima notifikasi push untuk assignment yang ditujukan
+                      kepadanya di company ini.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-1">
+                  <Button onClick={saveChanges} disabled={saving || !hasUnsavedChanges}>
+                    <Save className="h-4 w-4" />
+                    Simpan Perubahan
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
 
           {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
           {success && <p className="mt-4 text-sm text-emerald-600">{success}</p>}
 
-          <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-base font-semibold text-slate-900">Status User</h2>
-            <p className="mt-1 text-xs text-slate-400">
-              Status DISABLED akan mencegah user mengakses aplikasi.
-            </p>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <select
-                value={draftStatus}
-                disabled={updatingStatus}
-                onChange={(e) => setDraftStatus(e.target.value as UserStatus)}
-                className={`${selectClassName} sm:max-w-xs`}
-              >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABELS[s]}
-                  </option>
-                ))}
-              </select>
-              <Button
-                onClick={updateStatus}
-                disabled={updatingStatus || draftStatus === user.status}
-              >
-                <Save className="h-4 w-4" />
-                Update Status
-              </Button>
-            </div>
-          </div>
-
-          {user.membership && (
-            <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="text-base font-semibold text-slate-900">Role</h2>
-              {isSuperadmin ? (
-                <p className="mt-2 text-sm text-slate-500">
-                  Role SUPERADMIN tidak dapat diubah melalui aplikasi. Gunakan bootstrap CLI.
-                </p>
-              ) : (
-                <>
-                  <p className="mt-1 text-xs text-slate-400">
-                    Ubah role user di company ini.
-                  </p>
-                  {!staffEligible && (
-                    <p className="mt-1 text-xs text-slate-400">
-                      User ini memakai email di luar domain @kalibrasimedika.co.id, jadi hanya role
-                      Customer yang tersedia.
-                    </p>
-                  )}
-                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <select
-                      value={draftRole}
-                      disabled={updatingRole}
-                      onChange={(e) => setDraftRole(e.target.value as MembershipRole)}
-                      className={`${selectClassName} sm:max-w-xs`}
-                    >
-                      {roleOptions.map((r) => (
-                        <option key={r} value={r}>
-                          {ROLE_LABELS[r]}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      onClick={updateRole}
-                      disabled={updatingRole || draftRole === user.membership.role}
-                    >
-                      <Save className="h-4 w-4" />
-                      Update Role
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {user.membership && (
-            <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="text-base font-semibold text-slate-900">Notifikasi</h2>
-              <p className="mt-1 text-xs text-slate-400">
-                User ini dapat menerima notifikasi push untuk assignment yang ditujukan kepadanya di
-                company ini.
-              </p>
-              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <label className="flex items-center gap-3 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={draftReceiveNotifications}
-                    disabled={updatingNotifications}
-                    onChange={(e) => setDraftReceiveNotifications(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-600"
-                  />
-                  Terima Notifikasi
-                </label>
-                <Button
-                  onClick={updateNotificationSettings}
-                  disabled={
-                    updatingNotifications ||
-                    draftReceiveNotifications === user.membership.receiveNotifications
-                  }
-                >
-                  <Save className="h-4 w-4" />
-                  Simpan
-                </Button>
-              </div>
-            </div>
-          )}
-
           {user.membership && !isSuperadmin && (
             <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-6">
-              <h2 className="text-base font-semibold text-red-900">Hapus Membership</h2>
+              <h2 className="text-base font-semibold text-red-900">Danger Zone</h2>
               <p className="mt-1 text-sm text-red-700">
-                Menghapus membership akan mencabut akses user ke company ini. User masih bisa login tapi tidak bisa mengakses fitur.
+                Menghapus membership akan mencabut akses user ke company ini. User masih bisa login
+                tapi tidak bisa mengakses fitur.
               </p>
-              <Button
-                variant="destructive"
-                className="mt-4"
-                onClick={removeMembership}
-                disabled={removingMembership}
-              >
-                <Trash2 className="h-4 w-4" />
-                Hapus Membership
-              </Button>
+              <div className="mt-4 flex justify-end">
+                <Button
+                  variant="destructive"
+                  onClick={removeMembership}
+                  disabled={removingMembership}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Hapus Membership
+                </Button>
+              </div>
             </div>
           )}
         </>
