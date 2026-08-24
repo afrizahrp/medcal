@@ -30,3 +30,4 @@ coverage/
 packages/db/prisma/migrations/**/migration_lock.toml.bak
 .env.example
 .env.production.example
+.env.production.example

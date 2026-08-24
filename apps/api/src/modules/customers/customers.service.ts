@@ -64,6 +64,9 @@ export class CustomersService {
           legalName: input.legalName,
           taxId: input.taxId?.trim() || undefined,
           address: input.address,
+          phone: input.phone?.trim() || undefined,
+          mobile: input.mobile?.trim() || undefined,
+          email: input.email ? normalizeEmail(input.email) : undefined,
         },
       });
 
@@ -106,6 +109,9 @@ export class CustomersService {
               { name: { contains: query.search, mode: "insensitive" } },
               { number: { contains: query.search, mode: "insensitive" } },
               { legalName: { contains: query.search, mode: "insensitive" } },
+              { email: { contains: query.search, mode: "insensitive" } },
+              { phone: { contains: query.search, mode: "insensitive" } },
+              { mobile: { contains: query.search, mode: "insensitive" } },
             ],
           }
         : {}),
@@ -161,6 +167,11 @@ export class CustomersService {
           ...(input.legalName !== undefined ? { legalName: input.legalName } : {}),
           ...(input.taxId !== undefined ? { taxId: input.taxId?.trim() || null } : {}),
           ...(input.address !== undefined ? { address: input.address } : {}),
+          ...(input.phone !== undefined ? { phone: input.phone?.trim() || null } : {}),
+          ...(input.mobile !== undefined ? { mobile: input.mobile?.trim() || null } : {}),
+          ...(input.email !== undefined
+            ? { email: input.email ? normalizeEmail(input.email) : null }
+            : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
         },
       });

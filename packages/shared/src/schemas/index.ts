@@ -237,6 +237,9 @@ export const customerCreateSchema = z.object({
   legalName: z.string().max(200).optional(),
   taxId: z.string().max(50).optional(),
   address: z.string().max(500).optional(),
+  phone: z.string().max(50).optional(),
+  mobile: z.string().max(50).optional(),
+  email: z.string().email().max(100).optional(),
   contact: customerContactInputSchema.optional(),
 });
 
@@ -258,6 +261,9 @@ export const customerUpdateSchema = z.object({
   legalName: z.string().max(200).nullable().optional(),
   taxId: z.string().max(50).nullable().optional(),
   address: z.string().max(500).nullable().optional(),
+  phone: z.string().max(50).nullable().optional(),
+  mobile: z.string().max(50).nullable().optional(),
+  email: z.string().email().max(100).nullable().optional(),
   status: z.enum(customerStatusValues).optional(),
   contact: customerContactInputSchema.optional(),
 });

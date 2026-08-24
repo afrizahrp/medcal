@@ -28,6 +28,9 @@ export interface CustomerRow {
   legalName: string | null;
   taxId: string | null;
   address: string | null;
+  phone: string | null;
+  mobile: string | null;
+  email: string | null;
   status: CustomerStatus;
   createdAt: string;
   updatedAt: string;
@@ -57,6 +60,16 @@ export const CUSTOMER_STATUS_LABELS: Record<CustomerStatus, string> = {
 };
 
 export const CUSTOMER_STATUS_OPTIONS: CustomerStatus[] = ["ACTIVE", "INACTIVE"];
+
+/** Shared page shell for /customers/new and /customers/[id] form views. */
+export const customerFormPageClass = "mx-auto w-full max-w-[1000px] px-4 py-5 md:px-6";
+
+/** Shared card padding for customer create/edit forms. */
+export const customerFormSurfaceClass = "mt-5 p-4 md:p-5";
+
+/** Shared action row below customer form fields. */
+export const customerFormActionsClass =
+  "mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3";
 
 export { PageHeader, Surface, selectClassName };
 
@@ -98,7 +111,7 @@ export function CustomerFilters({
         <Input
           value={searchInput}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Cari nomor, nama, atau legal name…"
+          placeholder="Cari nomor atau nama…"
           className="pl-9"
           aria-label="Cari customer"
         />
@@ -123,51 +136,38 @@ export function CustomerFilters({
 export function CustomerTable({ customers }: { customers: CustomerRow[] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-left text-sm">
+      <table className="w-full min-w-[640px]">
         <thead>
-          <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400">
-            <th className="py-2 pr-3">Nomor</th>
-            <th className="py-2 pr-3">Nama</th>
-            <th className="py-2 pr-3">Legal name</th>
-            <th className="py-2 pr-3">Tax ID</th>
-            <th className="py-2 pr-3">Kontak</th>
-            <th className="py-2">Status</th>
+          <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+            <th className="px-4 py-3">Nomor</th>
+            <th className="px-4 py-3">Nama</th>
+            <th className="px-4 py-3">Phone</th>
+            <th className="px-4 py-3">Email</th>
+            <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3"></th>
           </tr>
         </thead>
-        <tbody>
-          {customers.map((customer) => {
-            const contact = primaryContact(customer);
-            return (
-              <tr key={customer.id} className="border-b border-slate-50 hover:bg-slate-50/80">
-                <td className="py-2.5 pr-3 font-mono text-xs text-slate-600">{customer.number}</td>
-                <td className="py-2.5 pr-3">
-                  <Link
-                    href={`/customers/${customer.id}`}
-                    className="font-medium text-brand-800 underline hover:text-brand-900"
-                  >
-                    {customer.name}
-                  </Link>
+        <tbody className="divide-y divide-slate-100">
+          {customers.map((customer) => (
+              <tr key={customer.id} className="hover:bg-slate-50">
+                <td className="px-4 py-3 font-mono text-xs text-slate-600">{customer.number}</td>
+                <td className="px-4 py-3">
+                  <p className="font-medium text-slate-900">{customer.name}</p>
                 </td>
-                <td className="py-2.5 pr-3 text-slate-600">{customer.legalName ?? "—"}</td>
-                <td className="py-2.5 pr-3 text-slate-600">{customer.taxId ?? "—"}</td>
-                <td className="py-2.5 pr-3 text-slate-600">
-                  {contact ? (
-                    <span>
-                      {contact.name}
-                      {contact.email ? (
-                        <span className="block text-xs text-slate-400">{contact.email}</span>
-                      ) : null}
-                    </span>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="py-2.5">
+                <td className="px-4 py-3 text-sm text-slate-600">{customer.phone ?? "—"}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{customer.email ?? "—"}</td>
+                <td className="px-4 py-3">
                   <CustomerStatusBadge status={customer.status} />
                 </td>
+                <td className="px-4 py-3">
+                  <Link href={`/customers/${customer.id}`}>
+                    <Button variant="ghost" size="sm">
+                      Edit
+                    </Button>
+                  </Link>
+                </td>
               </tr>
-            );
-          })}
+          ))}
         </tbody>
       </table>
     </div>

@@ -1,27 +1,69 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { AccessDenied } from "../../../../components/access-denied";
+import { CustomerFormFields, type CustomerFormFieldsValue } from "../customer-form-fields";
 import { buildUpdatePayload, formatCustomerApiError } from "../customer-form-utils";
 import {
+  type CustomerRow,
   type CustomerStatus,
   CUSTOMER_STATUS_LABELS,
   CUSTOMER_STATUS_OPTIONS,
   CustomerStatusBadge,
   PageHeader,
   Surface,
+  customerFormActionsClass,
+  customerFormPageClass,
+  customerFormSurfaceClass,
   primaryContact,
   selectClassName,
 } from "../customers-ui";
 import { useCustomer, useUpdateCustomer } from "../use-customers-query";
 
-const fieldClass = "mt-1.5 w-full";
+const emptyForm: CustomerFormFieldsValue = {
+  name: "",
+  legalName: "",
+  taxId: "",
+  address: "",
+  phone: "",
+  mobile: "",
+  email: "",
+  contactName: "",
+  contactEmail: "",
+  contactPhone: "",
+  contactTitle: "",
+};
+
+function formFromCustomer(customer: CustomerRow): CustomerFormFieldsValue {
+  const contact = primaryContact(customer);
+  return {
+    name: customer.name,
+    legalName: customer.legalName ?? "",
+    taxId: customer.taxId ?? "",
+    address: customer.address ?? "",
+    phone: customer.phone ?? "",
+    mobile: customer.mobile ?? "",
+    email: customer.email ?? "",
+    contactName: contact?.name ?? "",
+    contactEmail: contact?.email ?? "",
+    contactPhone: contact?.phone ?? "",
+    contactTitle: contact?.title ?? "",
+  };
+}
+
+function DetailField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
+      <dd className="mt-0.5 text-slate-700">{children}</dd>
+    </div>
+  );
+}
 
 export default function CustomerDetailPage() {
   const params = useParams<{ id: string }>();
@@ -31,30 +73,15 @@ export default function CustomerDetailPage() {
 
   const customer = customerQuery.data;
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState("");
-  const [legalName, setLegalName] = useState("");
-  const [taxId, setTaxId] = useState("");
-  const [address, setAddress] = useState("");
+  const [form, setForm] = useState<CustomerFormFieldsValue>(emptyForm);
   const [status, setStatus] = useState<CustomerStatus>("ACTIVE");
-  const [contactName, setContactName] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
-  const [contactPhone, setContactPhone] = useState("");
-  const [contactTitle, setContactTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (!customer) return;
-    const contact = primaryContact(customer);
-    setName(customer.name);
-    setLegalName(customer.legalName ?? "");
-    setTaxId(customer.taxId ?? "");
-    setAddress(customer.address ?? "");
+    setForm(formFromCustomer(customer));
     setStatus(customer.status);
-    setContactName(contact?.name ?? "");
-    setContactEmail(contact?.email ?? "");
-    setContactPhone(contact?.phone ?? "");
-    setContactTitle(contact?.title ?? "");
   }, [customer]);
 
   if (!capabilities?.customerRead) {
@@ -63,7 +90,7 @@ export default function CustomerDetailPage() {
 
   if (customerQuery.isLoading) {
     return (
-      <div className="w-full px-4 py-6 md:px-6 md:py-6">
+      <div className={customerFormPageClass}>
         <p className="text-sm text-slate-400">Memuat…</p>
       </div>
     );
@@ -75,7 +102,7 @@ export default function CustomerDetailPage() {
 
   if (customerQuery.error instanceof ApiError && customerQuery.error.status === 404) {
     return (
-      <div className="w-full px-4 py-6 md:px-6 md:py-6">
+      <div className={customerFormPageClass}>
         <PageHeader
           title="Customer tidak ditemukan"
           crumbs={[
@@ -83,14 +110,14 @@ export default function CustomerDetailPage() {
             { href: "/customers", label: "Customers" },
           ]}
         />
-        <p className="mt-6 text-sm text-slate-600">Customer tidak ditemukan.</p>
+        <p className="mt-5 text-sm text-slate-600">Customer tidak ditemukan.</p>
       </div>
     );
   }
 
   if (!customer) {
     return (
-      <div className="w-full px-4 py-6 md:px-6 md:py-6">
+      <div className={customerFormPageClass}>
         <p className="text-sm text-red-600">Gagal memuat customer.</p>
       </div>
     );
@@ -98,17 +125,16 @@ export default function CustomerDetailPage() {
 
   const contact = primaryContact(customer);
 
+  function setField<K extends keyof CustomerFormFieldsValue>(
+    field: K,
+    next: CustomerFormFieldsValue[K],
+  ) {
+    setForm((prev) => ({ ...prev, [field]: next }));
+  }
+
   function resetForm() {
-    const currentContact = primaryContact(customer!);
-    setName(customer!.name);
-    setLegalName(customer!.legalName ?? "");
-    setTaxId(customer!.taxId ?? "");
-    setAddress(customer!.address ?? "");
+    setForm(formFromCustomer(customer!));
     setStatus(customer!.status);
-    setContactName(currentContact?.name ?? "");
-    setContactEmail(currentContact?.email ?? "");
-    setContactPhone(currentContact?.phone ?? "");
-    setContactTitle(currentContact?.title ?? "");
     setError(null);
   }
 
@@ -121,17 +147,7 @@ export default function CustomerDetailPage() {
     try {
       await updateMutation.mutateAsync({
         id: customer!.id,
-        input: buildUpdatePayload({
-          name,
-          legalName,
-          taxId,
-          address,
-          status,
-          contactName,
-          contactEmail,
-          contactPhone,
-          contactTitle,
-        }),
+        input: buildUpdatePayload({ ...form, status }),
       });
       setSuccess("Changes saved.");
       setEditing(false);
@@ -142,7 +158,7 @@ export default function CustomerDetailPage() {
   }
 
   return (
-    <div className="w-full px-4 py-6 md:px-6 md:py-6">
+    <div className={customerFormPageClass}>
       <PageHeader
         title={customer.name}
         crumbs={[
@@ -152,10 +168,10 @@ export default function CustomerDetailPage() {
         ]}
       />
 
-      {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
-      {success ? <p className="mt-4 text-sm text-emerald-700">{success}</p> : null}
+      {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+      {success ? <p className="mt-3 text-sm text-emerald-700">{success}</p> : null}
 
-      <Surface className="mt-6 p-4 md:p-6">
+      <Surface className={customerFormSurfaceClass}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="font-mono text-sm text-slate-600">{customer.number}</p>
           {editing ? (
@@ -177,61 +193,10 @@ export default function CustomerDetailPage() {
         </div>
 
         {editing ? (
-          <form onSubmit={save} className="mt-4 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700">
-                Name <span className="text-red-500">*</span>
-              </label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} className={fieldClass} required />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Legal name</label>
-                <Input value={legalName} onChange={(e) => setLegalName(e.target.value)} className={fieldClass} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Tax ID / NPWP</label>
-                <Input value={taxId} onChange={(e) => setTaxId(e.target.value)} className={fieldClass} />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Address</label>
-              <textarea
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className={`${selectClassName} ${fieldClass} min-h-[80px]`}
-              />
-            </div>
+          <form onSubmit={save} className="mt-3">
+            <CustomerFormFields value={form} onChange={setField} />
 
-            <div className="border-t border-slate-100 pt-4">
-              <h2 className="text-sm font-semibold text-slate-900">Primary contact</h2>
-              <p className="mt-1 text-xs text-slate-400">Optional — email is checked for duplicates within your company.</p>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-slate-700">Contact name</label>
-                  <Input value={contactName} onChange={(e) => setContactName(e.target.value)} className={fieldClass} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">Email</label>
-                  <Input
-                    type="email"
-                    value={contactEmail}
-                    onChange={(e) => setContactEmail(e.target.value)}
-                    className={fieldClass}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">Phone</label>
-                  <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className={fieldClass} />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-slate-700">Title</label>
-                  <Input value={contactTitle} onChange={(e) => setContactTitle(e.target.value)} className={fieldClass} />
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <div className={customerFormActionsClass}>
               <Button
                 type="button"
                 variant="outline"
@@ -250,63 +215,71 @@ export default function CustomerDetailPage() {
           </form>
         ) : (
           <>
-            <dl className="mt-4 space-y-3 text-sm">
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-slate-400">Name</dt>
-                <dd className="mt-0.5 font-medium text-slate-900">{customer.name}</dd>
-              </div>
-              {customer.legalName ? (
-                <div>
-                  <dt className="text-xs uppercase tracking-wide text-slate-400">Legal name</dt>
-                  <dd className="mt-0.5 text-slate-700">{customer.legalName}</dd>
+            <dl className="mt-3 space-y-3 text-sm">
+              <DetailField label="Name">
+                <span className="font-medium text-slate-900">{customer.name}</span>
+              </DetailField>
+
+              {(customer.legalName || customer.taxId) && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {customer.legalName ? (
+                    <DetailField label="Legal name">{customer.legalName}</DetailField>
+                  ) : (
+                    <div />
+                  )}
+                  {customer.taxId ? <DetailField label="Tax ID">{customer.taxId}</DetailField> : null}
                 </div>
-              ) : null}
-              {customer.taxId ? (
-                <div>
-                  <dt className="text-xs uppercase tracking-wide text-slate-400">Tax ID</dt>
-                  <dd className="mt-0.5 text-slate-700">{customer.taxId}</dd>
-                </div>
-              ) : null}
+              )}
+
               {customer.address ? (
-                <div>
-                  <dt className="text-xs uppercase tracking-wide text-slate-400">Address</dt>
-                  <dd className="mt-0.5 whitespace-pre-wrap text-slate-700">{customer.address}</dd>
-                </div>
+                <DetailField label="Address">
+                  <span className="whitespace-pre-wrap">{customer.address}</span>
+                </DetailField>
               ) : null}
+
+              {(customer.phone || customer.mobile) && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {customer.phone ? <DetailField label="Phone">{customer.phone}</DetailField> : <div />}
+                  {customer.mobile ? <DetailField label="Mobile">{customer.mobile}</DetailField> : null}
+                </div>
+              )}
+
+              {customer.email ? (
+                <DetailField label="Email">
+                  <a href={`mailto:${customer.email}`} className="text-brand-800 underline">
+                    {customer.email}
+                  </a>
+                </DetailField>
+              ) : null}
+
               {contact ? (
                 <>
-                  <div className="border-t border-slate-100 pt-3">
-                    <dt className="text-xs uppercase tracking-wide text-slate-400">Contact</dt>
-                    <dd className="mt-0.5 font-medium text-slate-900">{contact.name}</dd>
+                  <div className="border-t border-slate-100 pt-5">
+                    <DetailField label="Contact">
+                      <span className="font-medium text-slate-900">{contact.name}</span>
+                    </DetailField>
                   </div>
-                  {contact.title ? (
-                    <div>
-                      <dt className="text-xs uppercase tracking-wide text-slate-400">Title</dt>
-                      <dd className="mt-0.5 text-slate-700">{contact.title}</dd>
+                  {(contact.email || contact.phone) && (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {contact.email ? (
+                        <DetailField label="Email">
+                          <a href={`mailto:${contact.email}`} className="text-brand-800 underline">
+                            {contact.email}
+                          </a>
+                        </DetailField>
+                      ) : (
+                        <div />
+                      )}
+                      {contact.phone ? <DetailField label="Phone">{contact.phone}</DetailField> : null}
                     </div>
-                  ) : null}
-                  {contact.email ? (
-                    <div>
-                      <dt className="text-xs uppercase tracking-wide text-slate-400">Email</dt>
-                      <dd className="mt-0.5">
-                        <a href={`mailto:${contact.email}`} className="text-brand-800 underline">
-                          {contact.email}
-                        </a>
-                      </dd>
-                    </div>
-                  ) : null}
-                  {contact.phone ? (
-                    <div>
-                      <dt className="text-xs uppercase tracking-wide text-slate-400">Phone</dt>
-                      <dd className="mt-0.5 text-slate-700">{contact.phone}</dd>
-                    </div>
-                  ) : null}
+                  )}
+                  {/* {contact.title ? <DetailField label="Title">{contact.title}</DetailField> : null} */}
                 </>
               ) : null}
             </dl>
 
             {capabilities.customerUpdate ? (
-              <div className="mt-4 flex justify-end border-t border-slate-100 pt-4">
+              <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   Edit
                 </Button>
@@ -316,7 +289,7 @@ export default function CustomerDetailPage() {
         )}
       </Surface>
 
-      <p className="mt-4 text-xs text-slate-400">
+      <p className="mt-3 text-xs text-slate-400">
         Customer number <span className="font-mono">{customer.number}</span> is assigned by the system and cannot be
         changed.
       </p>

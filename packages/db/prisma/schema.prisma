@@ -788,6 +788,9 @@ model Customer {
   legalName String?
   taxId     String?
   address   String?
+  phone     String?
+  mobile    String?
+  email     String?
   status    CustomerStatus @default(ACTIVE)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt

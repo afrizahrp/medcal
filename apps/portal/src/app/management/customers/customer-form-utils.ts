@@ -26,6 +26,9 @@ export function buildCreatePayload(form: {
   legalName: string;
   taxId: string;
   address: string;
+  phone: string;
+  mobile: string;
+  email: string;
   contactName: string;
   contactEmail: string;
   contactPhone: string;
@@ -37,6 +40,9 @@ export function buildCreatePayload(form: {
   if (form.legalName.trim()) payload.legalName = form.legalName.trim();
   if (form.taxId.trim()) payload.taxId = form.taxId.trim();
   if (form.address.trim()) payload.address = form.address.trim();
+  if (form.phone.trim()) payload.phone = form.phone.trim();
+  if (form.mobile.trim()) payload.mobile = form.mobile.trim();
+  if (form.email.trim()) payload.email = form.email.trim();
 
   const contact = buildContactPayload(form);
   if (contact) payload.contact = contact;
@@ -49,6 +55,9 @@ export function buildUpdatePayload(form: {
   legalName: string;
   taxId: string;
   address: string;
+  phone: string;
+  mobile: string;
+  email: string;
   status: "ACTIVE" | "INACTIVE";
   contactName: string;
   contactEmail: string;
@@ -60,6 +69,9 @@ export function buildUpdatePayload(form: {
     legalName: form.legalName.trim() || null,
     taxId: form.taxId.trim() || null,
     address: form.address.trim() || null,
+    phone: form.phone.trim() || null,
+    mobile: form.mobile.trim() || null,
+    email: form.email.trim() || null,
     status: form.status,
   };
 
