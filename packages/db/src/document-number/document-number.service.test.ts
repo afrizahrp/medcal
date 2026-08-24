@@ -183,4 +183,32 @@ describe("DocumentNumberService.allocate", () => {
       });
     }
   });
+
+  it("bootstraps from existing document numbers when sequence row is missing", async () => {
+    await cleanupSequences(TEST_COMPANY_A);
+
+    const issuedAt = new Date("2026-08-24T00:00:00.000Z");
+    const legacyCustomer = await prisma.customer.create({
+      data: {
+        companyId: TEST_COMPANY_A,
+        number: "CUS/2026/08/00001",
+        name: "Legacy Customer",
+      },
+    });
+
+    try {
+      const nextNumber = await prisma.$transaction((tx) =>
+        DocumentNumberService.allocate({
+          companyId: TEST_COMPANY_A,
+          documentType: "CUSTOMER",
+          issuedAt,
+          tx,
+        }),
+      );
+
+      expect(nextNumber).toBe("CUS/2026/08/00002");
+    } finally {
+      await prisma.customer.delete({ where: { id: legacyCustomer.id } });
+    }
+  });
 });

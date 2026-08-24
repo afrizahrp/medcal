@@ -244,8 +244,8 @@ export function KontakForm() {
                 Pesan Terkirim
               </Dialog.Title>
               <Dialog.Description className="mt-2 space-y-2 text-sm leading-relaxed text-ink-600">
-                <p>Terima kasih telah menghubungi</p>
-                <p>Tim kami akan segera menghubungi Anda</p>
+                <span className="block">Terima kasih telah menghubungi</span>
+                <span className="block">Tim kami akan segera menghubungi Anda</span>
               </Dialog.Description>
               <div className="mt-6 flex justify-end">
                 <Dialog.Close className="rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700">
