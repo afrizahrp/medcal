@@ -31,7 +31,11 @@ const DEFAULT_PAGE_SIZE = 10;
 // dedup is what made the old /leads-backed list unable to reconcile with
 // ContactMessagesService.getStatistics's per-message global counts.
 export type ContactMessageListRow = Prisma.ContactMessageGetPayload<{
-  include: { topic: true; lead: { select: { id: true; status: true } } };
+  include: {
+    topic: true;
+    lead: { select: { id: true; status: true } };
+    chatSession: { select: { id: true } };
+  };
 }>;
 
 export interface ContactMessageListResult {
@@ -331,7 +335,11 @@ export class ContactMessagesService {
         orderBy: { [sortField]: sortDir },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: { topic: true, lead: { select: { id: true, status: true } } },
+        include: {
+          topic: true,
+          lead: { select: { id: true, status: true } },
+          chatSession: { select: { id: true } },
+        },
       }),
     ]);
 

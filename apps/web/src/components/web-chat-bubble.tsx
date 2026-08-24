@@ -210,27 +210,34 @@ export function WebChatBubble() {
                 </p>
 
                 <div ref={threadRef} className="mt-2 flex-1 space-y-2 overflow-y-auto pr-1">
-                  {chat.messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={
-                        message.senderType === "ADMIN"
-                          ? "mr-auto max-w-[85%] rounded-xl rounded-bl-sm bg-ink-50 px-3 py-2 text-sm text-ink-900"
-                          : "ml-auto max-w-[85%] rounded-xl rounded-br-sm bg-brand-600 px-3 py-2 text-sm text-white"
-                      }
-                    >
-                      <p className="whitespace-pre-wrap">{message.body}</p>
-                      <p
-                        className={
-                          message.senderType === "ADMIN"
-                            ? "mt-1 text-[10px] text-ink-400"
-                            : "mt-1 text-[10px] text-white/70"
-                        }
+                  {chat.messages.map((message) => {
+                    const isOwnMessage = message.senderType === "VISITOR";
+                    return (
+                      <div
+                        key={message.id}
+                        className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
                       >
-                        {formatTime(message.createdAt)}
-                      </p>
-                    </div>
-                  ))}
+                        <div
+                          className={
+                            isOwnMessage
+                              ? "max-w-[85%] rounded-xl rounded-br-sm bg-brand-600 px-3 py-2 text-sm text-white"
+                              : "max-w-[85%] rounded-xl rounded-bl-sm bg-ink-50 px-3 py-2 text-sm text-ink-900"
+                          }
+                        >
+                          <p className="whitespace-pre-wrap">{message.body}</p>
+                          <p
+                            className={
+                              isOwnMessage
+                                ? "mt-1 text-[10px] text-white/70"
+                                : "mt-1 text-[10px] text-ink-400"
+                            }
+                          >
+                            {formatTime(message.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {chat.sessionClosed ? (

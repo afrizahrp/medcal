@@ -85,6 +85,20 @@ export interface ContactMessageRow {
   message: string;
   topic: ContactTopic | null;
   lead: { id: string; status: LeadStatus } | null;
+  chatSession: { id: string } | null;
+}
+
+/** Web Chat first-touch messages open the chat thread; all other channels open Lead detail. */
+export function getContactMessageDetailHref(
+  message: Pick<ContactMessageRow, "getFrom" | "lead" | "chatSession">,
+): string | null {
+  if (message.getFrom === "CHAT_PERSON" && message.chatSession) {
+    return `/chat/${message.chatSession.id}`;
+  }
+  if (message.lead) {
+    return `/leads/${message.lead.id}`;
+  }
+  return null;
 }
 
 export const LEAD_STATUS_OPTIONS: LeadStatus[] = ["NEW", "CONTACTED", "QUALIFIED", "REJECTED", "CONVERTED"];
@@ -678,16 +692,16 @@ export function MessageInboxEmptyState({
 function MessageInboxTableRow({ message }: { message: ContactMessageRow }) {
   const router = useRouter();
   const isPending = message.status === "PENDING";
-  const leadHref = message.lead ? `/leads/${message.lead.id}` : null;
+  const detailHref = getContactMessageDetailHref(message);
 
   function handleRowClick() {
-    if (leadHref) router.push(leadHref);
+    if (detailHref) router.push(detailHref);
   }
 
   function handleRowKeyDown(e: React.KeyboardEvent) {
-    if (leadHref && (e.key === "Enter" || e.key === " ")) {
+    if (detailHref && (e.key === "Enter" || e.key === " ")) {
       e.preventDefault();
-      router.push(leadHref);
+      router.push(detailHref);
     }
   }
 
@@ -695,13 +709,13 @@ function MessageInboxTableRow({ message }: { message: ContactMessageRow }) {
     <tr
       className={cn(
         "group border-b border-slate-100 last:border-0 transition-colors",
-        leadHref && "cursor-pointer hover:bg-slate-50/80",
+        detailHref && "cursor-pointer hover:bg-slate-50/80",
         isPending && "bg-orange-50/30",
       )}
-      onClick={leadHref ? handleRowClick : undefined}
-      onKeyDown={leadHref ? handleRowKeyDown : undefined}
-      tabIndex={leadHref ? 0 : undefined}
-      aria-label={leadHref ? `Buka detail lead ${message.name}` : undefined}
+      onClick={detailHref ? handleRowClick : undefined}
+      onKeyDown={detailHref ? handleRowKeyDown : undefined}
+      tabIndex={detailHref ? 0 : undefined}
+      aria-label={detailHref ? `Buka detail pesan ${message.name}` : undefined}
     >
       <td className="min-w-[180px] align-middle px-4 py-3.5">
         <div className="min-w-0">
@@ -740,7 +754,7 @@ function MessageInboxTableRow({ message }: { message: ContactMessageRow }) {
             {formatRelativeTime(message.createdAt)}
           </span>
           <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-            <LeadRowMenu leadId={message.lead?.id} />
+            <LeadRowMenu detailHref={getContactMessageDetailHref(message)} />
           </div>
         </div>
       </td>
@@ -895,6 +909,7 @@ export function MessageInboxList({
         {messages.map((message) => {
           const body = <MessageCardBody message={message} compact={variant === "mobile"} />;
           const isPending = message.status === "PENDING";
+          const detailHref = getContactMessageDetailHref(message);
           return (
             <li
               key={message.id}
@@ -904,10 +919,10 @@ export function MessageInboxList({
                 isPending && "bg-orange-50/20",
               )}
             >
-              {message.lead ? (
+              {detailHref ? (
                 <Link
-                  href={`/leads/${message.lead.id}`}
-                  aria-label={`Buka detail lead ${message.name}`}
+                  href={detailHref}
+                  aria-label={`Buka detail pesan ${message.name}`}
                   className="min-w-0 flex-1 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   {body}
@@ -916,7 +931,7 @@ export function MessageInboxList({
                 <div className="min-w-0 flex-1 p-4">{body}</div>
               )}
               <div className="flex shrink-0 items-start border-l border-slate-100 p-2 pt-4">
-                <LeadRowMenu leadId={message.lead?.id} />
+                <LeadRowMenu detailHref={detailHref} />
               </div>
             </li>
           );
@@ -926,7 +941,7 @@ export function MessageInboxList({
   );
 }
 
-function LeadRowMenu({ leadId }: { leadId?: string }) {
+function LeadRowMenu({ detailHref }: { detailHref: string | null }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -940,8 +955,8 @@ function LeadRowMenu({ leadId }: { leadId?: string }) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem asChild disabled={!leadId}>
-          {leadId ? <Link href={`/leads/${leadId}`}>Lihat detail</Link> : <span>Lihat detail</span>}
+        <DropdownMenuItem asChild disabled={!detailHref}>
+          {detailHref ? <Link href={detailHref}>Lihat detail</Link> : <span>Lihat detail</span>}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

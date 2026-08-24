@@ -18,15 +18,12 @@ import { notifyUnreadCountChanged } from "../../../lib/use-unread-count";
 import { cn } from "@/lib/utils";
 import type { ChatSessionDetail } from "./chat-session-types";
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 }
+
+/** Portal admin view — own messages (ADMIN) align right; visitor messages align left. */
+const PORTAL_VIEWER_TYPE = "ADMIN" as const;
 
 function mergeMessages(base: ChatWireMessage[], live: ChatWireMessage[]): ChatWireMessage[] {
   const byId = new Map(base.map((m) => [m.id, m]));
@@ -170,30 +167,41 @@ export function ChatConversationPanel({ sessionId }: { sessionId: string }) {
             </div>
           </header>
 
-          <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-4 sm:px-4">
-            <ul className="space-y-3">
-              {messages.length === 0 ? (
-                <li className="text-sm text-muted-foreground">Belum ada pesan.</li>
-              ) : (
-                messages.map((message) => (
-                  <li
-                    key={message.id}
-                    className={cn(
-                      "max-w-[75%] rounded-lg border p-3 text-sm",
-                      message.senderType === "ADMIN"
-                        ? "ml-auto border-brand-200 bg-brand-50"
-                        : "mr-auto bg-background",
-                    )}
-                  >
-                    <p className="whitespace-pre-wrap">{message.body}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {message.senderType === "ADMIN" ? "Admin" : session.visitorName} ·{" "}
-                      {formatDateTime(message.createdAt)}
-                    </p>
-                  </li>
-                ))
-              )}
-            </ul>
+          <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pl-3 pt-2 sm:pl-4">
+            {messages.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Belum ada pesan.</p>
+            ) : (
+              <div className="space-y-2 pr-1" role="log" aria-live="polite" aria-relevant="additions">
+                {messages.map((message) => {
+                  const isOwnMessage = message.senderType === PORTAL_VIEWER_TYPE;
+                  return (
+                    <div
+                      key={message.id}
+                      className={cn("flex", isOwnMessage ? "justify-end" : "justify-start")}
+                    >
+                      <div
+                        className={cn(
+                          "max-w-[85%] rounded-xl px-3 py-2 text-sm",
+                          isOwnMessage
+                            ? "rounded-br-sm bg-brand-600 text-white"
+                            : "rounded-bl-sm bg-slate-50 text-slate-900",
+                        )}
+                      >
+                        <p className="whitespace-pre-wrap">{message.body}</p>
+                        <p
+                          className={cn(
+                            "mt-1 text-[10px]",
+                            isOwnMessage ? "text-white/70" : "text-slate-400",
+                          )}
+                        >
+                          {formatTime(message.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {isClosed ? (
