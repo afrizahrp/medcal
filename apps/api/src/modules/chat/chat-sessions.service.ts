@@ -246,9 +246,26 @@ export class ChatSessionsService {
     if (!session) {
       throw new NotFoundException({ message: "Chat session not found", code: "CHAT_SESSION_NOT_FOUND" });
     }
-    return prisma.chatSession.update({
-      where: { id: sessionId },
-      data: { status: "CLOSED", closedAt: new Date() },
+
+    const closedAt = new Date();
+    return prisma.$transaction(async (tx) => {
+      const closed = await tx.chatSession.update({
+        where: { id: sessionId },
+        data: { status: "CLOSED", closedAt },
+      });
+
+      if (session.contactMessageId) {
+        await tx.contactMessage.updateMany({
+          where: {
+            id: session.contactMessageId,
+            companyId,
+            status: { not: "CLOSED" },
+          },
+          data: { status: "CLOSED" },
+        });
+      }
+
+      return closed;
     });
   }
 

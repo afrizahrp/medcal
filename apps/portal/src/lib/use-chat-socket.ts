@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { notifyContactMessagesChanged } from "./contact-messages-sync";
 import { useManagementChatSocket } from "./management-chat-socket";
 
 export type ChatConnectionState = "connecting" | "connected" | "disconnected" | "error";
@@ -64,7 +65,9 @@ export function useChatSocket(sessionId: string): UseChatSocketResult {
     }
 
     function onSessionClosed(payload: { sessionId: string }) {
-      if (payload.sessionId === sessionId) setSessionClosed(true);
+      if (payload.sessionId !== sessionId) return;
+      setSessionClosed(true);
+      notifyContactMessagesChanged();
     }
 
     function onError(payload: ChatSocketErrorPayload) {

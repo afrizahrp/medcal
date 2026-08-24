@@ -411,6 +411,106 @@ describe("ChatSessionsService session lifecycle", () => {
   });
 });
 
+describe("ChatSessionsService.closeSession — linked ContactMessage CLOSED sync", () => {
+  it("closes linked ContactMessage when session closes from PENDING", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    expect(session.contactMessageId).toBeTruthy();
+
+    const before = await prisma.contactMessage.findUniqueOrThrow({
+      where: { id: session.contactMessageId! },
+    });
+    expect(before.status).toBe("PENDING");
+
+    const closed = await service.closeSession(countCompanyId, session.id);
+    expect(closed.status).toBe("CLOSED");
+    expect(closed.closedAt).not.toBeNull();
+
+    const after = await prisma.contactMessage.findUniqueOrThrow({
+      where: { id: session.contactMessageId! },
+    });
+    expect(after.status).toBe("CLOSED");
+  });
+
+  it("closes linked ContactMessage when session closes from READ", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await prisma.contactMessage.update({
+      where: { id: session.contactMessageId! },
+      data: { status: "READ" },
+    });
+
+    await service.closeSession(countCompanyId, session.id);
+
+    const contactMessage = await prisma.contactMessage.findUniqueOrThrow({
+      where: { id: session.contactMessageId! },
+    });
+    expect(contactMessage.status).toBe("CLOSED");
+  });
+
+  it("closes linked ContactMessage when session closes from REPLIED", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await prisma.contactMessage.update({
+      where: { id: session.contactMessageId! },
+      data: { status: "REPLIED" },
+    });
+
+    await service.closeSession(countCompanyId, session.id);
+
+    const contactMessage = await prisma.contactMessage.findUniqueOrThrow({
+      where: { id: session.contactMessageId! },
+    });
+    expect(contactMessage.status).toBe("CLOSED");
+  });
+
+  it("keeps ContactMessage CLOSED idempotently when already CLOSED before session close", async () => {
+    const session = await createSessionForCompany(countCompanyId);
+    await prisma.contactMessage.update({
+      where: { id: session.contactMessageId! },
+      data: { status: "CLOSED" },
+    });
+
+    const closed = await service.closeSession(countCompanyId, session.id);
+    expect(closed.status).toBe("CLOSED");
+
+    const contactMessages = await prisma.contactMessage.findMany({
+      where: { id: session.contactMessageId! },
+    });
+    expect(contactMessages).toHaveLength(1);
+    expect(contactMessages[0]!.status).toBe("CLOSED");
+  });
+
+  it("closes session normally when contactMessageId is null", async () => {
+    const session = await prisma.chatSession.create({
+      data: {
+        companyId: countCompanyId,
+        visitorName: "No Intake",
+        visitorEmail: `no-intake-${randomUUID().slice(0, 8)}@example.com`,
+        status: "OPEN",
+      },
+    });
+    countCompanySessionIds.push(session.id);
+
+    const closed = await service.closeSession(countCompanyId, session.id);
+    expect(closed.status).toBe("CLOSED");
+    expect(closed.contactMessageId).toBeNull();
+  });
+
+  it("updates ContactMessage statistics after close (ContactMessage.status source of truth)", async () => {
+    const contactMessagesService = new ContactMessagesService();
+    const before = await contactMessagesService.getStatistics(countCompanyId);
+
+    const session = await createSessionForCompany(countCompanyId);
+    const mid = await contactMessagesService.getStatistics(countCompanyId);
+    expect(mid.pending).toBe(before.pending + 1);
+    expect(mid.closed).toBe(before.closed);
+
+    await service.closeSession(countCompanyId, session.id);
+
+    const after = await contactMessagesService.getStatistics(countCompanyId);
+    expect(after.pending).toBe(mid.pending - 1);
+    expect(after.closed).toBe(mid.closed + 1);
+  });
+});
+
 describe("ChatSessionsService.findById / findMessages — tenant isolation", () => {
   it("findById scopes to companyId — a session cannot be read via a foreign companyId", async () => {
     const session = await createSession();
