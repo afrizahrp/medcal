@@ -27,6 +27,9 @@ const FIXTURE: GrantRow[] = [
   { role: "ADMIN", resource: "lead", action: "read" },
   { role: "ADMIN", resource: "lead", action: "update" },
   { role: "ADMIN", resource: "lead", action: "assign" },
+  { role: "ADMIN", resource: "customer", action: "read" },
+  { role: "ADMIN", resource: "customer", action: "create" },
+  { role: "ADMIN", resource: "customer", action: "update" },
   { role: "ADMIN", resource: "chat", action: "read" },
   { role: "ADMIN", resource: "chat", action: "reply" },
   { role: "ADMIN", resource: "chat", action: "close" },
@@ -93,6 +96,21 @@ describe("hasPermission — lead resource (Lead Inbox, locked 2026-08-16 Decisio
     expect(hasPermission("TECHNICIAN", "lead", "read")).toBe(false);
     expect(hasPermission("FINANCE", "lead", "read")).toBe(false);
     expect(hasPermission("CUSTOMER", "lead", "read")).toBe(false);
+  });
+});
+
+describe("hasPermission — customer resource (Customer CRM)", () => {
+  it("grants ADMIN customer:read, customer:create, and customer:update", () => {
+    expect(hasPermission("ADMIN", "customer", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "customer", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "customer", "update")).toBe(true);
+  });
+
+  it("denies roles with no customer grant", () => {
+    expect(hasPermission("SUPERVISOR", "customer", "read")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "customer", "create")).toBe(false);
+    expect(hasPermission("FINANCE", "customer", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER", "customer", "read")).toBe(false);
   });
 });
 

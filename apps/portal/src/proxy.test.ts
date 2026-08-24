@@ -21,6 +21,7 @@ describe("portal proxy matcher", () => {
 
   it("still matches management app routes", () => {
     expect(isMatchedByProxy("/leads")).toBe(true);
+    expect(isMatchedByProxy("/customers")).toBe(true);
     expect(isMatchedByProxy("/")).toBe(true);
   });
 

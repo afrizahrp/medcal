@@ -1,5 +1,5 @@
-import { BadRequestException, Body, Controller, Get, Inject, Param, Patch, Query, UseGuards } from "@nestjs/common";
-import { leadAssignSchema, leadListQuerySchema, leadStatusUpdateSchema } from "@medcal/shared";
+import { BadRequestException, Body, Controller, Get, Inject, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { leadAssignSchema, leadConvertSchema, leadListQuerySchema, leadStatusUpdateSchema } from "@medcal/shared";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
@@ -83,5 +83,23 @@ export class LeadsController {
       });
     }
     return this.service.assignToUser(companyId, id, parsed.data.assignedToUserId);
+  }
+
+  @Post(":id/convert")
+  @RequirePermission("customer", "create")
+  async convertToCustomer(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ) {
+    const parsed = leadConvertSchema.safeParse(rawBody ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid lead conversion payload",
+        code: "INVALID_LEAD_CONVERT",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.convertToCustomer(companyId, id, parsed.data);
   }
 }

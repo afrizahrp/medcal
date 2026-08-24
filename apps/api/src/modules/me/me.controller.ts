@@ -58,6 +58,9 @@ export class MeController {
       emailSend: hasPermission(membership.role, "email", "send"),
       emailDelete: hasPermission(membership.role, "email", "delete"),
       emailManage: hasPermission(membership.role, "email", "manage"),
+      customerRead: hasPermission(membership.role, "customer", "read"),
+      customerCreate: hasPermission(membership.role, "customer", "create"),
+      customerUpdate: hasPermission(membership.role, "customer", "update"),
     };
 
     return {

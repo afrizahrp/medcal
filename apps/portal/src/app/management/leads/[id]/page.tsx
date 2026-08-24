@@ -1,14 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { MessageCircle, Save, Send } from "lucide-react";
+import { MessageCircle, Save, Send, UserPlus } from "lucide-react";
 import { ApiError, apiFetch, isForbidden, normalizePhone } from "@medcal/shared";
+import { useAuthz } from "@medcal/auth/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { AccessDenied } from "../../../../components/access-denied";
 import { notifyUnreadCountChanged } from "../../../../lib/use-unread-count";
+import { formatCustomerApiError } from "../../customers/customer-form-utils";
+import { useConvertLeadToCustomer } from "../../customers/use-customers-query";
 import {
   type ContactStatus,
   type GetMessageFrom,
@@ -58,6 +62,7 @@ interface LeadDetail {
   email: string;
   phone: string | null;
   organizationName: string | null;
+  customerId: string | null;
   createdAt: string;
   contactMessages: ContactMessage[];
 }
@@ -68,6 +73,9 @@ function whatsappHref(phone: string): string {
 
 export default function LeadDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const { capabilities } = useAuthz();
+  const convertMutation = useConvertLeadToCustomer();
   const [lead, setLead] = useState<LeadDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [forbidden, setForbidden] = useState(false);
@@ -78,6 +86,11 @@ export default function LeadDetailPage() {
   const [updatingMessageStatusId, setUpdatingMessageStatusId] = useState<string | null>(null);
   const [draftLeadStatus, setDraftLeadStatus] = useState<LeadStatus>("NEW");
   const [draftMessageStatuses, setDraftMessageStatuses] = useState<Record<string, ContactStatus>>({});
+  const [convertLegalName, setConvertLegalName] = useState("");
+  const [convertTaxId, setConvertTaxId] = useState("");
+  const [convertAddress, setConvertAddress] = useState("");
+  const [convertError, setConvertError] = useState<string | null>(null);
+  const [convertSuccess, setConvertSuccess] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -156,6 +169,27 @@ export default function LeadDetailPage() {
       setError("Gagal mengubah status lead.");
     } finally {
       setUpdatingLeadStatus(false);
+    }
+  }
+
+  async function convertToCustomer() {
+    if (!lead || lead.customerId) return;
+    setConvertError(null);
+    setConvertSuccess(null);
+    try {
+      const result = await convertMutation.mutateAsync({
+        leadId: lead.id,
+        input: {
+          ...(convertLegalName.trim() ? { legalName: convertLegalName.trim() } : {}),
+          ...(convertTaxId.trim() ? { taxId: convertTaxId.trim() } : {}),
+          ...(convertAddress.trim() ? { address: convertAddress.trim() } : {}),
+        },
+      });
+      setConvertSuccess(`Lead dikonversi ke customer ${result.customer.number}.`);
+      await load();
+      router.push(`/customers/${result.customer.id}`);
+    } catch (err) {
+      setConvertError(formatCustomerApiError(err, "Gagal mengonversi lead ke customer."));
     }
   }
 
@@ -359,6 +393,59 @@ export default function LeadDetailPage() {
               </Button>
               <LeadStatusBadge status={lead.status} />
             </div>
+          </Surface>
+
+          <Surface className="mt-4 p-4 md:p-5">
+            <h2 className="text-base font-semibold text-slate-900">Customer</h2>
+            {lead.customerId ? (
+              <div className="mt-3 space-y-2 text-sm">
+                <p className="text-slate-600">Lead ini sudah terhubung ke customer.</p>
+                <Link
+                  href={`/customers/${lead.customerId}`}
+                  className="inline-flex font-medium text-brand-800 underline hover:text-brand-900"
+                >
+                  Lihat customer
+                </Link>
+                <LeadStatusBadge status={lead.status} />
+              </div>
+            ) : capabilities?.customerCreate ? (
+              <div className="mt-3 space-y-4">
+                <p className="text-xs text-slate-400">
+                  Konversi lead menjadi customer melalui transaksi backend. Nama organisasi/nama lead akan dipetakan
+                  otomatis.
+                </p>
+                {convertError ? <p className="text-sm text-red-600">{convertError}</p> : null}
+                {convertSuccess ? <p className="text-sm text-emerald-700">{convertSuccess}</p> : null}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Legal name (opsional)</label>
+                    <Input
+                      value={convertLegalName}
+                      onChange={(e) => setConvertLegalName(e.target.value)}
+                      className="mt-1.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Tax ID (opsional)</label>
+                    <Input value={convertTaxId} onChange={(e) => setConvertTaxId(e.target.value)} className="mt-1.5" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">Alamat (opsional)</label>
+                  <textarea
+                    value={convertAddress}
+                    onChange={(e) => setConvertAddress(e.target.value)}
+                    className={`${selectClassName} mt-1.5 min-h-[72px] w-full`}
+                  />
+                </div>
+                <Button type="button" disabled={convertMutation.isPending} onClick={convertToCustomer}>
+                  <UserPlus className="h-4 w-4" />
+                  {convertMutation.isPending ? "Mengonversi…" : "Convert to Customer"}
+                </Button>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-400">Lead belum dikonversi ke customer.</p>
+            )}
           </Surface>
 
           <Surface className="mt-4 p-4 md:p-5">

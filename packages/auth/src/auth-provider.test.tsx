@@ -30,6 +30,9 @@ const ME_A = {
     emailSend: true,
     emailDelete: true,
     emailManage: true,
+    customerRead: true,
+    customerCreate: true,
+    customerUpdate: true,
   },
 };
 
@@ -43,6 +46,9 @@ const ME_B = {
     emailSend: false,
     emailDelete: false,
     emailManage: false,
+    customerRead: false,
+    customerCreate: false,
+    customerUpdate: false,
   },
 };
 

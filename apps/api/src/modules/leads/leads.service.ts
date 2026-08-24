@@ -1,9 +1,10 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { prisma } from "@medcal/db";
-import type { ContactMessage, Lead, LeadStatus, Prisma } from "@medcal/db";
-import { LEAD_SORTABLE_FIELDS } from "@medcal/shared";
+import type { ContactMessage, Customer, Lead, LeadStatus, Prisma } from "@medcal/db";
+import { LEAD_SORTABLE_FIELDS, type LeadConvertInput } from "@medcal/shared";
 import type { LeadListQuery } from "@medcal/shared";
 import { resolveSortOrder } from "../../common/sort-query";
+import { CustomersService } from "../customers/customers.service";
 import { findLeadMatchCandidates } from "./lead-matching";
 import { NotificationDispatchService } from "../push-tokens/notification-dispatch.service";
 
@@ -47,6 +48,8 @@ export class LeadsService {
   constructor(
     @Inject(NotificationDispatchService)
     private readonly notificationDispatch: NotificationDispatchService,
+    @Inject(CustomersService)
+    private readonly customersService: CustomersService,
   ) {}
   async findAll(companyId: string, query: LeadListQuery): Promise<LeadListResult> {
     const page = query.page ?? 1;
@@ -211,5 +214,54 @@ export class LeadsService {
     }
 
     return updated;
+  }
+
+  /**
+   * Convert a Lead into a Customer using the canonical createCustomer path.
+   * All steps run in a single transaction — any failure rolls back Customer,
+   * CustomerContact, document number allocation, and Lead updates.
+   */
+  async convertToCustomer(
+    companyId: string,
+    id: string,
+    overrides: LeadConvertInput = {},
+  ): Promise<{ customer: Customer; lead: Lead }> {
+    return prisma.$transaction(async (tx) => {
+      const lead = await tx.lead.findFirst({ where: { id, companyId } });
+      if (!lead) {
+        throw new NotFoundException({ message: "Lead not found", code: "LEAD_NOT_FOUND" });
+      }
+
+      if (lead.customerId) {
+        throw new ConflictException({
+          message: "Lead is already linked to a customer",
+          code: "LEAD_ALREADY_CONVERTED",
+          customerId: lead.customerId,
+        });
+      }
+
+      const customer = await this.customersService.createCustomer(
+        companyId,
+        {
+          name: lead.organizationName ?? lead.name,
+          legalName: overrides.legalName,
+          taxId: overrides.taxId,
+          address: overrides.address,
+          contact: {
+            name: lead.name,
+            email: lead.email,
+            phone: lead.phone ?? undefined,
+          },
+        },
+        tx,
+      );
+
+      const updatedLead = await tx.lead.update({
+        where: { id },
+        data: { customerId: customer.id, status: "CONVERTED" },
+      });
+
+      return { customer, lead: updatedLead };
+    });
   }
 }

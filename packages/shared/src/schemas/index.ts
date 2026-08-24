@@ -217,3 +217,58 @@ export const emailUpdateSchema = z.object({
 });
 
 export type EmailUpdateInput = z.infer<typeof emailUpdateSchema>;
+
+// =============================================================================
+// Customer CRM (D05)
+// =============================================================================
+
+const customerStatusValues = ["ACTIVE", "INACTIVE"] as const;
+
+const customerContactInputSchema = z.object({
+  name: z.string().min(1).max(100),
+  email: z.string().email().max(100).nullish(),
+  phone: z.string().max(20).nullish(),
+  title: z.string().max(100).nullish(),
+});
+
+/** POST /customers body */
+export const customerCreateSchema = z.object({
+  name: z.string().min(1).max(200),
+  legalName: z.string().max(200).optional(),
+  taxId: z.string().max(50).optional(),
+  address: z.string().max(500).optional(),
+  contact: customerContactInputSchema.optional(),
+});
+
+export type CustomerCreateInput = z.infer<typeof customerCreateSchema>;
+
+/** GET /customers query params */
+export const customerListQuerySchema = baseListQuerySchema.extend({
+  status: z.enum(customerStatusValues).optional(),
+});
+
+export type CustomerListQuery = z.infer<typeof customerListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /customers — see resolveSortOrder. */
+export const CUSTOMER_SORTABLE_FIELDS = ["createdAt", "name", "number", "status"] as const;
+
+/** PATCH /customers/:id body */
+export const customerUpdateSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  legalName: z.string().max(200).nullable().optional(),
+  taxId: z.string().max(50).nullable().optional(),
+  address: z.string().max(500).nullable().optional(),
+  status: z.enum(customerStatusValues).optional(),
+  contact: customerContactInputSchema.optional(),
+});
+
+export type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;
+
+/** POST /leads/:id/convert body — optional overrides for fields Lead does not carry */
+export const leadConvertSchema = z.object({
+  legalName: z.string().max(200).optional(),
+  taxId: z.string().max(50).optional(),
+  address: z.string().max(500).optional(),
+});
+
+export type LeadConvertInput = z.infer<typeof leadConvertSchema>;

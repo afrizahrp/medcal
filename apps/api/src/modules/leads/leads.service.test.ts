@@ -3,13 +3,15 @@ import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@medcal/db";
 import type { NotificationDispatchService } from "../push-tokens/notification-dispatch.service";
+import { CustomersService } from "../customers/customers.service";
 import { LeadsService } from "./leads.service";
 
 const notificationDispatch = {
   sendToUsers: async () => ({ tokens: 0, sent: 0, failed: 0, deactivated: 0 }),
 } as NotificationDispatchService;
 
-const service = new LeadsService(notificationDispatch);
+const customersService = new CustomersService();
+const service = new LeadsService(notificationDispatch, customersService);
 const realCompanyId = "PKM";
 const createdLeadIds: string[] = [];
 const createdContactMessageIds: string[] = [];

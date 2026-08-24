@@ -12,12 +12,14 @@ import { MenuModule } from "./modules/menu/menu.module";
 import { EmailsModule } from "./modules/emails/emails.module";
 import { PermissionsModule } from "./modules/permissions/permissions.module";
 import { PushTokensModule } from "./modules/push-tokens/push-tokens.module";
+import { CustomersModule } from "./modules/customers/customers.module";
 
 @Module({
   imports: [
     AuthModule.forRoot({ auth, isGlobal: true }),
     ContactMessagesModule,
     LeadsModule,
+    CustomersModule,
     WhitelistModule,
     MeModule,
     ChatModule,

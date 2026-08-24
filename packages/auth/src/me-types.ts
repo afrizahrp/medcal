@@ -8,6 +8,9 @@ export type MeCapabilities = {
   emailSend: boolean;
   emailDelete: boolean;
   emailManage: boolean;
+  customerRead: boolean;
+  customerCreate: boolean;
+  customerUpdate: boolean;
 };
 
 export type MeUser = {
