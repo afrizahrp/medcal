@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { shouldNotifyChatUnread } from "./chat-unread-notify";
+import { notifyContactMessagesChanged } from "./contact-messages-sync";
 import { notifyUnreadCountChanged } from "./use-unread-count";
 import type { ChatConnectionState, ChatWireMessage } from "./use-chat-socket";
 
@@ -52,11 +53,22 @@ export function ManagementChatSocketProvider({ children }: { children: React.Rea
       if (!shouldNotifyChatUnread(message, viewedSessionIdRef.current)) return;
       notifyUnreadCountChanged("chat");
     }
+    // New ContactMessage from any source (Contact Form, WhatsApp-lead, or a
+    // brand-new Web Chat session) — server-emitted only after the row's
+    // transaction commits (ChatGateway.afterInit). Reuses the exact same
+    // bus Leads/[id] and Chat/[id] already publish to, so management-shell's
+    // existing subscriber invalidates Leads List/Leads[id]/statistics the
+    // same way a mark-read or close event does (E2E leads statistics sync
+    // audit, follow-up 2026-08-25) — no new event bus.
+    function onContactMessageCreated() {
+      notifyContactMessagesChanged();
+    }
 
     instance.on("connect", onConnect);
     instance.on("disconnect", onDisconnect);
     instance.on("connect_error", onConnectError);
     instance.on("message", onMessage);
+    instance.on("contact_message_created", onContactMessageCreated);
     // Intentionally no "history" listener — joining a session must not
     // refetch unread-count once per historical message.
 
@@ -65,6 +77,7 @@ export function ManagementChatSocketProvider({ children }: { children: React.Rea
       instance.off("disconnect", onDisconnect);
       instance.off("connect_error", onConnectError);
       instance.off("message", onMessage);
+      instance.off("contact_message_created", onContactMessageCreated);
       instance.disconnect();
       socketRef.current = null;
       setSocket(null);

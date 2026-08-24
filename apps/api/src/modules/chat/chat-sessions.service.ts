@@ -3,6 +3,7 @@ import { prisma } from "@medcal/db";
 import type { ChatMessage, ChatSession, Prisma } from "@medcal/db";
 import { chatMessageCreateSchema, chatSessionCreateSchema, chatSessionMarkReadSchema } from "@medcal/shared";
 import { ContactMessagesService } from "../contact-messages/contact-messages.service";
+import { publishContactMessageCreated } from "../contact-messages/contact-message-events";
 
 export interface ChatSessionWithMessages extends ChatSession {
   messages: ChatMessage[];
@@ -96,6 +97,7 @@ export class ChatSessionsService {
 
     if (contactMessageId) {
       void this.contactMessagesService.notifyNewContactMessage(companyId, contactMessageId);
+      publishContactMessageCreated({ companyId });
     }
 
     return result;

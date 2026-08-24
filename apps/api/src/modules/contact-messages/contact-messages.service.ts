@@ -14,6 +14,7 @@ import { resolveSortOrder } from "../../common/sort-query";
 import { classifyLeadMatch, findLeadMatchCandidates } from "../leads/lead-matching";
 import type { Db } from "../leads/lead-matching";
 import { NotificationDispatchService } from "../push-tokens/notification-dispatch.service";
+import { publishContactMessageCreated } from "./contact-message-events";
 
 // Canonical default (Management List pattern, 2026-08-18) — matches the
 // frontend's own initial pageSize (apps/portal/.../leads/page.tsx), so this
@@ -187,9 +188,12 @@ export class ContactMessagesService {
 
     const result = { id: created.id, matchStatus: created.matchStatus, leadId: created.leadId };
 
-    // Push only after non-transactional create — chat sessions notify post-commit.
+    // Push + realtime sync only after non-transactional create — chat
+    // sessions notify post-commit themselves (see ChatSessionsService.
+    // createSession, same tx === prisma pattern this mirrors).
     if (tx === prisma) {
       void this.notifyNewContactMessage(companyId, created.id);
+      publishContactMessageCreated({ companyId });
     }
 
     return result;
@@ -357,6 +361,20 @@ export class ContactMessagesService {
     const message = await prisma.contactMessage.findFirst({ where: { id, companyId } });
     if (!message) {
       throw new NotFoundException({ message: "Contact message not found", code: "CONTACT_MESSAGE_NOT_FOUND" });
+    }
+    // Guard mirrors ChatSessionsService.markRead's PENDING->READ transition
+    // (E2E leads statistics sync audit, 2026-08-25) — READ is only ever
+    // reached from PENDING, so this endpoint can never regress an already
+    // REPLIED/CLOSED message back to READ, whether the caller is the Leads
+    // detail page's manual dropdown or an automatic mark-as-read on open.
+    // Other target statuses (REPLIED/CLOSED/PENDING) stay a direct set, same
+    // as before.
+    if (status === "READ") {
+      await prisma.contactMessage.updateMany({
+        where: { id, companyId, status: "PENDING" },
+        data: { status: "READ" },
+      });
+      return prisma.contactMessage.findFirstOrThrow({ where: { id, companyId } });
     }
     return prisma.contactMessage.update({ where: { id }, data: { status } });
   }

@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@medcal/db";
 import { ContactMessagesService } from "../contact-messages/contact-messages.service";
+import { onContactMessageCreated } from "../contact-messages/contact-message-events";
 import { ChatSessionsService } from "./chat-sessions.service";
 
 // Real Postgres, same convention as leads.service.test.ts /
@@ -262,6 +263,72 @@ describe("ChatSessionsService.createSession — transaction atomicity (corrected
       where: { id: result.contactMessageId! },
     });
     expect(contactMessages).toBe(1);
+  });
+});
+
+describe("ChatSessionsService.createSession — new-ContactMessage realtime sync (E2E leads statistics sync audit, follow-up 2026-08-25)", () => {
+  it("publishes exactly one contact-message-created event, after commit, on success", async () => {
+    const payloads: { companyId: string }[] = [];
+    const unsubscribe = onContactMessageCreated((payload) => payloads.push(payload));
+
+    await createSession();
+
+    unsubscribe();
+    expect(payloads).toEqual([{ companyId: realCompanyId }]);
+  });
+
+  it("does not publish when ContactMessage creation fails and the transaction rolls back", async () => {
+    const spy = vi
+      .spyOn(ContactMessagesService.prototype, "create")
+      .mockRejectedValueOnce(new Error("Simulated ContactMessage failure"));
+
+    const payloads: { companyId: string }[] = [];
+    const unsubscribe = onContactMessageCreated((payload) => payloads.push(payload));
+
+    await expect(
+      service.createSession(realCompanyId, {
+        name: "No Event On Failure",
+        email: `no-event-${randomUUID().slice(0, 8)}@example.com`,
+        message: "Should not publish",
+      }),
+    ).rejects.toThrow("Simulated ContactMessage failure");
+
+    unsubscribe();
+    spy.mockRestore();
+    expect(payloads).toEqual([]);
+  });
+
+  it("does not publish when the post-create link step fails and the transaction rolls back", async () => {
+    const linkSpy = vi
+      .spyOn(ChatSessionsService.prototype as unknown as { linkContactMessage: () => unknown }, "linkContactMessage")
+      .mockRejectedValueOnce(new Error("Simulated link failure"));
+
+    const payloads: { companyId: string }[] = [];
+    const unsubscribe = onContactMessageCreated((payload) => payloads.push(payload));
+
+    await expect(
+      service.createSession(realCompanyId, {
+        name: "No Event On Link Failure",
+        email: `no-event-link-${randomUUID().slice(0, 8)}@example.com`,
+        message: "Should not publish",
+      }),
+    ).rejects.toThrow("Simulated link failure");
+
+    unsubscribe();
+    linkSpy.mockRestore();
+    expect(payloads).toEqual([]);
+  });
+
+  it("does not publish for a follow-up chat message on an existing session (send_message path)", async () => {
+    const session = await createSession();
+
+    const payloads: { companyId: string }[] = [];
+    const unsubscribe = onContactMessageCreated((payload) => payloads.push(payload));
+
+    await service.addMessage(realCompanyId, session.id, { senderType: "VISITOR", body: "A follow-up message" });
+
+    unsubscribe();
+    expect(payloads).toEqual([]);
   });
 });
 

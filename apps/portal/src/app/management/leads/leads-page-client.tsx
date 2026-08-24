@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { isForbidden } from "@medcal/shared";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -28,7 +27,6 @@ import {
   useNeedsReviewQuery,
   useResolveLeadMatch,
 } from "./use-contact-messages-query";
-import { subscribeContactMessagesChanged } from "../../../lib/contact-messages-sync";
 
 // The 7 URL-addressable keys that materially define the current list view
 // (Management List canonical pattern, 2026-08-18) — refresh, back/forward,
@@ -37,7 +35,6 @@ import { subscribeContactMessagesChanged } from "../../../lib/contact-messages-s
 const URL_KEYS = ["search", "status", "source", "topicId", "sortBy", "sortDir", "page", "pageSize"] as const;
 
 export default function LeadsPageClient() {
-  const queryClient = useQueryClient();
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
   const status: ContactStatus | "" = (params.status as ContactStatus | undefined) ?? "";
@@ -60,13 +57,6 @@ export default function LeadsPageClient() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
-
-  useEffect(() => {
-    return subscribeContactMessagesChanged(() => {
-      queryClient.invalidateQueries({ queryKey: ["contact-messages-statistics"] });
-      queryClient.invalidateQueries({ queryKey: ["contact-messages"] });
-    });
-  }, [queryClient]);
 
   const [lastResolved, setLastResolved] = useState<{ name: string; leadId: string } | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);

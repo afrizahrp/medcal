@@ -1,9 +1,10 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, OnModuleDestroy } from "@nestjs/common";
 import {
   ConnectedSocket,
   MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -17,6 +18,7 @@ import { serializeChatMessage } from "./chat-serialization";
 import { ChatSessionsService } from "./chat-sessions.service";
 import { ChatSocketAuthError, requireChatPermission, resolveSocketIdentity, roomForCompany, roomForSession } from "./chat-socket-auth";
 import type { SocketIdentity } from "./chat-socket-auth";
+import { onContactMessageCreated } from "../contact-messages/contact-message-events";
 
 function parseTrustedOrigins(raw: string | undefined): string[] {
   return (raw ?? "")
@@ -66,7 +68,7 @@ interface CloseSessionPayload {
     credentials: true,
   },
 })
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, OnModuleDestroy {
   @WebSocketServer()
   server!: Server;
 
@@ -77,6 +79,24 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // other provider in this codebase already follows this explicit-token
   // convention (see contact-topics.controller.ts, whitelist.controller.ts).
   constructor(@Inject(ChatSessionsService) private readonly chatSessions: ChatSessionsService) {}
+
+  private unsubscribeContactMessageCreated?: () => void;
+
+  // New-ContactMessage realtime sync (E2E leads statistics sync audit,
+  // follow-up 2026-08-25) — reuses the company-wide admin room every
+  // chat:read-permitted admin socket already auto-joins at connect time
+  // (handleConnection above), the same room "message"'s VISITOR fan-out
+  // already broadcasts to. afterInit is the earliest point `this.server` is
+  // guaranteed assigned by Nest.
+  afterInit(): void {
+    this.unsubscribeContactMessageCreated = onContactMessageCreated(({ companyId }) => {
+      this.server.to(roomForCompany(companyId)).emit("contact_message_created", { companyId });
+    });
+  }
+
+  onModuleDestroy(): void {
+    this.unsubscribeContactMessageCreated?.();
+  }
 
   async handleConnection(socket: Socket): Promise<void> {
     // Stored as a promise, not just the resolved value: @SubscribeMessage

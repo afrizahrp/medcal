@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { MessageCircle, Save, Send, UserPlus } from "lucide-react";
@@ -10,12 +10,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AccessDenied } from "../../../../components/access-denied";
-import { notifyUnreadCountChanged } from "../../../../lib/use-unread-count";
 import { formatCustomerApiError } from "../../customers/customer-form-utils";
 import { useConvertLeadToCustomer } from "../../customers/use-customers-query";
 import {
+  useLeadDetailQuery,
+  useUpdateContactMessageStatus,
+  useUpdateLeadStatus,
+} from "../use-contact-messages-query";
+import {
   type ContactStatus,
-  type GetMessageFrom,
   type LeadStatus,
   CONTACT_STATUS_LABELS,
   CONTACT_STATUS_OPTIONS,
@@ -36,37 +39,6 @@ import {
 import type { EmailListResponse, EmailListRow } from "../../email/use-emails-query";
 import { formatListDateTime } from "../../email/email-ui";
 
-interface ContactTopic {
-  id: number;
-  name: string;
-}
-
-interface ContactMessage {
-  id: string;
-  getFrom: GetMessageFrom;
-  status: ContactStatus;
-  subject: string | null;
-  message: string;
-  name: string;
-  email: string;
-  phone: string | null;
-  organizationName: string | null;
-  topic: ContactTopic | null;
-  createdAt: string;
-}
-
-interface LeadDetail {
-  id: string;
-  status: LeadStatus;
-  name: string;
-  email: string;
-  phone: string | null;
-  organizationName: string | null;
-  customerId: string | null;
-  createdAt: string;
-  contactMessages: ContactMessage[];
-}
-
 function whatsappHref(phone: string): string {
   return `https://wa.me/${normalizePhone(phone)}`;
 }
@@ -76,13 +48,16 @@ export default function LeadDetailPage() {
   const router = useRouter();
   const { capabilities } = useAuthz();
   const convertMutation = useConvertLeadToCustomer();
-  const [lead, setLead] = useState<LeadDetail | null>(null);
-  const [notFound, setNotFound] = useState(false);
-  const [forbidden, setForbidden] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const leadQuery = useLeadDetailQuery(params.id);
+  const updateMessageStatusMutation = useUpdateContactMessageStatus();
+  const updateLeadStatusMutation = useUpdateLeadStatus();
+  const lead = leadQuery.data ?? null;
+  const notFound = leadQuery.error instanceof ApiError && leadQuery.error.status === 404;
+  const forbidden = isForbidden(leadQuery.error);
+  const loadError = leadQuery.isError && !notFound && !forbidden ? "Gagal memuat detail pesan." : null;
+  const [actionError, setActionError] = useState<string | null>(null);
   const [leadEmails, setLeadEmails] = useState<EmailListRow[] | null>(null);
   const [leadEmailsError, setLeadEmailsError] = useState<string | null>(null);
-  const [updatingLeadStatus, setUpdatingLeadStatus] = useState(false);
   const [updatingMessageStatusId, setUpdatingMessageStatusId] = useState<string | null>(null);
   const [draftLeadStatus, setDraftLeadStatus] = useState<LeadStatus>("NEW");
   const [draftMessageStatuses, setDraftMessageStatuses] = useState<Record<string, ContactStatus>>({});
@@ -92,84 +67,83 @@ export default function LeadDetailPage() {
   const [convertError, setConvertError] = useState<string | null>(null);
   const [convertSuccess, setConvertSuccess] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
-    setNotFound(false);
-    setForbidden(false);
+  // Re-sync drafts to server state on every fresh load — including a
+  // background refetch triggered by the contact-message bus (Chat markRead/
+  // close, or this page's own auto mark-as-read below), same as the old
+  // load()'s unconditional setDraft*() on every call.
+  useEffect(() => {
+    if (!lead) return;
+    setDraftLeadStatus(lead.status);
+    setDraftMessageStatuses(
+      Object.fromEntries(lead.contactMessages.map((message) => [message.id, message.status])),
+    );
+  }, [lead]);
+
+  // Lead email history (confirmed association only) — unrelated to
+  // ContactMessage status sync, so it stays on its own mount-only fetch
+  // instead of being tied to the lead detail query's refetches.
+  const loadLeadEmails = useCallback(async () => {
     setLeadEmails(null);
     setLeadEmailsError(null);
     try {
-      const data = await apiFetch<LeadDetail>(`/leads/${params.id}`);
-      setLead(data);
-      setDraftLeadStatus(data.status);
-      setDraftMessageStatuses(
-        Object.fromEntries(data.contactMessages.map((message) => [message.id, message.status])),
-      );
-
-      // Lead email history (confirmed association only) — Phase 3 completion pass.
-      try {
-        const emailData = await apiFetch<EmailListResponse>(`/leads/${params.id}/emails`);
-        setLeadEmails(emailData.data);
-      } catch (err) {
-        if (isForbidden(err)) {
-          // Keep page renderable; just hide lead history section.
-          setLeadEmailsError("Anda tidak memiliki izin untuk melihat riwayat email lead ini.");
-        } else {
-          setLeadEmailsError("Gagal memuat riwayat email lead.");
-        }
-        setLeadEmails([]);
-      }
+      const emailData = await apiFetch<EmailListResponse>(`/leads/${params.id}/emails`);
+      setLeadEmails(emailData.data);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        setNotFound(true);
-      } else if (isForbidden(err)) {
-        setForbidden(true);
+      if (isForbidden(err)) {
+        setLeadEmailsError("Anda tidak memiliki izin untuk melihat riwayat email lead ini.");
       } else {
-        setError("Gagal memuat detail pesan.");
+        setLeadEmailsError("Gagal memuat riwayat email lead.");
       }
+      setLeadEmails([]);
     }
   }, [params.id]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadLeadEmails();
+  }, [loadLeadEmails]);
 
-  async function updateMessageStatus(messageId: string) {
+  // Opening Leads/[id] marks any still-PENDING message on this lead as READ
+  // — same guarded backend transition Chat/[id] already triggers via
+  // markRead (ChatSessionsService.markRead's PENDING->READ guard, mirrored
+  // for standalone ContactMessages by ContactMessagesService.updateStatus).
+  // The markedOnOpenRef guard mirrors chat-conversation-panel.tsx's
+  // markedLiveMessageIds pattern so re-renders/refetches never send a
+  // duplicate mark-read request for a message already handled this session.
+  const markedOnOpenRef = useRef<Set<string>>(new Set());
+  const { mutate: updateContactMessageStatus } = updateMessageStatusMutation;
+  useEffect(() => {
+    const messages = lead?.contactMessages;
+    if (!messages) return;
+    for (const message of messages) {
+      if (message.status !== "PENDING" || markedOnOpenRef.current.has(message.id)) continue;
+      markedOnOpenRef.current.add(message.id);
+      updateContactMessageStatus({ messageId: message.id, status: "READ" });
+    }
+  }, [lead?.contactMessages, updateContactMessageStatus]);
+
+  function updateMessageStatus(messageId: string) {
     const nextStatus = draftMessageStatuses[messageId];
     const current = lead?.contactMessages.find((m) => m.id === messageId);
     if (!nextStatus || !current || nextStatus === current.status) return;
 
+    setActionError(null);
     setUpdatingMessageStatusId(messageId);
-    try {
-      await apiFetch(`/contact-messages/${messageId}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: nextStatus }),
-      });
-      await load();
-      if (current.status === "PENDING" && nextStatus !== "PENDING") {
-        notifyUnreadCountChanged("contact");
-      }
-    } catch {
-      setError("Gagal mengubah status pesan.");
-    } finally {
-      setUpdatingMessageStatusId(null);
-    }
+    updateMessageStatusMutation.mutate(
+      { messageId, status: nextStatus },
+      {
+        onError: () => setActionError("Gagal mengubah status pesan."),
+        onSettled: () => setUpdatingMessageStatusId(null),
+      },
+    );
   }
 
-  async function updateLeadStatus() {
+  function updateLeadStatus() {
     if (!lead || draftLeadStatus === lead.status) return;
-    setUpdatingLeadStatus(true);
-    try {
-      await apiFetch<LeadDetail>(`/leads/${lead.id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: draftLeadStatus }),
-      });
-      await load();
-    } catch {
-      setError("Gagal mengubah status lead.");
-    } finally {
-      setUpdatingLeadStatus(false);
-    }
+    setActionError(null);
+    updateLeadStatusMutation.mutate(
+      { leadId: lead.id, status: draftLeadStatus },
+      { onError: () => setActionError("Gagal mengubah status lead.") },
+    );
   }
 
   async function convertToCustomer() {
@@ -186,7 +160,6 @@ export default function LeadDetailPage() {
         },
       });
       setConvertSuccess(`Lead dikonversi ke customer ${result.customer.number}.`);
-      await load();
       router.push(`/customers/${result.customer.id}`);
     } catch (err) {
       setConvertError(formatCustomerApiError(err, "Gagal mengonversi lead ke customer."));
@@ -210,7 +183,7 @@ export default function LeadDetailPage() {
           />
           <p className="mt-6 text-sm text-slate-600">Pesan tidak ditemukan.</p>
         </>
-      ) : error && !lead ? (
+      ) : loadError && !lead ? (
         <>
           <PageHeader
             title="Contact Messages"
@@ -219,7 +192,7 @@ export default function LeadDetailPage() {
               { href: "/leads", label: "Contact Messages" },
             ]}
           />
-          <p className="mt-6 text-sm text-red-600">{error}</p>
+          <p className="mt-6 text-sm text-red-600">{loadError}</p>
         </>
       ) : !lead ? (
         <p className="text-sm text-slate-400">Memuat…</p>
@@ -234,7 +207,7 @@ export default function LeadDetailPage() {
             ]}
           />
 
-          {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+          {actionError && <p className="mt-4 text-sm text-red-600">{actionError}</p>}
 
           <Surface className="mt-6 p-4 md:p-5">
             <div className="flex items-start justify-between gap-3">
@@ -377,7 +350,7 @@ export default function LeadDetailPage() {
             <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
               <select
                 value={draftLeadStatus}
-                disabled={updatingLeadStatus}
+                disabled={updateLeadStatusMutation.isPending}
                 onChange={(e) => setDraftLeadStatus(e.target.value as LeadStatus)}
                 className={`${selectClassName} w-full sm:max-w-xs`}
               >
@@ -387,7 +360,7 @@ export default function LeadDetailPage() {
                   </option>
                 ))}
               </select>
-              <Button type="button" className="w-full sm:w-auto" disabled={updatingLeadStatus || draftLeadStatus === lead.status} onClick={updateLeadStatus}>
+              <Button type="button" className="w-full sm:w-auto" disabled={updateLeadStatusMutation.isPending || draftLeadStatus === lead.status} onClick={updateLeadStatus}>
                 <Save className="h-4 w-4" />
                 Update
               </Button>

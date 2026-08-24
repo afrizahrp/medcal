@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import type { NavItem } from "../../app/management/nav-config";
+import { subscribeContactMessagesChanged } from "../../lib/contact-messages-sync";
+import { LEAD_DETAIL_QUERY_KEY } from "../../app/management/customers/use-customers-query";
 import { ManagementHeader } from "./header";
 import { MobileDrawer } from "./mobile-drawer";
 import { ManagementSidebar } from "./sidebar";
@@ -31,6 +34,7 @@ export function ManagementShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname() ?? "/";
+  const queryClient = useQueryClient();
   const lockChatHeight = isChatWorkspacePath(pathname);
   const [collapsed, setCollapsed] = useState(false);
   const [hoverExpanded, setHoverExpanded] = useState(false);
@@ -42,6 +46,31 @@ export function ManagementShell({
     setCollapsed(readSidebarCollapsed());
     setHydrated(true);
   }, []);
+
+  // Shell-level listener — stays mounted while admin navigates between Chat,
+  // Leads List, and Leads/[id]. refetchType: "all" refetches inactive
+  // queries too (e.g. LeadsPageClient unmounted on Chat, or Leads/[id]
+  // unmounted while a mark-read happens elsewhere) so every page is fresh on
+  // return without a hard browser reload. LEAD_DETAIL_QUERY_KEY (unscoped —
+  // invalidates every open Leads/[id]) makes Leads/[id] a subscriber/consumer
+  // of this same existing mechanism instead of a new one (E2E leads
+  // statistics sync audit, 2026-08-25).
+  useEffect(() => {
+    return subscribeContactMessagesChanged(() => {
+      void queryClient.invalidateQueries({
+        queryKey: ["contact-messages-statistics"],
+        refetchType: "all",
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["contact-messages"],
+        refetchType: "all",
+      });
+      void queryClient.invalidateQueries({
+        queryKey: [LEAD_DETAIL_QUERY_KEY],
+        refetchType: "all",
+      });
+    });
+  }, [queryClient]);
 
   useEffect(() => {
     const mq = window.matchMedia(DESKTOP_MQ);

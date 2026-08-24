@@ -3,6 +3,7 @@ import { BadRequestException, InternalServerErrorException } from "@nestjs/commo
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@medcal/db";
 import { ContactMessagesService } from "./contact-messages.service";
+import { onContactMessageCreated } from "./contact-message-events";
 
 // Real Postgres, same DATABASE_URL apps/api's dev script uses (loaded via
 // vitest.setup.ts). No mocking — consistent with registration-gate/whitelist tests.
@@ -153,6 +154,69 @@ describe("ContactMessagesService.create — happy path", () => {
   });
 });
 
+describe("ContactMessagesService.create — new-ContactMessage realtime sync (E2E leads statistics sync audit, follow-up 2026-08-25)", () => {
+  it("publishes exactly one contact-message-created event, after commit, for a Contact Form message", async () => {
+    const payloads: { companyId: string }[] = [];
+    const unsubscribe = onContactMessageCreated((payload) => payloads.push(payload));
+
+    await create(basePayload({ getFrom: "CONTACTFORM", topicId: activeTopicId }));
+
+    unsubscribe();
+    expect(payloads).toEqual([{ companyId: realCompanyId }]);
+  });
+
+  // WhatsApp-lead shares this exact create() path — confirmed by the E2E
+  // audit to always create a brand-new ContactMessage (no "update existing"
+  // branch exists anywhere), so publishing here unconditionally covers it
+  // too, not just Contact Form.
+  it("publishes exactly one contact-message-created event for a WhatsApp-lead message", async () => {
+    const payloads: { companyId: string }[] = [];
+    const unsubscribe = onContactMessageCreated((payload) => payloads.push(payload));
+
+    await create(basePayload({ getFrom: "WHATSAPP" }));
+
+    unsubscribe();
+    expect(payloads).toEqual([{ companyId: realCompanyId }]);
+  });
+
+  it("does not publish when creation fails validation", async () => {
+    const payloads: { companyId: string }[] = [];
+    const unsubscribe = onContactMessageCreated((payload) => payloads.push(payload));
+
+    const { name: _drop, ...invalidPayload } = basePayload();
+    await expect(service.create(realCompanyId, invalidPayload)).rejects.toBeInstanceOf(BadRequestException);
+
+    unsubscribe();
+    expect(payloads).toEqual([]);
+  });
+
+  it("does not publish when companyId does not resolve to a known Company", async () => {
+    const payloads: { companyId: string }[] = [];
+    const unsubscribe = onContactMessageCreated((payload) => payloads.push(payload));
+
+    await expect(service.create("ZZZ-UNKNOWN", basePayload())).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    );
+
+    unsubscribe();
+    expect(payloads).toEqual([]);
+  });
+
+  it("does not publish for a transaction-scoped create (Web Chat's own path publishes separately, post-commit)", async () => {
+    const payloads: { companyId: string }[] = [];
+    const unsubscribe = onContactMessageCreated((payload) => payloads.push(payload));
+
+    await prisma.$transaction(async (tx) => {
+      const result = await service.create(realCompanyId, basePayload({ topicId: activeTopicId }), tx);
+      createdMessageIds.push(result.id);
+      if (result.leadId) createdLeadIds.push(result.leadId);
+    });
+
+    unsubscribe();
+    expect(payloads).toEqual([]);
+  });
+});
+
 describe("ContactMessagesService.findActiveTopics", () => {
   it("returns only active topics", async () => {
     const topics = await service.findActiveTopics();
@@ -179,6 +243,30 @@ describe("ContactMessagesService.updateStatus — unread tracking (Lead Inbox, l
       status: 404,
       response: { code: "CONTACT_MESSAGE_NOT_FOUND" },
     });
+  });
+
+  it("keeps READ as READ when already READ (idempotent)", async () => {
+    const created = await create(basePayload({ topicId: activeTopicId }));
+    await service.updateStatus(realCompanyId, created.id, "READ");
+
+    const updated = await service.updateStatus(realCompanyId, created.id, "READ");
+    expect(updated.status).toBe("READ");
+  });
+
+  it("does not regress REPLIED back to READ", async () => {
+    const created = await create(basePayload({ topicId: activeTopicId }));
+    await service.updateStatus(realCompanyId, created.id, "REPLIED");
+
+    const updated = await service.updateStatus(realCompanyId, created.id, "READ");
+    expect(updated.status).toBe("REPLIED");
+  });
+
+  it("does not regress CLOSED back to READ", async () => {
+    const created = await create(basePayload({ topicId: activeTopicId }));
+    await service.updateStatus(realCompanyId, created.id, "CLOSED");
+
+    const updated = await service.updateStatus(realCompanyId, created.id, "READ");
+    expect(updated.status).toBe("CLOSED");
   });
 });
 
@@ -352,6 +440,23 @@ describe("ContactMessagesService.getStatistics — global tenant summary", () =>
     expect(after.replied).toBe(before.replied + 1);
     expect(after.closed).toBe(before.closed + 1);
     expect(after.pending + after.read + after.replied + after.closed).toBe(after.total);
+  });
+
+  it("moving PENDING -> READ -> CLOSED shifts pending/read/closed counts without changing total (Leads/[id] sync, 2026-08-25)", async () => {
+    const before = await service.getStatistics(countCompanyId);
+    const message = await createForCompany(countCompanyId, basePayload({ topicId: activeTopicId }));
+
+    await service.updateStatus(countCompanyId, message.id, "READ");
+    const afterRead = await service.getStatistics(countCompanyId);
+    expect(afterRead.total).toBe(before.total + 1);
+    expect(afterRead.pending).toBe(before.pending);
+    expect(afterRead.read).toBe(before.read + 1);
+
+    await service.updateStatus(countCompanyId, message.id, "CLOSED");
+    const afterClosed = await service.getStatistics(countCompanyId);
+    expect(afterClosed.total).toBe(before.total + 1);
+    expect(afterClosed.read).toBe(before.read);
+    expect(afterClosed.closed).toBe(before.closed + 1);
   });
 
   it("does not include another company's messages", async () => {
