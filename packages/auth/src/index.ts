@@ -74,4 +74,7 @@ export const auth = betterAuth({
   },
   // Required (even empty) for @DatabaseHook()/@BeforeCreate() providers to wire up.
   databaseHooks: {},
+  // Required (even empty) for @Hook()/@BeforeHook() providers to wire up —
+  // see apps/api/src/modules/whitelist/registration-origin.hook.ts.
+  hooks: {},
 });

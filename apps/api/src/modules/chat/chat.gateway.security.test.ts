@@ -89,7 +89,10 @@ async function createAdmin(role: MembershipRole): Promise<{ cookie: string; user
     update: { status: "ACTIVE" },
   });
 
-  const signUp = await auth.api.signUpEmail({ body: { email, password, name: "Chat Test Admin" } });
+  const signUp = await auth.api.signUpEmail({
+    body: { email, password, name: "Chat Test Admin" },
+    headers: new Headers({ origin: "http://apps.localhost:3003" }),
+  });
   cleanup.userIds.push(signUp.user.id);
 
   await prisma.user.update({
@@ -452,7 +455,10 @@ describe("Company admin room — live unread fan-out", () => {
       update: { status: "ACTIVE" },
     });
 
-    const signUp = await auth.api.signUpEmail({ body: { email, password, name: "Foreign Chat Admin" } });
+    const signUp = await auth.api.signUpEmail({
+      body: { email, password, name: "Foreign Chat Admin" },
+      headers: new Headers({ origin: "http://apps.localhost:3003" }),
+    });
     cleanup.userIds.push(signUp.user.id);
     await prisma.userMembership.create({
       data: { userId: signUp.user.id, companyId: FOREIGN_COMPANY_ID, role: "ADMIN" },

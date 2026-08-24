@@ -17,6 +17,47 @@ export function isAllowedRegistrationDomain(email: string): boolean {
   return emailDomain(email) === COMPANY_EMAIL_DOMAIN;
 }
 
+export type RegistrationContext = "INTERNAL_STAFF" | "CUSTOMER_PORTAL";
+
+const MANAGEMENT_HOST_PREFIX = "apps.";
+const CLIENT_HOST_PREFIX = "portal.";
+
+/**
+ * Server-trusted registration context, derived only from the request's Origin
+ * header (never a client-supplied body field — see F4 registration gate).
+ * Mirrors apps/portal/src/proxy.ts's apps./portal. host-prefix matching so
+ * the two hostname discriminators can never drift apart.
+ *
+ * WARNING for anyone calling Better Auth's signUpEmail/authClient.signUp.email
+ * directly (scripts, tests, fixtures — not the real browser register page,
+ * which gets Origin from the browser automatically): if the request carries
+ * no Origin this function recognizes, apps/api/src/modules/whitelist's
+ * registration-origin.hook.ts and registration-gate.hook.ts both fail closed
+ * with REGISTRATION_ORIGIN_NOT_ALLOWED. Pass an explicit `headers: new
+ * Headers({ origin: "http://apps.localhost:3003" })` (or the portal.*
+ * equivalent) on every such call — see bootstrap-superadmin.ts or
+ * registration-gate.integration.test.ts for the pattern. This is enforced
+ * structurally by registration-origin-callers.test.ts, which scans the repo
+ * for new signUpEmail call sites missing this.
+ */
+export function resolveRegistrationContext(
+  origin: string | null | undefined,
+  devDefaultHostGroup?: string,
+): RegistrationContext | null {
+  let host: string;
+  try {
+    host = new URL(origin ?? "").hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  if (host.startsWith(MANAGEMENT_HOST_PREFIX)) return "INTERNAL_STAFF";
+  if (host.startsWith(CLIENT_HOST_PREFIX)) return "CUSTOMER_PORTAL";
+  if (host === "localhost" || host === "127.0.0.1") {
+    return devDefaultHostGroup === "client" ? "CUSTOMER_PORTAL" : "INTERNAL_STAFF";
+  }
+  return null;
+}
+
 export function isPublicEmailDomain(domain: string): boolean {
   const d = domain.toLowerCase();
   return (

@@ -79,7 +79,10 @@ async function createAdminCookie(): Promise<{ cookie: string; userId: string }> 
     update: { status: "ACTIVE" },
   });
 
-  const signUp = await auth.api.signUpEmail({ body: { email, password, name: "Precedence Test Admin" } });
+  const signUp = await auth.api.signUpEmail({
+    body: { email, password, name: "Precedence Test Admin" },
+    headers: new Headers({ origin: "http://apps.localhost:3003" }),
+  });
   cleanup.userIds.push(signUp.user.id);
 
   await prisma.user.update({

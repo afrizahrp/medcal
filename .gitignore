@@ -26,6 +26,10 @@ coverage/
 # OS
 .DS_Store
 
+# Local git worktree checkouts created by Claude Code agent sessions
+# (e.g. isolation: "worktree") — never committed/pushed, local-only.
+.claude/worktrees/
+
 # Prisma backup
 packages/db/prisma/migrations/**/migration_lock.toml.bak
 .env.example

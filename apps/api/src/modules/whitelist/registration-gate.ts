@@ -1,5 +1,5 @@
 import { prisma } from "@medcal/db";
-import { isAllowedRegistrationDomain, normalizeEmail } from "@medcal/shared";
+import { isAllowedRegistrationDomain, normalizeEmail, type RegistrationContext } from "@medcal/shared";
 
 /**
  * Why a registration was rejected — for the externally-returned error only.
@@ -7,11 +7,20 @@ import { isAllowedRegistrationDomain, normalizeEmail } from "@medcal/shared";
  * entry" so the response never confirms/denies whether a specific email was
  * ever whitelisted (no enumeration, no DB/model details).
  */
-export type RegistrationRejectionReason = "INVALID_DOMAIN" | "NOT_WHITELISTED";
+export type DomainRejectionReason = "INVALID_DOMAIN" | "NOT_WHITELISTED";
+export type RegistrationRejectionReason = DomainRejectionReason | "ORIGIN_NOT_ALLOWED";
 
-async function evaluateRegistration(rawEmail: string): Promise<RegistrationRejectionReason | null> {
-  // G4: company-domain staff still require ACTIVE EmailWhitelist.
-  // External domains may self-register without whitelist (no role/membership).
+/**
+ * G4: company-domain staff still require ACTIVE EmailWhitelist. External
+ * domains may self-register without whitelist (no role/membership). Internal
+ * helper shared by both registration hooks (registration-origin.hook.ts's
+ * @BeforeHook and registration-gate.hook.ts's @BeforeCreate) via
+ * getRegistrationRejectionReasonForContext below — both are context-aware
+ * (2A fix) so they can never contradict each other on the same request; this
+ * function only ever runs for the INTERNAL_STAFF branch, where the company
+ * domain's whitelist requirement still applies.
+ */
+async function evaluateDomainWhitelist(rawEmail: string): Promise<DomainRejectionReason | null> {
   if (!isAllowedRegistrationDomain(rawEmail)) {
     return null;
   }
@@ -24,22 +33,31 @@ async function evaluateRegistration(rawEmail: string): Promise<RegistrationRejec
 }
 
 /**
- * Registration gate (G4):
- *  - company domain (kalibrasimedika.co.id, exact match via
- *    isAllowedRegistrationDomain) → require a matching ACTIVE EmailWhitelist
- *  - any other domain → allow (no whitelist)
- * Does not create UserMembership or assign a role.
- * Extracted as a plain function so it's testable without a NestJS/Better Auth
- * harness; apps/api/src/modules/whitelist/registration-gate.hook.ts wires it
- * into Better Auth's databaseHooks.user.create.before.
+ * Origin-aware registration gate — used by BOTH registration hooks
+ * (registration-origin.hook.ts's @BeforeHook("/sign-up/email") and
+ * registration-gate.hook.ts's @BeforeCreate("user")), each deriving the same
+ * `context` from the request's Origin header via resolveRegistrationContext,
+ * from two different but equivalent sources Better Auth exposes it through
+ * (see registration-gate.hook.ts's comment for why both must agree):
+ *  - INTERNAL_STAFF: non-company domain rejects immediately; company domain
+ *    still requires ACTIVE EmailWhitelist (same rule as evaluateDomainWhitelist).
+ *  - CUSTOMER_PORTAL: any domain allowed, including the company domain —
+ *    whitelist is never consulted.
+ *  - unrecognized/missing Origin: fail closed.
  */
-export async function isRegistrationAllowed(rawEmail: string): Promise<boolean> {
-  return (await evaluateRegistration(rawEmail)) === null;
-}
-
-/** Same checks as isRegistrationAllowed, but reports which one failed. */
-export async function getRegistrationRejectionReason(
+export async function getRegistrationRejectionReasonForContext(
   rawEmail: string,
+  context: RegistrationContext | null,
 ): Promise<RegistrationRejectionReason | null> {
-  return evaluateRegistration(rawEmail);
+  if (context === null) {
+    return "ORIGIN_NOT_ALLOWED";
+  }
+  if (context === "CUSTOMER_PORTAL") {
+    return null;
+  }
+  // INTERNAL_STAFF
+  if (!isAllowedRegistrationDomain(rawEmail)) {
+    return "INVALID_DOMAIN";
+  }
+  return evaluateDomainWhitelist(rawEmail);
 }

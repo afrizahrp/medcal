@@ -105,8 +105,17 @@ async function main() {
       // Goes through the real, unmodified F4 registration gate — this call
       // fails exactly like any other blocked sign-up would if the whitelist
       // entry above were somehow missing or the domain check failed.
+      // Origin header is required: the registration-origin hook fails closed
+      // on missing/unrecognized Origin, so this must present as a real
+      // apps.* (INTERNAL_STAFF) request, not a bypass. Reuses the first
+      // apps.* entry already declared in TRUSTED_ORIGINS instead of a new env
+      // var, so dev/prod stay in sync with the deployment's real domain.
+      const appsOrigin =
+        (process.env.TRUSTED_ORIGINS ?? "").split(",").map((o) => o.trim()).find((o) => o.includes("apps.")) ??
+        "http://apps.localhost:3003";
       const result = await auth.api.signUpEmail({
         body: { email, password: args.password, name: args.name },
+        headers: new Headers({ origin: appsOrigin }),
       });
       user = result.user as User;
       console.log(`[bootstrap] Account created for "${email}" (id: ${user.id}).`);
