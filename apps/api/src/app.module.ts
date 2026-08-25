@@ -13,6 +13,7 @@ import { EmailsModule } from "./modules/emails/emails.module";
 import { PermissionsModule } from "./modules/permissions/permissions.module";
 import { PushTokensModule } from "./modules/push-tokens/push-tokens.module";
 import { CustomersModule } from "./modules/customers/customers.module";
+import { CalibrationRequestsModule } from "./modules/calibration-requests/calibration-requests.module";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { CustomersModule } from "./modules/customers/customers.module";
     ContactMessagesModule,
     LeadsModule,
     CustomersModule,
+    CalibrationRequestsModule,
     WhitelistModule,
     MeModule,
     ChatModule,

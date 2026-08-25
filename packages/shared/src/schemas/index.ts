@@ -278,3 +278,61 @@ export const leadConvertSchema = z.object({
 });
 
 export type LeadConvertInput = z.infer<typeof leadConvertSchema>;
+
+// =============================================================================
+// CalibrationRequest (D06)
+// =============================================================================
+
+const serviceModeValues = ["ON_SITE", "SEND_TO_LAB"] as const;
+const calibrationRequestStatusValues = [
+  "DRAFT",
+  "SUBMITTED",
+  "IN_QUOTATION",
+  "CANCELLED",
+  "FULFILLED",
+] as const;
+
+/** Nested item input for CalibrationRequestItem */
+const calibrationRequestItemInputSchema = z.object({
+  deviceId: z.string().min(1),
+  notes: z.string().max(1000).optional(),
+});
+
+/** POST /calibration-requests body */
+export const calibrationRequestCreateSchema = z.object({
+  customerId: z.string().min(1),
+  leadId: z.string().min(1).optional(),
+  serviceMode: z.enum(serviceModeValues),
+  desiredScheduleNote: z.string().max(500).optional(),
+  notes: z.string().max(2000).optional(),
+  items: z.array(calibrationRequestItemInputSchema).min(1),
+});
+
+export type CalibrationRequestCreateInput = z.infer<typeof calibrationRequestCreateSchema>;
+
+/** GET /calibration-requests query params */
+export const calibrationRequestListQuerySchema = baseListQuerySchema.extend({
+  status: z.enum(calibrationRequestStatusValues).optional(),
+  customerId: z.string().optional(),
+});
+
+export type CalibrationRequestListQuery = z.infer<typeof calibrationRequestListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /calibration-requests — see resolveSortOrder. */
+export const CALIBRATION_REQUEST_SORTABLE_FIELDS = [
+  "createdAt",
+  "number",
+  "status",
+] as const;
+
+/** PATCH /calibration-requests/:id body (only allowed while DRAFT) */
+export const calibrationRequestUpdateSchema = z.object({
+  customerId: z.string().min(1).optional(),
+  leadId: z.string().min(1).nullable().optional(),
+  serviceMode: z.enum(serviceModeValues).optional(),
+  desiredScheduleNote: z.string().max(500).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  items: z.array(calibrationRequestItemInputSchema).min(1).optional(),
+});
+
+export type CalibrationRequestUpdateInput = z.infer<typeof calibrationRequestUpdateSchema>;
