@@ -52,6 +52,8 @@ const RESOURCE_LABELS: Record<string, string> = {
   menu: "Menu Management",
   permission: "Permission Management",
   deviceModel: "Device Model",
+  deviceCapability: "Device Capability",
+  deviceCapabilityItem: "Device Capability Item",
 };
 
 const ACTION_LABELS: Record<string, string> = {

@@ -500,3 +500,51 @@ export const deviceModelUpdateSchema = z.object({
 });
 
 export type DeviceModelUpdateInput = z.infer<typeof deviceModelUpdateSchema>;
+
+// =============================================================================
+// DeviceCapability + DeviceCapabilityItem Master Data
+// =============================================================================
+
+/** POST /device-capabilities body */
+export const deviceCapabilityCreateSchema = z.object({
+  code: z.string().min(1).max(64).toUpperCase(),
+  name: z.string().min(1).max(150),
+  description: optionalDescription,
+});
+
+export type DeviceCapabilityCreateInput = z.infer<typeof deviceCapabilityCreateSchema>;
+
+/** GET /device-capabilities query params */
+export const deviceCapabilityListQuerySchema = baseListQuerySchema;
+
+export type DeviceCapabilityListQuery = z.infer<typeof deviceCapabilityListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /device-capabilities — see resolveSortOrder. */
+export const DEVICE_CAPABILITY_SORTABLE_FIELDS = ["createdAt", "code", "name"] as const;
+
+/** PATCH /device-capabilities/:id body */
+export const deviceCapabilityUpdateSchema = z.object({
+  code: z.string().min(1).max(64).toUpperCase().optional(),
+  name: z.string().min(1).max(150).optional(),
+  description: z.string().max(500).nullable().optional(),
+});
+
+export type DeviceCapabilityUpdateInput = z.infer<typeof deviceCapabilityUpdateSchema>;
+
+/** POST /device-capabilities/:id/items body */
+export const deviceCapabilityItemCreateSchema = z.object({
+  code: z.string().min(1).max(64).toUpperCase(),
+  name: z.string().min(1).max(150),
+  description: optionalDescription,
+});
+
+export type DeviceCapabilityItemCreateInput = z.infer<typeof deviceCapabilityItemCreateSchema>;
+
+/** PATCH /device-capabilities/:id/items/:itemId body */
+export const deviceCapabilityItemUpdateSchema = z.object({
+  code: z.string().min(1).max(64).toUpperCase().optional(),
+  name: z.string().min(1).max(150).optional(),
+  description: z.string().max(500).nullable().optional(),
+});
+
+export type DeviceCapabilityItemUpdateInput = z.infer<typeof deviceCapabilityItemUpdateSchema>;

@@ -14,7 +14,8 @@ export type ManagementNavIcon =
   | "device"
   | "folderTree"
   | "tags"
-  | "boxes";
+  | "boxes"
+  | "activity";
 
 export interface NavItem {
   label: string;

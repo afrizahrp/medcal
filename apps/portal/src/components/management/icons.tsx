@@ -1,5 +1,5 @@
 import type { SVGProps } from "react";
-import { Boxes, FolderTree, Tags } from "lucide-react";
+import { Activity, Boxes, FolderTree, Tags } from "lucide-react";
 import type { ManagementNavIcon } from "../../app/management/nav-config";
 
 type IconProps = SVGProps<SVGSVGElement>;
@@ -267,6 +267,8 @@ export function NavIcon({
       return <Tags {...props} />;
     case "boxes":
       return <Boxes {...props} />;
+    case "activity":
+      return <Activity {...props} />;
     default:
       return null;
   }

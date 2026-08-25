@@ -67,6 +67,15 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "ADMIN", resource: "deviceModel", action: "create" },
   { role: "ADMIN", resource: "deviceModel", action: "update" },
   { role: "ADMIN", resource: "deviceModel", action: "delete" },
+  // DeviceCapability / DeviceCapabilityItem Master Data (2026-08-26)
+  { role: "ADMIN", resource: "deviceCapability", action: "read" },
+  { role: "ADMIN", resource: "deviceCapability", action: "create" },
+  { role: "ADMIN", resource: "deviceCapability", action: "update" },
+  { role: "ADMIN", resource: "deviceCapability", action: "delete" },
+  { role: "ADMIN", resource: "deviceCapabilityItem", action: "read" },
+  { role: "ADMIN", resource: "deviceCapabilityItem", action: "create" },
+  { role: "ADMIN", resource: "deviceCapabilityItem", action: "update" },
+  { role: "ADMIN", resource: "deviceCapabilityItem", action: "delete" },
   // SUPERVISOR
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   // TECHNICIAN

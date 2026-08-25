@@ -926,6 +926,36 @@ model DeviceModel {
   @@index([deviceTypeId])
 }
 
+// Device function/capability master — global (no companyId), same convention
+// as Uom/DeviceCategory. DeviceCapabilityItem is a child of a capability
+// (e.g. NIBP → Systolic/Diastolic/MAP). Do not FK DeviceModel or Device to
+// these models this phase; calibration parameters are a later phase.
+model DeviceCapability {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items DeviceCapabilityItem[]
+}
+
+model DeviceCapabilityItem {
+  id           String   @id @default(cuid())
+  capabilityId String
+  code         String
+  name         String
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  capability DeviceCapability @relation(fields: [capabilityId], references: [id])
+
+  @@unique([capabilityId, code])
+  @@index([capabilityId])
+}
+
 model Device {
   id           String       @id @default(cuid())
   companyId    String

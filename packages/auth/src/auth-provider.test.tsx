@@ -48,6 +48,14 @@ const ME_A = {
     deviceModelCreate: true,
     deviceModelUpdate: true,
     deviceModelDelete: true,
+    deviceCapabilityRead: true,
+    deviceCapabilityCreate: true,
+    deviceCapabilityUpdate: true,
+    deviceCapabilityDelete: true,
+    deviceCapabilityItemRead: true,
+    deviceCapabilityItemCreate: true,
+    deviceCapabilityItemUpdate: true,
+    deviceCapabilityItemDelete: true,
   },
 };
 
@@ -79,6 +87,14 @@ const ME_B = {
     deviceModelCreate: false,
     deviceModelUpdate: false,
     deviceModelDelete: false,
+    deviceCapabilityRead: false,
+    deviceCapabilityCreate: false,
+    deviceCapabilityUpdate: false,
+    deviceCapabilityDelete: false,
+    deviceCapabilityItemRead: false,
+    deviceCapabilityItemCreate: false,
+    deviceCapabilityItemUpdate: false,
+    deviceCapabilityItemDelete: false,
   },
 };
 

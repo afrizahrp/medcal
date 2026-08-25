@@ -39,6 +39,9 @@ import type { MembershipRole } from "@medcal/db";
  * - deviceCategory/deviceType/deviceModel:read/create/update/delete
  *   (Device taxonomy): Kemenkes-confirmed DeviceType list grouped by
  *   internal DeviceCategory; DeviceModel is manufacturer+model under a type.
+ * - deviceCapability/deviceCapabilityItem:read/create/update/delete
+ *   (Device function master): DeviceCapability is a device function
+ *   (e.g. NIBP); DeviceCapabilityItem is a child aspect of that function.
  */
 const ac = createAccessControl({
   contactMessage: ["read"],
@@ -49,6 +52,8 @@ const ac = createAccessControl({
   deviceCategory: ["read", "create", "update", "delete"],
   deviceType: ["read", "create", "update", "delete"],
   deviceModel: ["read", "create", "update", "delete"],
+  deviceCapability: ["read", "create", "update", "delete"],
+  deviceCapabilityItem: ["read", "create", "update", "delete"],
   chat: ["read", "reply", "close"],
   users: ["read", "manage"],
   membership: ["manage"],

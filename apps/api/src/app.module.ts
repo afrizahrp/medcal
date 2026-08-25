@@ -18,6 +18,7 @@ import { UomsModule } from "./modules/uoms/uoms.module";
 import { DeviceCategoriesModule } from "./modules/device-categories/device-categories.module";
 import { DeviceTypesModule } from "./modules/device-types/device-types.module";
 import { DeviceModelsModule } from "./modules/device-models/device-models.module";
+import { DeviceCapabilitiesModule } from "./modules/device-capabilities/device-capabilities.module";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { DeviceModelsModule } from "./modules/device-models/device-models.module
     DeviceCategoriesModule,
     DeviceTypesModule,
     DeviceModelsModule,
+    DeviceCapabilitiesModule,
     WhitelistModule,
     MeModule,
     ChatModule,

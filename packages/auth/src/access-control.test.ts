@@ -56,6 +56,14 @@ const FIXTURE: GrantRow[] = [
   { role: "ADMIN", resource: "deviceModel", action: "create" },
   { role: "ADMIN", resource: "deviceModel", action: "update" },
   { role: "ADMIN", resource: "deviceModel", action: "delete" },
+  { role: "ADMIN", resource: "deviceCapability", action: "read" },
+  { role: "ADMIN", resource: "deviceCapability", action: "create" },
+  { role: "ADMIN", resource: "deviceCapability", action: "update" },
+  { role: "ADMIN", resource: "deviceCapability", action: "delete" },
+  { role: "ADMIN", resource: "deviceCapabilityItem", action: "read" },
+  { role: "ADMIN", resource: "deviceCapabilityItem", action: "create" },
+  { role: "ADMIN", resource: "deviceCapabilityItem", action: "update" },
+  { role: "ADMIN", resource: "deviceCapabilityItem", action: "delete" },
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   { role: "SUPERVISOR", resource: "users", action: "read" },
   { role: "SUPERVISOR", resource: "membership", action: "manage" },
@@ -166,6 +174,27 @@ describe("hasPermission — deviceCategory / deviceType / deviceModel master dat
     expect(hasPermission("FINANCE", "deviceCategory", "delete")).toBe(false);
     expect(hasPermission("CUSTOMER", "deviceType", "read")).toBe(false);
     expect(hasPermission("CUSTOMER", "deviceModel", "read")).toBe(false);
+  });
+});
+
+describe("hasPermission — deviceCapability / deviceCapabilityItem master data", () => {
+  it("grants ADMIN read/create/update/delete on capability and capability item", () => {
+    expect(hasPermission("ADMIN", "deviceCapability", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCapability", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCapability", "update")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCapability", "delete")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCapabilityItem", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCapabilityItem", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCapabilityItem", "update")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCapabilityItem", "delete")).toBe(true);
+  });
+
+  it("denies roles with no deviceCapability / deviceCapabilityItem grant", () => {
+    expect(hasPermission("SUPERVISOR", "deviceCapability", "read")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "deviceCapabilityItem", "create")).toBe(false);
+    expect(hasPermission("FINANCE", "deviceCapability", "delete")).toBe(false);
+    expect(hasPermission("CUSTOMER", "deviceCapability", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER", "deviceCapabilityItem", "read")).toBe(false);
   });
 });
 
