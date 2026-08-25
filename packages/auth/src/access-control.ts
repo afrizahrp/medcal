@@ -42,6 +42,7 @@ const ac = createAccessControl({
   whitelist: ["manage"],
   lead: ["read", "update", "assign"],
   customer: ["read", "create", "update"],
+  uom: ["read", "create", "update"],
   chat: ["read", "reply", "close"],
   users: ["read", "manage"],
   membership: ["manage"],

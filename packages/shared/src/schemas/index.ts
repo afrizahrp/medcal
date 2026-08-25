@@ -338,3 +338,58 @@ export const calibrationRequestUpdateSchema = z.object({
 });
 
 export type CalibrationRequestUpdateInput = z.infer<typeof calibrationRequestUpdateSchema>;
+
+// =============================================================================
+// UOM (Unit of Measurement) Master Data
+// =============================================================================
+
+const uomCategoryValues = [
+  "PRESSURE",
+  "TEMPERATURE",
+  "RATE",
+  "FLOW",
+  "PERCENTAGE",
+  "LENGTH",
+  "MASS",
+  "VOLUME",
+  "TIME",
+  "ELECTRICAL",
+  "OTHER",
+] as const;
+
+export type UomCategory = (typeof uomCategoryValues)[number];
+
+/** POST /uoms body */
+export const uomCreateSchema = z.object({
+  code: z.string().min(1).max(20).toUpperCase(),
+  name: z.string().min(1).max(100),
+  symbol: z.string().min(1).max(20),
+  category: z.enum(uomCategoryValues),
+});
+
+export type UomCreateInput = z.infer<typeof uomCreateSchema>;
+
+/** GET /uoms query params */
+export const uomListQuerySchema = baseListQuerySchema.extend({
+  category: z.enum(uomCategoryValues).optional(),
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type UomListQuery = z.infer<typeof uomListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /uoms — see resolveSortOrder. */
+export const UOM_SORTABLE_FIELDS = ["createdAt", "code", "name", "category"] as const;
+
+/** PATCH /uoms/:id body */
+export const uomUpdateSchema = z.object({
+  code: z.string().min(1).max(20).toUpperCase().optional(),
+  name: z.string().min(1).max(100).optional(),
+  symbol: z.string().min(1).max(20).optional(),
+  category: z.enum(uomCategoryValues).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type UomUpdateInput = z.infer<typeof uomUpdateSchema>;

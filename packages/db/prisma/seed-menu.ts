@@ -195,6 +195,17 @@ const ROWS: MenuSeedRow[] = [
     viewResource: "tax",
     viewAction: "manage",
   },
+  {
+    application: "MANAGEMENT",
+    code: "system-setting.uom",
+    parentCode: "system-setting",
+    label: "UOM",
+    href: "/uoms",
+    icon: "settings",
+    order: 2,
+    viewResource: "uom",
+    viewAction: "read",
+  },
 
   // ══════════════════════════════════════════════════════════════════════════
   // CUSTOMER — apps/portal/src/app/client/
@@ -218,6 +229,8 @@ const DEPRECATED_CODES: Array<{ application: MenuApplication; code: string }> = 
   { application: "MANAGEMENT", code: "whitelist" },
   { application: "MANAGEMENT", code: "menu-management" },
   { application: "MANAGEMENT", code: "permission-management" },
+  { application: "MANAGEMENT", code: "master-data.uom" },
+  { application: "MANAGEMENT", code: "master-data" },
 ];
 
 async function seedMenu() {

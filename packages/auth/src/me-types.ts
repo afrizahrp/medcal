@@ -11,6 +11,9 @@ export type MeCapabilities = {
   customerRead: boolean;
   customerCreate: boolean;
   customerUpdate: boolean;
+  uomRead: boolean;
+  uomCreate: boolean;
+  uomUpdate: boolean;
 };
 
 export type MeUser = {

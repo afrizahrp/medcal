@@ -14,6 +14,7 @@ import { PermissionsModule } from "./modules/permissions/permissions.module";
 import { PushTokensModule } from "./modules/push-tokens/push-tokens.module";
 import { CustomersModule } from "./modules/customers/customers.module";
 import { CalibrationRequestsModule } from "./modules/calibration-requests/calibration-requests.module";
+import { UomsModule } from "./modules/uoms/uoms.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { CalibrationRequestsModule } from "./modules/calibration-requests/calibr
     LeadsModule,
     CustomersModule,
     CalibrationRequestsModule,
+    UomsModule,
     WhitelistModule,
     MeModule,
     ChatModule,

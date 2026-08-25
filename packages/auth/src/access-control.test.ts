@@ -41,6 +41,9 @@ const FIXTURE: GrantRow[] = [
   { role: "ADMIN", resource: "email", action: "send" },
   { role: "ADMIN", resource: "email", action: "delete" },
   { role: "ADMIN", resource: "email", action: "manage" },
+  { role: "ADMIN", resource: "uom", action: "read" },
+  { role: "ADMIN", resource: "uom", action: "create" },
+  { role: "ADMIN", resource: "uom", action: "update" },
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   { role: "SUPERVISOR", resource: "users", action: "read" },
   { role: "SUPERVISOR", resource: "membership", action: "manage" },
@@ -111,6 +114,21 @@ describe("hasPermission — customer resource (Customer CRM)", () => {
     expect(hasPermission("TECHNICIAN", "customer", "create")).toBe(false);
     expect(hasPermission("FINANCE", "customer", "read")).toBe(false);
     expect(hasPermission("CUSTOMER", "customer", "read")).toBe(false);
+  });
+});
+
+describe("hasPermission — uom resource (UOM master data)", () => {
+  it("grants ADMIN uom:read, uom:create, and uom:update", () => {
+    expect(hasPermission("ADMIN", "uom", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "uom", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "uom", "update")).toBe(true);
+  });
+
+  it("denies roles with no uom grant", () => {
+    expect(hasPermission("SUPERVISOR", "uom", "read")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "uom", "create")).toBe(false);
+    expect(hasPermission("FINANCE", "uom", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER", "uom", "read")).toBe(false);
   });
 });
 

@@ -61,6 +61,9 @@ export class MeController {
       customerRead: hasPermission(membership.role, "customer", "read"),
       customerCreate: hasPermission(membership.role, "customer", "create"),
       customerUpdate: hasPermission(membership.role, "customer", "update"),
+      uomRead: hasPermission(membership.role, "uom", "read"),
+      uomCreate: hasPermission(membership.role, "uom", "create"),
+      uomUpdate: hasPermission(membership.role, "uom", "update"),
     };
 
     return {

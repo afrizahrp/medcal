@@ -981,6 +981,7 @@ export function PaginationBar({
   onPageChange,
   onPageSizeChange,
   className,
+  itemLabel = "pesan",
 }: {
   page: number;
   totalPages: number;
@@ -989,6 +990,8 @@ export function PaginationBar({
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   className?: string;
+  /** Noun for the total count, e.g. "pesan", "satuan", "customer". */
+  itemLabel?: string;
 }) {
   return (
     <div
@@ -1016,7 +1019,7 @@ export function PaginationBar({
       <p className="text-sm text-slate-500">
         Halaman {page} dari {totalPages}
         <span className="mx-1.5 text-slate-300">·</span>
-        Total: {total} pesan
+        Total: {total} {itemLabel}
       </p>
 
       <div className="flex gap-2">

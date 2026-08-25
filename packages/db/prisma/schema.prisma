@@ -260,6 +260,20 @@ enum FileOwnerType {
   OTHER
 }
 
+enum UomCategory {
+  PRESSURE
+  TEMPERATURE
+  RATE
+  FLOW
+  PERCENTAGE
+  LENGTH
+  MASS
+  VOLUME
+  TIME
+  ELECTRICAL
+  OTHER
+}
+
 // Email → Lead Management (locked plan)
 enum EmailFolder {
   INBOX
@@ -606,6 +620,23 @@ model ContactTopic {
 
   messages ContactMessage[]
 
+  @@index([isActive])
+}
+
+// Unit of Measurement master data — global (no companyId) since UOMs are
+// universal scientific standards (mmHg, °C, kPa, etc.) that don't vary by
+// company. Admin CRUD enabled for extensibility, unlike ContactTopic.
+model Uom {
+  id        String      @id @default(cuid())
+  code      String      @unique
+  name      String
+  symbol    String
+  category  UomCategory
+  isActive  Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([category])
   @@index([isActive])
 }
 
