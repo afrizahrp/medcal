@@ -7,6 +7,9 @@ export const DOCUMENT_TYPE_PREFIX: Record<DocumentType, string> = {
   QUOTATION: "QUO",
   PURCHASE_ORDER: "PUR",
   WORK_ORDER: "SPK",
+  INVOICE: "INV",
+  CERTIFICATE: "CER",
+  CREDIT_NOTE: "CRN",
 };
 
 export function resolveDocumentPrefix(documentType: DocumentType): string {

@@ -59,6 +59,15 @@ const ac = createAccessControl({
   // sending. notification:test is SUPERADMIN-only by default (no RolePermission
   // rows seeded) — send to production tokens requires explicit admin action.
   notification: ["test"],
+  // Calibration Lifecycle Management: resources for the calibration workflow
+  calibrationRequest: ["read", "create", "update", "cancel"],
+  quotation: ["read", "create", "update", "cancel", "approve"],
+  purchaseOrder: ["read", "create", "update", "cancel", "approve"],
+  workOrder: ["read", "create", "update", "cancel", "assign"],
+  calibrationJob: ["read", "create", "update", "complete"],
+  certificate: ["read", "create", "update", "issue"],
+  invoice: ["read", "create", "update", "void"],
+  payment: ["read", "create", "update", "reconcile"],
 } as const);
 
 /**

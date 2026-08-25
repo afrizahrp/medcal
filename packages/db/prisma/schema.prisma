@@ -215,6 +215,9 @@ enum DocumentType {
   QUOTATION
   PURCHASE_ORDER
   WORK_ORDER
+  INVOICE
+  CERTIFICATE
+  CREDIT_NOTE
 }
 
 enum ReminderChannel {
