@@ -13,7 +13,8 @@ export type ManagementNavIcon =
   | "settings"
   | "device"
   | "folderTree"
-  | "tags";
+  | "tags"
+  | "boxes";
 
 export interface NavItem {
   label: string;

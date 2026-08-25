@@ -51,6 +51,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   contactMessage: "Contact Messages",
   menu: "Menu Management",
   permission: "Permission Management",
+  deviceModel: "Device Model",
 };
 
 const ACTION_LABELS: Record<string, string> = {

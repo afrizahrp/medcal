@@ -116,6 +116,17 @@ const ROWS: MenuSeedRow[] = [
     viewResource: "deviceType",
     viewAction: "read",
   },
+  {
+    application: "MANAGEMENT",
+    code: "device-management.models",
+    parentCode: "device-management",
+    label: "Models",
+    href: "/device-models",
+    icon: "boxes",
+    order: 2,
+    viewResource: "deviceModel",
+    viewAction: "read",
+  },
 
   // ─────────────────────────────────────────────────────────────────────────
   // Calibration Management (group) → order: 3

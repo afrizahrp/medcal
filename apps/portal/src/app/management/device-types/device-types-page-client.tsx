@@ -83,17 +83,14 @@ export default function DeviceTypesPageClient() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
           title="Device Type"
-          crumbs={[
-            { href: "/", label: "Dashboard" },
-            { label: "Device Type" },
-          ]}
+          crumbs={[{ href: "/", label: "Dashboard" }, { label: "Device Type" }]}
         />
 
         {capabilities.deviceTypeCreate ? (
           <Button asChild className="shrink-0">
             <Link href="/device-types/new">
               <Plus className="h-4 w-4" />
-              Tambah Device Type
+              Device Type
             </Link>
           </Button>
         ) : null}

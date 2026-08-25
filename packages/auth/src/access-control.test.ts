@@ -52,6 +52,10 @@ const FIXTURE: GrantRow[] = [
   { role: "ADMIN", resource: "deviceType", action: "create" },
   { role: "ADMIN", resource: "deviceType", action: "update" },
   { role: "ADMIN", resource: "deviceType", action: "delete" },
+  { role: "ADMIN", resource: "deviceModel", action: "read" },
+  { role: "ADMIN", resource: "deviceModel", action: "create" },
+  { role: "ADMIN", resource: "deviceModel", action: "update" },
+  { role: "ADMIN", resource: "deviceModel", action: "delete" },
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   { role: "SUPERVISOR", resource: "users", action: "read" },
   { role: "SUPERVISOR", resource: "membership", action: "manage" },
@@ -140,8 +144,8 @@ describe("hasPermission — uom resource (UOM master data)", () => {
   });
 });
 
-describe("hasPermission — deviceCategory / deviceType master data", () => {
-  it("grants ADMIN read/create/update/delete on both resources", () => {
+describe("hasPermission — deviceCategory / deviceType / deviceModel master data", () => {
+  it("grants ADMIN read/create/update/delete on all three resources", () => {
     expect(hasPermission("ADMIN", "deviceCategory", "read")).toBe(true);
     expect(hasPermission("ADMIN", "deviceCategory", "create")).toBe(true);
     expect(hasPermission("ADMIN", "deviceCategory", "update")).toBe(true);
@@ -150,13 +154,18 @@ describe("hasPermission — deviceCategory / deviceType master data", () => {
     expect(hasPermission("ADMIN", "deviceType", "create")).toBe(true);
     expect(hasPermission("ADMIN", "deviceType", "update")).toBe(true);
     expect(hasPermission("ADMIN", "deviceType", "delete")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceModel", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceModel", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceModel", "update")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceModel", "delete")).toBe(true);
   });
 
-  it("denies roles with no deviceCategory / deviceType grant", () => {
+  it("denies roles with no deviceCategory / deviceType / deviceModel grant", () => {
     expect(hasPermission("SUPERVISOR", "deviceCategory", "read")).toBe(false);
     expect(hasPermission("TECHNICIAN", "deviceType", "create")).toBe(false);
     expect(hasPermission("FINANCE", "deviceCategory", "delete")).toBe(false);
     expect(hasPermission("CUSTOMER", "deviceType", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER", "deviceModel", "read")).toBe(false);
   });
 });
 

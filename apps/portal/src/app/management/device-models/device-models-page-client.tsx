@@ -11,23 +11,23 @@ import { useUrlQueryState } from "@/hooks/use-url-query-state";
 import { cn } from "@/lib/utils";
 import { AccessDenied } from "../../../components/access-denied";
 import {
-  type CustomerStatus,
-  CustomerEmptyState,
-  CustomerFilters,
-  CustomerTable,
   PageHeader,
-  PaginationBar,
   Surface,
-} from "./customers-ui";
-import { useCustomers } from "./use-customers-query";
+  DeviceModelFilters,
+  DeviceModelTable,
+  DeviceModelEmptyState,
+  PaginationBar,
+} from "./device-models-ui";
+import { useDeviceModels } from "./use-device-models-query";
+import { useDeviceTypes } from "../device-types/use-device-types-query";
 
-const URL_KEYS = ["search", "status", "sortBy", "sortDir", "page", "pageSize"] as const;
+const URL_KEYS = ["search", "deviceTypeId", "sortBy", "sortDir", "page", "pageSize"] as const;
 
-export default function CustomersPageClient() {
+export default function DeviceModelsPageClient() {
   const { capabilities } = useAuthz();
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
-  const status: CustomerStatus | "" = (params.status as CustomerStatus | undefined) ?? "";
+  const deviceTypeId = params.deviceTypeId ?? "";
   const sortBy = params.sortBy ?? "createdAt";
   const sortDir = (params.sortDir as "asc" | "desc" | undefined) ?? "desc";
   const page = Number(params.page) || 1;
@@ -44,24 +44,34 @@ export default function CustomersPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
 
-  const customersQuery = useCustomers({
+  const typesQuery = useDeviceTypes({
+    search: "",
+    categoryId: "",
+    isActive: "",
+    sortBy: "name",
+    sortDir: "asc",
+    page: 1,
+    pageSize: 100,
+  });
+
+  const query = useDeviceModels({
     search: committedSearch,
-    status,
+    deviceTypeId,
     sortBy,
     sortDir,
     page,
     pageSize,
   });
 
-  if (!capabilities?.customerRead) {
+  if (!capabilities?.deviceModelRead) {
     return <AccessDenied />;
   }
 
-  const result = customersQuery.data;
-  const loading = customersQuery.isLoading;
-  const fetching = customersQuery.isFetching && !loading;
-  const forbidden = isForbidden(customersQuery.error);
-  const error = customersQuery.isError && !forbidden ? "Gagal memuat daftar customer." : null;
+  const result = query.data;
+  const loading = query.isLoading;
+  const fetching = query.isFetching && !loading;
+  const forbidden = isForbidden(query.error);
+  const error = query.isError && !forbidden ? "Gagal memuat daftar Device Model." : null;
   const totalPages = result ? Math.max(1, result.totalPages) : 1;
 
   if (forbidden) {
@@ -72,26 +82,28 @@ export default function CustomersPageClient() {
     <div className="w-full px-4 py-6 md:px-6 md:py-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
-          title="Customers"
-          crumbs={[{ href: "/", label: "Dashboard" }, { label: "Customers" }]}
+          title="Device Model"
+          crumbs={[{ href: "/", label: "Dashboard" }, { label: "Device Model" }]}
         />
 
-        {capabilities.customerCreate ? (
+        {capabilities.deviceModelCreate ? (
           <Button asChild className="shrink-0">
-            <Link href="/customers/new">
-              <Plus className="h-4 w-4" />
-              Customer
+            <Link href="/device-models/new">
+              <Plus className="h-4 w-4" /> Device Model
             </Link>
           </Button>
         ) : null}
       </div>
 
       <Surface className={cn("mt-6 p-4 md:p-6", fetching && "opacity-70")}>
-        <CustomerFilters
+        <DeviceModelFilters
           searchInput={searchInput}
           onSearchChange={setSearchInput}
-          status={status}
-          onStatusChange={(next) => setParams({ status: next || undefined, page: undefined })}
+          deviceTypeId={deviceTypeId}
+          onDeviceTypeChange={(next) =>
+            setParams({ deviceTypeId: next || undefined, page: undefined })
+          }
+          deviceTypes={typesQuery.data?.data ?? []}
         />
 
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
@@ -99,14 +111,14 @@ export default function CustomersPageClient() {
         {loading ? (
           <p className="mt-6 text-sm text-slate-400">Memuat…</p>
         ) : result && result.data.length === 0 ? (
-          <CustomerEmptyState
+          <DeviceModelEmptyState
             onClearFilters={
-              committedSearch || status
+              committedSearch || deviceTypeId
                 ? () => {
                     setSearchInput("");
                     setParams({
                       search: undefined,
-                      status: undefined,
+                      deviceTypeId: undefined,
                       page: undefined,
                     });
                   }
@@ -116,7 +128,7 @@ export default function CustomersPageClient() {
         ) : result ? (
           <>
             <div className="mt-4">
-              <CustomerTable customers={result.data} />
+              <DeviceModelTable models={result.data} />
             </div>
             <PaginationBar
               className="mt-4"
@@ -124,7 +136,7 @@ export default function CustomersPageClient() {
               totalPages={totalPages}
               total={result.total}
               pageSize={pageSize}
-              itemLabel="customer"
+              itemLabel="model"
               onPageChange={(next) => setParams({ page: next <= 1 ? undefined : String(next) })}
               onPageSizeChange={(next) =>
                 setParams({ pageSize: next === 10 ? undefined : String(next), page: undefined })

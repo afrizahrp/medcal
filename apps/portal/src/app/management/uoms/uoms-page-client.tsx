@@ -74,17 +74,14 @@ export default function UomsPageClient() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
           title="Unit of Measurement"
-          crumbs={[
-            { href: "/", label: "Dashboard" },
-            { label: "UOM" },
-          ]}
+          crumbs={[{ href: "/", label: "Dashboard" }, { label: "UOM" }]}
         />
 
         {capabilities.uomCreate ? (
           <Button asChild className="shrink-0">
             <Link href="/uoms/new">
               <Plus className="h-4 w-4" />
-              Tambah UOM
+              UOM
             </Link>
           </Button>
         ) : null}

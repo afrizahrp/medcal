@@ -72,6 +72,10 @@ export class MeController {
       deviceTypeCreate: hasPermission(membership.role, "deviceType", "create"),
       deviceTypeUpdate: hasPermission(membership.role, "deviceType", "update"),
       deviceTypeDelete: hasPermission(membership.role, "deviceType", "delete"),
+      deviceModelRead: hasPermission(membership.role, "deviceModel", "read"),
+      deviceModelCreate: hasPermission(membership.role, "deviceModel", "create"),
+      deviceModelUpdate: hasPermission(membership.role, "deviceModel", "update"),
+      deviceModelDelete: hasPermission(membership.role, "deviceModel", "delete"),
     };
 
     return {

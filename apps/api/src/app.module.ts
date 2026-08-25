@@ -17,6 +17,7 @@ import { CalibrationRequestsModule } from "./modules/calibration-requests/calibr
 import { UomsModule } from "./modules/uoms/uoms.module";
 import { DeviceCategoriesModule } from "./modules/device-categories/device-categories.module";
 import { DeviceTypesModule } from "./modules/device-types/device-types.module";
+import { DeviceModelsModule } from "./modules/device-models/device-models.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { DeviceTypesModule } from "./modules/device-types/device-types.module";
     UomsModule,
     DeviceCategoriesModule,
     DeviceTypesModule,
+    DeviceModelsModule,
     WhitelistModule,
     MeModule,
     ChatModule,

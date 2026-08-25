@@ -466,3 +466,37 @@ export const deviceTypeUpdateSchema = z.object({
 });
 
 export type DeviceTypeUpdateInput = z.infer<typeof deviceTypeUpdateSchema>;
+
+// =============================================================================
+// DeviceModel Master Data
+// =============================================================================
+
+/** POST /device-models body */
+export const deviceModelCreateSchema = z.object({
+  deviceTypeId: z.string().min(1),
+  manufacturer: z.string().trim().min(1).max(150),
+  model: z.string().trim().min(1).max(150),
+  description: optionalDescription,
+});
+
+export type DeviceModelCreateInput = z.infer<typeof deviceModelCreateSchema>;
+
+/** GET /device-models query params */
+export const deviceModelListQuerySchema = baseListQuerySchema.extend({
+  deviceTypeId: z.string().min(1).optional(),
+});
+
+export type DeviceModelListQuery = z.infer<typeof deviceModelListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /device-models — see resolveSortOrder. */
+export const DEVICE_MODEL_SORTABLE_FIELDS = ["createdAt", "manufacturer", "model"] as const;
+
+/** PATCH /device-models/:id body */
+export const deviceModelUpdateSchema = z.object({
+  deviceTypeId: z.string().min(1).optional(),
+  manufacturer: z.string().trim().min(1).max(150).optional(),
+  model: z.string().trim().min(1).max(150).optional(),
+  description: z.string().max(500).nullable().optional(),
+});
+
+export type DeviceModelUpdateInput = z.infer<typeof deviceModelUpdateSchema>;

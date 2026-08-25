@@ -901,9 +901,29 @@ model DeviceType {
   updatedAt   DateTime @updatedAt
 
   category DeviceCategory @relation(fields: [categoryId], references: [id])
+  models   DeviceModel[]
 
   @@index([categoryId])
   @@index([isActive])
+}
+
+// Product/model master under a DeviceType — manufacturer is a plain string
+// this phase (not a DeviceManufacturer entity). Unique per
+// (deviceTypeId, manufacturer, model); the same model name may exist under
+// a different DeviceType. Do not FK Device to this model yet.
+model DeviceModel {
+  id           String   @id @default(cuid())
+  deviceTypeId String
+  manufacturer String
+  model        String
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  deviceType DeviceType @relation(fields: [deviceTypeId], references: [id])
+
+  @@unique([deviceTypeId, manufacturer, model])
+  @@index([deviceTypeId])
 }
 
 model Device {

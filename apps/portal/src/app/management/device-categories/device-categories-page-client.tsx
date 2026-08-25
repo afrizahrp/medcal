@@ -71,17 +71,14 @@ export default function DeviceCategoriesPageClient() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
           title="Device Category"
-          crumbs={[
-            { href: "/", label: "Dashboard" },
-            { label: "Device Category" },
-          ]}
+          crumbs={[{ href: "/", label: "Dashboard" }, { label: "Device Category" }]}
         />
 
         {capabilities.deviceCategoryCreate ? (
           <Button asChild className="shrink-0">
             <Link href="/device-categories/new">
               <Plus className="h-4 w-4" />
-              Tambah Kategori
+              Device Category
             </Link>
           </Button>
         ) : null}

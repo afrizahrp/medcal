@@ -44,6 +44,10 @@ const ME_A = {
     deviceTypeCreate: true,
     deviceTypeUpdate: true,
     deviceTypeDelete: true,
+    deviceModelRead: true,
+    deviceModelCreate: true,
+    deviceModelUpdate: true,
+    deviceModelDelete: true,
   },
 };
 
@@ -71,6 +75,10 @@ const ME_B = {
     deviceTypeCreate: false,
     deviceTypeUpdate: false,
     deviceTypeDelete: false,
+    deviceModelRead: false,
+    deviceModelCreate: false,
+    deviceModelUpdate: false,
+    deviceModelDelete: false,
   },
 };
 
