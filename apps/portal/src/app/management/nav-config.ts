@@ -10,7 +10,10 @@ export type ManagementNavIcon =
   | "permission"
   | "calibration"
   | "customer"
-  | "settings";
+  | "settings"
+  | "device"
+  | "folderTree"
+  | "tags";
 
 export interface NavItem {
   label: string;

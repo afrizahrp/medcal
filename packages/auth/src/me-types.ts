@@ -14,6 +14,14 @@ export type MeCapabilities = {
   uomRead: boolean;
   uomCreate: boolean;
   uomUpdate: boolean;
+  deviceCategoryRead: boolean;
+  deviceCategoryCreate: boolean;
+  deviceCategoryUpdate: boolean;
+  deviceCategoryDelete: boolean;
+  deviceTypeRead: boolean;
+  deviceTypeCreate: boolean;
+  deviceTypeUpdate: boolean;
+  deviceTypeDelete: boolean;
 };
 
 export type MeUser = {

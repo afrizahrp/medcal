@@ -15,6 +15,8 @@ import { PushTokensModule } from "./modules/push-tokens/push-tokens.module";
 import { CustomersModule } from "./modules/customers/customers.module";
 import { CalibrationRequestsModule } from "./modules/calibration-requests/calibration-requests.module";
 import { UomsModule } from "./modules/uoms/uoms.module";
+import { DeviceCategoriesModule } from "./modules/device-categories/device-categories.module";
+import { DeviceTypesModule } from "./modules/device-types/device-types.module";
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { UomsModule } from "./modules/uoms/uoms.module";
     CustomersModule,
     CalibrationRequestsModule,
     UomsModule,
+    DeviceCategoriesModule,
+    DeviceTypesModule,
     WhitelistModule,
     MeModule,
     ChatModule,

@@ -64,6 +64,14 @@ export class MeController {
       uomRead: hasPermission(membership.role, "uom", "read"),
       uomCreate: hasPermission(membership.role, "uom", "create"),
       uomUpdate: hasPermission(membership.role, "uom", "update"),
+      deviceCategoryRead: hasPermission(membership.role, "deviceCategory", "read"),
+      deviceCategoryCreate: hasPermission(membership.role, "deviceCategory", "create"),
+      deviceCategoryUpdate: hasPermission(membership.role, "deviceCategory", "update"),
+      deviceCategoryDelete: hasPermission(membership.role, "deviceCategory", "delete"),
+      deviceTypeRead: hasPermission(membership.role, "deviceType", "read"),
+      deviceTypeCreate: hasPermission(membership.role, "deviceType", "create"),
+      deviceTypeUpdate: hasPermission(membership.role, "deviceType", "update"),
+      deviceTypeDelete: hasPermission(membership.role, "deviceType", "delete"),
     };
 
     return {

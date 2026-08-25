@@ -36,6 +36,8 @@ import type { MembershipRole } from "@medcal/db";
  *   SUPERADMIN-only by default (see hasPermission's hardcoded bypass) —
  *   granting it to another role is a deliberate, explicit admin action, not
  *   something this catalog entry does on its own.
+ * - deviceCategory/deviceType:read/create/update/delete (Device taxonomy):
+ *   Kemenkes-confirmed DeviceType list grouped by internal DeviceCategory.
  */
 const ac = createAccessControl({
   contactMessage: ["read"],
@@ -43,6 +45,8 @@ const ac = createAccessControl({
   lead: ["read", "update", "assign"],
   customer: ["read", "create", "update"],
   uom: ["read", "create", "update"],
+  deviceCategory: ["read", "create", "update", "delete"],
+  deviceType: ["read", "create", "update", "delete"],
   chat: ["read", "reply", "close"],
   users: ["read", "manage"],
   membership: ["manage"],

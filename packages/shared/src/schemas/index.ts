@@ -393,3 +393,76 @@ export const uomUpdateSchema = z.object({
 });
 
 export type UomUpdateInput = z.infer<typeof uomUpdateSchema>;
+
+// =============================================================================
+// DeviceCategory & DeviceType Master Data
+// =============================================================================
+
+const optionalDescription = z.string().max(500).optional();
+
+/** POST /device-categories body */
+export const deviceCategoryCreateSchema = z.object({
+  code: z.string().min(1).max(64).toUpperCase(),
+  name: z.string().min(1).max(150),
+  description: optionalDescription,
+});
+
+export type DeviceCategoryCreateInput = z.infer<typeof deviceCategoryCreateSchema>;
+
+/** GET /device-categories query params */
+export const deviceCategoryListQuerySchema = baseListQuerySchema.extend({
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type DeviceCategoryListQuery = z.infer<typeof deviceCategoryListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /device-categories — see resolveSortOrder. */
+export const DEVICE_CATEGORY_SORTABLE_FIELDS = ["createdAt", "code", "name"] as const;
+
+/** PATCH /device-categories/:id body */
+export const deviceCategoryUpdateSchema = z.object({
+  code: z.string().min(1).max(64).toUpperCase().optional(),
+  name: z.string().min(1).max(150).optional(),
+  description: z.string().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type DeviceCategoryUpdateInput = z.infer<typeof deviceCategoryUpdateSchema>;
+
+/** POST /device-types body */
+export const deviceTypeCreateSchema = z.object({
+  categoryId: z.string().min(1),
+  code: z.string().min(1).max(64).toUpperCase(),
+  name: z.string().min(1).max(150),
+  description: optionalDescription,
+});
+
+export type DeviceTypeCreateInput = z.infer<typeof deviceTypeCreateSchema>;
+
+/** GET /device-types query params */
+export const deviceTypeListQuerySchema = baseListQuerySchema.extend({
+  categoryId: z.string().min(1).optional(),
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type DeviceTypeListQuery = z.infer<typeof deviceTypeListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /device-types — see resolveSortOrder. */
+export const DEVICE_TYPE_SORTABLE_FIELDS = ["createdAt", "code", "name"] as const;
+
+/** PATCH /device-types/:id body */
+export const deviceTypeUpdateSchema = z.object({
+  categoryId: z.string().min(1).optional(),
+  code: z.string().min(1).max(64).toUpperCase().optional(),
+  name: z.string().min(1).max(150).optional(),
+  description: z.string().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type DeviceTypeUpdateInput = z.infer<typeof deviceTypeUpdateSchema>;

@@ -44,6 +44,14 @@ const FIXTURE: GrantRow[] = [
   { role: "ADMIN", resource: "uom", action: "read" },
   { role: "ADMIN", resource: "uom", action: "create" },
   { role: "ADMIN", resource: "uom", action: "update" },
+  { role: "ADMIN", resource: "deviceCategory", action: "read" },
+  { role: "ADMIN", resource: "deviceCategory", action: "create" },
+  { role: "ADMIN", resource: "deviceCategory", action: "update" },
+  { role: "ADMIN", resource: "deviceCategory", action: "delete" },
+  { role: "ADMIN", resource: "deviceType", action: "read" },
+  { role: "ADMIN", resource: "deviceType", action: "create" },
+  { role: "ADMIN", resource: "deviceType", action: "update" },
+  { role: "ADMIN", resource: "deviceType", action: "delete" },
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   { role: "SUPERVISOR", resource: "users", action: "read" },
   { role: "SUPERVISOR", resource: "membership", action: "manage" },
@@ -129,6 +137,26 @@ describe("hasPermission — uom resource (UOM master data)", () => {
     expect(hasPermission("TECHNICIAN", "uom", "create")).toBe(false);
     expect(hasPermission("FINANCE", "uom", "read")).toBe(false);
     expect(hasPermission("CUSTOMER", "uom", "read")).toBe(false);
+  });
+});
+
+describe("hasPermission — deviceCategory / deviceType master data", () => {
+  it("grants ADMIN read/create/update/delete on both resources", () => {
+    expect(hasPermission("ADMIN", "deviceCategory", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCategory", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCategory", "update")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCategory", "delete")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceType", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceType", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceType", "update")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceType", "delete")).toBe(true);
+  });
+
+  it("denies roles with no deviceCategory / deviceType grant", () => {
+    expect(hasPermission("SUPERVISOR", "deviceCategory", "read")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "deviceType", "create")).toBe(false);
+    expect(hasPermission("FINANCE", "deviceCategory", "delete")).toBe(false);
+    expect(hasPermission("CUSTOMER", "deviceType", "read")).toBe(false);
   });
 });
 

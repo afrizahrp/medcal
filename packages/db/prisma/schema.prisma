@@ -872,6 +872,40 @@ model CustomerContact {
 // Devices & Request
 // =============================================================================
 
+// Device taxonomy master data — global (no companyId), same convention as Uom.
+// DeviceCategory is an internal domain grouping; DeviceType.name is the
+// confirmed Kemenkes capability list (35 types). Device.category remains a
+// free-text snapshot this phase — do not FK Device to these models yet.
+model DeviceCategory {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  types DeviceType[]
+
+  @@index([isActive])
+}
+
+model DeviceType {
+  id          String   @id @default(cuid())
+  categoryId  String
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category DeviceCategory @relation(fields: [categoryId], references: [id])
+
+  @@index([categoryId])
+  @@index([isActive])
+}
+
 model Device {
   id           String       @id @default(cuid())
   companyId    String

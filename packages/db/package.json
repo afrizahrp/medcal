@@ -14,7 +14,8 @@
     "seed:contact-topics": "tsx prisma/seed-contact-topics.ts",
     "seed:menu": "tsx prisma/seed-menu.ts",
     "seed:role-permissions": "tsx prisma/seed-role-permissions.ts",
-    "seed:uoms": "tsx prisma/seed-uoms.ts"
+    "seed:uoms": "tsx prisma/seed-uoms.ts",
+    "seed:device-types": "tsx prisma/seed-device-types.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0"

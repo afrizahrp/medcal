@@ -84,14 +84,48 @@ const ROWS: MenuSeedRow[] = [
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Calibration Management (group) → order: 2
+  // Device Management (group) → order: 2
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    application: "MANAGEMENT",
+    code: "device-management",
+    label: "Device Management",
+    icon: "device",
+    order: 2,
+    isGroup: true,
+  },
+  {
+    application: "MANAGEMENT",
+    code: "device-management.categories",
+    parentCode: "device-management",
+    label: "Categories",
+    href: "/device-categories",
+    icon: "folderTree",
+    order: 0,
+    viewResource: "deviceCategory",
+    viewAction: "read",
+  },
+  {
+    application: "MANAGEMENT",
+    code: "device-management.types",
+    parentCode: "device-management",
+    label: "Types",
+    href: "/device-types",
+    icon: "tags",
+    order: 1,
+    viewResource: "deviceType",
+    viewAction: "read",
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Calibration Management (group) → order: 3
   // ─────────────────────────────────────────────────────────────────────────
   {
     application: "MANAGEMENT",
     code: "calibration-management",
     label: "Calibration Management",
     icon: "calibration",
-    order: 2,
+    order: 3,
     isGroup: true,
   },
   {
@@ -118,14 +152,14 @@ const ROWS: MenuSeedRow[] = [
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // User Management (group) → order: 3
+  // User Management (group) → order: 4
   // ─────────────────────────────────────────────────────────────────────────
   {
     application: "MANAGEMENT",
     code: "user-management",
     label: "User Management",
     icon: "users",
-    order: 3,
+    order: 4,
     isGroup: true,
   },
   {
@@ -163,14 +197,14 @@ const ROWS: MenuSeedRow[] = [
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // System Setting (group) → order: 4
+  // System Setting (group) → order: 5
   // ─────────────────────────────────────────────────────────────────────────
   {
     application: "MANAGEMENT",
     code: "system-setting",
     label: "System Setting",
     icon: "settings",
-    order: 4,
+    order: 5,
     isGroup: true,
   },
   {
@@ -231,6 +265,8 @@ const DEPRECATED_CODES: Array<{ application: MenuApplication; code: string }> = 
   { application: "MANAGEMENT", code: "permission-management" },
   { application: "MANAGEMENT", code: "master-data.uom" },
   { application: "MANAGEMENT", code: "master-data" },
+  { application: "MANAGEMENT", code: "system-setting.device-categories" },
+  { application: "MANAGEMENT", code: "system-setting.device-types" },
 ];
 
 async function seedMenu() {

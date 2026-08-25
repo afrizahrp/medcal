@@ -1,4 +1,5 @@
 import type { SVGProps } from "react";
+import { FolderTree, Tags } from "lucide-react";
 import type { ManagementNavIcon } from "../../app/management/nav-config";
 
 type IconProps = SVGProps<SVGSVGElement>;
@@ -203,6 +204,18 @@ export function CustomerIcon(props: IconProps) {
   );
 }
 
+export function DeviceIcon(props: IconProps) {
+  return (
+    <svg {...baseProps(props)}>
+      <rect x="5" y="3" width="14" height="12" rx="2" />
+      <path d="M8 21h8" />
+      <path d="M12 15v6" />
+      <path d="M8 7h.01" />
+      <path d="M8 10h5" />
+    </svg>
+  );
+}
+
 export function SettingsIcon(props: IconProps) {
   return (
     <svg {...baseProps(props)}>
@@ -246,6 +259,12 @@ export function NavIcon({
       return <CustomerIcon {...props} />;
     case "settings":
       return <SettingsIcon {...props} />;
+    case "device":
+      return <DeviceIcon {...props} />;
+    case "folderTree":
+      return <FolderTree {...props} />;
+    case "tags":
+      return <Tags {...props} />;
     default:
       return null;
   }
