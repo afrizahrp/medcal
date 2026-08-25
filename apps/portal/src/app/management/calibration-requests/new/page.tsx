@@ -3,11 +3,23 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Save, Trash2 } from "lucide-react";
+import { format } from "date-fns";
+import { id as localeId } from "date-fns/locale";
+import { CalendarIcon, Check, ChevronsUpDown, Plus, Save, Trash2 } from "lucide-react";
 import { ApiError } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AccessDenied } from "../../../../components/access-denied";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import {
   PageHeader,
   Surface,
@@ -27,17 +39,17 @@ interface ItemInput {
   notes: string;
 }
 
-const emptyItem: ItemInput = { deviceId: "", notes: "" };
-
 export default function NewCalibrationRequestPage() {
   const router = useRouter();
   const createMutation = useCreateCalibrationRequest();
 
   const [customerId, setCustomerId] = useState("");
+  const [customerOpen, setCustomerOpen] = useState(false);
   const [serviceMode, setServiceMode] = useState<ServiceMode>("ON_SITE");
-  const [desiredScheduleNote, setDesiredScheduleNote] = useState("");
+  const [desiredDate, setDesiredDate] = useState<Date | undefined>(undefined);
+  const [dateOpen, setDateOpen] = useState(false);
   const [notes, setNotes] = useState("");
-  const [items, setItems] = useState<ItemInput[]>([{ ...emptyItem }]);
+  const [items, setItems] = useState<ItemInput[]>([{ deviceId: "", notes: "" }]);
   const [error, setError] = useState<string | null>(null);
 
   const customersQuery = useCustomers({
@@ -50,9 +62,10 @@ export default function NewCalibrationRequestPage() {
   });
 
   const customers = customersQuery.data?.data ?? [];
+  const selectedCustomer = customers.find((c) => c.id === customerId);
 
   function addItem() {
-    setItems((prev) => [...prev, { ...emptyItem }]);
+    setItems((prev) => [...prev, { deviceId: "", notes: "" }]);
   }
 
   function removeItem(index: number) {
@@ -60,9 +73,7 @@ export default function NewCalibrationRequestPage() {
   }
 
   function updateItem(index: number, field: keyof ItemInput, value: string) {
-    setItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
-    );
+    setItems((prev) => prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)));
   }
 
   async function submit(e: React.FormEvent) {
@@ -84,7 +95,7 @@ export default function NewCalibrationRequestPage() {
       const result = await createMutation.mutateAsync({
         customerId,
         serviceMode,
-        desiredScheduleNote: desiredScheduleNote.trim() || undefined,
+        expectedDate: desiredDate,
         notes: notes.trim() || undefined,
         items: validItems.map((item) => ({
           deviceId: item.deviceId.trim(),
@@ -121,140 +132,225 @@ export default function NewCalibrationRequestPage() {
 
       <form onSubmit={submit}>
         <Surface className={formSurfaceClass}>
-          {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
+          {error ? (
+            <div className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          ) : null}
 
-          <div className="space-y-5">
-            <section className="space-y-3">
-              <h2 className="text-sm font-semibold text-slate-900">Request Information</h2>
+          <div className="space-y-6">
+            <section className="space-y-4">
+              <h2 className="text-base font-semibold text-slate-900">Request Information</h2>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700">
-                  Customer <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                  className={`${selectClassName} mt-1 w-full`}
-                  required
-                >
-                  <option value="">Pilih customer…</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.number})
-                    </option>
-                  ))}
-                </select>
-                {customersQuery.isLoading ? (
-                  <p className="mt-1 text-xs text-slate-400">Memuat customer…</p>
-                ) : null}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Customer <span className="text-red-500">*</span>
+                  </label>
+                  <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={customerOpen}
+                        className="w-full justify-between font-normal"
+                      >
+                        {selectedCustomer ? (
+                          <span className="truncate">
+                            {selectedCustomer.name}{" "}
+                            <span className="text-slate-400">({selectedCustomer.number})</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">Pilih customer…</span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Cari customer…" />
+                        <CommandList>
+                          <CommandEmpty>
+                            {customersQuery.isLoading ? "Memuat…" : "Customer tidak ditemukan."}
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {customers.map((customer) => (
+                              <CommandItem
+                                key={customer.id}
+                                value={`${customer.name} ${customer.number}`}
+                                onSelect={() => {
+                                  setCustomerId(customer.id);
+                                  setCustomerOpen(false);
+                                  setItems([{ deviceId: "", notes: "" }]);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    customerId === customer.id ? "opacity-100" : "opacity-0",
+                                  )}
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate font-medium">{customer.name}</p>
+                                  <p className="truncate text-xs text-slate-500">
+                                    {customer.number}
+                                  </p>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Service Mode <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={serviceMode}
+                    onChange={(e) => setServiceMode(e.target.value as ServiceMode)}
+                    className={cn(selectClassName, "w-full")}
+                    required
+                  >
+                    {SERVICE_MODE_OPTIONS.map((mode) => (
+                      <option key={mode} value={mode}>
+                        {SERVICE_MODE_LABELS[mode]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Expected Date
+                  </label>
+                  <Popover open={dateOpen} onOpenChange={setDateOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start font-normal",
+                          !desiredDate && "text-slate-400",
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {desiredDate
+                          ? format(desiredDate, "PPP", { locale: localeId })
+                          : "Pilih tanggal…"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={desiredDate}
+                        onSelect={(date) => {
+                          setDesiredDate(date);
+                          setDateOpen(false);
+                        }}
+                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                        captionLayout="dropdown"
+                        startMonth={new Date(2020, 0)}
+                        endMonth={new Date(2030, 11)}
+                        autoFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="md:col-span-1" />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700">
-                  Service Mode <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={serviceMode}
-                  onChange={(e) => setServiceMode(e.target.value as ServiceMode)}
-                  className={`${selectClassName} mt-1 w-full`}
-                  required
-                >
-                  {SERVICE_MODE_OPTIONS.map((mode) => (
-                    <option key={mode} value={mode}>
-                      {SERVICE_MODE_LABELS[mode]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700">
-                  Desired Schedule Note
-                </label>
-                <Input
-                  value={desiredScheduleNote}
-                  onChange={(e) => setDesiredScheduleNote(e.target.value)}
-                  placeholder="e.g., ASAP, Next week, etc."
-                  className="mt-1 w-full"
-                  maxLength={500}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Notes</label>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Notes</label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className={`${selectClassName} mt-1 min-h-[72px] w-full`}
+                  className={cn(selectClassName, "min-h-[80px] w-full")}
                   placeholder="Additional notes…"
                   maxLength={2000}
                 />
               </div>
             </section>
 
-            <section className="space-y-3 border-t border-slate-100 pt-5">
+            <section className="space-y-4 border-t border-slate-100 pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-900">Devices</h2>
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    Add devices to calibrate. Enter device IDs from the customer's device
-                    list.
+                  <h2 className="text-base font-semibold text-slate-900">Devices</h2>
+                  <p className="mt-0.5 text-sm text-slate-500">
+                    {customerId
+                      ? "Enter device IDs for calibration."
+                      : "Select a customer first to add devices."}
                   </p>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={addItem}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addItem}
+                  disabled={!customerId}
+                >
                   <Plus className="h-4 w-4" />
                   Add Device
                 </Button>
               </div>
 
-              <div className="space-y-3">
-                {items.map((item, index) => (
-                  <div
-                    key={index}
-                    className="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
-                  >
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1 space-y-2">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600">
-                            Device ID <span className="text-red-500">*</span>
-                          </label>
-                          <Input
-                            value={item.deviceId}
-                            onChange={(e) => updateItem(index, "deviceId", e.target.value)}
-                            placeholder="Enter device ID"
-                            className="mt-1"
-                            required={index === 0}
-                          />
+              {!customerId ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                  Select a customer to add devices for calibration.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {items.map((item, index) => (
+                    <div
+                      key={index}
+                      className="rounded-lg border border-slate-200 bg-slate-50/50 p-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 grid gap-3 md:grid-cols-2">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Device ID <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              value={item.deviceId}
+                              onChange={(e) => updateItem(index, "deviceId", e.target.value)}
+                              placeholder="Enter device ID"
+                              required={index === 0}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Notes
+                            </label>
+                            <Input
+                              value={item.notes}
+                              onChange={(e) => updateItem(index, "notes", e.target.value)}
+                              placeholder="Notes for this device…"
+                              maxLength={1000}
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600">
-                            Notes
-                          </label>
-                          <Input
-                            value={item.notes}
-                            onChange={(e) => updateItem(index, "notes", e.target.value)}
-                            placeholder="Notes for this device…"
-                            className="mt-1"
-                            maxLength={1000}
-                          />
-                        </div>
+                        {items.length > 1 ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="mt-5 h-9 w-9 shrink-0 text-slate-400 hover:text-red-600"
+                            onClick={() => removeItem(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <div className="mt-5 h-9 w-9" />
+                        )}
                       </div>
-                      {items.length > 1 ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 shrink-0 text-slate-400 hover:text-red-600"
-                          onClick={() => removeItem(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      ) : null}
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </section>
           </div>
 

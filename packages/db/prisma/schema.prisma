@@ -868,17 +868,26 @@ model Device {
 }
 
 model CalibrationRequest {
-  id                  String                   @id @default(cuid())
-  companyId           String
-  customerId          String
-  number              String
-  leadId              String?
-  serviceMode         ServiceMode
+  id         String                   @id @default(cuid())
+  companyId  String
+  customerId String
+  number     String
+  leadId     String?
+  serviceMode ServiceMode
+
+  /// The date expected/requested by the customer for calibration service.
+  /// This is the canonical scheduling field for CalibrationRequest.
+  expectedDate DateTime? @db.Date
+
+  /// @deprecated Use `expectedDate` instead.
+  /// This field is retained for backward compatibility with existing data.
+  /// Do not use in new code. Will be removed in a future cleanup revision.
   desiredScheduleNote String?
-  status              CalibrationRequestStatus @default(DRAFT)
-  notes               String?
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
+
+  status    CalibrationRequestStatus @default(DRAFT)
+  notes     String?
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)

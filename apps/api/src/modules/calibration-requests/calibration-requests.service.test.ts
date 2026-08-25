@@ -96,15 +96,16 @@ describe("CalibrationRequestsService.create", () => {
     expect(result.items[0]?.notes).toBe("Test notes");
   });
 
-  it("creates CalibrationRequest with multiple items", async () => {
+  it("creates CalibrationRequest with multiple items and expectedDate", async () => {
     const customer = await createTestCustomer(realCompanyId);
     const device1 = await createTestDevice(realCompanyId, customer.id);
     const device2 = await createTestDevice(realCompanyId, customer.id);
 
+    const expectedDate = new Date("2026-12-01");
     const result = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "SEND_TO_LAB",
-      desiredScheduleNote: "ASAP",
+      expectedDate,
       notes: "Urgent calibration",
       items: [
         { deviceId: device1.id, notes: "Item 1" },
@@ -115,8 +116,22 @@ describe("CalibrationRequestsService.create", () => {
 
     expect(result.items).toHaveLength(2);
     expect(result.serviceMode).toBe("SEND_TO_LAB");
-    expect(result.desiredScheduleNote).toBe("ASAP");
+    expect(result.expectedDate).toEqual(expectedDate);
     expect(result.notes).toBe("Urgent calibration");
+  });
+
+  it("creates CalibrationRequest without expectedDate", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const device = await createTestDevice(realCompanyId, customer.id);
+
+    const result = await service.create(realCompanyId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceId: device.id }],
+    });
+    createdCalibrationRequestIds.push(result.id);
+
+    expect(result.expectedDate).toBeNull();
   });
 
   it("rejects creation with non-existent customer", async () => {
@@ -204,15 +219,38 @@ describe("CalibrationRequestsService.update", () => {
     });
     createdCalibrationRequestIds.push(created.id);
 
+    const expectedDate = new Date("2026-12-15");
     const updated = await service.update(realCompanyId, created.id, {
       serviceMode: "SEND_TO_LAB",
       notes: "Updated notes",
-      desiredScheduleNote: "Next week",
+      expectedDate,
     });
 
     expect(updated.serviceMode).toBe("SEND_TO_LAB");
     expect(updated.notes).toBe("Updated notes");
-    expect(updated.desiredScheduleNote).toBe("Next week");
+    expect(updated.expectedDate).toEqual(expectedDate);
+  });
+
+  it("updates expectedDate to null", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const device = await createTestDevice(realCompanyId, customer.id);
+
+    const expectedDate = new Date("2026-12-20");
+    const created = await service.create(realCompanyId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      expectedDate,
+      items: [{ deviceId: device.id }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+
+    expect(created.expectedDate).toEqual(expectedDate);
+
+    const updated = await service.update(realCompanyId, created.id, {
+      expectedDate: null,
+    });
+
+    expect(updated.expectedDate).toBeNull();
   });
 
   it("updates items by replacing them", async () => {

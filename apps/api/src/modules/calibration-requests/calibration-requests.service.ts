@@ -78,7 +78,7 @@ export class CalibrationRequestsService {
           number,
           leadId: input.leadId,
           serviceMode: input.serviceMode,
-          desiredScheduleNote: input.desiredScheduleNote,
+          expectedDate: input.expectedDate,
           status: "DRAFT",
           notes: input.notes,
         },
@@ -238,9 +238,7 @@ export class CalibrationRequestsService {
           ...(input.customerId !== undefined ? { customerId: input.customerId } : {}),
           ...(input.leadId !== undefined ? { leadId: input.leadId } : {}),
           ...(input.serviceMode !== undefined ? { serviceMode: input.serviceMode } : {}),
-          ...(input.desiredScheduleNote !== undefined
-            ? { desiredScheduleNote: input.desiredScheduleNote }
-            : {}),
+          ...(input.expectedDate !== undefined ? { expectedDate: input.expectedDate } : {}),
           ...(input.notes !== undefined ? { notes: input.notes } : {}),
         },
       });

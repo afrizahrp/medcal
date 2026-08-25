@@ -163,9 +163,14 @@ export default function CalibrationRequestDetailPage() {
             </DetailField>
           </div>
 
-          {request.desiredScheduleNote ? (
-            <DetailField label="Desired Schedule">
-              {request.desiredScheduleNote}
+          {request.expectedDate ? (
+            <DetailField label="Expected Date">
+              {new Date(request.expectedDate).toLocaleDateString("id-ID", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
             </DetailField>
           ) : null}
 

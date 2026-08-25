@@ -45,7 +45,8 @@ export interface CalibrationRequestRow {
   number: string;
   leadId: string | null;
   serviceMode: ServiceMode;
-  desiredScheduleNote: string | null;
+  /** The date expected/requested by the customer for calibration service. */
+  expectedDate: string | null;
   status: CalibrationRequestStatus;
   notes: string | null;
   createdAt: string;
@@ -93,9 +94,9 @@ const STATUS_BADGE_CLASS: Record<CalibrationRequestStatus, string> = {
   FULFILLED: "border-transparent bg-emerald-600 text-white hover:bg-emerald-600",
 };
 
-export const formPageClass = "mx-auto w-full max-w-[1000px] px-4 py-5 md:px-6";
-export const formSurfaceClass = "mt-5 p-4 md:p-5";
-export const formActionsClass = "mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3";
+export const formPageClass = "mx-auto w-full max-w-[1400px] px-4 py-5 md:px-6 lg:px-8";
+export const formSurfaceClass = "mt-5 p-5 md:p-6";
+export const formActionsClass = "mt-4 flex justify-end gap-3 border-t border-slate-100 pt-4";
 
 export { PageHeader, Surface, selectClassName, PaginationBar };
 

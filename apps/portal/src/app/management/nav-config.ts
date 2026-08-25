@@ -7,7 +7,10 @@ export type ManagementNavIcon =
   | "users"
   | "whitelist"
   | "menu"
-  | "permission";
+  | "permission"
+  | "calibration"
+  | "customer"
+  | "settings";
 
 export interface NavItem {
   label: string;

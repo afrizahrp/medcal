@@ -303,7 +303,8 @@ export const calibrationRequestCreateSchema = z.object({
   customerId: z.string().min(1),
   leadId: z.string().min(1).optional(),
   serviceMode: z.enum(serviceModeValues),
-  desiredScheduleNote: z.string().max(500).optional(),
+  /** The date expected/requested by the customer for calibration service. */
+  expectedDate: z.coerce.date().optional(),
   notes: z.string().max(2000).optional(),
   items: z.array(calibrationRequestItemInputSchema).min(1),
 });
@@ -330,7 +331,8 @@ export const calibrationRequestUpdateSchema = z.object({
   customerId: z.string().min(1).optional(),
   leadId: z.string().min(1).nullable().optional(),
   serviceMode: z.enum(serviceModeValues).optional(),
-  desiredScheduleNote: z.string().max(500).nullable().optional(),
+  /** The date expected/requested by the customer for calibration service. */
+  expectedDate: z.coerce.date().nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
   items: z.array(calibrationRequestItemInputSchema).min(1).optional(),
 });

@@ -68,6 +68,8 @@ const ac = createAccessControl({
   certificate: ["read", "create", "update", "issue"],
   invoice: ["read", "create", "update", "void"],
   payment: ["read", "create", "update", "reconcile"],
+  // System Settings
+  tax: ["manage"],
 } as const);
 
 /**

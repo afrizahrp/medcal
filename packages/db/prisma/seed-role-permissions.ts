@@ -43,6 +43,13 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "ADMIN", resource: "email", action: "send" },
   { role: "ADMIN", resource: "email", action: "delete" },
   { role: "ADMIN", resource: "email", action: "manage" },
+  // Calibration Management (2026-08-25)
+  { role: "ADMIN", resource: "calibrationRequest", action: "read" },
+  { role: "ADMIN", resource: "calibrationRequest", action: "create" },
+  { role: "ADMIN", resource: "calibrationRequest", action: "update" },
+  { role: "ADMIN", resource: "calibrationRequest", action: "cancel" },
+  // System Settings (2026-08-26)
+  { role: "ADMIN", resource: "tax", action: "manage" },
   // SUPERVISOR
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   // TECHNICIAN

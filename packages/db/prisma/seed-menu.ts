@@ -22,7 +22,11 @@ interface MenuSeedRow {
 }
 
 const ROWS: MenuSeedRow[] = [
-  // MANAGEMENT — mirrors apps/portal/src/app/management/nav-config.ts
+  // ══════════════════════════════════════════════════════════════════════════
+  // MANAGEMENT — apps/portal/src/app/management/
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Dashboard (root leaf)
   {
     application: "MANAGEMENT",
     code: "dashboard",
@@ -33,6 +37,10 @@ const ROWS: MenuSeedRow[] = [
     viewResource: "managementDashboard",
     viewAction: "read",
   },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Leads (group) → order: 1
+  // ─────────────────────────────────────────────────────────────────────────
   {
     application: "MANAGEMENT",
     code: "leads",
@@ -71,61 +79,126 @@ const ROWS: MenuSeedRow[] = [
     href: "/email",
     icon: "email",
     order: 2,
-    isActive: true,
     viewResource: "email",
     viewAction: "read",
   },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Calibration Management (group) → order: 2
+  // ─────────────────────────────────────────────────────────────────────────
   {
     application: "MANAGEMENT",
-    code: "customers",
-    label: "Customers",
-    href: "/customers",
-    icon: "users",
+    code: "calibration-management",
+    label: "Calibration Management",
+    icon: "calibration",
     order: 2,
+    isGroup: true,
+  },
+  {
+    application: "MANAGEMENT",
+    code: "calibration-management.customers",
+    parentCode: "calibration-management",
+    label: "Customer",
+    href: "/customers",
+    icon: "customer",
+    order: 0,
     viewResource: "customer",
     viewAction: "read",
   },
   {
     application: "MANAGEMENT",
-    code: "users",
-    label: "Users",
-    href: "/users",
+    code: "calibration-management.calibration-requests",
+    parentCode: "calibration-management",
+    label: "Calibration Request",
+    href: "/calibration-requests",
+    icon: "calibration",
+    order: 1,
+    viewResource: "calibrationRequest",
+    viewAction: "read",
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // User Management (group) → order: 3
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    application: "MANAGEMENT",
+    code: "user-management",
+    label: "User Management",
     icon: "users",
     order: 3,
+    isGroup: true,
+  },
+  {
+    application: "MANAGEMENT",
+    code: "user-management.users",
+    parentCode: "user-management",
+    label: "User",
+    href: "/users",
+    icon: "users",
+    order: 0,
     viewResource: "users",
     viewAction: "read",
   },
   {
     application: "MANAGEMENT",
-    code: "whitelist",
+    code: "user-management.whitelist",
+    parentCode: "user-management",
     label: "Whitelist",
     href: "/whitelist",
     icon: "whitelist",
-    order: 4,
+    order: 1,
     viewResource: "whitelist",
     viewAction: "manage",
   },
   {
     application: "MANAGEMENT",
-    code: "menu-management",
-    label: "Menu Management",
+    code: "user-management.permission-management",
+    parentCode: "user-management",
+    label: "Permission",
+    href: "/permission-management",
+    icon: "permission",
+    order: 2,
+    viewResource: "permission",
+    viewAction: "manage",
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // System Setting (group) → order: 4
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    application: "MANAGEMENT",
+    code: "system-setting",
+    label: "System Setting",
+    icon: "settings",
+    order: 4,
+    isGroup: true,
+  },
+  {
+    application: "MANAGEMENT",
+    code: "system-setting.menu-management",
+    parentCode: "system-setting",
+    label: "Menu",
     href: "/menu-management",
     icon: "menu",
-    order: 5,
+    order: 0,
     viewResource: "menu",
     viewAction: "manage",
   },
   {
     application: "MANAGEMENT",
-    code: "permission-management",
-    label: "Permission Management",
-    href: "/permission-management",
-    icon: "permission",
-    order: 6,
-    viewResource: "permission",
+    code: "system-setting.tax",
+    parentCode: "system-setting",
+    label: "Tax",
+    href: "/tax",
+    icon: "settings",
+    order: 1,
+    viewResource: "tax",
     viewAction: "manage",
   },
-  // CUSTOMER — mirrors apps/portal/src/app/client/nav-config.ts
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CUSTOMER — apps/portal/src/app/client/
+  // ══════════════════════════════════════════════════════════════════════════
   {
     application: "CUSTOMER",
     code: "dashboard",
@@ -135,6 +208,16 @@ const ROWS: MenuSeedRow[] = [
     viewResource: "customerDashboard",
     viewAction: "read",
   },
+];
+
+// Legacy menu codes that have been reorganized into parent groups.
+// These will be deleted during seed to avoid duplicate entries in sidebar.
+const DEPRECATED_CODES: Array<{ application: MenuApplication; code: string }> = [
+  { application: "MANAGEMENT", code: "customers" },
+  { application: "MANAGEMENT", code: "users" },
+  { application: "MANAGEMENT", code: "whitelist" },
+  { application: "MANAGEMENT", code: "menu-management" },
+  { application: "MANAGEMENT", code: "permission-management" },
 ];
 
 async function seedMenu() {
@@ -192,7 +275,19 @@ async function seedMenu() {
     );
   }
 
+  // Delete deprecated/legacy menu entries that have been reorganized
+  let deletedCount = 0;
+  for (const deprecated of DEPRECATED_CODES) {
+    const result = await prisma.menu.deleteMany({
+      where: { application: deprecated.application, code: deprecated.code },
+    });
+    deletedCount += result.count;
+  }
+
   console.log(`[seed] ${ROWS.length} Menu rows upserted.`);
+  if (deletedCount > 0) {
+    console.log(`[seed] ${deletedCount} deprecated menu rows deleted.`);
+  }
   await prisma.$disconnect();
 }
 
