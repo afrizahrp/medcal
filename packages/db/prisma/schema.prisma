@@ -274,6 +274,13 @@ enum UomCategory {
   OTHER
 }
 
+enum CalibrationValueType {
+  NUMBER
+  RATIO
+  TEXT
+  BOOLEAN
+}
+
 // Email → Lead Management (locked plan)
 enum EmailFolder {
   INBOX
@@ -964,23 +971,26 @@ model DeviceCapabilityItem {
 }
 
 // Master definition of a calibration measurement parameter for a DeviceType,
-// under a DeviceCapabilityItem, with a centralized Uom. Not a calibration
-// result / transaction. Unique per (deviceTypeId, capabilityItemId, code)
-// so the same capability item + code may exist independently per device type.
+// under a DeviceCapabilityItem. valueType declares the kind of value the
+// parameter expects; uom is required in meaning for NUMBER, optional for
+// RATIO/TEXT/BOOLEAN. Not a calibration result / transaction. Unique per
+// (deviceTypeId, capabilityItemId, code) so the same capability item + code
+// may exist independently per device type.
 model DeviceCalibrationParameter {
-  id               String   @id @default(cuid())
+  id               String               @id @default(cuid())
   deviceTypeId     String
   capabilityItemId String
   code             String
   name             String
   description      String?
-  uomId            String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  valueType        CalibrationValueType @default(NUMBER)
+  uomId            String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   deviceType     DeviceType           @relation(fields: [deviceTypeId], references: [id])
   capabilityItem DeviceCapabilityItem @relation(fields: [capabilityItemId], references: [id])
-  uom            Uom                  @relation(fields: [uomId], references: [id])
+  uom            Uom?                 @relation(fields: [uomId], references: [id])
 
   @@unique([deviceTypeId, capabilityItemId, code])
   @@index([deviceTypeId])

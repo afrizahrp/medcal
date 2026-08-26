@@ -1,19 +1,19 @@
 /**
- * Seeds DeviceCalibrationParameter (241 CONFIRMED rows) from real LK worksheets.
+ * Seeds DeviceCalibrationParameter (242 CONFIRMED rows) from real LK worksheets.
  * Data extracted from seed_device_calibration_parameter.csv — evidence_source and
- * status are traceability metadata only (not DB columns). The BLOCKED row
- * VENT_IE_RATIO (I:E Ratio) is intentionally omitted: uomId is required and
- * the value is a ratio (e.g. "1:2"), not a standard physical unit.
+ * status are traceability metadata only (not DB columns). VENT_IE_RATIO is a
+ * RATIO parameter (e.g. "1:2") and is seeded with valueType=RATIO and uomId=null.
  * Run manually: pnpm --filter @medcal/db run seed:device-calibration-parameters
  */
-import { prisma } from "../src/index";
+import { prisma, type CalibrationValueType } from "../src/index";
 
 interface ParameterSeedRow {
   deviceTypeCode: string;
   capabilityItemCode: string;
   code: string;
   name: string;
-  uomCode: string;
+  uomCode: string | null;
+  valueType?: CalibrationValueType;
 }
 
 /**
@@ -92,8 +92,8 @@ const ITEM_CAPABILITY_BY_CODE: Record<string, string> = {
 };
 
 /**
- * 241 CONFIRMED rows from seed_device_calibration_parameter.csv.
- * VENT_IE_RATIO skipped (BLOCKED, empty uom_code).
+ * 242 CONFIRMED rows from seed_device_calibration_parameter.csv.
+ * VENT_IE_RATIO is included with valueType=RATIO and uomCode=null.
  */
 const PARAMETERS: ParameterSeedRow[] = [
   {
@@ -830,6 +830,14 @@ const PARAMETERS: ParameterSeedRow[] = [
     code: "VENT_RESP_RATE",
     name: "Respiration Rate",
     uomCode: "RPM",
+  },
+  {
+    deviceTypeCode: "VENTILATOR",
+    capabilityItemCode: "IE_RATIO",
+    code: "VENT_IE_RATIO",
+    name: "I:E Ratio",
+    uomCode: null,
+    valueType: "RATIO",
   },
   {
     deviceTypeCode: "VENTILATOR",
@@ -1785,8 +1793,8 @@ const PARAMETERS: ParameterSeedRow[] = [
   },
 ];
 
-const EXPECTED_COUNT = 241;
-const SKIPPED_PARAM_CODE = "VENT_IE_RATIO";
+const EXPECTED_COUNT = 242;
+const RATIO_PARAM_CODE = "VENT_IE_RATIO";
 
 interface FailedRow {
   code: string;
@@ -1832,8 +1840,8 @@ async function seedDeviceCalibrationParameters() {
       `[seed] Expected ${EXPECTED_COUNT} DeviceCalibrationParameter rows, got ${PARAMETERS.length}`,
     );
   }
-  if (PARAMETERS.some((row) => row.code === SKIPPED_PARAM_CODE)) {
-    throw new Error(`[seed] ${SKIPPED_PARAM_CODE} must not be included in the seed data`);
+  if (!PARAMETERS.some((row) => row.code === RATIO_PARAM_CODE)) {
+    throw new Error(`[seed] ${RATIO_PARAM_CODE} must be included in the seed data`);
   }
 
   await assertPrerequisites();
@@ -1896,9 +1904,16 @@ async function seedDeviceCalibrationParameters() {
       continue;
     }
 
-    const uomId = uomIdByCode.get(row.uomCode);
-    if (!uomId) {
-      failed.push({ code: row.code, reason: `missing Uom.code=${row.uomCode}` });
+    let uomId: string | null = null;
+    if (row.uomCode) {
+      const resolved = uomIdByCode.get(row.uomCode);
+      if (!resolved) {
+        failed.push({ code: row.code, reason: `missing Uom.code=${row.uomCode}` });
+        continue;
+      }
+      uomId = resolved;
+    } else if ((row.valueType ?? "NUMBER") === "NUMBER") {
+      failed.push({ code: row.code, reason: "NUMBER valueType requires uomCode" });
       continue;
     }
 
@@ -1917,19 +1932,33 @@ async function seedDeviceCalibrationParameters() {
         name: row.name,
         description: null,
         uomId,
+        ...(row.valueType ? { valueType: row.valueType } : {}),
       },
       update: {
         name: row.name,
         uomId,
+        ...(row.valueType ? { valueType: row.valueType } : {}),
       },
     });
     upserted += 1;
   }
 
   const tableCount = await prisma.deviceCalibrationParameter.count();
-  const skippedPresent = await prisma.deviceCalibrationParameter.findFirst({
-    where: { code: SKIPPED_PARAM_CODE },
-    select: { id: true, code: true },
+  const ieRatio = await prisma.deviceCalibrationParameter.findFirst({
+    where: { code: RATIO_PARAM_CODE },
+    select: {
+      code: true,
+      name: true,
+      valueType: true,
+      uomId: true,
+      deviceType: { select: { code: true } },
+      capabilityItem: {
+        select: {
+          code: true,
+          capability: { select: { code: true } },
+        },
+      },
+    },
   });
 
   const spot = await prisma.deviceCalibrationParameter.findFirst({
@@ -1937,6 +1966,7 @@ async function seedDeviceCalibrationParameters() {
     select: {
       code: true,
       name: true,
+      valueType: true,
       deviceType: { select: { code: true } },
       capabilityItem: {
         select: {
@@ -1951,12 +1981,16 @@ async function seedDeviceCalibrationParameters() {
   console.log(
     `[seed] ${upserted} DeviceCalibrationParameter rows upserted (table count: ${tableCount}).`,
   );
-  console.log(
-    `[seed] Skipped ${SKIPPED_PARAM_CODE}: ${skippedPresent ? "FOUND in table (unexpected)" : "not seeded"}.`,
-  );
+  if (ieRatio) {
+    console.log(
+      `[seed] ${RATIO_PARAM_CODE}: DeviceType=${ieRatio.deviceType.code}, DeviceCapabilityItem=${ieRatio.capabilityItem.code} (capability=${ieRatio.capabilityItem.capability.code}), valueType=${ieRatio.valueType}, uomId=${ieRatio.uomId}.`,
+    );
+  } else {
+    console.log(`[seed] ${RATIO_PARAM_CODE}: not found (unexpected).`);
+  }
   if (spot) {
     console.log(
-      `[seed] Spot-check BPM_SYSTOLIC: DeviceType=${spot.deviceType.code}, DeviceCapabilityItem=${spot.capabilityItem.code} (capability=${spot.capabilityItem.capability.code}), Uom=${spot.uom.code}.`,
+      `[seed] Spot-check BPM_SYSTOLIC: DeviceType=${spot.deviceType.code}, DeviceCapabilityItem=${spot.capabilityItem.code} (capability=${spot.capabilityItem.capability.code}), valueType=${spot.valueType}, Uom=${spot.uom?.code ?? "null"}.`,
     );
   } else {
     console.log("[seed] Spot-check BPM_SYSTOLIC: not found.");

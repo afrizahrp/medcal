@@ -168,7 +168,7 @@ describe("DeviceCalibrationParametersService.create", () => {
     expect(parameter.capabilityItemId).toBe(item.id);
     expect(parameter.capabilityItem.name).toBe("Systolic Pressure");
     expect(parameter.uomId).toBe(uom.id);
-    expect(parameter.uom.symbol).toBe("mmHg");
+    expect(parameter.uom?.symbol).toBe("mmHg");
   });
 
   it("rejects duplicate code under the same device type and capability item", async () => {

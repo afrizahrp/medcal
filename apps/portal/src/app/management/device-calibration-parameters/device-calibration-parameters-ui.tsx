@@ -46,12 +46,13 @@ export interface DeviceCalibrationParameterRow {
   code: string;
   name: string;
   description: string | null;
-  uomId: string;
+  valueType: "NUMBER" | "RATIO" | "TEXT" | "BOOLEAN";
+  uomId: string | null;
   createdAt: string;
   updatedAt: string;
   deviceType: DeviceCalibrationParameterTypeRef;
   capabilityItem: DeviceCalibrationParameterItemRef;
-  uom: DeviceCalibrationParameterUomRef;
+  uom: DeviceCalibrationParameterUomRef | null;
 }
 
 export interface DeviceCalibrationParameterListResponse {
@@ -177,13 +178,14 @@ export function DeviceCalibrationParameterTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[920px]">
+      <table className="w-full min-w-[1020px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
             <th className="px-4 py-3">Device Type</th>
             <th className="px-4 py-3">Capability Item</th>
             <th className="px-4 py-3">Kode</th>
             <th className="px-4 py-3">Nama</th>
+            <th className="px-4 py-3">Tipe nilai</th>
             <th className="px-4 py-3">UOM</th>
             <th className="px-4 py-3">Deskripsi</th>
             <th className="px-4 py-3"></th>
@@ -208,8 +210,19 @@ export function DeviceCalibrationParameterTable({
               </td>
               <td className="px-4 py-3 font-medium text-slate-900">{row.name}</td>
               <td className="px-4 py-3">
-                <span className="font-medium text-slate-700">{row.uom.symbol}</span>
-                <span className="ml-1 text-xs text-slate-500">{row.uom.name}</span>
+                <Badge variant="secondary" className="font-mono text-xs text-slate-600">
+                  {row.valueType}
+                </Badge>
+              </td>
+              <td className="px-4 py-3">
+                {row.uom ? (
+                  <>
+                    <span className="font-medium text-slate-700">{row.uom.symbol}</span>
+                    <span className="ml-1 text-xs text-slate-500">{row.uom.name}</span>
+                  </>
+                ) : (
+                  <span className="text-slate-400">—</span>
+                )}
               </td>
               <td className="px-4 py-3 text-sm text-slate-600">
                 {row.description ? (

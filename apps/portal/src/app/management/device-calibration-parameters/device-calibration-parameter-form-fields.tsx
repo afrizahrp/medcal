@@ -339,7 +339,7 @@ export function buildDeviceCalibrationParameterUpdatePayload(
     capabilityItemId: form.capabilityItemId,
     code: form.code.trim(),
     name: form.name.trim(),
-    uomId: form.uomId,
+    ...(form.uomId ? { uomId: form.uomId } : {}),
     description: form.description.trim() ? form.description.trim() : null,
   };
 }

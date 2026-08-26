@@ -223,7 +223,7 @@ export function DeviceFormFields({
               value={value.brand}
               onChange={(e) => onChange("brand", e.target.value)}
               className={fieldClass}
-              placeholder="Omron"
+              placeholder="Masukkan merek alat"
               maxLength={150}
             />
           </div>
@@ -236,7 +236,7 @@ export function DeviceFormFields({
               value={value.model}
               onChange={(e) => onChange("model", e.target.value)}
               className={fieldClass}
-              placeholder="HEM-7120"
+              placeholder="Masukkan model/tipe alat"
               maxLength={150}
             />
           </div>
@@ -252,7 +252,7 @@ export function DeviceFormFields({
               value={value.serialNumber}
               onChange={(e) => onChange("serialNumber", e.target.value)}
               className={fieldClass}
-              placeholder="SN-001"
+              placeholder="Masukkan nomor seri alat"
               maxLength={100}
             />
           </div>

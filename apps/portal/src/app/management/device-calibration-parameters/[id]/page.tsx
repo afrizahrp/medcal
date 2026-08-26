@@ -50,7 +50,7 @@ function formFromRow(row: DeviceCalibrationParameterRow): DeviceCalibrationParam
     capabilityItemId: row.capabilityItemId,
     code: row.code,
     name: row.name,
-    uomId: row.uomId,
+    uomId: row.uomId ?? "",
     description: row.description ?? "",
   };
 }
@@ -183,7 +183,7 @@ export default function DeviceCalibrationParameterDetailPage() {
       setError("Nama wajib diisi.");
       return;
     }
-    if (!form.uomId) {
+    if (!form.uomId && row?.valueType === "NUMBER") {
       setError("UOM wajib dipilih.");
       return;
     }
@@ -286,9 +286,13 @@ export default function DeviceCalibrationParameterDetailPage() {
                 </DetailField>
               </div>
 
+              <DetailField label="Tipe nilai">
+                <span className="font-mono font-medium">{row.valueType}</span>
+              </DetailField>
+
               <DetailField label="UOM">
                 <span className="font-medium">
-                  {row.uom.symbol} — {row.uom.name}
+                  {row.uom ? `${row.uom.symbol} — ${row.uom.name}` : "—"}
                 </span>
               </DetailField>
 
