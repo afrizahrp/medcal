@@ -49,6 +49,7 @@ const ROWS: UomSeedRow[] = [
   { code: "V", name: "Volt", symbol: "V", category: "ELECTRICAL" },
   { code: "MV", name: "Millivolt", symbol: "mV", category: "ELECTRICAL" },
   { code: "MA", name: "Milliampere", symbol: "mA", category: "ELECTRICAL" },
+  { code: "UA", name: "Microampere", symbol: "µA", category: "ELECTRICAL" },
   { code: "OHM", name: "Ohm", symbol: "Ω", category: "ELECTRICAL" },
   { code: "MOHM", name: "Megaohm", symbol: "MΩ", category: "ELECTRICAL" },
 
@@ -65,6 +66,10 @@ const ROWS: UomSeedRow[] = [
   { code: "MM", name: "Millimeter", symbol: "mm", category: "LENGTH" },
   { code: "CM", name: "Centimeter", symbol: "cm", category: "LENGTH" },
   { code: "M", name: "Meter", symbol: "m", category: "LENGTH" },
+
+  // Velocity / sound — no dedicated UomCategory; required by calibration-parameter seed
+  { code: "M_S", name: "Meter per Second", symbol: "m/s", category: "OTHER" },
+  { code: "DB", name: "Decibel", symbol: "dB", category: "OTHER" },
 ];
 
 async function seedUoms() {
