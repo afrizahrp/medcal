@@ -68,6 +68,10 @@ const FIXTURE: GrantRow[] = [
   { role: "ADMIN", resource: "deviceCalibrationParameter", action: "create" },
   { role: "ADMIN", resource: "deviceCalibrationParameter", action: "update" },
   { role: "ADMIN", resource: "deviceCalibrationParameter", action: "delete" },
+  { role: "ADMIN", resource: "device", action: "read" },
+  { role: "ADMIN", resource: "device", action: "create" },
+  { role: "ADMIN", resource: "device", action: "update" },
+  { role: "ADMIN", resource: "device", action: "delete" },
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   { role: "SUPERVISOR", resource: "users", action: "read" },
   { role: "SUPERVISOR", resource: "membership", action: "manage" },
@@ -215,6 +219,22 @@ describe("hasPermission — deviceCalibrationParameter master data", () => {
     expect(hasPermission("TECHNICIAN", "deviceCalibrationParameter", "create")).toBe(false);
     expect(hasPermission("FINANCE", "deviceCalibrationParameter", "update")).toBe(false);
     expect(hasPermission("CUSTOMER", "deviceCalibrationParameter", "delete")).toBe(false);
+  });
+});
+
+describe("hasPermission — device resource (physical asset)", () => {
+  it("grants ADMIN device:read, device:create, device:update, and device:delete", () => {
+    expect(hasPermission("ADMIN", "device", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "device", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "device", "update")).toBe(true);
+    expect(hasPermission("ADMIN", "device", "delete")).toBe(true);
+  });
+
+  it("denies roles with no device grant", () => {
+    expect(hasPermission("SUPERVISOR", "device", "read")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "device", "create")).toBe(false);
+    expect(hasPermission("FINANCE", "device", "update")).toBe(false);
+    expect(hasPermission("CUSTOMER", "device", "delete")).toBe(false);
   });
 });
 

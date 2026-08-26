@@ -60,6 +60,10 @@ const ME_A = {
     deviceCalibrationParameterCreate: true,
     deviceCalibrationParameterUpdate: true,
     deviceCalibrationParameterDelete: true,
+    deviceRead: true,
+    deviceCreate: true,
+    deviceUpdate: true,
+    deviceDelete: true,
   },
 };
 
@@ -103,6 +107,10 @@ const ME_B = {
     deviceCalibrationParameterCreate: false,
     deviceCalibrationParameterUpdate: false,
     deviceCalibrationParameterDelete: false,
+    deviceRead: false,
+    deviceCreate: false,
+    deviceUpdate: false,
+    deviceDelete: false,
   },
 };
 

@@ -595,3 +595,58 @@ export const deviceCalibrationParameterUpdateSchema = z.object({
 export type DeviceCalibrationParameterUpdateInput = z.infer<
   typeof deviceCalibrationParameterUpdateSchema
 >;
+
+// =============================================================================
+// Device (physical asset, company-scoped)
+// =============================================================================
+
+const deviceStatusValues = ["ACTIVE", "INACTIVE"] as const;
+
+const optionalDeviceText = z.string().trim().max(150).optional();
+const optionalDeviceTextNullable = z.string().trim().max(150).nullable().optional();
+
+/** POST /devices body */
+export const deviceCreateSchema = z.object({
+  customerId: z.string().min(1),
+  deviceTypeId: z.string().min(1),
+  brand: optionalDeviceText,
+  model: optionalDeviceText,
+  serialNumber: z.string().trim().max(100).optional(),
+  category: optionalDeviceText,
+  locationText: z.string().trim().max(200).optional(),
+  status: z.enum(deviceStatusValues).optional(),
+});
+
+export type DeviceCreateInput = z.infer<typeof deviceCreateSchema>;
+
+/** GET /devices query params */
+export const deviceListQuerySchema = baseListQuerySchema.extend({
+  deviceTypeId: z.string().min(1).optional(),
+  customerId: z.string().min(1).optional(),
+  status: z.enum(deviceStatusValues).optional(),
+});
+
+export type DeviceListQuery = z.infer<typeof deviceListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /devices — see resolveSortOrder. */
+export const DEVICE_SORTABLE_FIELDS = [
+  "createdAt",
+  "brand",
+  "model",
+  "serialNumber",
+  "status",
+] as const;
+
+/** PATCH /devices/:id body — deviceTypeId remains required when supplied (never null). */
+export const deviceUpdateSchema = z.object({
+  customerId: z.string().min(1).optional(),
+  deviceTypeId: z.string().min(1).optional(),
+  brand: optionalDeviceTextNullable,
+  model: optionalDeviceTextNullable,
+  serialNumber: z.string().trim().max(100).nullable().optional(),
+  category: optionalDeviceTextNullable,
+  locationText: z.string().trim().max(200).nullable().optional(),
+  status: z.enum(deviceStatusValues).optional(),
+});
+
+export type DeviceUpdateInput = z.infer<typeof deviceUpdateSchema>;

@@ -7,6 +7,7 @@ import { DeviceTypesService } from "./device-types.service";
 const service = new DeviceTypesService();
 const createdTypeIds: string[] = [];
 const createdCategoryIds: string[] = [];
+const createdCustomerIds: string[] = [];
 
 function uniqueCode() {
   return `T${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -22,8 +23,12 @@ async function createCategory() {
 
 afterAll(async () => {
   if (createdTypeIds.length > 0) {
+    await prisma.device.deleteMany({ where: { deviceTypeId: { in: createdTypeIds } } });
     await prisma.deviceModel.deleteMany({ where: { deviceTypeId: { in: createdTypeIds } } });
     await prisma.deviceType.deleteMany({ where: { id: { in: createdTypeIds } } });
+  }
+  if (createdCustomerIds.length > 0) {
+    await prisma.customer.deleteMany({ where: { id: { in: createdCustomerIds } } });
   }
   if (createdCategoryIds.length > 0) {
     await prisma.deviceCategory.deleteMany({ where: { id: { in: createdCategoryIds } } });
@@ -160,5 +165,36 @@ describe("DeviceTypesService.findAll / findOne / update / remove", () => {
     await expect(service.remove(deviceType.id)).rejects.toBeInstanceOf(BadRequestException);
 
     await prisma.deviceModel.delete({ where: { id: model.id } });
+  });
+
+  it("rejects delete when the device type still has devices", async () => {
+    const category = await createCategory();
+    const deviceType = await service.create({
+      categoryId: category.id,
+      code: uniqueCode(),
+      name: "With Devices",
+    });
+    createdTypeIds.push(deviceType.id);
+
+    const customer = await prisma.customer.create({
+      data: {
+        companyId: "PKM",
+        number: `CUS/TEST/${randomUUID().slice(0, 8)}`,
+        name: `DeviceType delete ${randomUUID().slice(0, 6)}`,
+      },
+    });
+    createdCustomerIds.push(customer.id);
+    const device = await prisma.device.create({
+      data: {
+        companyId: "PKM",
+        customerId: customer.id,
+        deviceTypeId: deviceType.id,
+      },
+    });
+
+    await expect(service.remove(deviceType.id)).rejects.toBeInstanceOf(BadRequestException);
+
+    await prisma.device.delete({ where: { id: device.id } });
+    await prisma.customer.delete({ where: { id: customer.id } });
   });
 });

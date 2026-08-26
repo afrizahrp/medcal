@@ -100,6 +100,10 @@ export class MeController {
         "deviceCalibrationParameter",
         "delete",
       ),
+      deviceRead: hasPermission(membership.role, "device", "read"),
+      deviceCreate: hasPermission(membership.role, "device", "create"),
+      deviceUpdate: hasPermission(membership.role, "device", "update"),
+      deviceDelete: hasPermission(membership.role, "device", "delete"),
     };
 
     return {

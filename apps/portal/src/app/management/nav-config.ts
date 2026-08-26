@@ -16,7 +16,8 @@ export type ManagementNavIcon =
   | "tags"
   | "boxes"
   | "activity"
-  | "slidersHorizontal";
+  | "slidersHorizontal"
+  | "cpu";
 
 export interface NavItem {
   label: string;

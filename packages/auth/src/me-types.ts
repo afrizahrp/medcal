@@ -38,6 +38,10 @@ export type MeCapabilities = {
   deviceCalibrationParameterCreate: boolean;
   deviceCalibrationParameterUpdate: boolean;
   deviceCalibrationParameterDelete: boolean;
+  deviceRead: boolean;
+  deviceCreate: boolean;
+  deviceUpdate: boolean;
+  deviceDelete: boolean;
 };
 
 export type MeUser = {

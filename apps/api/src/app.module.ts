@@ -20,6 +20,7 @@ import { DeviceTypesModule } from "./modules/device-types/device-types.module";
 import { DeviceModelsModule } from "./modules/device-models/device-models.module";
 import { DeviceCapabilitiesModule } from "./modules/device-capabilities/device-capabilities.module";
 import { DeviceCalibrationParametersModule } from "./modules/device-calibration-parameters/device-calibration-parameters.module";
+import { DevicesModule } from "./modules/devices/devices.module";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { DeviceCalibrationParametersModule } from "./modules/device-calibration-
     DeviceModelsModule,
     DeviceCapabilitiesModule,
     DeviceCalibrationParametersModule,
+    DevicesModule,
     WhitelistModule,
     MeModule,
     ChatModule,
