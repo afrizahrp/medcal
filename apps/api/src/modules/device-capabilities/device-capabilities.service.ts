@@ -224,6 +224,15 @@ export class DeviceCapabilitiesService {
 
   async removeItem(capabilityId: string, itemId: string): Promise<DeviceCapabilityItemRow> {
     const existing = await this.findItem(capabilityId, itemId);
+    const parameterCount = await prisma.deviceCalibrationParameter.count({
+      where: { capabilityItemId: itemId },
+    });
+    if (parameterCount > 0) {
+      throw new BadRequestException({
+        message: "Cannot delete a capability item that still has calibration parameters",
+        code: "DEVICE_CAPABILITY_ITEM_HAS_PARAMETERS",
+      });
+    }
     await prisma.deviceCapabilityItem.delete({ where: { id: existing.id } });
     return existing;
   }

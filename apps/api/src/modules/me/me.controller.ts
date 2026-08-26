@@ -84,6 +84,22 @@ export class MeController {
       deviceCapabilityItemCreate: hasPermission(membership.role, "deviceCapabilityItem", "create"),
       deviceCapabilityItemUpdate: hasPermission(membership.role, "deviceCapabilityItem", "update"),
       deviceCapabilityItemDelete: hasPermission(membership.role, "deviceCapabilityItem", "delete"),
+      deviceCalibrationParameterRead: hasPermission(membership.role, "deviceCalibrationParameter", "read"),
+      deviceCalibrationParameterCreate: hasPermission(
+        membership.role,
+        "deviceCalibrationParameter",
+        "create",
+      ),
+      deviceCalibrationParameterUpdate: hasPermission(
+        membership.role,
+        "deviceCalibrationParameter",
+        "update",
+      ),
+      deviceCalibrationParameterDelete: hasPermission(
+        membership.role,
+        "deviceCalibrationParameter",
+        "delete",
+      ),
     };
 
     return {

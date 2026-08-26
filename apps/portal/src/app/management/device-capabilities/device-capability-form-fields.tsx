@@ -111,6 +111,9 @@ export function formatDeviceCapabilityApiError(error: unknown): string {
     if (code === "DEVICE_CAPABILITY_ITEM_NOT_FOUND") {
       return "Capability Item tidak ditemukan.";
     }
+    if (code === "DEVICE_CAPABILITY_ITEM_HAS_PARAMETERS") {
+      return "Capability Item masih memiliki calibration parameter — hapus parameter terlebih dahulu.";
+    }
     if (
       code === "INVALID_DEVICE_CAPABILITY" ||
       code === "INVALID_DEVICE_CAPABILITY_UPDATE" ||

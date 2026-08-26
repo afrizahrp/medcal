@@ -138,6 +138,17 @@ const ROWS: MenuSeedRow[] = [
     viewResource: "deviceCapability",
     viewAction: "read",
   },
+  {
+    application: "MANAGEMENT",
+    code: "device-management.calibration-parameters",
+    parentCode: "device-management",
+    label: "Calibration Parameters",
+    href: "/device-calibration-parameters",
+    icon: "slidersHorizontal",
+    order: 4,
+    viewResource: "deviceCalibrationParameter",
+    viewAction: "read",
+  },
 
   // ─────────────────────────────────────────────────────────────────────────
   // Calibration Management (group) → order: 3

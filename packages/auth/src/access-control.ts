@@ -42,6 +42,9 @@ import type { MembershipRole } from "@medcal/db";
  * - deviceCapability/deviceCapabilityItem:read/create/update/delete
  *   (Device function master): DeviceCapability is a device function
  *   (e.g. NIBP); DeviceCapabilityItem is a child aspect of that function.
+ * - deviceCalibrationParameter:read/create/update/delete (Calibration
+ *   parameter master): what is measured/assessed during calibration,
+ *   linked to a DeviceCapabilityItem and a centralized Uom.
  */
 const ac = createAccessControl({
   contactMessage: ["read"],
@@ -54,6 +57,7 @@ const ac = createAccessControl({
   deviceModel: ["read", "create", "update", "delete"],
   deviceCapability: ["read", "create", "update", "delete"],
   deviceCapabilityItem: ["read", "create", "update", "delete"],
+  deviceCalibrationParameter: ["read", "create", "update", "delete"],
   chat: ["read", "reply", "close"],
   users: ["read", "manage"],
   membership: ["manage"],

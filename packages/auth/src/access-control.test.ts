@@ -64,6 +64,10 @@ const FIXTURE: GrantRow[] = [
   { role: "ADMIN", resource: "deviceCapabilityItem", action: "create" },
   { role: "ADMIN", resource: "deviceCapabilityItem", action: "update" },
   { role: "ADMIN", resource: "deviceCapabilityItem", action: "delete" },
+  { role: "ADMIN", resource: "deviceCalibrationParameter", action: "read" },
+  { role: "ADMIN", resource: "deviceCalibrationParameter", action: "create" },
+  { role: "ADMIN", resource: "deviceCalibrationParameter", action: "update" },
+  { role: "ADMIN", resource: "deviceCalibrationParameter", action: "delete" },
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   { role: "SUPERVISOR", resource: "users", action: "read" },
   { role: "SUPERVISOR", resource: "membership", action: "manage" },
@@ -195,6 +199,22 @@ describe("hasPermission — deviceCapability / deviceCapabilityItem master data"
     expect(hasPermission("FINANCE", "deviceCapability", "delete")).toBe(false);
     expect(hasPermission("CUSTOMER", "deviceCapability", "read")).toBe(false);
     expect(hasPermission("CUSTOMER", "deviceCapabilityItem", "read")).toBe(false);
+  });
+});
+
+describe("hasPermission — deviceCalibrationParameter master data", () => {
+  it("grants ADMIN read/create/update/delete", () => {
+    expect(hasPermission("ADMIN", "deviceCalibrationParameter", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCalibrationParameter", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCalibrationParameter", "update")).toBe(true);
+    expect(hasPermission("ADMIN", "deviceCalibrationParameter", "delete")).toBe(true);
+  });
+
+  it("denies roles with no deviceCalibrationParameter grant", () => {
+    expect(hasPermission("SUPERVISOR", "deviceCalibrationParameter", "read")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "deviceCalibrationParameter", "create")).toBe(false);
+    expect(hasPermission("FINANCE", "deviceCalibrationParameter", "update")).toBe(false);
+    expect(hasPermission("CUSTOMER", "deviceCalibrationParameter", "delete")).toBe(false);
   });
 });
 

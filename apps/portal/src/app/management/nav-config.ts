@@ -15,7 +15,8 @@ export type ManagementNavIcon =
   | "folderTree"
   | "tags"
   | "boxes"
-  | "activity";
+  | "activity"
+  | "slidersHorizontal";
 
 export interface NavItem {
   label: string;

@@ -548,3 +548,50 @@ export const deviceCapabilityItemUpdateSchema = z.object({
 });
 
 export type DeviceCapabilityItemUpdateInput = z.infer<typeof deviceCapabilityItemUpdateSchema>;
+
+// =============================================================================
+// DeviceCalibrationParameter Master Data
+// =============================================================================
+
+/** POST /device-calibration-parameters body */
+export const deviceCalibrationParameterCreateSchema = z.object({
+  deviceTypeId: z.string().min(1),
+  capabilityItemId: z.string().min(1),
+  code: z.string().min(1).max(64).toUpperCase(),
+  name: z.string().min(1).max(150),
+  description: optionalDescription,
+  uomId: z.string().min(1),
+});
+
+export type DeviceCalibrationParameterCreateInput = z.infer<
+  typeof deviceCalibrationParameterCreateSchema
+>;
+
+/** GET /device-calibration-parameters query params */
+export const deviceCalibrationParameterListQuerySchema = baseListQuerySchema.extend({
+  deviceTypeId: z.string().min(1).optional(),
+  capabilityId: z.string().min(1).optional(),
+  capabilityItemId: z.string().min(1).optional(),
+  uomId: z.string().min(1).optional(),
+});
+
+export type DeviceCalibrationParameterListQuery = z.infer<
+  typeof deviceCalibrationParameterListQuerySchema
+>;
+
+/** Whitelisted `sortBy` values for GET /device-calibration-parameters — see resolveSortOrder. */
+export const DEVICE_CALIBRATION_PARAMETER_SORTABLE_FIELDS = ["createdAt", "code", "name"] as const;
+
+/** PATCH /device-calibration-parameters/:id body */
+export const deviceCalibrationParameterUpdateSchema = z.object({
+  deviceTypeId: z.string().min(1).optional(),
+  capabilityItemId: z.string().min(1).optional(),
+  code: z.string().min(1).max(64).toUpperCase().optional(),
+  name: z.string().min(1).max(150).optional(),
+  description: z.string().max(500).nullable().optional(),
+  uomId: z.string().min(1).optional(),
+});
+
+export type DeviceCalibrationParameterUpdateInput = z.infer<
+  typeof deviceCalibrationParameterUpdateSchema
+>;

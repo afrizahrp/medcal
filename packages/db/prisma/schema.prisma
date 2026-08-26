@@ -636,6 +636,8 @@ model Uom {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
+  calibrationParameters DeviceCalibrationParameter[]
+
   @@index([category])
   @@index([isActive])
 }
@@ -900,8 +902,9 @@ model DeviceType {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  category DeviceCategory @relation(fields: [categoryId], references: [id])
-  models   DeviceModel[]
+  category              DeviceCategory               @relation(fields: [categoryId], references: [id])
+  models                DeviceModel[]
+  calibrationParameters DeviceCalibrationParameter[]
 
   @@index([categoryId])
   @@index([isActive])
@@ -928,8 +931,10 @@ model DeviceModel {
 
 // Device function/capability master — global (no companyId), same convention
 // as Uom/DeviceCategory. DeviceCapabilityItem is a child of a capability
-// (e.g. NIBP → Systolic/Diastolic/MAP). Do not FK DeviceModel or Device to
-// these models this phase; calibration parameters are a later phase.
+// (e.g. NIBP → Systolic/Diastolic/MAP). DeviceCalibrationParameter is a
+// master definition of what is measured/assessed during calibration, unique
+// per (deviceTypeId, capabilityItemId, code). Do not FK DeviceModel or Device
+// to these models this phase.
 model DeviceCapability {
   id          String   @id @default(cuid())
   code        String   @unique
@@ -950,10 +955,36 @@ model DeviceCapabilityItem {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  capability DeviceCapability @relation(fields: [capabilityId], references: [id])
+  capability            DeviceCapability             @relation(fields: [capabilityId], references: [id])
+  calibrationParameters DeviceCalibrationParameter[]
 
   @@unique([capabilityId, code])
   @@index([capabilityId])
+}
+
+// Master definition of a calibration measurement parameter for a DeviceType,
+// under a DeviceCapabilityItem, with a centralized Uom. Not a calibration
+// result / transaction. Unique per (deviceTypeId, capabilityItemId, code)
+// so the same capability item + code may exist independently per device type.
+model DeviceCalibrationParameter {
+  id               String   @id @default(cuid())
+  deviceTypeId     String
+  capabilityItemId String
+  code             String
+  name             String
+  description      String?
+  uomId            String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  deviceType     DeviceType           @relation(fields: [deviceTypeId], references: [id])
+  capabilityItem DeviceCapabilityItem @relation(fields: [capabilityItemId], references: [id])
+  uom            Uom                  @relation(fields: [uomId], references: [id])
+
+  @@unique([deviceTypeId, capabilityItemId, code])
+  @@index([deviceTypeId])
+  @@index([capabilityItemId])
+  @@index([uomId])
 }
 
 model Device {

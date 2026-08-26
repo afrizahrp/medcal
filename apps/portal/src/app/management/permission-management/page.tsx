@@ -54,6 +54,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   deviceModel: "Device Model",
   deviceCapability: "Device Capability",
   deviceCapabilityItem: "Device Capability Item",
+  deviceCalibrationParameter: "Calibration Parameter",
 };
 
 const ACTION_LABELS: Record<string, string> = {

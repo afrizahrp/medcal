@@ -76,6 +76,11 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "ADMIN", resource: "deviceCapabilityItem", action: "create" },
   { role: "ADMIN", resource: "deviceCapabilityItem", action: "update" },
   { role: "ADMIN", resource: "deviceCapabilityItem", action: "delete" },
+  // DeviceCalibrationParameter Master Data (2026-08-26)
+  { role: "ADMIN", resource: "deviceCalibrationParameter", action: "read" },
+  { role: "ADMIN", resource: "deviceCalibrationParameter", action: "create" },
+  { role: "ADMIN", resource: "deviceCalibrationParameter", action: "update" },
+  { role: "ADMIN", resource: "deviceCalibrationParameter", action: "delete" },
   // SUPERVISOR
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   // TECHNICIAN
