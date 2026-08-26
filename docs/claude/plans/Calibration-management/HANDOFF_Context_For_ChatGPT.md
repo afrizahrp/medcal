@@ -285,6 +285,13 @@ Key files there:
   report, but useful for deeper evidence trails)
 - `Reports_Implementation_CalibrationRequest_Module.md` — implementation report for the
   CalibrationRequest backend module (schema fields verified, test results, TODO gaps)
+- `investigation-lk-vs-measurement-schema.md` — **read this before designing anything related
+  to `MeasurementResult`.** A read-only Claude Code investigation against all 50 real LK
+  worksheets in `technician-docs.zip`, cross-referenced against the live schema. Confirms and
+  substantially deepens the open question in Section 9 above (no tolerance field on
+  `DeviceCalibrationParameter`, ~10 distinct measurement-data shapes, no schema home for
+  reference equipment used per job or for structured Telaah Teknis scoring, real device-type
+  coverage is ~49 not 35). Contains 4 grounded (not-yet-implemented) design directions.
 - Original planning docs referenced throughout: `Audit and design Purchase Order.md`,
   `centralized-document-numbering-phase1-2.md`, `audit_before_customer_implementation.md`
 
@@ -309,39 +316,87 @@ into the docs folder above (or wherever the project owner prefers) before Cursor
 
 ## 9. Open Architecture Questions (unresolved, needs a decision before relevant modules are built)
 
-1. **`MeasurementResult` ↔ `DeviceCalibrationParameter` linkage is undefined.** The schema
-   already has a `MeasurementResult` model (`schema.prisma` ~line 1126-1138, related to
-   `CalibrationJob`) using unstructured `payloadJson`/`summaryJson` fields to store what a
-   technician measures in the field. Separately, `DeviceCalibrationParameter` (built in the
-   Device Management work — see Section 5B) is a structured, relational master catalog of
-   exactly which parameters must be measured per DeviceType, each with a defined `Uom` (or,
-   as of a later refinement, a `valueType` of `NUMBER`/`RATIO`/`TEXT`/`BOOLEAN` for parameters
-   that aren't a plain physical quantity — see Section 5B for the `VENT_IE_RATIO` case that
-   prompted this).
-   **There is currently no foreign key or other link between the two** — nothing ties a given
-   `MeasurementResult` entry back to the specific `DeviceCalibrationParameter` it's fulfilling.
-   Left as-is, technician-entered results (free-form JSON) could drift from the structured
-   parameter catalog (typos in field names, missed parameters, no automatic validation against
-   the expected Uom/parameter set). This should be resolved — likely by adding a
-   `deviceCalibrationParameterId` FK (or an array of structured entries) to
-   `MeasurementResult`, or restructuring how a `CalibrationJob`'s expected parameters are
-   derived from `DeviceCalibrationParameter` — before the Tech-PWA job-execution UI and the
-   `CalibrationJob`/`MeasurementResult` backend are built. Not yet designed; flagged here so
-   it isn't lost before that phase starts.
+1. **`MeasurementResult` ↔ `DeviceCalibrationParameter` linkage — now investigated in depth
+   against 50 real LK worksheets, confirmed broader and more severe than first flagged.**
+   Full investigation report:
+   `D:\medcal\docs\claude\plans\Calibration-management\investigation-lk-vs-measurement-schema.md`
+   (produced by a dedicated Claude Code read-only investigation task against
+   `technician-docs.zip`, extracted to `docs/technician-docs/` — 50 `.docx` LK worksheets, one
+   per device type, all successfully parsed). Key findings, roughly in priority order:
 
-   **Caution for whoever designs this**: while resolving item A1 in `Rangkuman_Gap_Konfirmasi_User.md`
-   (how to represent `VENT_IE_RATIO`), a proposal surfaced that would have restructured
+   - **`DeviceCalibrationParameter` has no tolerance/threshold field at all.** This was a
+     deliberate exclusion in its original build (the build task explicitly forbade speculative
+     fields like `tolerance`/`minimum`/`maximum` without evidence). The 50-document review now
+     provides that evidence: every LK worksheet pairs each measured parameter with a fixed
+     tolerance (e.g. Equipment Leakage Current ≤500µA for Class I devices, ≤100µA for Class
+     II — not a universal constant, varies by device type/class). Tolerance is a property of
+     the device-type+parameter definition, not of an individual measurement instance — so it
+     belongs on the MASTER catalog, not deferred to a future instance/result layer. **This
+     should now be added to `DeviceCalibrationParameter`** (or a sibling limit model, if a
+     parameter can have more than one limit shape) — the original "don't invent" caution no
+     longer applies now that real evidence exists.
+   - **Performance-measurement data has at least ~10 structurally distinct shapes** across the
+     50 documents — far more than a simple "setting × replicate" grid. Includes: multiple
+     independent sub-tables per device type; externally-attached data-logger readings not
+     entered in the LK at all (cold-storage/chamber devices); free-form, dynamically-named
+     parameter lists with per-row custom tolerances (Hematology/Chemistry Analyzers — the
+     parameter set isn't fixed, technicians substitute from a reference certificate);
+     qualitative pass/fail with no numeric value (Bio Safety Cabinet smoke/HEPA tests);
+     derived/calculated values referencing other cells (Mikroskop magnification ratio); paired
+     reference-vs-UUT tables (Thermohygrometer); hysteresis/directional sub-readings (Naik/
+     Turun); non-monotonic or qualitative setting points (SpO2 out-of-order values; Min/Med/
+     Max labels); single-value range/classification checks with no replicate; fixed covariates
+     held constant while one parameter sweeps. A structured `MeasurementResult`/
+     `MeasurementEntry` design needs to accommodate this diversity, likely via a core
+     structured shape (parameter × setting × replicate) plus a `Json` escape hatch for the
+     genuinely irregular cases — see Suggested Direction A in the investigation report.
+   - **Reference/standard equipment used per job has zero schema representation.** Every
+     single one of the 50 worksheets has a "Daftar Alat yang Digunakan" table (which specific
+     reference instrument, brand/model/serial, was used for that job) — this is universal, not
+     an edge case, and `JobEvidence` (photo/file attachment) cannot represent it. See
+     Suggested Direction C (a `JobReferenceEquipmentUsed` model) — flagged as low-ambiguity,
+     low-risk to design since the shape doesn't vary much across device types.
+   - **`QualityReview`'s scoring structure can't represent the real "Telaah Teknis" scoring.**
+     The dominant pattern is a 3-category weighted score (commonly 10/40/50, but varies —
+     10/40/60, 20/80, 10/90 depending on whether an electrical-safety line applies), and one
+     worksheet variant (`LK Kelistrikan`, a generic electrical-installation-only worksheet, not
+     device-specific) replaces the whole scoring mechanism with a 5-tier categorical
+     classification instead of points. `QualityReview` currently only has
+     `decision`/`status`/free-text `notes` — no structured score breakdown, no variable
+     weighting. See Suggested Direction D.
+   - **Device-type catalog coverage is 27 of ~49 real device types, not 27 of 35 as
+     previously assumed.** `technician-docs.zip` (50 documents) is a materially larger and more
+     authoritative source than the earlier `Penilaian_Kemampuan.zip` (30 documents) used to
+     build the current 242-row `DeviceCalibrationParameter` seed — it includes ~22 additional
+     real device types with no seeded parameters yet (Audiometer, Auto Chemistry Analyzer,
+     Autoclave, Bio Safety Cabinet, Centrifuge/Centrifuge Refrigerator, CPAP, Dental Unit,
+     Dental X-Ray, Electro Accupunture, Examination Lamp, Fetal Doppler, Head Lamp Medik,
+     Hematologi Analyzer, Infusion Pump, Laminar Air Flow, Lampu Operasi, Laryngoskop,
+     Mikroskop Laboratorium, pH Meter, Phototherapy, Platelet Agitator Incubator, Rotator,
+     Spirometer, Suction Pump, Syringe Pump). Whoever continues the parameter-seeding work
+     should treat `technician-docs.zip` as the primary source going forward, not the older zip.
+   - **Two likely mislabeled source files** were flagged (not fixed): `LK Otoscope.docx`
+     actually contains a light-source test matching the Examination Lamp/Head Lamp/Lampu
+     Operasi/Laryngoskop family, not an otoscope-specific test; `LK Phaco Emulsifikasi.docx`
+     actually contains a suction/vacuum test identical in structure to `LK Suction Pump.docx`,
+     not a phaco-emulsification-specific test. These need confirmation from the calibration
+     team (see `Rangkuman_Gap_Konfirmasi_User.md`) before being used as a basis for seeding
+     those two device types' parameters.
+
+   **Caution for whoever designs the eventual link** (carried over from before, still
+   applies): while resolving item A1 in `Rangkuman_Gap_Konfirmasi_User.md` (how to represent
+   `VENT_IE_RATIO`), a proposal surfaced that would have restructured
    `DeviceCalibrationParameter` itself into an instance/value-holding table (adding
    `deviceId`, `valueNumeric`, `ratioNumerator`, etc. directly onto it). That was correctly
-   rejected — it would have collapsed the master-definition table into a
-   measurement-result table, duplicating what `MeasurementResult` already exists to do, and
-   broken the 242 already-seeded rows' meaning (master definitions, not instances). The
-   `valueType` enum was added to `DeviceCalibrationParameter` instead (a master-level concept:
-   "this parameter expects a ratio," not "here is the ratio value") — keep this boundary
-   intact when eventually designing the actual link to `MeasurementResult`. The lesson:
-   `DeviceCalibrationParameter` describes WHAT to measure and what shape the value takes;
-   `MeasurementResult` (or whatever links to it) is where the ACTUAL measured value from a
-   real job lives. Don't merge these two concerns.
+   rejected — it would have collapsed the master-definition table into a measurement-result
+   table. The `valueType` enum was added to `DeviceCalibrationParameter` instead (a
+   master-level concept: "this parameter expects a ratio," not "here is the ratio value").
+   **The tolerance field being added now follows the same principle** — it's a master-level
+   constant (what the limit IS), not an instance-level value (what was measured). Keep this
+   boundary intact: `DeviceCalibrationParameter` describes WHAT to measure, what shape the
+   value takes, and what the pass/fail limit is; the eventual `MeasurementResult`/
+   `MeasurementEntry` layer is where the ACTUAL measured value from a real job lives, checked
+   against that limit. Don't merge these two concerns.
 
 ## 10. Immediate Next Steps at Handoff Time (was Section 8; renumbered)
 
@@ -359,13 +414,25 @@ Status of in-flight items as of this update:
 5. **Device CRUD + Portal UI** — ✅ DONE, confirmed (see Section 5B).
 6. **`VENT_IE_RATIO` design decision** — ✅ RESOLVED. Added `valueType` enum to
    `DeviceCalibrationParameter` (see Section 5B) rather than forcing a dimensionless Uom.
-   Note: a related idea was raised (and correctly rejected) during this process — see Section
-   9 below for a caution about a proposal that would have duplicated `MeasurementResult`.
-7. **`MeasurementResult` ↔ `DeviceCalibrationParameter` linkage** — still open (see Section 9).
-   The `valueType` field added while resolving item 6 above is actually a useful head start
-   for this — it lets the future result-recording layer know in advance whether a given
-   parameter expects a number, ratio, text, or boolean, rather than guessing from free-form
-   JSON.
+7. **`MeasurementResult` ↔ `DeviceCalibrationParameter` linkage** — investigated in depth
+   (see Section 9), still needs actual design/implementation. Three concrete sub-decisions
+   now block this, roughly in priority order:
+   a. Add a tolerance/limit field (or sibling model) to `DeviceCalibrationParameter` — the
+      investigation confirmed this is a real master-level gap, not a deferred instance-level
+      concern.
+   b. Decide on the `MeasurementEntry`-style structured model (Suggested Direction A in the
+      investigation report) vs. alternatives, accounting for the ~10 distinct data shapes
+      found.
+   c. Decide on `JobReferenceEquipmentUsed` (Direction C) and the `QualityReview` scoring
+      structure (Direction D) — both confirmed as universal/near-universal gaps with no
+      schema home today.
+8. **Device-type coverage gap** — the real device-type count is ~49 (from `technician-docs.zip`,
+   50 documents), not 35. ~22 device types have no `DeviceCalibrationParameter` rows yet.
+   Extending the seed to cover them should use `technician-docs.zip` as the primary source
+   going forward (more complete and authoritative than the earlier `Penilaian_Kemampuan.zip`).
+9. **Two possibly-mislabeled LK source files** (`LK Otoscope.docx`, `LK Phaco Emulsifikasi.docx`)
+   need confirmation from the calibration team before being used as a seeding source for those
+   two device types — see `Rangkuman_Gap_Konfirmasi_User.md`.
 
 Beyond these in-flight items, the next lifecycle-module candidates remain: the Quotation
 module (backend, following the same pattern as CalibrationRequest), or resolving B4 to unblock

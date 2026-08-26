@@ -974,9 +974,10 @@ model DeviceCapabilityItem {
 // Master definition of a calibration measurement parameter for a DeviceType,
 // under a DeviceCapabilityItem. valueType declares the kind of value the
 // parameter expects; uom is required in meaning for NUMBER, optional for
-// RATIO/TEXT/BOOLEAN. Not a calibration result / transaction. Unique per
-// (deviceTypeId, capabilityItemId, code) so the same capability item + code
-// may exist independently per device type.
+// RATIO/TEXT/BOOLEAN. toleranceMin/toleranceMax store the comparable
+// acceptance bounds (nullable for upper-bound-only or unresolved cases);
+// toleranceNote keeps the verbatim LK wording. Unique per
+// (deviceTypeId, capabilityItemId, code).
 model DeviceCalibrationParameter {
   id               String               @id @default(cuid())
   deviceTypeId     String
@@ -986,6 +987,9 @@ model DeviceCalibrationParameter {
   description      String?
   valueType        CalibrationValueType @default(NUMBER)
   uomId            String?
+  toleranceMin     Decimal?             @db.Decimal(18, 4)
+  toleranceMax     Decimal?             @db.Decimal(18, 4)
+  toleranceNote    String?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 

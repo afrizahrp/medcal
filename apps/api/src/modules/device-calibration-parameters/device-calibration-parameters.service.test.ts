@@ -169,6 +169,64 @@ describe("DeviceCalibrationParametersService.create", () => {
     expect(parameter.capabilityItem.name).toBe("Systolic Pressure");
     expect(parameter.uomId).toBe(uom.id);
     expect(parameter.uom?.symbol).toBe("mmHg");
+    expect(parameter.toleranceMin).toBeNull();
+    expect(parameter.toleranceMax).toBeNull();
+    expect(parameter.toleranceNote).toBeNull();
+  });
+
+  it("stores a nominal-plus-minus tolerance as computed min and max", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const parameter = await service.create({
+      deviceTypeId: deviceType.id,
+      capabilityItemId: item.id,
+      code: uniqueCode(),
+      name: "Room Temperature",
+      uomId: uom.id,
+      toleranceMin: 19,
+      toleranceMax: 31,
+      toleranceNote: "25 ± 6°C",
+    });
+    createdParameterIds.push(parameter.id);
+
+    expect(Number(parameter.toleranceMin)).toBe(19);
+    expect(Number(parameter.toleranceMax)).toBe(31);
+    expect(parameter.toleranceNote).toBe("25 ± 6°C");
+  });
+
+  it("stores an upper-bound-only tolerance with min left null", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const parameter = await service.create({
+      deviceTypeId: deviceType.id,
+      capabilityItemId: item.id,
+      code: uniqueCode(),
+      name: "Equipment Leakage Current",
+      uomId: uom.id,
+      toleranceMax: 500,
+      toleranceNote: "≤500 µA",
+    });
+    createdParameterIds.push(parameter.id);
+
+    expect(parameter.toleranceMin).toBeNull();
+    expect(Number(parameter.toleranceMax)).toBe(500);
+    expect(parameter.toleranceNote).toBe("≤500 µA");
+  });
+
+  it("rejects a create payload whose min is greater than max", () => {
+    expect(
+      deviceCalibrationParameterCreateSchema.safeParse({
+        deviceTypeId: "type-1",
+        capabilityItemId: "item-1",
+        code: "CODE",
+        name: "Named",
+        uomId: "uom-1",
+        toleranceMin: 10,
+        toleranceMax: 5,
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects duplicate code under the same device type and capability item", async () => {
@@ -375,6 +433,24 @@ describe("DeviceCalibrationParametersService.findAll / findOne / update / remove
     expect(updated.deviceTypeId).toBe(otherType.id);
     expect(updated.capabilityItemId).toBe(other.item.id);
     expect(updated.uomId).toBe(otherUom.id);
+
+    const withTolerance = await service.update(created.id, {
+      toleranceMin: 90,
+      toleranceMax: null,
+      toleranceNote: "≥90%",
+    });
+    expect(Number(withTolerance.toleranceMin)).toBe(90);
+    expect(withTolerance.toleranceMax).toBeNull();
+    expect(withTolerance.toleranceNote).toBe("≥90%");
+
+    const clearedTolerance = await service.update(created.id, {
+      toleranceMin: null,
+      toleranceMax: null,
+      toleranceNote: null,
+    });
+    expect(clearedTolerance.toleranceMin).toBeNull();
+    expect(clearedTolerance.toleranceMax).toBeNull();
+    expect(clearedTolerance.toleranceNote).toBeNull();
 
     const removed = await service.remove(created.id);
     expect(removed.id).toBe(created.id);

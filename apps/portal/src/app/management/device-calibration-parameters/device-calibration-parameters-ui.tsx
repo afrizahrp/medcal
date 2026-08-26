@@ -48,11 +48,39 @@ export interface DeviceCalibrationParameterRow {
   description: string | null;
   valueType: "NUMBER" | "RATIO" | "TEXT" | "BOOLEAN";
   uomId: string | null;
+  toleranceMin: string | number | null;
+  toleranceMax: string | number | null;
+  toleranceNote: string | null;
   createdAt: string;
   updatedAt: string;
   deviceType: DeviceCalibrationParameterTypeRef;
   capabilityItem: DeviceCalibrationParameterItemRef;
   uom: DeviceCalibrationParameterUomRef | null;
+}
+
+function formatBound(value: string | number): string {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 4,
+    useGrouping: false,
+  }).format(Number(value));
+}
+
+export function formatCalibrationTolerance(row: {
+  toleranceMin: string | number | null;
+  toleranceMax: string | number | null;
+  toleranceNote: string | null;
+}): string | null {
+  const min = row.toleranceMin == null || row.toleranceMin === "" ? null : Number(row.toleranceMin);
+  const max = row.toleranceMax == null || row.toleranceMax === "" ? null : Number(row.toleranceMax);
+  const hasMin = min != null && Number.isFinite(min);
+  const hasMax = max != null && Number.isFinite(max);
+  let bounds: string | null = null;
+  if (hasMin && hasMax) bounds = `${formatBound(min)} – ${formatBound(max)}`;
+  else if (hasMax) bounds = `≤ ${formatBound(max)}`;
+  else if (hasMin) bounds = `≥ ${formatBound(min)}`;
+  const note = row.toleranceNote?.trim() || null;
+  if (bounds && note) return `${bounds} (${note})`;
+  return bounds ?? note;
 }
 
 export interface DeviceCalibrationParameterListResponse {
@@ -178,7 +206,7 @@ export function DeviceCalibrationParameterTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1020px]">
+      <table className="w-full min-w-[1140px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
             <th className="px-4 py-3">Device Type</th>
@@ -187,6 +215,7 @@ export function DeviceCalibrationParameterTable({
             <th className="px-4 py-3">Nama</th>
             <th className="px-4 py-3">Tipe nilai</th>
             <th className="px-4 py-3">UOM</th>
+            <th className="px-4 py-3">Batas</th>
             <th className="px-4 py-3">Deskripsi</th>
             <th className="px-4 py-3"></th>
           </tr>
@@ -222,6 +251,11 @@ export function DeviceCalibrationParameterTable({
                   </>
                 ) : (
                   <span className="text-slate-400">—</span>
+                )}
+              </td>
+              <td className="px-4 py-3 font-medium text-slate-700">
+                {formatCalibrationTolerance(row) ?? (
+                  <span className="font-normal text-slate-400">—</span>
                 )}
               </td>
               <td className="px-4 py-3 text-sm text-slate-600">

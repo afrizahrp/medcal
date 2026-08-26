@@ -555,14 +555,47 @@ export type DeviceCapabilityItemUpdateInput = z.infer<typeof deviceCapabilityIte
 // =============================================================================
 
 /** POST /device-calibration-parameters body */
-export const deviceCalibrationParameterCreateSchema = z.object({
-  deviceTypeId: z.string().min(1),
-  capabilityItemId: z.string().min(1),
-  code: z.string().min(1).max(64).toUpperCase(),
-  name: z.string().min(1).max(150),
-  description: optionalDescription,
-  uomId: z.string().min(1),
-});
+const optionalFiniteNumber = z.preprocess((value) => {
+  if (value === undefined) return undefined;
+  if (value === "" || value === null) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return null;
+    return Number(trimmed);
+  }
+  return value;
+}, z.number().finite().nullable().optional());
+
+function refineToleranceBounds(
+  data: { toleranceMin?: number | null; toleranceMax?: number | null },
+  ctx: z.RefinementCtx,
+) {
+  if (
+    data.toleranceMin != null &&
+    data.toleranceMax != null &&
+    data.toleranceMin > data.toleranceMax
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "toleranceMin must be less than or equal to toleranceMax",
+      path: ["toleranceMin"],
+    });
+  }
+}
+
+export const deviceCalibrationParameterCreateSchema = z
+  .object({
+    deviceTypeId: z.string().min(1),
+    capabilityItemId: z.string().min(1),
+    code: z.string().min(1).max(64).toUpperCase(),
+    name: z.string().min(1).max(150),
+    description: optionalDescription,
+    uomId: z.string().min(1),
+    toleranceMin: optionalFiniteNumber,
+    toleranceMax: optionalFiniteNumber,
+    toleranceNote: z.string().max(500).nullable().optional(),
+  })
+  .superRefine(refineToleranceBounds);
 
 export type DeviceCalibrationParameterCreateInput = z.infer<
   typeof deviceCalibrationParameterCreateSchema
@@ -584,14 +617,19 @@ export type DeviceCalibrationParameterListQuery = z.infer<
 export const DEVICE_CALIBRATION_PARAMETER_SORTABLE_FIELDS = ["createdAt", "code", "name"] as const;
 
 /** PATCH /device-calibration-parameters/:id body */
-export const deviceCalibrationParameterUpdateSchema = z.object({
-  deviceTypeId: z.string().min(1).optional(),
-  capabilityItemId: z.string().min(1).optional(),
-  code: z.string().min(1).max(64).toUpperCase().optional(),
-  name: z.string().min(1).max(150).optional(),
-  description: z.string().max(500).nullable().optional(),
-  uomId: z.string().min(1).optional(),
-});
+export const deviceCalibrationParameterUpdateSchema = z
+  .object({
+    deviceTypeId: z.string().min(1).optional(),
+    capabilityItemId: z.string().min(1).optional(),
+    code: z.string().min(1).max(64).toUpperCase().optional(),
+    name: z.string().min(1).max(150).optional(),
+    description: z.string().max(500).nullable().optional(),
+    uomId: z.string().min(1).optional(),
+    toleranceMin: optionalFiniteNumber,
+    toleranceMax: optionalFiniteNumber,
+    toleranceNote: z.string().max(500).nullable().optional(),
+  })
+  .superRefine(refineToleranceBounds);
 
 export type DeviceCalibrationParameterUpdateInput = z.infer<
   typeof deviceCalibrationParameterUpdateSchema

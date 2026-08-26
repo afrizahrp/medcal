@@ -90,6 +90,15 @@ export class DeviceCalibrationParametersService {
     }
   }
 
+  private assertToleranceBounds(min: number | null | undefined, max: number | null | undefined): void {
+    if (min != null && max != null && min > max) {
+      throw new BadRequestException({
+        message: "toleranceMin must be less than or equal to toleranceMax",
+        code: "INVALID_CALIBRATION_TOLERANCE",
+      });
+    }
+  }
+
   private async assertUniqueCode(
     deviceTypeId: string,
     capabilityItemId: string,
@@ -120,6 +129,7 @@ export class DeviceCalibrationParametersService {
     await this.assertDeviceTypeExists(input.deviceTypeId);
     await this.assertCapabilityItemExists(input.capabilityItemId);
     await this.assertUomExists(input.uomId);
+    this.assertToleranceBounds(input.toleranceMin, input.toleranceMax);
     await this.assertUniqueCode(input.deviceTypeId, input.capabilityItemId, input.code);
 
     return prisma.deviceCalibrationParameter.create({
@@ -130,6 +140,9 @@ export class DeviceCalibrationParametersService {
         name: input.name,
         description: input.description,
         uomId: input.uomId,
+        toleranceMin: input.toleranceMin ?? null,
+        toleranceMax: input.toleranceMax ?? null,
+        toleranceNote: input.toleranceNote ?? null,
       },
       include: parameterInclude,
     });
@@ -163,6 +176,7 @@ export class DeviceCalibrationParametersService {
               { uom: { name: { contains: query.search, mode: "insensitive" } } },
               { uom: { code: { contains: query.search, mode: "insensitive" } } },
               { uom: { symbol: { contains: query.search, mode: "insensitive" } } },
+              { toleranceNote: { contains: query.search, mode: "insensitive" } },
             ],
           }
         : {}),
@@ -223,6 +237,20 @@ export class DeviceCalibrationParametersService {
       await this.assertUomExists(input.uomId);
     }
 
+    const nextMin =
+      input.toleranceMin !== undefined
+        ? (input.toleranceMin ?? null)
+        : existing.toleranceMin == null
+          ? null
+          : Number(existing.toleranceMin);
+    const nextMax =
+      input.toleranceMax !== undefined
+        ? (input.toleranceMax ?? null)
+        : existing.toleranceMax == null
+          ? null
+          : Number(existing.toleranceMax);
+    this.assertToleranceBounds(nextMin, nextMax);
+
     const uniqueChanged =
       nextDeviceTypeId !== existing.deviceTypeId ||
       nextCapabilityItemId !== existing.capabilityItemId ||
@@ -241,6 +269,9 @@ export class DeviceCalibrationParametersService {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.uomId !== undefined ? { uomId: input.uomId } : {}),
+        ...(input.toleranceMin !== undefined ? { toleranceMin: input.toleranceMin } : {}),
+        ...(input.toleranceMax !== undefined ? { toleranceMax: input.toleranceMax } : {}),
+        ...(input.toleranceNote !== undefined ? { toleranceNote: input.toleranceNote } : {}),
       },
       include: parameterInclude,
     });

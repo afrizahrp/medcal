@@ -11,6 +11,7 @@ import {
   DeviceCalibrationParameterFormFields,
   buildDeviceCalibrationParameterCreatePayload,
   formatDeviceCalibrationParameterApiError,
+  validateCalibrationToleranceForm,
   type DeviceCalibrationParameterFormValue,
 } from "../device-calibration-parameter-form-fields";
 import {
@@ -35,6 +36,9 @@ const emptyForm: DeviceCalibrationParameterFormValue = {
   code: "",
   name: "",
   uomId: "",
+  toleranceMin: "",
+  toleranceMax: "",
+  toleranceNote: "",
   description: "",
 };
 
@@ -107,6 +111,11 @@ export default function NewDeviceCalibrationParameterPage() {
     }
     if (!form.uomId) {
       setError("UOM wajib dipilih.");
+      return;
+    }
+    const limitError = validateCalibrationToleranceForm(form);
+    if (limitError) {
+      setError(limitError);
       return;
     }
 

@@ -11,6 +11,7 @@ import {
   DeviceCalibrationParameterFormFields,
   buildDeviceCalibrationParameterUpdatePayload,
   formatDeviceCalibrationParameterApiError,
+  validateCalibrationToleranceForm,
   type DeviceCalibrationParameterFormValue,
 } from "../device-calibration-parameter-form-fields";
 import {
@@ -20,6 +21,7 @@ import {
   deviceCalibrationParameterFormActionsClass,
   deviceCalibrationParameterFormPageClass,
   deviceCalibrationParameterFormSurfaceClass,
+  formatCalibrationTolerance,
 } from "../device-calibration-parameters-ui";
 import {
   useDeleteDeviceCalibrationParameter,
@@ -40,6 +42,9 @@ const emptyForm: DeviceCalibrationParameterFormValue = {
   code: "",
   name: "",
   uomId: "",
+  toleranceMin: "",
+  toleranceMax: "",
+  toleranceNote: "",
   description: "",
 };
 
@@ -51,6 +56,11 @@ function formFromRow(row: DeviceCalibrationParameterRow): DeviceCalibrationParam
     code: row.code,
     name: row.name,
     uomId: row.uomId ?? "",
+    toleranceMin:
+      row.toleranceMin == null || row.toleranceMin === "" ? "" : String(Number(row.toleranceMin)),
+    toleranceMax:
+      row.toleranceMax == null || row.toleranceMax === "" ? "" : String(Number(row.toleranceMax)),
+    toleranceNote: row.toleranceNote ?? "",
     description: row.description ?? "",
   };
 }
@@ -187,6 +197,11 @@ export default function DeviceCalibrationParameterDetailPage() {
       setError("UOM wajib dipilih.");
       return;
     }
+    const limitError = validateCalibrationToleranceForm(form);
+    if (limitError) {
+      setError(limitError);
+      return;
+    }
 
     try {
       await updateMutation.mutateAsync({
@@ -294,6 +309,10 @@ export default function DeviceCalibrationParameterDetailPage() {
                 <span className="font-medium">
                   {row.uom ? `${row.uom.symbol} — ${row.uom.name}` : "—"}
                 </span>
+              </DetailField>
+
+              <DetailField label="Batas penerimaan">
+                <span className="font-medium">{formatCalibrationTolerance(row) ?? "—"}</span>
               </DetailField>
 
               <DetailField label="Deskripsi">

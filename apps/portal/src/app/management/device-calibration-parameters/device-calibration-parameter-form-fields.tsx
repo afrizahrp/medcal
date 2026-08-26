@@ -30,6 +30,9 @@ export interface DeviceCalibrationParameterFormValue {
   code: string;
   name: string;
   uomId: string;
+  toleranceMin: string;
+  toleranceMax: string;
+  toleranceNote: string;
   description: string;
 }
 
@@ -278,7 +281,7 @@ export function DeviceCalibrationParameterFormFields({
 
         <ComboboxField
           id="uomId"
-          label="UOM"
+          label="UOM parameter"
           required
           open={uomOpen}
           onOpenChange={setUomOpen}
@@ -300,6 +303,53 @@ export function DeviceCalibrationParameterFormFields({
           onSelect={(id) => onChange("uomId", id)}
         />
 
+        <div className={gridClass}>
+          <div>
+            <label htmlFor="toleranceMin" className="block text-sm font-medium text-slate-700">
+              Toleransi min
+            </label>
+            <Input
+              id="toleranceMin"
+              type="number"
+              step="any"
+              value={value.toleranceMin}
+              onChange={(e) => onChange("toleranceMin", e.target.value)}
+              className={fieldClass}
+              placeholder="19"
+            />
+          </div>
+          <div>
+            <label htmlFor="toleranceMax" className="block text-sm font-medium text-slate-700">
+              Toleransi max
+            </label>
+            <Input
+              id="toleranceMax"
+              type="number"
+              step="any"
+              value={value.toleranceMax}
+              onChange={(e) => onChange("toleranceMax", e.target.value)}
+              className={fieldClass}
+              placeholder="31"
+            />
+          </div>
+        </div>
+        <p className="-mt-2 text-xs text-slate-500">
+          Isi keduanya untuk rentang (25 ± 6°C → 19–31). Hanya max untuk batas atas (≤500 µA).
+        </p>
+        <div>
+          <label htmlFor="toleranceNote" className="block text-sm font-medium text-slate-700">
+            Catatan toleransi (teks LK)
+          </label>
+          <Input
+            id="toleranceNote"
+            value={value.toleranceNote}
+            onChange={(e) => onChange("toleranceNote", e.target.value)}
+            className={fieldClass}
+            placeholder="25 ± 6°C"
+            maxLength={500}
+          />
+        </div>
+
         <div>
           <label htmlFor="description" className="block text-sm font-medium text-slate-700">
             Deskripsi
@@ -317,10 +367,28 @@ export function DeviceCalibrationParameterFormFields({
   );
 }
 
+export function validateCalibrationToleranceForm(
+  form: DeviceCalibrationParameterFormValue,
+): string | null {
+  const minRaw = form.toleranceMin.trim();
+  const maxRaw = form.toleranceMax.trim();
+  const min = minRaw === "" ? null : Number(minRaw);
+  const max = maxRaw === "" ? null : Number(maxRaw);
+  if (minRaw !== "" && !Number.isFinite(min)) return "Toleransi min tidak valid.";
+  if (maxRaw !== "" && !Number.isFinite(max)) return "Toleransi max tidak valid.";
+  if (min != null && max != null && min > max) {
+    return "Toleransi min tidak boleh lebih besar dari max.";
+  }
+  return null;
+}
+
 export function buildDeviceCalibrationParameterCreatePayload(
   form: DeviceCalibrationParameterFormValue,
 ) {
   const description = form.description.trim();
+  const note = form.toleranceNote.trim();
+  const minRaw = form.toleranceMin.trim();
+  const maxRaw = form.toleranceMax.trim();
   return {
     deviceTypeId: form.deviceTypeId,
     capabilityItemId: form.capabilityItemId,
@@ -328,12 +396,17 @@ export function buildDeviceCalibrationParameterCreatePayload(
     name: form.name.trim(),
     uomId: form.uomId,
     ...(description ? { description } : {}),
+    ...(minRaw !== "" ? { toleranceMin: Number(minRaw) } : {}),
+    ...(maxRaw !== "" ? { toleranceMax: Number(maxRaw) } : {}),
+    ...(note ? { toleranceNote: note } : {}),
   };
 }
 
 export function buildDeviceCalibrationParameterUpdatePayload(
   form: DeviceCalibrationParameterFormValue,
 ) {
+  const minRaw = form.toleranceMin.trim();
+  const maxRaw = form.toleranceMax.trim();
   return {
     deviceTypeId: form.deviceTypeId,
     capabilityItemId: form.capabilityItemId,
@@ -341,6 +414,9 @@ export function buildDeviceCalibrationParameterUpdatePayload(
     name: form.name.trim(),
     ...(form.uomId ? { uomId: form.uomId } : {}),
     description: form.description.trim() ? form.description.trim() : null,
+    toleranceMin: minRaw === "" ? null : Number(minRaw),
+    toleranceMax: maxRaw === "" ? null : Number(maxRaw),
+    toleranceNote: form.toleranceNote.trim() ? form.toleranceNote.trim() : null,
   };
 }
 
@@ -361,6 +437,9 @@ export function formatDeviceCalibrationParameterApiError(error: unknown): string
     }
     if (code === "UOM_NOT_FOUND") {
       return "UOM yang dipilih tidak ditemukan.";
+    }
+    if (code === "INVALID_CALIBRATION_TOLERANCE") {
+      return "Rentang toleransi tidak valid. Min tidak boleh lebih besar dari max.";
     }
     if (
       code === "INVALID_DEVICE_CALIBRATION_PARAMETER" ||
