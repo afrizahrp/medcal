@@ -287,7 +287,13 @@ describe("DevicesService.findAll / findOne / update / remove", () => {
         customerId: customer.id,
         number: `REQ/TEST/${randomUUID().slice(0, 8)}`,
         serviceMode: "ON_SITE",
-        items: { create: { companyId: realCompanyId, deviceId: created.id } },
+        items: {
+          create: {
+            companyId: realCompanyId,
+            deviceTypeId: deviceType.id,
+            deviceId: created.id,
+          },
+        },
       },
     });
     createdCalibrationRequestIds.push(request.id);

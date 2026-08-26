@@ -200,6 +200,9 @@ export function formatDeviceTypeApiError(error: unknown): string {
     if (code === "DEVICE_TYPE_HAS_MODELS") {
       return "Device Type tidak dapat dihapus karena masih memiliki Device Model.";
     }
+    if (code === "DEVICE_TYPE_HAS_CALIBRATION_REQUESTS") {
+      return "Device Type tidak dapat dihapus karena masih dipakai Calibration Request.";
+    }
     if (typeof error.data?.message === "string") return error.data.message;
     return error.message;
   }

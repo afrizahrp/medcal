@@ -166,6 +166,15 @@ export class DeviceTypesService {
         code: "DEVICE_TYPE_HAS_MODELS",
       });
     }
+    const requestItemCount = await prisma.calibrationRequestItem.count({
+      where: { deviceTypeId: id },
+    });
+    if (requestItemCount > 0) {
+      throw new BadRequestException({
+        message: "Cannot delete a device type that is used by calibration requests",
+        code: "DEVICE_TYPE_HAS_CALIBRATION_REQUESTS",
+      });
+    }
     await prisma.deviceType.delete({ where: { id: existing.id } });
     return existing;
   }

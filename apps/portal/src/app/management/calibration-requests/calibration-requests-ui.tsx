@@ -1,10 +1,20 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Check, ChevronsUpDown, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../../../components/management/page-header";
 import { PaginationBar, Surface, selectClassName, formatRelativeTime } from "../leads/leads-ui";
@@ -18,18 +28,19 @@ export type CalibrationRequestStatus =
 
 export type ServiceMode = "ON_SITE" | "SEND_TO_LAB";
 
-export interface CalibrationRequestDevice {
+export interface CalibrationRequestDeviceType {
   id: string;
-  brand: string | null;
-  model: string | null;
-  serialNumber: string | null;
+  code: string;
+  name: string;
+  category: { id: string; name: string };
 }
 
 export interface CalibrationRequestItem {
   id: string;
+  deviceTypeId: string;
   deviceId: string;
   notes: string | null;
-  device: CalibrationRequestDevice;
+  deviceType: CalibrationRequestDeviceType;
 }
 
 export interface CalibrationRequestCustomer {
@@ -291,5 +302,99 @@ export function ConfirmDialog({
         </div>
       </div>
     </div>
+  );
+}
+
+export type DeviceTypeOption = {
+  id: string;
+  name: string;
+  code?: string;
+  category?: { id: string; name: string } | null;
+};
+
+export function DeviceTypeItemSelect({
+  value,
+  onChange,
+  deviceTypes,
+  loading,
+  disabled,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  deviceTypes: DeviceTypeOption[];
+  loading?: boolean;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = deviceTypes.find((type) => type.id === value);
+  const groups = useMemo(() => {
+    const map = new Map<string, DeviceTypeOption[]>();
+    for (const type of deviceTypes) {
+      const heading = type.category?.name || "Other";
+      const list = map.get(heading) ?? [];
+      list.push(type);
+      map.set(heading, list);
+    }
+    return map;
+  }, [deviceTypes]);
+
+  const emptyLabel =
+    !loading && deviceTypes.length === 0
+      ? "No device types available"
+      : "Device Type tidak ditemukan.";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          aria-label="Device Type"
+          disabled={disabled || loading}
+          className="w-full justify-between font-normal"
+        >
+          {selected ? (
+            <span className="truncate">{selected.name}</span>
+          ) : (
+            <span className="text-slate-400">
+              {loading ? "Memuat tipe…" : "Select Device Type"}
+            </span>
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Cari device type…" />
+          <CommandList>
+            <CommandEmpty>{loading ? "Memuat…" : emptyLabel}</CommandEmpty>
+            {Array.from(groups.entries()).map(([heading, types]) => (
+              <CommandGroup key={heading} heading={heading}>
+                {types.map((type) => (
+                  <CommandItem
+                    key={type.id}
+                    value={`${type.name} ${type.code ?? ""} ${heading}`}
+                    onSelect={() => {
+                      onChange(type.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        value === type.id ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    <span className="truncate">{type.name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }

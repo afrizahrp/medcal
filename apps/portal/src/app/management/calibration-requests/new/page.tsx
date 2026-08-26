@@ -29,15 +29,20 @@ import {
   selectClassName,
   SERVICE_MODE_OPTIONS,
   SERVICE_MODE_LABELS,
+  DeviceTypeItemSelect,
   type ServiceMode,
 } from "../calibration-requests-ui";
 import { useCreateCalibrationRequest } from "../use-calibration-requests-query";
 import { useCustomers } from "../../customers/use-customers-query";
+import { useDeviceTypes } from "../../device-types/use-device-types-query";
 
 interface ItemInput {
+  deviceTypeId: string;
   deviceId: string;
   notes: string;
 }
+
+const emptyItem = (): ItemInput => ({ deviceTypeId: "", deviceId: "", notes: "" });
 
 export default function NewCalibrationRequestPage() {
   const router = useRouter();
@@ -49,7 +54,7 @@ export default function NewCalibrationRequestPage() {
   const [desiredDate, setDesiredDate] = useState<Date | undefined>(undefined);
   const [dateOpen, setDateOpen] = useState(false);
   const [notes, setNotes] = useState("");
-  const [items, setItems] = useState<ItemInput[]>([{ deviceId: "", notes: "" }]);
+  const [items, setItems] = useState<ItemInput[]>([emptyItem()]);
   const [error, setError] = useState<string | null>(null);
 
   const customersQuery = useCustomers({
@@ -60,12 +65,22 @@ export default function NewCalibrationRequestPage() {
     page: 1,
     pageSize: 100,
   });
+  const typesQuery = useDeviceTypes({
+    search: "",
+    categoryId: "",
+    isActive: true,
+    sortBy: "name",
+    sortDir: "asc",
+    page: 1,
+    pageSize: 100,
+  });
 
   const customers = customersQuery.data?.data ?? [];
+  const deviceTypes = typesQuery.data?.data ?? [];
   const selectedCustomer = customers.find((c) => c.id === customerId);
 
   function addItem() {
-    setItems((prev) => [...prev, { deviceId: "", notes: "" }]);
+    setItems((prev) => [...prev, emptyItem()]);
   }
 
   function removeItem(index: number) {
@@ -85,9 +100,18 @@ export default function NewCalibrationRequestPage() {
       return;
     }
 
-    const validItems = items.filter((item) => item.deviceId.trim());
+    const filledItems = items.filter(
+      (item) => item.deviceTypeId.trim() || item.deviceId.trim() || item.notes.trim(),
+    );
+    const validItems = filledItems.filter(
+      (item) => item.deviceTypeId.trim() && item.deviceId.trim(),
+    );
     if (validItems.length === 0) {
       setError("Minimal 1 device harus ditambahkan.");
+      return;
+    }
+    if (validItems.length !== filledItems.length) {
+      setError("Setiap device wajib memiliki Device Type dan Device ID.");
       return;
     }
 
@@ -98,6 +122,7 @@ export default function NewCalibrationRequestPage() {
         expectedDate: desiredDate,
         notes: notes.trim() || undefined,
         items: validItems.map((item) => ({
+          deviceTypeId: item.deviceTypeId.trim(),
           deviceId: item.deviceId.trim(),
           notes: item.notes.trim() || undefined,
         })),
@@ -108,8 +133,8 @@ export default function NewCalibrationRequestPage() {
         const code = err.data?.code;
         if (code === "CUSTOMER_NOT_FOUND") {
           setError("Customer tidak ditemukan.");
-        } else if (code === "DEVICE_NOT_FOUND") {
-          setError("Satu atau lebih device tidak ditemukan.");
+        } else if (code === "DEVICE_TYPE_NOT_FOUND") {
+          setError("Satu atau lebih device type tidak ditemukan.");
         } else {
           setError(err.data?.message ?? err.message);
         }
@@ -140,8 +165,8 @@ export default function NewCalibrationRequestPage() {
             <section className="space-y-4">
               <h2 className="text-base font-semibold text-slate-900">Request Information</h2>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                <div className="min-w-0">
                   <label className="mb-1.5 block text-sm font-medium text-slate-700">
                     Customer <span className="text-red-500">*</span>
                   </label>
@@ -179,7 +204,7 @@ export default function NewCalibrationRequestPage() {
                                 onSelect={() => {
                                   setCustomerId(customer.id);
                                   setCustomerOpen(false);
-                                  setItems([{ deviceId: "", notes: "" }]);
+                                  setItems([emptyItem()]);
                                 }}
                               >
                                 <Check
@@ -203,7 +228,7 @@ export default function NewCalibrationRequestPage() {
                   </Popover>
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <label className="mb-1.5 block text-sm font-medium text-slate-700">
                     Service Mode <span className="text-red-500">*</span>
                   </label>
@@ -220,10 +245,8 @@ export default function NewCalibrationRequestPage() {
                     ))}
                   </select>
                 </div>
-              </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
+                <div className="min-w-0">
                   <label className="mb-1.5 block text-sm font-medium text-slate-700">
                     Expected Date
                   </label>
@@ -236,10 +259,12 @@ export default function NewCalibrationRequestPage() {
                           !desiredDate && "text-slate-400",
                         )}
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {desiredDate
-                          ? format(desiredDate, "PPP", { locale: localeId })
-                          : "Pilih tanggal…"}
+                        <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                        <span className="truncate">
+                          {desiredDate
+                            ? format(desiredDate, "PPP", { locale: localeId })
+                            : "Pilih tanggal…"}
+                        </span>
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -259,8 +284,6 @@ export default function NewCalibrationRequestPage() {
                     </PopoverContent>
                   </Popover>
                 </div>
-
-                <div className="md:col-span-1" />
               </div>
 
               <div>
@@ -281,7 +304,7 @@ export default function NewCalibrationRequestPage() {
                   <h2 className="text-base font-semibold text-slate-900">Devices</h2>
                   <p className="mt-0.5 text-sm text-slate-500">
                     {customerId
-                      ? "Enter device IDs for calibration."
+                      ? "Pilih device type dan masukkan Device ID milik customer."
                       : "Select a customer first to add devices."}
                   </p>
                 </div>
@@ -309,28 +332,41 @@ export default function NewCalibrationRequestPage() {
                       className="rounded-lg border border-slate-200 bg-slate-50/50 p-4"
                     >
                       <div className="flex items-start gap-3">
-                        <div className="flex-1 grid gap-3 md:grid-cols-2">
+                        <div className="min-w-0 flex-1 space-y-3">
                           <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">
-                              Device ID <span className="text-red-500">*</span>
+                              Device Type <span className="text-red-500">*</span>
                             </label>
-                            <Input
-                              value={item.deviceId}
-                              onChange={(e) => updateItem(index, "deviceId", e.target.value)}
-                              placeholder="Enter device ID"
-                              required={index === 0}
+                            <DeviceTypeItemSelect
+                              value={item.deviceTypeId}
+                              onChange={(id) => updateItem(index, "deviceTypeId", id)}
+                              deviceTypes={deviceTypes}
+                              loading={typesQuery.isLoading}
                             />
                           </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-medium text-slate-600">
-                              Notes
-                            </label>
-                            <Input
-                              value={item.notes}
-                              onChange={(e) => updateItem(index, "notes", e.target.value)}
-                              placeholder="Notes for this device…"
-                              maxLength={1000}
-                            />
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-slate-600">
+                                Device ID <span className="text-red-500">*</span>
+                              </label>
+                              <Input
+                                value={item.deviceId}
+                                onChange={(e) => updateItem(index, "deviceId", e.target.value)}
+                                placeholder="Enter device ID"
+                                required={index === 0}
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-slate-600">
+                                Notes
+                              </label>
+                              <Input
+                                value={item.notes}
+                                onChange={(e) => updateItem(index, "notes", e.target.value)}
+                                placeholder="Notes for this device…"
+                                maxLength={1000}
+                              />
+                            </div>
                           </div>
                         </div>
                         {items.length > 1 ? (

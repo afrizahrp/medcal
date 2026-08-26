@@ -11,8 +11,20 @@ import { resolveSortOrder } from "../../common/sort-query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
+const deviceTypeSelect = {
+  id: true,
+  code: true,
+  name: true,
+  category: { select: { id: true, name: true } },
+} as const;
+
+const calibrationRequestInclude = {
+  items: { include: { deviceType: { select: deviceTypeSelect } } },
+  customer: true,
+} as const;
+
 export type CalibrationRequestWithItems = Prisma.CalibrationRequestGetPayload<{
-  include: { items: { include: { device: true } }; customer: true };
+  include: typeof calibrationRequestInclude;
 }>;
 
 export interface CalibrationRequestListResult {
@@ -21,6 +33,20 @@ export interface CalibrationRequestListResult {
   pageSize: number;
   total: number;
   totalPages: number;
+}
+
+async function assertDeviceTypesExist(
+  tx: Prisma.TransactionClient,
+  deviceTypeIds: string[],
+): Promise<void> {
+  const uniqueIds = [...new Set(deviceTypeIds)];
+  const count = await tx.deviceType.count({ where: { id: { in: uniqueIds } } });
+  if (count !== uniqueIds.length) {
+    throw new BadRequestException({
+      message: "One or more device types not found",
+      code: "DEVICE_TYPE_NOT_FOUND",
+    });
+  }
 }
 
 @Injectable()
@@ -52,16 +78,10 @@ export class CalibrationRequestsService {
         }
       }
 
-      const deviceIds = input.items.map((item) => item.deviceId);
-      const devices = await tx.device.findMany({
-        where: { id: { in: deviceIds }, companyId },
-      });
-      if (devices.length !== deviceIds.length) {
-        throw new BadRequestException({
-          message: "One or more devices not found",
-          code: "DEVICE_NOT_FOUND",
-        });
-      }
+      await assertDeviceTypesExist(
+        tx,
+        input.items.map((item) => item.deviceTypeId),
+      );
 
       const issuedAt = new Date();
       const number = await DocumentNumberService.allocate({
@@ -88,6 +108,7 @@ export class CalibrationRequestsService {
         data: input.items.map((item) => ({
           companyId,
           requestId: calibrationRequest.id,
+          deviceTypeId: item.deviceTypeId,
           deviceId: item.deviceId,
           notes: item.notes,
         })),
@@ -95,7 +116,7 @@ export class CalibrationRequestsService {
 
       return tx.calibrationRequest.findFirstOrThrow({
         where: { id: calibrationRequest.id, companyId },
-        include: { items: { include: { device: true } }, customer: true },
+        include: calibrationRequestInclude,
       });
     });
   }
@@ -136,7 +157,7 @@ export class CalibrationRequestsService {
         orderBy: { [sortField]: sortDir },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: { items: { include: { device: true } }, customer: true },
+        include: calibrationRequestInclude,
       }),
     ]);
 
@@ -146,7 +167,7 @@ export class CalibrationRequestsService {
   async findOne(companyId: string, id: string): Promise<CalibrationRequestWithItems> {
     const calibrationRequest = await prisma.calibrationRequest.findFirst({
       where: { id, companyId },
-      include: { items: { include: { device: true } }, customer: true },
+      include: calibrationRequestInclude,
     });
     if (!calibrationRequest) {
       throw new NotFoundException({
@@ -207,16 +228,10 @@ export class CalibrationRequestsService {
       }
 
       if (input.items) {
-        const deviceIds = input.items.map((item) => item.deviceId);
-        const devices = await tx.device.findMany({
-          where: { id: { in: deviceIds }, companyId },
-        });
-        if (devices.length !== deviceIds.length) {
-          throw new BadRequestException({
-            message: "One or more devices not found",
-            code: "DEVICE_NOT_FOUND",
-          });
-        }
+        await assertDeviceTypesExist(
+          tx,
+          input.items.map((item) => item.deviceTypeId),
+        );
 
         await tx.calibrationRequestItem.deleteMany({
           where: { requestId: id },
@@ -226,6 +241,7 @@ export class CalibrationRequestsService {
           data: input.items.map((item) => ({
             companyId,
             requestId: id,
+            deviceTypeId: item.deviceTypeId,
             deviceId: item.deviceId,
             notes: item.notes,
           })),
@@ -245,7 +261,7 @@ export class CalibrationRequestsService {
 
       return tx.calibrationRequest.findFirstOrThrow({
         where: { id, companyId },
-        include: { items: { include: { device: true } }, customer: true },
+        include: calibrationRequestInclude,
       });
     });
   }
@@ -282,7 +298,7 @@ export class CalibrationRequestsService {
     return prisma.calibrationRequest.update({
       where: { id },
       data: { status: "CANCELLED" },
-      include: { items: { include: { device: true } }, customer: true },
+      include: calibrationRequestInclude,
     });
   }
 
@@ -307,7 +323,7 @@ export class CalibrationRequestsService {
     return prisma.calibrationRequest.update({
       where: { id },
       data: { status: "SUBMITTED" },
-      include: { items: { include: { device: true } }, customer: true },
+      include: calibrationRequestInclude,
     });
   }
 }

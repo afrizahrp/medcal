@@ -193,13 +193,12 @@ export default function CalibrationRequestDetailPage() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="font-medium text-slate-900">
-                      {item.device.brand ?? "Unknown"} {item.device.model ?? ""}
+                    <p className="font-medium text-slate-900">{item.deviceType.name}</p>
+                    <p className="mt-0.5 font-mono text-xs text-slate-500">
+                      Device ID: {item.deviceId}
                     </p>
-                    {item.device.serialNumber ? (
-                      <p className="mt-0.5 font-mono text-xs text-slate-500">
-                        S/N: {item.device.serialNumber}
-                      </p>
+                    {item.deviceType.category?.name ? (
+                      <p className="mt-0.5 text-xs text-slate-400">{item.deviceType.category.name}</p>
                     ) : null}
                     {item.notes ? (
                       <p className="mt-1 text-sm text-slate-600">{item.notes}</p>

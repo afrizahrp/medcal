@@ -23,22 +23,27 @@ import {
   selectClassName,
   SERVICE_MODE_OPTIONS,
   SERVICE_MODE_LABELS,
+  DeviceTypeItemSelect,
   type ServiceMode,
   type CalibrationRequestRow,
+  type DeviceTypeOption,
 } from "../../calibration-requests-ui";
 import {
   useCalibrationRequest,
   useUpdateCalibrationRequest,
 } from "../../use-calibration-requests-query";
 import { useCustomers } from "../../../customers/use-customers-query";
+import { useDeviceTypes } from "../../../device-types/use-device-types-query";
 
 interface ItemInput {
+  deviceTypeId: string;
   deviceId: string;
   notes: string;
 }
 
 function itemsFromRequest(request: CalibrationRequestRow): ItemInput[] {
   return request.items.map((item) => ({
+    deviceTypeId: item.deviceTypeId,
     deviceId: item.deviceId,
     notes: item.notes ?? "",
   }));
@@ -78,10 +83,30 @@ export default function EditCalibrationRequestPage() {
     page: 1,
     pageSize: 100,
   });
+  const typesQuery = useDeviceTypes({
+    search: "",
+    categoryId: "",
+    isActive: true,
+    sortBy: "name",
+    sortDir: "asc",
+    page: 1,
+    pageSize: 100,
+  });
 
   const customers = customersQuery.data?.data ?? [];
   const selectedCustomer = customers.find((c) => c.id === customerId);
   const request = query.data;
+  const deviceTypes: DeviceTypeOption[] = [
+    ...(typesQuery.data?.data ?? []),
+    ...(request?.items
+      .map((item) => item.deviceType)
+      .filter(
+        (type, index, all) =>
+          Boolean(type) &&
+          all.findIndex((candidate) => candidate.id === type.id) === index &&
+          !(typesQuery.data?.data ?? []).some((listed) => listed.id === type.id),
+      ) ?? []),
+  ];
 
   useEffect(() => {
     if (request && !initialized) {
@@ -152,7 +177,7 @@ export default function EditCalibrationRequestPage() {
   }
 
   function addItem() {
-    setItems((prev) => [...prev, { deviceId: "", notes: "" }]);
+    setItems((prev) => [...prev, { deviceTypeId: "", deviceId: "", notes: "" }]);
   }
 
   function removeItem(index: number) {
@@ -174,9 +199,18 @@ export default function EditCalibrationRequestPage() {
       return;
     }
 
-    const validItems = items.filter((item) => item.deviceId.trim());
+    const filledItems = items.filter(
+      (item) => item.deviceTypeId.trim() || item.deviceId.trim() || item.notes.trim(),
+    );
+    const validItems = filledItems.filter(
+      (item) => item.deviceTypeId.trim() && item.deviceId.trim(),
+    );
     if (validItems.length === 0) {
       setError("Minimal 1 device harus ditambahkan.");
+      return;
+    }
+    if (validItems.length !== filledItems.length) {
+      setError("Setiap device wajib memiliki Device Type dan Device ID.");
       return;
     }
 
@@ -189,6 +223,7 @@ export default function EditCalibrationRequestPage() {
           expectedDate: desiredDate ?? null,
           notes: notes.trim() || null,
           items: validItems.map((item) => ({
+            deviceTypeId: item.deviceTypeId.trim(),
             deviceId: item.deviceId.trim(),
             notes: item.notes.trim() || undefined,
           })),
@@ -200,8 +235,8 @@ export default function EditCalibrationRequestPage() {
         const code = err.data?.code;
         if (code === "CUSTOMER_NOT_FOUND") {
           setError("Customer tidak ditemukan.");
-        } else if (code === "DEVICE_NOT_FOUND") {
-          setError("Satu atau lebih device tidak ditemukan.");
+        } else if (code === "DEVICE_TYPE_NOT_FOUND") {
+          setError("Satu atau lebih device type tidak ditemukan.");
         } else if (code === "INVALID_STATUS_FOR_UPDATE") {
           setError("Request tidak dapat diedit dalam status saat ini.");
         } else {
@@ -278,7 +313,7 @@ export default function EditCalibrationRequestPage() {
                                   setCustomerId(customer.id);
                                   setCustomerOpen(false);
                                   if (changed) {
-                                    setItems([{ deviceId: "", notes: "" }]);
+                                    setItems([{ deviceTypeId: "", deviceId: "", notes: "" }]);
                                   }
                                 }}
                               >
@@ -377,7 +412,7 @@ export default function EditCalibrationRequestPage() {
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">Devices</h2>
                   <p className="mt-0.5 text-sm text-slate-500">
-                    Enter device IDs for calibration.
+                    Pilih device type dan masukkan Device ID milik customer.
                   </p>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={addItem}>
@@ -393,28 +428,41 @@ export default function EditCalibrationRequestPage() {
                     className="rounded-lg border border-slate-200 bg-slate-50/50 p-4"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="flex-1 grid gap-3 md:grid-cols-2">
+                      <div className="min-w-0 flex-1 space-y-3">
                         <div>
                           <label className="mb-1 block text-xs font-medium text-slate-600">
-                            Device ID <span className="text-red-500">*</span>
+                            Device Type <span className="text-red-500">*</span>
                           </label>
-                          <Input
-                            value={item.deviceId}
-                            onChange={(e) => updateItem(index, "deviceId", e.target.value)}
-                            placeholder="Enter device ID"
-                            required={index === 0}
+                          <DeviceTypeItemSelect
+                            value={item.deviceTypeId}
+                            onChange={(id) => updateItem(index, "deviceTypeId", id)}
+                            deviceTypes={deviceTypes}
+                            loading={typesQuery.isLoading}
                           />
                         </div>
-                        <div>
-                          <label className="mb-1 block text-xs font-medium text-slate-600">
-                            Notes
-                          </label>
-                          <Input
-                            value={item.notes}
-                            onChange={(e) => updateItem(index, "notes", e.target.value)}
-                            placeholder="Notes for this device…"
-                            maxLength={1000}
-                          />
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Device ID <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              value={item.deviceId}
+                              onChange={(e) => updateItem(index, "deviceId", e.target.value)}
+                              placeholder="Enter device ID"
+                              required={index === 0}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Notes
+                            </label>
+                            <Input
+                              value={item.notes}
+                              onChange={(e) => updateItem(index, "notes", e.target.value)}
+                              placeholder="Notes for this device…"
+                              maxLength={1000}
+                            />
+                          </div>
                         </div>
                       </div>
                       {items.length > 1 ? (

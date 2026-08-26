@@ -294,6 +294,7 @@ const calibrationRequestStatusValues = [
 
 /** Nested item input for CalibrationRequestItem */
 const calibrationRequestItemInputSchema = z.object({
+  deviceTypeId: z.string().min(1),
   deviceId: z.string().min(1),
   notes: z.string().max(1000).optional(),
 });

@@ -202,16 +202,12 @@ schema rather than trusting an earlier description of it, since schemas evolve.
 | `DeviceType` | 35 | ✅ Seeded (confirmed by project owner) |
 | `Uom` | 34 (31 original + `UA` microampere, `M_S` meter/second, `DB` decibel added later) | ✅ Seeded (confirmed by project owner) |
 | `DeviceModel` | 0 | ⏸️ Deliberately deferred — no real brand/model inventory data available yet |
-| `DeviceCapability` | 21 rows prepared (CSV: `seed_device_capability.csv`) | 🟡 Cursor prompt issued (`Seed_DeviceCapability_and_Item.md`), **execution result not yet confirmed back** — check with project owner whether this ran and passed verification |
+| `DeviceCapability` | 21 rows prepared (CSV: `seed_device_capability.csv`) | 🟡 Cursor prompt issued (`Seed_DeviceCapability_and_Item.md`), **execution result still not confirmed back as of this update** — check with project owner whether this ran and passed verification before assuming it's seeded |
 | `DeviceCapabilityItem` | 66 rows prepared (CSV: `seed_device_capability_item.csv`) | 🟡 Same prompt as above, same unconfirmed status |
-| `DeviceCalibrationParameter` | 241 rows prepared + 1 intentionally excluded (CSV: `seed_device_calibration_parameter.csv`) | 🟡 Cursor prompt issued (`Seed_DeviceCalibrationParameter.md`), **execution result not yet confirmed back** |
-| `Device.deviceTypeId` FK | N/A — schema change, not data | ❌ Decided but not yet implemented — no migration written yet |
+| `DeviceCalibrationParameter` | 242 rows (241 `NUMBER`-type + 1 `RATIO`-type) | ✅ **Confirmed seeded and verified.** Includes a schema refinement completed after initial seeding: added `valueType` enum (`NUMBER`/`RATIO`/`TEXT`/`BOOLEAN`, default `NUMBER`) and made `uomId` nullable, specifically to support `VENT_IE_RATIO` (Ventilator I:E Ratio), which is a ratio (e.g. "1:2") rather than a physical quantity with a unit — seeded with `valueType=RATIO`, `uomId=NULL`. Migration verified idempotent (row count stable across repeated runs), typecheck/build/tests passed (12/12). Portal UI (list/detail) was also touched in this same task to handle nullable `uomId` without crashing and to display `valueType` — not originally in scope but a reasonable/necessary consequence of the schema change; worth a quick manual diff review if not already done. Note: the Calibration Parameter create/edit form still defaults to `valueType=NUMBER` with `uomId` required on create — there is currently no UI path to create a new `RATIO`-type parameter through the form (only via seed/script). Not urgent (only one RATIO parameter exists today) but flagged for whenever a second ratio-type parameter is needed. |
+| `Device.deviceTypeId` FK | N/A — schema change | ✅ **Confirmed done and verified.** Required FK to `DeviceType`, added in commit `aed25e4` (2026-08-26 09:32, migration folder `20260826090000_add_device_type_to_device`). Verified via direct DB inspection: table was empty before and after (0 rows, no data risk), FK constraint + NOT NULL + index all confirmed present, insert-without-FK and insert-with-invalid-FK both correctly rejected. `deviceModelId` was deliberately NOT added (per locked decision — `DeviceModel` backfill still deferred); `brand`/`model`/`category` remain free-text `String?` fields on `Device` as a fallback until/unless `DeviceModel` is backfilled later. |
+| `Device` CRUD + Portal UI | N/A — application code, not data | ✅ **Confirmed done.** List page (search by brand/model/serial/type/tipe/customer, filters for DeviceType/Customer/Status, supports deep-link via `customerId`/`deviceTypeId` query params), create/edit form (DeviceType required selector reusing the existing DeviceType query hook, Customer selector reusing the existing Customer picker, `deviceModelId` deliberately not implemented), detail page, delete respecting referential integrity (no cascade). One issue found and fixed post-build: the create form initially had hardcoded example-looking placeholder text (`Omron` / `HEM-7120` / `SN-001`) which risked being mistaken for real/seeded data — corrected to plain instructional placeholders (`Masukkan merek alat`, etc.) via a small follow-up fix; verified visually by the project owner. `Device` table itself remains intentionally empty (0 rows) — it is meant to be populated through real usage (staff creating records via this UI) or a future data import from an existing inventory source, never through seeding. |
 
-**Why 241 not 242**: one row (`VENT_IE_RATIO`, Ventilator's I:E Ratio parameter) was
-deliberately excluded because it's expressed as a ratio (e.g. "1:2") rather than a standard
-physical quantity with a `Uom`, and `uomId` is a required field on `DeviceCalibrationParameter`.
-This needs a separate design decision (dimensionless Uom entry vs. a different modeling
-approach) before it can be seeded — flagged, not resolved.
 
 **Coverage note**: of the 35 official DeviceTypes, 27 have real LK-worksheet evidence backing
 their `DeviceCalibrationParameter` rows. The remaining 8 (Ambulatory ECG, Aspirators/Suction,
@@ -317,8 +313,11 @@ into the docs folder above (or wherever the project owner prefers) before Cursor
    already has a `MeasurementResult` model (`schema.prisma` ~line 1126-1138, related to
    `CalibrationJob`) using unstructured `payloadJson`/`summaryJson` fields to store what a
    technician measures in the field. Separately, `DeviceCalibrationParameter` (built in the
-   Device Management work — see Section 5) is a structured, relational master catalog of
-   exactly which parameters must be measured per DeviceType, each with a defined `Uom`.
+   Device Management work — see Section 5B) is a structured, relational master catalog of
+   exactly which parameters must be measured per DeviceType, each with a defined `Uom` (or,
+   as of a later refinement, a `valueType` of `NUMBER`/`RATIO`/`TEXT`/`BOOLEAN` for parameters
+   that aren't a plain physical quantity — see Section 5B for the `VENT_IE_RATIO` case that
+   prompted this).
    **There is currently no foreign key or other link between the two** — nothing ties a given
    `MeasurementResult` entry back to the specific `DeviceCalibrationParameter` it's fulfilling.
    Left as-is, technician-entered results (free-form JSON) could drift from the structured
@@ -330,25 +329,46 @@ into the docs folder above (or wherever the project owner prefers) before Cursor
    `CalibrationJob`/`MeasurementResult` backend are built. Not yet designed; flagged here so
    it isn't lost before that phase starts.
 
+   **Caution for whoever designs this**: while resolving item A1 in `Rangkuman_Gap_Konfirmasi_User.md`
+   (how to represent `VENT_IE_RATIO`), a proposal surfaced that would have restructured
+   `DeviceCalibrationParameter` itself into an instance/value-holding table (adding
+   `deviceId`, `valueNumeric`, `ratioNumerator`, etc. directly onto it). That was correctly
+   rejected — it would have collapsed the master-definition table into a
+   measurement-result table, duplicating what `MeasurementResult` already exists to do, and
+   broken the 242 already-seeded rows' meaning (master definitions, not instances). The
+   `valueType` enum was added to `DeviceCalibrationParameter` instead (a master-level concept:
+   "this parameter expects a ratio," not "here is the ratio value") — keep this boundary
+   intact when eventually designing the actual link to `MeasurementResult`. The lesson:
+   `DeviceCalibrationParameter` describes WHAT to measure and what shape the value takes;
+   `MeasurementResult` (or whatever links to it) is where the ACTUAL measured value from a
+   real job lives. Don't merge these two concerns.
+
 ## 10. Immediate Next Steps at Handoff Time (was Section 8; renumbered)
 
-Multiple threads are in-flight simultaneously. Check status of each with the project owner
-before assuming any is complete:
+Status of in-flight items as of this update:
 
-1. **Portal UI for CalibrationRequest** — a Cursor prompt was issued
-   (`Implementation_Portal_UI_CalibrationRequest.md`, scope: `apps/portal` only). Completion
-   status unconfirmed as of this handoff.
-2. **DeviceCapability + DeviceCapabilityItem seeding** — prompt issued, execution result not
-   yet reported back (see Section 5B table).
-3. **DeviceCalibrationParameter seeding** — prompt issued, execution result not yet reported
-   back (see Section 5B table).
-4. **`Device.deviceTypeId` FK migration** — decided (Option A: required FK to DeviceType,
-   `brand`/`model` remain free-text) but no Cursor prompt written yet. This should probably be
-   done before or alongside the Device Management seeding above, since without it the seeded
-   catalog data has no way to actually connect to real customer-owned devices yet.
-5. **`VENT_IE_RATIO` design decision** — still open (see Section 5B).
-6. **`MeasurementResult` ↔ `DeviceCalibrationParameter` linkage** — still open (see Section 9).
+1. **Portal UI for CalibrationRequest** — prompt was issued
+   (`Implementation_Portal_UI_CalibrationRequest.md`). Completion status still unconfirmed —
+   check with the project owner.
+2. **DeviceCapability + DeviceCapabilityItem seeding** — prompt issued, execution result
+   STILL not reported back as of this update (see Section 5B table). This is the main
+   remaining unknown in the Device Management sub-system — check this first before assuming
+   the capability catalog is usable.
+3. **DeviceCalibrationParameter seeding** — ✅ DONE, confirmed (see Section 5B).
+4. **`Device.deviceTypeId` FK migration** — ✅ DONE, confirmed (see Section 5B).
+5. **Device CRUD + Portal UI** — ✅ DONE, confirmed (see Section 5B).
+6. **`VENT_IE_RATIO` design decision** — ✅ RESOLVED. Added `valueType` enum to
+   `DeviceCalibrationParameter` (see Section 5B) rather than forcing a dimensionless Uom.
+   Note: a related idea was raised (and correctly rejected) during this process — see Section
+   9 below for a caution about a proposal that would have duplicated `MeasurementResult`.
+7. **`MeasurementResult` ↔ `DeviceCalibrationParameter` linkage** — still open (see Section 9).
+   The `valueType` field added while resolving item 6 above is actually a useful head start
+   for this — it lets the future result-recording layer know in advance whether a given
+   parameter expects a number, ratio, text, or boolean, rather than guessing from free-form
+   JSON.
 
 Beyond these in-flight items, the next lifecycle-module candidates remain: the Quotation
 module (backend, following the same pattern as CalibrationRequest), or resolving B4 to unblock
-WorkOrder.
+WorkOrder. A full list of open business/domain decisions needing the project owner's or a
+domain expert's input (not just engineering follow-through) has been separately compiled in
+`Rangkuman_Gap_Konfirmasi_User.md` — worth reviewing alongside this handoff document.

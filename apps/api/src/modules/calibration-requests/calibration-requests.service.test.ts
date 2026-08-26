@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@medcal/db";
 import { isValidDocumentNumber } from "@medcal/db";
+import { calibrationRequestCreateSchema } from "@medcal/shared";
 import { CalibrationRequestsService } from "./calibration-requests.service";
 
 const service = new CalibrationRequestsService();
 const realCompanyId = "PKM";
 const createdCalibrationRequestIds: string[] = [];
 const createdCustomerIds: string[] = [];
-const createdDeviceIds: string[] = [];
 const createdCompanyIds: string[] = [];
 const createdDeviceTypeIds: string[] = [];
 const createdDeviceCategoryIds: string[] = [];
@@ -21,11 +21,6 @@ async function cleanupCalibrationRequests(ids: string[]) {
     where: { requestId: { in: ids } },
   });
   await prisma.calibrationRequest.deleteMany({ where: { id: { in: ids } } });
-}
-
-async function cleanupDevices(ids: string[]) {
-  if (ids.length === 0) return;
-  await prisma.device.deleteMany({ where: { id: { in: ids } } });
 }
 
 async function cleanupCustomers(ids: string[]) {
@@ -73,24 +68,8 @@ async function getTestDeviceTypeId(): Promise<string> {
   return deviceType.id;
 }
 
-async function createTestDevice(companyId: string, customerId: string) {
-  const device = await prisma.device.create({
-    data: {
-      companyId,
-      customerId,
-      deviceTypeId: await getTestDeviceTypeId(),
-      brand: "Test Brand",
-      model: `Model ${randomUUID().slice(0, 6)}`,
-      serialNumber: `SN-${randomUUID().slice(0, 8)}`,
-    },
-  });
-  createdDeviceIds.push(device.id);
-  return device;
-}
-
 afterAll(async () => {
   await cleanupCalibrationRequests(createdCalibrationRequestIds);
-  await cleanupDevices(createdDeviceIds);
   if (createdDeviceTypeIds.length > 0) {
     await prisma.deviceType.deleteMany({ where: { id: { in: createdDeviceTypeIds } } });
   }
@@ -105,15 +84,62 @@ afterAll(async () => {
   }
 });
 
+describe("calibrationRequestCreateSchema items", () => {
+  it("accepts a valid item with deviceTypeId and string deviceId", () => {
+    const parsed = calibrationRequestCreateSchema.safeParse({
+      customerId: "cust-1",
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId: "type-1", deviceId: "BPM-001", notes: "Annual" }],
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects a missing deviceTypeId", () => {
+    expect(
+      calibrationRequestCreateSchema.safeParse({
+        customerId: "cust-1",
+        serviceMode: "ON_SITE",
+        items: [{ deviceId: "BPM-001" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      calibrationRequestCreateSchema.safeParse({
+        customerId: "cust-1",
+        serviceMode: "ON_SITE",
+        items: [{ deviceTypeId: null, deviceId: "BPM-001" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      calibrationRequestCreateSchema.safeParse({
+        customerId: "cust-1",
+        serviceMode: "ON_SITE",
+        items: [{ deviceTypeId: "", deviceId: "BPM-001" }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("treats deviceId as a required string, not a Device lookup key", () => {
+    const parsed = calibrationRequestCreateSchema.safeParse({
+      customerId: "cust-1",
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId: "type-1", deviceId: "BPM-001" }],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.items[0]?.deviceId).toBe("BPM-001");
+    }
+  });
+});
+
 describe("CalibrationRequestsService.create", () => {
   it("creates CalibrationRequest with items and allocates REQ number", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const result = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device.id, notes: "Test notes" }],
+      items: [{ deviceTypeId, deviceId: "BPM-001", notes: "Test notes" }],
     });
     createdCalibrationRequestIds.push(result.id);
 
@@ -123,14 +149,15 @@ describe("CalibrationRequestsService.create", () => {
     expect(isValidDocumentNumber(result.number)).toBe(true);
     expect(result.number.startsWith("CRQ/")).toBe(true);
     expect(result.items).toHaveLength(1);
-    expect(result.items[0]?.deviceId).toBe(device.id);
+    expect(result.items[0]?.deviceTypeId).toBe(deviceTypeId);
+    expect(result.items[0]?.deviceId).toBe("BPM-001");
     expect(result.items[0]?.notes).toBe("Test notes");
+    expect(result.items[0]?.deviceType.name).toBe("Test Device Type");
   });
 
   it("creates CalibrationRequest with multiple items and expectedDate", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device1 = await createTestDevice(realCompanyId, customer.id);
-    const device2 = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const expectedDate = new Date("2026-12-01");
     const result = await service.create(realCompanyId, {
@@ -139,8 +166,8 @@ describe("CalibrationRequestsService.create", () => {
       expectedDate,
       notes: "Urgent calibration",
       items: [
-        { deviceId: device1.id, notes: "Item 1" },
-        { deviceId: device2.id, notes: "Item 2" },
+        { deviceTypeId, deviceId: "BPM-001", notes: "Item 1" },
+        { deviceTypeId, deviceId: "PM-002", notes: "Item 2" },
       ],
     });
     createdCalibrationRequestIds.push(result.id);
@@ -153,12 +180,12 @@ describe("CalibrationRequestsService.create", () => {
 
   it("creates CalibrationRequest without expectedDate", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const result = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device.id }],
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
     });
     createdCalibrationRequestIds.push(result.id);
 
@@ -166,28 +193,47 @@ describe("CalibrationRequestsService.create", () => {
   });
 
   it("rejects creation with non-existent customer", async () => {
-    const customer = await createTestCustomer(realCompanyId);
-    const device = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     await expect(
       service.create(realCompanyId, {
         customerId: "non-existent-id",
         serviceMode: "ON_SITE",
-        items: [{ deviceId: device.id }],
+        items: [{ deviceTypeId, deviceId: "BPM-001" }],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("rejects creation with non-existent device", async () => {
+  it("rejects creation with a non-existent deviceTypeId", async () => {
     const customer = await createTestCustomer(realCompanyId);
 
-    await expect(
-      service.create(realCompanyId, {
+    try {
+      await service.create(realCompanyId, {
         customerId: customer.id,
         serviceMode: "ON_SITE",
-        items: [{ deviceId: "non-existent-device" }],
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+        items: [{ deviceTypeId: "non-existent-device-type", deviceId: "BPM-001" }],
+      });
+      expect.fail("expected DEVICE_TYPE_NOT_FOUND");
+    } catch (err) {
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: "DEVICE_TYPE_NOT_FOUND" }),
+      );
+    }
+  });
+
+  it("does not look up Device master by deviceId", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+
+    const result = await service.create(realCompanyId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, deviceId: "non-existent-device" }],
+    });
+    createdCalibrationRequestIds.push(result.id);
+
+    expect(result.items[0]?.deviceId).toBe("non-existent-device");
   });
 });
 
@@ -200,13 +246,13 @@ describe("CalibrationRequestsService tenant isolation", () => {
     createdCompanyIds.push(otherCompanyId);
 
     const customer = await createTestCustomer(otherCompanyId);
-    const device = await createTestDevice(otherCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     await cleanupSequences(otherCompanyId);
     const foreign = await service.create(otherCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device.id }],
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
     });
     createdCalibrationRequestIds.push(foreign.id);
 
@@ -223,13 +269,13 @@ describe("CalibrationRequestsService tenant isolation", () => {
     createdCompanyIds.push(otherCompanyId);
 
     const customer = await createTestCustomer(otherCompanyId);
-    const device = await createTestDevice(otherCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     await cleanupSequences(otherCompanyId);
     const foreign = await service.create(otherCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device.id }],
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
     });
     createdCalibrationRequestIds.push(foreign.id);
 
@@ -241,12 +287,12 @@ describe("CalibrationRequestsService tenant isolation", () => {
 describe("CalibrationRequestsService.update", () => {
   it("updates calibration request fields while in DRAFT status", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const created = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device.id }],
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
     });
     createdCalibrationRequestIds.push(created.id);
 
@@ -264,14 +310,14 @@ describe("CalibrationRequestsService.update", () => {
 
   it("updates expectedDate to null", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const expectedDate = new Date("2026-12-20");
     const created = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
       expectedDate,
-      items: [{ deviceId: device.id }],
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
     });
     createdCalibrationRequestIds.push(created.id);
 
@@ -286,36 +332,35 @@ describe("CalibrationRequestsService.update", () => {
 
   it("updates items by replacing them", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device1 = await createTestDevice(realCompanyId, customer.id);
-    const device2 = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const created = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device1.id, notes: "Original" }],
+      items: [{ deviceTypeId, deviceId: "BPM-001", notes: "Original" }],
     });
     createdCalibrationRequestIds.push(created.id);
 
     const updated = await service.update(realCompanyId, created.id, {
       items: [
-        { deviceId: device1.id, notes: "Updated" },
-        { deviceId: device2.id, notes: "New item" },
+        { deviceTypeId, deviceId: "BPM-001", notes: "Updated" },
+        { deviceTypeId, deviceId: "PM-002", notes: "New item" },
       ],
     });
 
     expect(updated.items).toHaveLength(2);
-    expect(updated.items.find((i) => i.deviceId === device1.id)?.notes).toBe("Updated");
-    expect(updated.items.find((i) => i.deviceId === device2.id)?.notes).toBe("New item");
+    expect(updated.items.find((i) => i.deviceId === "BPM-001")?.notes).toBe("Updated");
+    expect(updated.items.find((i) => i.deviceId === "PM-002")?.notes).toBe("New item");
   });
 
   it("rejects update when status is not DRAFT", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const created = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device.id }],
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
     });
     createdCalibrationRequestIds.push(created.id);
 
@@ -330,12 +375,12 @@ describe("CalibrationRequestsService.update", () => {
 describe("CalibrationRequestsService.cancel", () => {
   it("cancels a DRAFT calibration request", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const created = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device.id }],
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
     });
     createdCalibrationRequestIds.push(created.id);
 
@@ -345,12 +390,12 @@ describe("CalibrationRequestsService.cancel", () => {
 
   it("cancels a SUBMITTED calibration request", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const created = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device.id }],
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
     });
     createdCalibrationRequestIds.push(created.id);
 
@@ -361,12 +406,12 @@ describe("CalibrationRequestsService.cancel", () => {
 
   it("rejects cancelling an already cancelled request", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const created = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device.id }],
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
     });
     createdCalibrationRequestIds.push(created.id);
 
@@ -381,12 +426,12 @@ describe("CalibrationRequestsService.cancel", () => {
 describe("CalibrationRequestsService.submit", () => {
   it("submits a DRAFT calibration request", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const created = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device.id }],
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
     });
     createdCalibrationRequestIds.push(created.id);
 
@@ -396,12 +441,12 @@ describe("CalibrationRequestsService.submit", () => {
 
   it("rejects submitting a non-DRAFT request", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const created = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device.id }],
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
     });
     createdCalibrationRequestIds.push(created.id);
 
@@ -416,20 +461,19 @@ describe("CalibrationRequestsService.submit", () => {
 describe("CalibrationRequestsService numbering", () => {
   it("uses DocumentNumberService with company-scoped sequence", async () => {
     const customer = await createTestCustomer(realCompanyId);
-    const device1 = await createTestDevice(realCompanyId, customer.id);
-    const device2 = await createTestDevice(realCompanyId, customer.id);
+    const deviceTypeId = await getTestDeviceTypeId();
 
     const first = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device1.id }],
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
     });
     createdCalibrationRequestIds.push(first.id);
 
     const second = await service.create(realCompanyId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceId: device2.id }],
+      items: [{ deviceTypeId, deviceId: "PM-002" }],
     });
     createdCalibrationRequestIds.push(second.id);
 
@@ -441,16 +485,7 @@ describe("CalibrationRequestsService numbering", () => {
 });
 
 describe("CalibrationRequestsService transaction rollback", () => {
-  it("rolls back fully if item creation fails (device from another company)", async () => {
-    const otherCompanyId = `I${randomUUID().slice(0, 2).toUpperCase()}`;
-    await prisma.company.create({
-      data: { id: otherCompanyId, name: "Other Device Co", status: "ACTIVE" },
-    });
-    createdCompanyIds.push(otherCompanyId);
-
-    const otherCustomer = await createTestCustomer(otherCompanyId);
-    const otherDevice = await createTestDevice(otherCompanyId, otherCustomer.id);
-
+  it("rolls back fully if item creation fails (invalid deviceTypeId)", async () => {
     const customer = await createTestCustomer(realCompanyId);
 
     const countBefore = await prisma.calibrationRequest.count({
@@ -461,7 +496,7 @@ describe("CalibrationRequestsService transaction rollback", () => {
       service.create(realCompanyId, {
         customerId: customer.id,
         serviceMode: "ON_SITE",
-        items: [{ deviceId: otherDevice.id }],
+        items: [{ deviceTypeId: "missing-device-type-id", deviceId: "BPM-001" }],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 

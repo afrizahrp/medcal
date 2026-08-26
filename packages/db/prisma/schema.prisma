@@ -909,10 +909,11 @@ model DeviceType {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  category              DeviceCategory               @relation(fields: [categoryId], references: [id])
-  models                DeviceModel[]
-  devices               Device[]
-  calibrationParameters DeviceCalibrationParameter[]
+  category                 DeviceCategory               @relation(fields: [categoryId], references: [id])
+  models                   DeviceModel[]
+  devices                  Device[]
+  calibrationParameters    DeviceCalibrationParameter[]
+  calibrationRequestItems  CalibrationRequestItem[]
 
   @@index([categoryId])
   @@index([isActive])
@@ -1016,7 +1017,6 @@ model Device {
   customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
   deviceType DeviceType @relation(fields: [deviceTypeId], references: [id])
 
-  requestItems       CalibrationRequestItem[]
   quotationItems     QuotationItem[]
   purchaseOrderItems PurchaseOrderItem[]
   calibrationJobs    CalibrationJob[]
@@ -1062,18 +1062,21 @@ model CalibrationRequest {
 }
 
 model CalibrationRequestItem {
-  id        String   @id @default(cuid())
-  companyId String
-  requestId String
-  deviceId  String
-  notes     String?
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  companyId    String
+  requestId    String
+  deviceTypeId String
+  /// Customer-provided physical device identifier (free-text). Not a FK to Device.
+  deviceId     String
+  notes        String?
+  createdAt    DateTime @default(now())
 
   request        CalibrationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  device         Device             @relation(fields: [deviceId], references: [id])
+  deviceType     DeviceType         @relation(fields: [deviceTypeId], references: [id])
   quotationItems QuotationItem[]
 
   @@index([requestId])
+  @@index([deviceTypeId])
 }
 
 // =============================================================================

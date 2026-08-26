@@ -6,9 +6,9 @@ export const company = {
   brandName: "Presisi Kalibrasi Medika",
   address:
     "Gedung Graha Bumi Indah Lantai 3, Jl. Inspeksi Kalimalang Kavling Agraria Blok E No. 10, Duren Sawit, Jakarta Timur, DKI Jakarta",
-  phoneDisplay: "62 857-7329-2530",
-  phoneRaw: "6285773292530",
-  whatsappNumber: "6285773292530",
+  phoneDisplay: "62 822-7777-8522",
+  phoneRaw: "6282277778522",
+  whatsappNumber: "6282277778522",
   email: "info@kalibrasimedika.co.id",
   accreditation: {
     body: "KAN",
@@ -82,15 +82,11 @@ export function getServiceCategory(slug: string) {
 }
 
 export function getKanEquipmentForCategory(categorySlug: string) {
-  return kanAccreditedProducts.filter(
-    (product) => product.categorySlug === categorySlug,
-  );
+  return kanAccreditedProducts.filter((product) => product.categorySlug === categorySlug);
 }
 
 export function hasKanScopeForCategory(categorySlug: string) {
-  return kanAccreditedProducts.some(
-    (product) => product.categorySlug === categorySlug,
-  );
+  return kanAccreditedProducts.some((product) => product.categorySlug === categorySlug);
 }
 
 export function isCategoryAccredited(category: ServiceCategory) {
