@@ -171,7 +171,7 @@ export class DeviceTypesService {
     });
     if (requestItemCount > 0) {
       throw new BadRequestException({
-        message: "Cannot delete a device type that is used by calibration requests",
+        message: "Cannot delete a device type that is used by requisitions",
         code: "DEVICE_TYPE_HAS_CALIBRATION_REQUESTS",
       });
     }

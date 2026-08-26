@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --shell-sidebar-expanded: 248px;
+  --shell-sidebar-expanded: 280px;
   --shell-sidebar-collapsed: 72px;
   --shell-canvas: #eef1f9;
   --shell-radius: 0.5rem;

@@ -40,6 +40,10 @@ const ICONS = [
   "users",
   "whitelist",
   "menu",
+  "fileText",
+  "gauge",
+  "clipboardList",
+  "messageSquareQuote",
 ] as const;
 
 const selectClassName =

@@ -131,7 +131,7 @@ export function MobileDrawer({
           ref={panelRef}
           id={MOBILE_DRAWER_ID}
           className={[
-            "pointer-events-auto flex h-full w-sidebar-expanded max-w-[min(248px,85vw)] flex-col border-r border-slate-200 bg-white shadow-md",
+            "pointer-events-auto flex h-full w-sidebar-expanded max-w-[min(280px,85vw)] flex-col border-r border-slate-200 bg-white shadow-md",
             "transition-transform duration-200 ease-out",
             open ? "translate-x-0" : "-translate-x-full pointer-events-none",
           ].join(" ")}

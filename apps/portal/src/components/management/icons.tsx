@@ -1,5 +1,16 @@
 import type { SVGProps } from "react";
-import { Activity, Boxes, Cpu, FolderTree, SlidersHorizontal, Tags } from "lucide-react";
+import {
+  Activity,
+  Boxes,
+  ClipboardList,
+  Cpu,
+  FileText,
+  FolderTree,
+  Gauge,
+  MessageSquareQuote,
+  SlidersHorizontal,
+  Tags,
+} from "lucide-react";
 import type { ManagementNavIcon } from "../../app/management/nav-config";
 
 type IconProps = SVGProps<SVGSVGElement>;
@@ -273,6 +284,14 @@ export function NavIcon({
       return <SlidersHorizontal {...props} />;
     case "cpu":
       return <Cpu {...props} />;
+    case "fileText":
+      return <FileText {...props} />;
+    case "gauge":
+      return <Gauge {...props} />;
+    case "clipboardList":
+      return <ClipboardList {...props} />;
+    case "messageSquareQuote":
+      return <MessageSquareQuote {...props} />;
     default:
       return null;
   }

@@ -17,7 +17,11 @@ export type ManagementNavIcon =
   | "boxes"
   | "activity"
   | "slidersHorizontal"
-  | "cpu";
+  | "cpu"
+  | "fileText"
+  | "gauge"
+  | "clipboardList"
+  | "messageSquareQuote";
 
 export interface NavItem {
   label: string;

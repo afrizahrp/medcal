@@ -171,7 +171,7 @@ export class CalibrationRequestsService {
     });
     if (!calibrationRequest) {
       throw new NotFoundException({
-        message: "Calibration request not found",
+        message: "Requisition not found",
         code: "CALIBRATION_REQUEST_NOT_FOUND",
       });
     }
@@ -188,7 +188,7 @@ export class CalibrationRequestsService {
     });
     if (!existing) {
       throw new NotFoundException({
-        message: "Calibration request not found",
+        message: "Requisition not found",
         code: "CALIBRATION_REQUEST_NOT_FOUND",
       });
     }
@@ -197,7 +197,7 @@ export class CalibrationRequestsService {
     // only allowing edits while status is DRAFT (the initial state).
     if (existing.status !== "DRAFT") {
       throw new BadRequestException({
-        message: "Cannot update calibration request that is not in DRAFT status",
+        message: "Cannot update requisition that is not in DRAFT status",
         code: "INVALID_STATUS_FOR_UPDATE",
       });
     }
@@ -272,21 +272,21 @@ export class CalibrationRequestsService {
     });
     if (!existing) {
       throw new NotFoundException({
-        message: "Calibration request not found",
+        message: "Requisition not found",
         code: "CALIBRATION_REQUEST_NOT_FOUND",
       });
     }
 
     if (existing.status === "CANCELLED") {
       throw new BadRequestException({
-        message: "Calibration request is already cancelled",
+        message: "Requisition is already cancelled",
         code: "ALREADY_CANCELLED",
       });
     }
 
     if (existing.status === "FULFILLED") {
       throw new BadRequestException({
-        message: "Cannot cancel a fulfilled calibration request",
+        message: "Cannot cancel a fulfilled requisition",
         code: "CANNOT_CANCEL_FULFILLED",
       });
     }
@@ -308,14 +308,14 @@ export class CalibrationRequestsService {
     });
     if (!existing) {
       throw new NotFoundException({
-        message: "Calibration request not found",
+        message: "Requisition not found",
         code: "CALIBRATION_REQUEST_NOT_FOUND",
       });
     }
 
     if (existing.status !== "DRAFT") {
       throw new BadRequestException({
-        message: "Only DRAFT calibration requests can be submitted",
+        message: "Only DRAFT requisitions can be submitted",
         code: "INVALID_STATUS_FOR_SUBMIT",
       });
     }

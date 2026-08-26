@@ -155,7 +155,7 @@ export function CalibrationRequestFilters({
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Cari nomor atau customer…"
           className="pl-9"
-          aria-label="Cari calibration request"
+          aria-label="Cari requisition"
         />
       </div>
       <select
@@ -235,7 +235,7 @@ export function CalibrationRequestEmptyState({
   return (
     <div className="py-10 text-center">
       <p className="text-sm text-slate-500">
-        Belum ada calibration request yang cocok dengan filter.
+        Belum ada requisition yang cocok dengan filter.
       </p>
       {onClearFilters ? (
         <Button type="button" variant="outline" className="mt-3" onClick={onClearFilters}>

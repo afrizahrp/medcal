@@ -341,6 +341,64 @@ export const calibrationRequestUpdateSchema = z.object({
 export type CalibrationRequestUpdateInput = z.infer<typeof calibrationRequestUpdateSchema>;
 
 // =============================================================================
+// Quotation (CalibrationRequest → Quotation)
+// =============================================================================
+
+const quotationSourceValues = ["PORTAL", "PHONE", "WHATSAPP", "OTHER"] as const;
+const quotationStatusValues = [
+  "DRAFT",
+  "SENT",
+  "APPROVED",
+  "REJECTED",
+  "EXPIRED",
+  "CANCELLED",
+] as const;
+
+const quotationDecimalSchema = z.coerce.number().finite();
+
+const quotationItemInputSchema = z.object({
+  requestItemId: z.string().min(1),
+  deviceId: z.string().min(1).optional(),
+  tariffId: z.string().min(1).optional(),
+  description: z.string().min(1).max(500),
+  qty: quotationDecimalSchema.positive().optional(),
+  unitPrice: quotationDecimalSchema.nonnegative(),
+});
+
+/** POST /quotations body — customerId is derived from the CalibrationRequest. */
+export const quotationCreateSchema = z.object({
+  requestId: z.string().min(1),
+  source: z.enum(quotationSourceValues).optional(),
+  validUntil: z.coerce.date().optional(),
+  taxId: z.string().min(1).optional(),
+  items: z.array(quotationItemInputSchema).min(1),
+});
+
+export type QuotationCreateInput = z.infer<typeof quotationCreateSchema>;
+
+/** GET /quotations query params */
+export const quotationListQuerySchema = baseListQuerySchema.extend({
+  status: z.enum(quotationStatusValues).optional(),
+  customerId: z.string().optional(),
+  requestId: z.string().optional(),
+});
+
+export type QuotationListQuery = z.infer<typeof quotationListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /quotations — see resolveSortOrder. */
+export const QUOTATION_SORTABLE_FIELDS = ["createdAt", "number", "status"] as const;
+
+/** PATCH /quotations/:id body (only allowed while DRAFT) */
+export const quotationUpdateSchema = z.object({
+  source: z.enum(quotationSourceValues).optional(),
+  validUntil: z.coerce.date().nullable().optional(),
+  taxId: z.string().min(1).nullable().optional(),
+  items: z.array(quotationItemInputSchema).min(1).optional(),
+});
+
+export type QuotationUpdateInput = z.infer<typeof quotationUpdateSchema>;
+
+// =============================================================================
 // UOM (Unit of Measurement) Master Data
 // =============================================================================
 

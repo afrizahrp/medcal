@@ -41,7 +41,7 @@ export class CalibrationRequestsController {
     const parsed = calibrationRequestCreateSchema.safeParse(rawBody);
     if (!parsed.success) {
       throw new BadRequestException({
-        message: "Invalid calibration request payload",
+        message: "Invalid requisition payload",
         code: "INVALID_CALIBRATION_REQUEST",
         issues: parsed.error.flatten(),
       });
@@ -58,7 +58,7 @@ export class CalibrationRequestsController {
     const parsed = calibrationRequestListQuerySchema.safeParse(rawQuery);
     if (!parsed.success) {
       throw new BadRequestException({
-        message: "Invalid calibration request list query",
+        message: "Invalid requisition list query",
         code: "INVALID_CALIBRATION_REQUEST_QUERY",
         issues: parsed.error.flatten(),
       });
@@ -85,7 +85,7 @@ export class CalibrationRequestsController {
     const parsed = calibrationRequestUpdateSchema.safeParse(rawBody);
     if (!parsed.success) {
       throw new BadRequestException({
-        message: "Invalid calibration request update",
+        message: "Invalid requisition update",
         code: "INVALID_CALIBRATION_REQUEST_UPDATE",
         issues: parsed.error.flatten(),
       });

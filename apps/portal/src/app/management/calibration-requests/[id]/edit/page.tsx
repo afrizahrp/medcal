@@ -135,13 +135,13 @@ export default function EditCalibrationRequestPage() {
     return (
       <div className={formPageClass}>
         <PageHeader
-          title="Calibration Request tidak ditemukan"
+          title="Requisition tidak ditemukan"
           crumbs={[
             { href: "/", label: "Dashboard" },
-            { href: "/calibration-requests", label: "Calibration Requests" },
+            { href: "/calibration-requests", label: "Requisitions" },
           ]}
         />
-        <p className="mt-5 text-sm text-slate-600">Calibration request tidak ditemukan.</p>
+        <p className="mt-5 text-sm text-slate-600">Requisition tidak ditemukan.</p>
       </div>
     );
   }
@@ -149,7 +149,7 @@ export default function EditCalibrationRequestPage() {
   if (!request) {
     return (
       <div className={formPageClass}>
-        <p className="text-sm text-red-600">Gagal memuat calibration request.</p>
+        <p className="text-sm text-red-600">Gagal memuat requisition.</p>
       </div>
     );
   }
@@ -161,13 +161,13 @@ export default function EditCalibrationRequestPage() {
           title="Cannot Edit"
           crumbs={[
             { href: "/", label: "Dashboard" },
-            { href: "/calibration-requests", label: "Calibration Requests" },
+            { href: "/calibration-requests", label: "Requisitions" },
             { href: `/calibration-requests/${request.id}`, label: request.number },
             { label: "Edit" },
           ]}
         />
         <p className="mt-5 text-sm text-amber-800">
-          Request ini tidak dapat diedit karena sudah tidak dalam status DRAFT.
+          Requisition ini tidak dapat diedit karena sudah tidak dalam status DRAFT.
         </p>
         <Button asChild className="mt-3" variant="outline">
           <Link href={`/calibration-requests/${request.id}`}>Kembali ke Detail</Link>
@@ -238,7 +238,7 @@ export default function EditCalibrationRequestPage() {
         } else if (code === "DEVICE_TYPE_NOT_FOUND") {
           setError("Satu atau lebih device type tidak ditemukan.");
         } else if (code === "INVALID_STATUS_FOR_UPDATE") {
-          setError("Request tidak dapat diedit dalam status saat ini.");
+          setError("Requisition tidak dapat diedit dalam status saat ini.");
         } else {
           setError(err.data?.message ?? err.message);
         }
@@ -254,7 +254,7 @@ export default function EditCalibrationRequestPage() {
         title={`Edit ${request.number}`}
         crumbs={[
           { href: "/", label: "Dashboard" },
-          { href: "/calibration-requests", label: "Calibration Requests" },
+          { href: "/calibration-requests", label: "Requisitions" },
           { href: `/calibration-requests/${request.id}`, label: request.number },
           { label: "Edit" },
         ]}
@@ -270,7 +270,7 @@ export default function EditCalibrationRequestPage() {
 
           <div className="space-y-6">
             <section className="space-y-4">
-              <h2 className="text-base font-semibold text-slate-900">Request Information</h2>
+              <h2 className="text-base font-semibold text-slate-900">Requisition Information</h2>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>

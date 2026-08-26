@@ -14,6 +14,7 @@ import { PermissionsModule } from "./modules/permissions/permissions.module";
 import { PushTokensModule } from "./modules/push-tokens/push-tokens.module";
 import { CustomersModule } from "./modules/customers/customers.module";
 import { CalibrationRequestsModule } from "./modules/calibration-requests/calibration-requests.module";
+import { QuotationsModule } from "./modules/quotations/quotations.module";
 import { UomsModule } from "./modules/uoms/uoms.module";
 import { DeviceCategoriesModule } from "./modules/device-categories/device-categories.module";
 import { DeviceTypesModule } from "./modules/device-types/device-types.module";
@@ -29,6 +30,7 @@ import { DevicesModule } from "./modules/devices/devices.module";
     LeadsModule,
     CustomersModule,
     CalibrationRequestsModule,
+    QuotationsModule,
     UomsModule,
     DeviceCategoriesModule,
     DeviceTypesModule,

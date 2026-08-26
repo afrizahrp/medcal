@@ -56,6 +56,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   deviceCapabilityItem: "Device Capability Item",
   deviceCalibrationParameter: "Calibration Parameter",
   device: "Device",
+  calibrationRequest: "Requisition",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -67,6 +68,8 @@ const ACTION_LABELS: Record<string, string> = {
   delete: "Delete",
   reply: "Reply",
   close: "Close",
+  cancel: "Cancel",
+  approve: "Approve",
 };
 
 const selectClassName =

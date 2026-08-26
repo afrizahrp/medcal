@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Edit, Send, X } from "lucide-react";
+import { ArrowLeft, Edit, FileText, Plus, Send, X } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
@@ -24,6 +24,8 @@ import {
   useSubmitCalibrationRequest,
   useCancelCalibrationRequest,
 } from "../use-calibration-requests-query";
+import { StatusBadge as QuotationStatusBadge } from "../../quotations/quotations-ui";
+import { useQuotations } from "../../quotations/use-quotations-query";
 
 export default function CalibrationRequestDetailPage() {
   const params = useParams<{ id: string }>();
@@ -32,6 +34,18 @@ export default function CalibrationRequestDetailPage() {
   const query = useCalibrationRequest(params.id);
   const submitMutation = useSubmitCalibrationRequest();
   const cancelMutation = useCancelCalibrationRequest();
+  const quotationQuery = useQuotations(
+    {
+      search: "",
+      status: "",
+      requestId: params.id,
+      sortBy: "createdAt",
+      sortDir: "desc",
+      page: 1,
+      pageSize: 1,
+    },
+    Boolean(params.id),
+  );
 
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -56,13 +70,13 @@ export default function CalibrationRequestDetailPage() {
     return (
       <div className={formPageClass}>
         <PageHeader
-          title="Calibration Request tidak ditemukan"
+          title="Requisition tidak ditemukan"
           crumbs={[
             { href: "/", label: "Dashboard" },
-            { href: "/calibration-requests", label: "Calibration Requests" },
+            { href: "/calibration-requests", label: "Requisitions" },
           ]}
         />
-        <p className="mt-5 text-sm text-slate-600">Calibration request tidak ditemukan.</p>
+        <p className="mt-5 text-sm text-slate-600">Requisition tidak ditemukan.</p>
       </div>
     );
   }
@@ -70,30 +84,36 @@ export default function CalibrationRequestDetailPage() {
   if (!request) {
     return (
       <div className={formPageClass}>
-        <p className="text-sm text-red-600">Gagal memuat calibration request.</p>
+        <p className="text-sm text-red-600">Gagal memuat requisition.</p>
       </div>
     );
   }
 
   const isDraft = request.status === "DRAFT";
-  const isSubmitted = request.status === "SUBMITTED";
   const canCancel =
     request.status !== "CANCELLED" && request.status !== "FULFILLED";
   const isReadOnly = !isDraft;
+  const quotationForbidden = isForbidden(quotationQuery.error);
+  const quotationReady = !quotationQuery.isLoading && !quotationQuery.isError;
+  const existingQuotation = quotationReady ? quotationQuery.data?.data[0] : undefined;
+  const canCreateQuotation =
+    quotationReady &&
+    !existingQuotation &&
+    (request.status === "SUBMITTED" || request.status === "IN_QUOTATION");
 
   async function handleSubmit() {
     setError(null);
     setSuccess(null);
     try {
       await submitMutation.mutateAsync(request!.id);
-      setSuccess("Calibration request berhasil disubmit.");
+      setSuccess("Requisition berhasil disubmit.");
       setShowSubmitConfirm(false);
       await query.refetch();
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.data?.message ?? err.message);
       } else {
-        setError("Gagal submit calibration request.");
+        setError("Gagal submit requisition.");
       }
       setShowSubmitConfirm(false);
     }
@@ -104,14 +124,14 @@ export default function CalibrationRequestDetailPage() {
     setSuccess(null);
     try {
       await cancelMutation.mutateAsync(request!.id);
-      setSuccess("Calibration request berhasil dibatalkan.");
+      setSuccess("Requisition berhasil dibatalkan.");
       setShowCancelConfirm(false);
       await query.refetch();
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.data?.message ?? err.message);
       } else {
-        setError("Gagal membatalkan calibration request.");
+        setError("Gagal membatalkan requisition.");
       }
       setShowCancelConfirm(false);
     }
@@ -123,7 +143,7 @@ export default function CalibrationRequestDetailPage() {
         title={request.number}
         crumbs={[
           { href: "/", label: "Dashboard" },
-          { href: "/calibration-requests", label: "Calibration Requests" },
+          { href: "/calibration-requests", label: "Requisitions" },
           { label: request.number },
         ]}
       />
@@ -139,7 +159,7 @@ export default function CalibrationRequestDetailPage() {
 
         {isReadOnly ? (
           <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Request ini tidak dapat diedit dalam status saat ini.
+            Requisition ini tidak dapat diedit dalam status saat ini.
           </p>
         ) : null}
 
@@ -180,6 +200,49 @@ export default function CalibrationRequestDetailPage() {
             </DetailField>
           ) : null}
         </dl>
+
+        {quotationForbidden ? null : (
+          <div className="mt-5 border-t border-slate-100 pt-5">
+            <h3 className="text-sm font-semibold text-slate-900">Quotation</h3>
+            {quotationQuery.isLoading ? (
+              <p className="mt-2 text-sm text-slate-400">Memuat…</p>
+            ) : quotationQuery.isError ? (
+              <p className="mt-2 text-sm text-red-600">Gagal memuat quotation.</p>
+            ) : existingQuotation ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                <div>
+                  <Link
+                    href={`/quotations/${existingQuotation.id}`}
+                    className="font-mono text-sm font-medium text-brand-700 hover:underline"
+                  >
+                    {existingQuotation.number}
+                  </Link>
+                  <div className="mt-1">
+                    <QuotationStatusBadge status={existingQuotation.status} />
+                  </div>
+                </div>
+                <Button type="button" variant="outline" size="sm" asChild>
+                  <Link href={`/quotations/${existingQuotation.id}`}>
+                    <FileText className="h-4 w-4" />
+                    View Quotation
+                  </Link>
+                </Button>
+              </div>
+            ) : canCreateQuotation ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-3">
+                <p className="text-sm text-slate-600">Belum ada quotation untuk request ini.</p>
+                <Button type="button" size="sm" asChild>
+                  <Link href={`/quotations/new?requestId=${request.id}`}>
+                    <Plus className="h-4 w-4" />
+                    Create Quotation
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-500">Belum ada quotation.</p>
+            )}
+          </div>
+        )}
 
         <div className="mt-5 border-t border-slate-100 pt-5">
           <h3 className="text-sm font-semibold text-slate-900">
@@ -240,7 +303,7 @@ export default function CalibrationRequestDetailPage() {
               onClick={() => setShowCancelConfirm(true)}
             >
               <X className="h-4 w-4" />
-              Cancel Request
+              Cancel Requisition
             </Button>
           ) : null}
         </div>
@@ -248,8 +311,8 @@ export default function CalibrationRequestDetailPage() {
 
       <ConfirmDialog
         open={showSubmitConfirm}
-        title="Submit Calibration Request?"
-        description="Setelah disubmit, request tidak dapat diedit lagi. Lanjutkan?"
+        title="Submit Requisition?"
+        description="Setelah disubmit, requisition tidak dapat diedit lagi. Lanjutkan?"
         confirmLabel="Submit"
         onConfirm={handleSubmit}
         onCancel={() => setShowSubmitConfirm(false)}
@@ -258,9 +321,9 @@ export default function CalibrationRequestDetailPage() {
 
       <ConfirmDialog
         open={showCancelConfirm}
-        title="Cancel Calibration Request?"
-        description="Request yang dibatalkan tidak dapat dipulihkan. Lanjutkan?"
-        confirmLabel="Cancel Request"
+        title="Cancel Requisition?"
+        description="Requisition yang dibatalkan tidak dapat dipulihkan. Lanjutkan?"
+        confirmLabel="Cancel Requisition"
         onConfirm={handleCancel}
         onCancel={() => setShowCancelConfirm(false)}
         loading={cancelMutation.isPending}

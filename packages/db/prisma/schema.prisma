@@ -1057,8 +1057,8 @@ model CalibrationRequest {
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   lead     Lead?    @relation(fields: [leadId], references: [id])
 
-  items      CalibrationRequestItem[]
-  quotations Quotation[]
+  items     CalibrationRequestItem[]
+  quotation Quotation?
 
   @@unique([companyId, number])
   @@index([companyId, status])
@@ -1110,7 +1110,7 @@ model Quotation {
   companyId          String
   customerId         String
   number             String
-  requestId          String?
+  requestId          String  @unique
   source             QuotationSource @default(PORTAL)
   status             QuotationStatus @default(DRAFT)
   validUntil         DateTime?
@@ -1127,7 +1127,7 @@ model Quotation {
 
   company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer   Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  request    CalibrationRequest? @relation(fields: [requestId], references: [id])
+  request        CalibrationRequest @relation(fields: [requestId], references: [id])
   tax            Tax?              @relation(fields: [taxId], references: [id])
   items          QuotationItem[]
   purchaseOrders PurchaseOrder[]

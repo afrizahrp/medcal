@@ -139,7 +139,7 @@ export default function NewCalibrationRequestPage() {
           setError(err.data?.message ?? err.message);
         }
       } else {
-        setError("Gagal membuat calibration request.");
+        setError("Gagal membuat requisition.");
       }
     }
   }
@@ -147,10 +147,10 @@ export default function NewCalibrationRequestPage() {
   return (
     <div className={formPageClass}>
       <PageHeader
-        title="New Calibration Request"
+        title="New Requisition"
         crumbs={[
           { href: "/", label: "Dashboard" },
-          { href: "/calibration-requests", label: "Calibration Requests" },
+          { href: "/calibration-requests", label: "Requisitions" },
           { label: "New" },
         ]}
       />
@@ -163,7 +163,7 @@ export default function NewCalibrationRequestPage() {
 
           <div className="space-y-6">
             <section className="space-y-4">
-              <h2 className="text-base font-semibold text-slate-900">Request Information</h2>
+              <h2 className="text-base font-semibold text-slate-900">Requisition Information</h2>
 
               <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
                 <div className="min-w-0">
@@ -396,7 +396,7 @@ export default function NewCalibrationRequestPage() {
             </Button>
             <Button type="submit" disabled={createMutation.isPending}>
               <Save className="h-4 w-4" />
-              {createMutation.isPending ? "Creating…" : "Create Request"}
+              {createMutation.isPending ? "Creating…" : "Create Requisition"}
             </Button>
           </div>
         </Surface>

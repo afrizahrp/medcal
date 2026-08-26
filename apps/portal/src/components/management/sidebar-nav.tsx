@@ -99,7 +99,7 @@ function NavGroup({
 }) {
   const children = item.children ?? [];
   const groupActive = isNavGroupActive(pathname, item);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(groupActive);
 
   useEffect(() => {
     if (groupActive) setOpen(true);

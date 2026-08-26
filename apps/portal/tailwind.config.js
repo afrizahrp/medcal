@@ -58,15 +58,15 @@ module.exports = {
         },
       },
       spacing: {
-        "sidebar-expanded": "248px",
+        "sidebar-expanded": "280px",
         "sidebar-collapsed": "72px",
       },
       width: {
-        "sidebar-expanded": "248px",
+        "sidebar-expanded": "280px",
         "sidebar-collapsed": "72px",
       },
       margin: {
-        "sidebar-expanded": "248px",
+        "sidebar-expanded": "280px",
         "sidebar-collapsed": "72px",
       },
       borderRadius: {
