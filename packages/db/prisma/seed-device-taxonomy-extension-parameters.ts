@@ -1,0 +1,1357 @@
+/**
+ * Seeds DeviceCalibrationParameter rows for the 24 in-scope new DeviceTypes.
+ * INSERT/upsert only for these types — does not touch the original 242 rows.
+ * Tolerances are taken from docs/technician-docs/ LK worksheets (verbatim notes).
+ *
+ * Out of scope: Auto Chemistry Analyzer, Hematologi Analyzer, pH Meter,
+ * Thermohygrometer, Otoscope, Phaco Emulsifikasi.
+ *
+ * FETAL_HEART_RATE is a dedicated capability (not VITAL_SIGNS_MONITORING.HEART_RATE).
+ * Laryngoskop illuminance 40,000–160,000 lux is seeded as-is from LK Laryngoskop.docx
+ * and needs human review (possible copy-paste from Lampu Operasi).
+ *
+ * Run after seed:uoms, seed:device-types, seed:device-capabilities:
+ *   pnpm --filter @medcal/db run seed:device-taxonomy-extension-parameters
+ */
+import { prisma, type CalibrationValueType } from "../src/index";
+
+interface ParameterSeedRow {
+  deviceTypeCode: string;
+  capabilityCode: string;
+  capabilityItemCode: string;
+  code: string;
+  name: string;
+  uomCode: string | null;
+  valueType?: CalibrationValueType;
+  toleranceMin: number | null;
+  toleranceMax: number | null;
+  toleranceNote: string | null;
+}
+
+type Bounds = {
+  min: number | null;
+  max: number | null;
+  note: string | null;
+};
+
+function t(
+  deviceTypeCode: string,
+  capabilityCode: string,
+  capabilityItemCode: string,
+  code: string,
+  name: string,
+  uomCode: string | null,
+  bounds: Bounds,
+  valueType?: CalibrationValueType,
+): ParameterSeedRow {
+  return {
+    deviceTypeCode,
+    capabilityCode,
+    capabilityItemCode,
+    code,
+    name,
+    uomCode,
+    valueType,
+    toleranceMin: bounds.min,
+    toleranceMax: bounds.max,
+    toleranceNote: bounds.note,
+  };
+}
+
+function pm(nominal: number, delta: number, note: string): Bounds {
+  return { min: nominal - delta, max: nominal + delta, note };
+}
+
+function pmPct(nominal: number, percent: number, note: string): Bounds {
+  const delta = nominal * (percent / 100);
+  return { min: nominal - delta, max: nominal + delta, note };
+}
+
+function maxOnly(max: number, note: string): Bounds {
+  return { min: null, max, note };
+}
+
+function minOnly(min: number, note: string): Bounds {
+  return { min, max: null, note };
+}
+
+function range(min: number, max: number, note: string): Bounds {
+  return { min, max, note };
+}
+
+function noteOnly(note: string): Bounds {
+  return { min: null, max: null, note };
+}
+
+const HUMIDITY_55_20 = pm(55, 20, "55 % ± 20 % RH");
+const HUMIDITY_55_20_RH = pm(55, 20, "55 %RH ± 20 %RH");
+const HUMIDITY_50_20 = pm(50, 20, "50 % ± 20 % RH");
+const HUMIDITY_55_10 = pm(55, 10, "55 % ± 10 % RH");
+const VOLTAGE_220_10 = pmPct(220, 10, "220 ± 10% Volt");
+const EARTH_03 = maxOnly(0.3, "≤ 0,3 Ω");
+const ISO_GT2_NOSPACE = minOnly(2, ">2 MΩ");
+const ISO_GT2_SPACE = minOnly(2, "> 2 MΩ");
+const LEAK_500 = maxOnly(500, "≤ 500 µA");
+const LEAK_100 = maxOnly(100, "≤ 100 µA");
+const LEAK_CLASS = maxOnly(500, "Kelas I ≤ 500 µA\nKelas II ≤ 100 µA");
+const APPLIED_500 = maxOnly(500, "≤ 500 µA");
+const APPLIED_50 = maxOnly(50, "≤ 50 µA");
+const PCT_10 = noteOnly("± 10%");
+const PCT_10_SPACE = noteOnly("± 10 %");
+
+function envElec(
+  deviceTypeCode: string,
+  prefix: string,
+  env: {
+    temp: Bounds;
+    humidity: Bounds;
+    voltage?: Bounds;
+    earth?: Bounds;
+    iso?: Bounds;
+    leak?: Bounds;
+    applied?: Bounds;
+  },
+): ParameterSeedRow[] {
+  const rows: ParameterSeedRow[] = [
+    t(
+      deviceTypeCode,
+      "ENVIRONMENTAL_CONDITIONS",
+      "ROOM_TEMPERATURE",
+      `${prefix}_ROOM_TEMP`,
+      "Room Temperature",
+      "DEG_C",
+      env.temp,
+    ),
+    t(
+      deviceTypeCode,
+      "ENVIRONMENTAL_CONDITIONS",
+      "ROOM_HUMIDITY",
+      `${prefix}_ROOM_HUMIDITY`,
+      "Room Humidity",
+      "PERCENT",
+      env.humidity,
+    ),
+  ];
+  if (env.voltage) {
+    rows.push(
+      t(
+        deviceTypeCode,
+        "ENVIRONMENTAL_CONDITIONS",
+        "INPUT_VOLTAGE",
+        `${prefix}_INPUT_VOLTAGE`,
+        "Input Voltage",
+        "V",
+        env.voltage,
+      ),
+    );
+  }
+  if (env.earth) {
+    rows.push(
+      t(
+        deviceTypeCode,
+        "ELECTRICAL_SAFETY",
+        "PROTECTIVE_EARTH_RESISTANCE",
+        `${prefix}_EARTH_RESISTANCE`,
+        "Protective Earth Resistance",
+        "OHM",
+        env.earth,
+      ),
+    );
+  }
+  if (env.iso) {
+    rows.push(
+      t(
+        deviceTypeCode,
+        "ELECTRICAL_SAFETY",
+        "INSULATION_RESISTANCE",
+        `${prefix}_INSULATION_RESISTANCE`,
+        "Insulation Resistance",
+        "MOHM",
+        env.iso,
+      ),
+    );
+  }
+  if (env.leak) {
+    rows.push(
+      t(
+        deviceTypeCode,
+        "ELECTRICAL_SAFETY",
+        "EQUIPMENT_LEAKAGE_CURRENT",
+        `${prefix}_EQUIP_LEAKAGE`,
+        "Equipment Leakage Current",
+        "UA",
+        env.leak,
+      ),
+    );
+  }
+  if (env.applied) {
+    rows.push(
+      t(
+        deviceTypeCode,
+        "ELECTRICAL_SAFETY",
+        "APPLIED_PART_LEAKAGE_CURRENT",
+        `${prefix}_APPLIED_LEAKAGE`,
+        "Applied Part Leakage Current",
+        "UA",
+        env.applied,
+      ),
+    );
+  }
+  return rows;
+}
+
+const LIGHT_CRI_85_100 = range(85, 100, "85 ≤ Ra ≤ 100");
+const LIGHT_CRI_85_100_DASH = range(85, 100, "85 – 100 Ra");
+const LIGHT_CCT_3000_6700_LE = range(3000, 6700, "3000°K ≤ 6700°K");
+const LIGHT_CCT_3000_6700_DASH = range(3000, 6700, "3000 - 6700°K");
+const LIGHT_LUX_GT_1000 = minOnly(1000, "> 1000 lux");
+const LIGHT_LUX_SURGICAL = range(40000, 160000, "40.000 – 160.000 lux");
+
+const PARAMETERS: ParameterSeedRow[] = [
+  // LK Audiometer.docx
+  ...envElec("AUDIOMETER", "AUD", {
+    temp: pm(25, 5, "25℃ ± 5℃"),
+    humidity: HUMIDITY_55_20_RH,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_500,
+    applied: APPLIED_500,
+  }),
+  t(
+    "AUDIOMETER",
+    "AUDIOMETRIC_PERFORMANCE",
+    "PURE_TONE_LINEARITY",
+    "AUD_PURE_TONE_LINEARITY",
+    "Pure Tone Linearity (dB)",
+    "DB",
+    noteOnly("± 1 dB"),
+  ),
+  t(
+    "AUDIOMETER",
+    "AUDIOMETRIC_PERFORMANCE",
+    "FREQUENCY_RESPONSE",
+    "AUD_FREQUENCY_RESPONSE",
+    "Frequency Response",
+    "HZ",
+    noteOnly("± 2%"),
+  ),
+
+  // LK Autoclave.docx
+  ...envElec("AUTOCLAVE", "ACLV", {
+    temp: pm(25, 5, "25℃ ± 5℃"),
+    humidity: HUMIDITY_55_20_RH,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_500,
+    applied: APPLIED_500,
+  }),
+  t(
+    "AUTOCLAVE",
+    "TEMPERATURE_CHAMBER_STERILIZATION",
+    "CHAMBER_TEMPERATURE",
+    "ACLV_CHAMBER_TEMP",
+    "Chamber Temperature",
+    "DEG_C",
+    noteOnly("ΔT1 = S1 – S2 ± 2 °C; ΔT2 = S1 – S3 ± 5 °C; ΔT3 = S1 – S3 ± 2 °C"),
+  ),
+  t(
+    "AUTOCLAVE",
+    "TEMPERATURE_CHAMBER_STERILIZATION",
+    "STERILIZATION_TEMPERATURE",
+    "ACLV_STER_TEMP",
+    "Sterilization Temperature",
+    "DEG_C",
+    noteOnly("121 °C ~ 124 °C; 134 °C ~137 °C"),
+  ),
+  t(
+    "AUTOCLAVE",
+    "TEMPERATURE_CHAMBER_STERILIZATION",
+    "STERILIZATION_TIME",
+    "ACLV_STER_TIME",
+    "Sterilization Time",
+    "MIN",
+    noteOnly("121 °C ≥ 15 menit; 134 °C ≥ 3 menit"),
+  ),
+
+  // LK Bio Safety Cabinet.docx
+  ...envElec("BIO_SAFETY_CABINET", "BSC", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_500,
+    applied: APPLIED_500,
+  }),
+  t(
+    "BIO_SAFETY_CABINET",
+    "CLEAN_AIR_CONTAINMENT",
+    "PARTICLE_COUNT",
+    "BSC_PARTICLE_COUNT",
+    "Particle Count (0.5 µm)",
+    "PARTICLE",
+    maxOnly(100, "0,5 ≤ 100 particle"),
+  ),
+  t(
+    "BIO_SAFETY_CABINET",
+    "CLEAN_AIR_CONTAINMENT",
+    "DOWNFLOW_VELOCITY",
+    "BSC_DOWNFLOW",
+    "Downflow Velocity",
+    "M_S",
+    range(0.25, 0.5, "Down Flow 0,25 - 0,5 m/s sesuaikan dengan spek BSC"),
+  ),
+  t(
+    "BIO_SAFETY_CABINET",
+    "CLEAN_AIR_CONTAINMENT",
+    "INFLOW_VELOCITY",
+    "BSC_INFLOW",
+    "Inflow Velocity",
+    "M_S",
+    noteOnly("≥ 0,40 m/s; Min : 0,4; Max : 1"),
+  ),
+  t(
+    "BIO_SAFETY_CABINET",
+    "CLEAN_AIR_CONTAINMENT",
+    "LIGHT_INTENSITY",
+    "BSC_LIGHT_INTENSITY",
+    "Light Intensity",
+    "LUX",
+    noteOnly("Lampu ON ≥ 450 lux; Lampu OFF ≤ 160 lux"),
+  ),
+  t(
+    "BIO_SAFETY_CABINET",
+    "CLEAN_AIR_CONTAINMENT",
+    "SOUND_LEVEL",
+    "BSC_SOUND_LEVEL",
+    "Sound Level",
+    "DBA",
+    noteOnly("Noise ON ≤ 70 dBA; Noise OFF ≤ 60 dBA"),
+  ),
+  t(
+    "BIO_SAFETY_CABINET",
+    "CLEAN_AIR_CONTAINMENT",
+    "UV_RADIATION",
+    "BSC_UV_RADIATION",
+    "UV Radiation",
+    "UW_CM2",
+    minOnly(40, "≥ 40 µW/cm²"),
+  ),
+  t(
+    "BIO_SAFETY_CABINET",
+    "CLEAN_AIR_CONTAINMENT",
+    "HEPA_LEAK_TEST",
+    "BSC_HEPA_LEAK",
+    "HEPA / ULPA Leak Test",
+    null,
+    noteOnly("Pass / Fail"),
+    "BOOLEAN",
+  ),
+
+  // LK Centrifuge.docx
+  ...envElec("CENTRIFUGE", "CENT", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_100,
+    applied: APPLIED_50,
+  }),
+  t(
+    "CENTRIFUGE",
+    "ROTATIONAL_SPEED",
+    "ROTATION_SPEED_ACCURACY",
+    "CENT_SPEED",
+    "Rotation Speed Accuracy",
+    "REV_MIN",
+    PCT_10,
+  ),
+  t(
+    "CENTRIFUGE",
+    "ROTATIONAL_SPEED",
+    "ROTATION_TIME_ACCURACY",
+    "CENT_TIME",
+    "Rotation Time Accuracy",
+    "SEC",
+    PCT_10_SPACE,
+  ),
+
+  // LK Centrifuge Refrigerator.docx
+  ...envElec("CENTRIFUGE_REFRIGERATOR", "CRFR", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_100,
+    applied: APPLIED_500,
+  }),
+  t(
+    "CENTRIFUGE_REFRIGERATOR",
+    "ROTATIONAL_SPEED",
+    "ROTATION_SPEED_ACCURACY",
+    "CRFR_SPEED",
+    "Rotation Speed Accuracy",
+    "REV_MIN",
+    PCT_10,
+  ),
+  t(
+    "CENTRIFUGE_REFRIGERATOR",
+    "ROTATIONAL_SPEED",
+    "ROTATION_TIME_ACCURACY",
+    "CRFR_TIME",
+    "Rotation Time Accuracy",
+    "SEC",
+    PCT_10_SPACE,
+  ),
+  t(
+    "CENTRIFUGE_REFRIGERATOR",
+    "TEMPERATURE_COLD_STORAGE",
+    "STORAGE_TEMPERATURE_UNIFORMITY",
+    "CRFR_STORAGE_TEMP",
+    "Compartment Temperature Uniformity",
+    "DEG_C",
+    noteOnly("Setting suhu sesuai dengan rentang pemakaian; ± 3°C"),
+  ),
+
+  // LK CPAP.docx
+  ...envElec("CPAP", "CPAP", {
+    temp: pm(21, 5, "21 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_100,
+    applied: APPLIED_50,
+  }),
+  t(
+    "CPAP",
+    "OXYGEN_CONCENTRATION",
+    "OXYGEN_CONCENTRATION_ACCURACY",
+    "CPAP_CONCENTRATION",
+    "Oxygen Concentration Accuracy",
+    "PERCENT",
+    noteOnly("± 3%"),
+  ),
+  t(
+    "CPAP",
+    "GAS_FLOW_RATE",
+    "FLOW_RATE_ACCURACY",
+    "CPAP_FLOW_RATE",
+    "Gas Flow Rate Accuracy",
+    "L_MIN",
+    noteOnly("± 20%"),
+  ),
+
+  // LK Dental Unit.docx
+  ...envElec("DENTAL_UNIT", "DUNIT", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_50_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_100,
+    applied: APPLIED_50,
+  }),
+  t(
+    "DENTAL_UNIT",
+    "DENTAL_UNIT_PERFORMANCE",
+    "HANDPIECE_SPEED_LOW",
+    "DUNIT_HP_SPEED_LOW",
+    "Handpiece Speed (Low)",
+    "REV_MIN",
+    range(5000, 11000, "5000 rpm-11.000 rpm"),
+  ),
+  t(
+    "DENTAL_UNIT",
+    "DENTAL_UNIT_PERFORMANCE",
+    "HANDPIECE_SPEED_HIGH",
+    "DUNIT_HP_SPEED_HIGH",
+    "Handpiece Speed (High)",
+    "REV_MIN",
+    minOnly(250000, ">250.000 rpm"),
+  ),
+  t(
+    "DENTAL_UNIT",
+    "DENTAL_UNIT_PERFORMANCE",
+    "HANDPIECE_PRESSURE",
+    "DUNIT_HP_PRESSURE",
+    "Handpiece Pressure",
+    "BAR",
+    range(3, 4, "3,0 bar – 4,0 bar"),
+  ),
+  t(
+    "DENTAL_UNIT",
+    "DENTAL_UNIT_PERFORMANCE",
+    "LIGHT_ILLUMINANCE",
+    "DUNIT_ILLUMINANCE",
+    "Illuminance (70 cm)",
+    "LUX",
+    minOnly(15000, ">15.000 lux"),
+  ),
+  t(
+    "DENTAL_UNIT",
+    "DENTAL_UNIT_PERFORMANCE",
+    "AIR_SPRAY_PRESSURE",
+    "DUNIT_AIR_SPRAY",
+    "Air Spray Pressure",
+    "MMHG",
+    range(250, 500, "250 mmHg ~ 500 mmHg"),
+  ),
+  t(
+    "DENTAL_UNIT",
+    "DENTAL_UNIT_PERFORMANCE",
+    "SUCTION_PRESSURE",
+    "DUNIT_SUCTION",
+    "Suction Pressure",
+    "MMHG",
+    range(-450, -150, "-150 mmHg ~-450 mmHg"),
+  ),
+
+  // LK Dental X-Ray.docx
+  ...envElec("DENTAL_XRAY", "DXRAY", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_500,
+    applied: APPLIED_500,
+  }),
+  t(
+    "DENTAL_XRAY",
+    "XRAY_PERFORMANCE",
+    "COLLIMATION_ACCURACY",
+    "DXRAY_COLLIMATION_LENGTH",
+    "Collimation Length",
+    "MM",
+    minOnly(200, "≥ 200 mm"),
+  ),
+  t(
+    "DENTAL_XRAY",
+    "XRAY_PERFORMANCE",
+    "COLLIMATION_ACCURACY",
+    "DXRAY_COLLIMATION_DIAMETER",
+    "Collimation Diameter",
+    "MM",
+    maxOnly(60, "≤ 60 mm"),
+  ),
+  t(
+    "DENTAL_XRAY",
+    "XRAY_PERFORMANCE",
+    "KV_ACCURACY",
+    "DXRAY_KV_ACCURACY",
+    "kV Accuracy",
+    "KV",
+    noteOnly("± 6 %"),
+  ),
+  t(
+    "DENTAL_XRAY",
+    "XRAY_PERFORMANCE",
+    "EXPOSURE_TIME_ACCURACY",
+    "DXRAY_EXPOSURE_TIME",
+    "Exposure Time Accuracy",
+    "SEC",
+    noteOnly("± 10 %"),
+  ),
+  t(
+    "DENTAL_XRAY",
+    "XRAY_PERFORMANCE",
+    "DOSE_LINEARITY",
+    "DXRAY_DOSE_LINEARITY",
+    "Dose Linearity",
+    "MGY",
+    noteOnly("± 10 %"),
+  ),
+  t(
+    "DENTAL_XRAY",
+    "XRAY_PERFORMANCE",
+    "OUTPUT_REPRODUCIBILITY",
+    "DXRAY_REPRODUCIBILITY",
+    "Output Reproducibility",
+    "MGY",
+    noteOnly("± 10 %; CV ≤ 0.05"),
+  ),
+  t(
+    "DENTAL_XRAY",
+    "XRAY_PERFORMANCE",
+    "HALF_VALUE_LAYER",
+    "DXRAY_HVL",
+    "Half Value Layer",
+    "MMAL",
+    noteOnly("70 ≥ 1,5 mmAI; 80 ≥ 2,3 mmAI"),
+  ),
+
+  // LK Electro Accupunture (EST).docx
+  ...envElec("ELECTRO_ACCUPUNTURE", "EST", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_50_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_100,
+    applied: APPLIED_50,
+  }),
+  t(
+    "ELECTRO_ACCUPUNTURE",
+    "ELECTROTHERAPY_STIMULATION",
+    "STIMULATION_FREQUENCY",
+    "EST_FREQUENCY",
+    "Stimulation Frequency",
+    "HZ",
+    noteOnly("±10%"),
+  ),
+  t(
+    "ELECTRO_ACCUPUNTURE",
+    "ELECTROTHERAPY_STIMULATION",
+    "STIMULATION_INTENSITY",
+    "EST_INTENSITY",
+    "Stimulation Intensity",
+    "MA",
+    noteOnly("±20%"),
+  ),
+  t(
+    "ELECTRO_ACCUPUNTURE",
+    "ELECTROTHERAPY_STIMULATION",
+    "PULSE_DURATION",
+    "EST_PULSE_DURATION",
+    "Pulse Duration",
+    "MS",
+    noteOnly("±10%"),
+  ),
+  t(
+    "ELECTRO_ACCUPUNTURE",
+    "ELECTROTHERAPY_STIMULATION",
+    "TREATMENT_TIMER",
+    "EST_TIMER",
+    "Treatment Timer",
+    "SEC",
+    noteOnly("±10%"),
+  ),
+
+  // LK Examination Lamp.docx
+  ...envElec("EXAMINATION_LAMP", "EXLMP", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_NOSPACE,
+    leak: LEAK_500,
+    applied: APPLIED_500,
+  }),
+  t(
+    "EXAMINATION_LAMP",
+    "LIGHT_SOURCE_PERFORMANCE",
+    "LIGHT_INTENSITY",
+    "EXLMP_INTENSITY",
+    "Light Intensity",
+    "LUX",
+    LIGHT_LUX_GT_1000,
+  ),
+  t(
+    "EXAMINATION_LAMP",
+    "LIGHT_SOURCE_PERFORMANCE",
+    "COLOR_TEMPERATURE",
+    "EXLMP_CCT",
+    "Color Temperature",
+    "KELVIN",
+    LIGHT_CCT_3000_6700_LE,
+  ),
+  t(
+    "EXAMINATION_LAMP",
+    "LIGHT_SOURCE_PERFORMANCE",
+    "COLOR_RENDERING_INDEX",
+    "EXLMP_CRI",
+    "Color Rendering Index",
+    "RA",
+    LIGHT_CRI_85_100,
+  ),
+
+  // LK Head Lamp Medik.docx
+  ...envElec("HEAD_LAMP_MEDIK", "HLAMP", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_NOSPACE,
+    leak: LEAK_500,
+    applied: APPLIED_500,
+  }),
+  t(
+    "HEAD_LAMP_MEDIK",
+    "LIGHT_SOURCE_PERFORMANCE",
+    "LIGHT_INTENSITY",
+    "HLAMP_INTENSITY",
+    "Light Intensity",
+    "LUX",
+    LIGHT_LUX_GT_1000,
+  ),
+  t(
+    "HEAD_LAMP_MEDIK",
+    "LIGHT_SOURCE_PERFORMANCE",
+    "COLOR_TEMPERATURE",
+    "HLAMP_CCT",
+    "Color Temperature",
+    "KELVIN",
+    LIGHT_CCT_3000_6700_LE,
+  ),
+  t(
+    "HEAD_LAMP_MEDIK",
+    "LIGHT_SOURCE_PERFORMANCE",
+    "COLOR_RENDERING_INDEX",
+    "HLAMP_CRI",
+    "Color Rendering Index",
+    "RA",
+    LIGHT_CRI_85_100,
+  ),
+
+  // LK Lampu Operasi.docx
+  ...envElec("LAMPU_OPERASI", "LOP", {
+    temp: pm(25, 6, "25 ± 6 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_NOSPACE,
+    leak: LEAK_500,
+    applied: APPLIED_500,
+  }),
+  t(
+    "LAMPU_OPERASI",
+    "LIGHT_SOURCE_PERFORMANCE",
+    "LIGHT_INTENSITY",
+    "LOP_INTENSITY",
+    "Light Intensity",
+    "LUX",
+    LIGHT_LUX_SURGICAL,
+  ),
+  t(
+    "LAMPU_OPERASI",
+    "LIGHT_SOURCE_PERFORMANCE",
+    "COLOR_TEMPERATURE",
+    "LOP_CCT",
+    "Color Temperature",
+    "KELVIN",
+    LIGHT_CCT_3000_6700_DASH,
+  ),
+  t(
+    "LAMPU_OPERASI",
+    "LIGHT_SOURCE_PERFORMANCE",
+    "COLOR_RENDERING_INDEX",
+    "LOP_CRI",
+    "Color Rendering Index",
+    "RA",
+    LIGHT_CRI_85_100_DASH,
+  ),
+
+  // LK Laryngoskop.docx
+  // FLAG: illuminance 40,000–160,000 lux matches Lampu Operasi and may be a
+  // copy-paste artifact — seeded as-is from the source document.
+  ...envElec("LARYNGOSKOP", "LARYN", {
+    temp: pm(25, 6, "25 ± 6 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_NOSPACE,
+    leak: LEAK_500,
+    applied: APPLIED_500,
+  }),
+  t(
+    "LARYNGOSKOP",
+    "LIGHT_SOURCE_PERFORMANCE",
+    "LIGHT_INTENSITY",
+    "LARYN_INTENSITY",
+    "Light Intensity",
+    "LUX",
+    LIGHT_LUX_SURGICAL,
+  ),
+  t(
+    "LARYNGOSKOP",
+    "LIGHT_SOURCE_PERFORMANCE",
+    "COLOR_TEMPERATURE",
+    "LARYN_CCT",
+    "Color Temperature",
+    "KELVIN",
+    LIGHT_CCT_3000_6700_DASH,
+  ),
+  t(
+    "LARYNGOSKOP",
+    "LIGHT_SOURCE_PERFORMANCE",
+    "COLOR_RENDERING_INDEX",
+    "LARYN_CRI",
+    "Color Rendering Index",
+    "RA",
+    LIGHT_CRI_85_100_DASH,
+  ),
+
+  // LK Fetal Doppler.docx
+  ...envElec("FETAL_DOPPLER", "FDOP", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_NOSPACE,
+    leak: LEAK_100,
+    applied: APPLIED_50,
+  }),
+  t(
+    "FETAL_DOPPLER",
+    "FETAL_HEART_RATE",
+    "FETAL_HR_ACCURACY",
+    "FDOP_HR_ACCURACY",
+    "Fetal Heart Rate Accuracy",
+    "BPM",
+    noteOnly("± 5 bpm"),
+  ),
+
+  // LK Infusion Pump.docx
+  ...envElec("INFUSION_PUMP", "INFUS", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_100,
+    applied: APPLIED_50,
+  }),
+  t(
+    "INFUSION_PUMP",
+    "INFUSION_FLOW",
+    "OCCLUSION_TEST",
+    "INFUS_OCCLUSION",
+    "Occlusion Test",
+    "PSI",
+    maxOnly(20, "< 20 psi"),
+  ),
+  t(
+    "INFUSION_PUMP",
+    "INFUSION_FLOW",
+    "FLOW_RATE_CALIBRATION",
+    "INFUS_FLOW_RATE",
+    "Flow Rate Calibration",
+    "ML_H",
+    noteOnly("±10%"),
+  ),
+
+  // LK Syringe Pump.docx
+  ...envElec("SYRINGE_PUMP", "SYR", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_100,
+    applied: APPLIED_50,
+  }),
+  t(
+    "SYRINGE_PUMP",
+    "INFUSION_FLOW",
+    "OCCLUSION_TEST",
+    "SYR_OCCLUSION",
+    "Occlusion Test",
+    "PSI",
+    maxOnly(20, "< 20 psi"),
+  ),
+  t(
+    "SYRINGE_PUMP",
+    "INFUSION_FLOW",
+    "FLOW_RATE_CALIBRATION",
+    "SYR_FLOW_RATE",
+    "Flow Rate Calibration",
+    "ML_H",
+    noteOnly("±10%"),
+  ),
+
+  // LK Laminar Air Flow.docx
+  ...envElec("LAMINAR_AIR_FLOW", "LAF", {
+    temp: pm(20, 5, "20 ± 5 °C"),
+    humidity: HUMIDITY_55_10,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_500,
+    applied: APPLIED_500,
+  }),
+  t(
+    "LAMINAR_AIR_FLOW",
+    "CLEAN_AIR_CONTAINMENT",
+    "PARTICLE_COUNT",
+    "LAF_PARTICLE_COUNT",
+    "Particle Count (0.5 µm)",
+    "PARTICLE",
+    maxOnly(100, "0,5 ≤ 100 Particle"),
+  ),
+  t(
+    "LAMINAR_AIR_FLOW",
+    "CLEAN_AIR_CONTAINMENT",
+    "DOWNFLOW_VELOCITY",
+    "LAF_DOWNFLOW",
+    "Downflow Velocity",
+    "M_S",
+    noteOnly("Down Flow Velocity : 0,25 - 0,50 m/s; ± 0,025"),
+  ),
+  t(
+    "LAMINAR_AIR_FLOW",
+    "CLEAN_AIR_CONTAINMENT",
+    "LIGHT_INTENSITY",
+    "LAF_LIGHT_INTENSITY",
+    "Light Intensity",
+    "LUX",
+    minOnly(750, "≥ 750 lux"),
+  ),
+  t(
+    "LAMINAR_AIR_FLOW",
+    "CLEAN_AIR_CONTAINMENT",
+    "SOUND_LEVEL",
+    "LAF_SOUND_LEVEL",
+    "Sound Level",
+    "DBA",
+    noteOnly("Background ≤ 55 dBA; Didalam kompartemen ≤ 65 dBA"),
+  ),
+  t(
+    "LAMINAR_AIR_FLOW",
+    "CLEAN_AIR_CONTAINMENT",
+    "UV_RADIATION",
+    "LAF_UV_RADIATION",
+    "UV Radiation",
+    "UW_CM2",
+    minOnly(40, "≥ 40 µW/cm²"),
+  ),
+
+  // LK Mikroskop Laboratorium.docx
+  ...envElec("MIKROSKOP_LABORATORIUM", "MICRO", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_500,
+    applied: APPLIED_500,
+  }),
+  t(
+    "MIKROSKOP_LABORATORIUM",
+    "OPTICAL_MAGNIFICATION",
+    "MAGNIFICATION_4X",
+    "MICRO_MAG_4X",
+    "Objective Magnification 4x",
+    "UM",
+    noteOnly("± 5%"),
+  ),
+  t(
+    "MIKROSKOP_LABORATORIUM",
+    "OPTICAL_MAGNIFICATION",
+    "MAGNIFICATION_10X",
+    "MICRO_MAG_10X",
+    "Objective Magnification 10x",
+    "UM",
+    noteOnly("± 5%"),
+  ),
+  t(
+    "MIKROSKOP_LABORATORIUM",
+    "OPTICAL_MAGNIFICATION",
+    "MAGNIFICATION_RATIO",
+    "MICRO_MAG_RATIO",
+    "Magnification Ratio",
+    null,
+    noteOnly("± 5%"),
+    "RATIO",
+  ),
+
+  // LK Phototherapy.docx
+  ...envElec("PHOTOTHERAPY", "PHOTO", {
+    temp: pm(25, 6, "25 ± 6 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_100,
+    applied: APPLIED_50,
+  }),
+  t(
+    "PHOTOTHERAPY",
+    "SPECTRAL_IRRADIANCE",
+    "SPECTRAL_IRRADIANCE_ACCURACY",
+    "PHOTO_IRRADIANCE",
+    "Spectral Irradiance Accuracy",
+    "UW_CM2_NM",
+    minOnly(8, "≥ 8 µW/cm2/nm"),
+  ),
+
+  // LK Platelet Agitator Incubator.docx
+  ...envElec("PLATELET_AGITATOR_INCUBATOR", "PLT", {
+    temp: pm(25, 6, "25 ± 6 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_500,
+    applied: APPLIED_500,
+  }),
+  t(
+    "PLATELET_AGITATOR_INCUBATOR",
+    "TEMPERATURE_COLD_STORAGE",
+    "STORAGE_TEMPERATURE_UNIFORMITY",
+    "PLT_STORAGE_TEMP",
+    "Storage Temperature Uniformity",
+    "DEG_C",
+    noteOnly("Setting suhu 20 ˚C - 24 ˚C; suhu : ± 1,5 °C"),
+  ),
+
+  // LK Rotator.docx
+  ...envElec("ROTATOR", "ROT", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_100,
+    applied: APPLIED_50,
+  }),
+  t(
+    "ROTATOR",
+    "ROTATIONAL_SPEED",
+    "ROTATION_SPEED_ACCURACY",
+    "ROT_SPEED",
+    "Rotation Speed Accuracy",
+    "REV_MIN",
+    PCT_10,
+  ),
+  t(
+    "ROTATOR",
+    "ROTATIONAL_SPEED",
+    "ROTATION_TIME_ACCURACY",
+    "ROT_TIME",
+    "Rotation Time Accuracy",
+    "SEC",
+    noteOnly("± 10 %"),
+  ),
+
+  // LK Spirometer.docx
+  ...envElec("SPIROMETER", "SPIRO", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_100,
+    applied: APPLIED_50,
+  }),
+  t(
+    "SPIROMETER",
+    "SPIROMETRY_VOLUME_ACCURACY",
+    "FVC_VOLUME_ACCURACY",
+    "SPIRO_FVC",
+    "FVC Volume Accuracy",
+    "L",
+    noteOnly("±3%"),
+  ),
+
+  // LK Suction Pump.docx
+  ...envElec("SUCTION_PUMP", "SUCT", {
+    temp: range(19, 31, "19 – 31 oC"),
+    humidity: range(35, 75, "35 – 75 % RH"),
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_SPACE,
+    leak: LEAK_CLASS,
+    applied: APPLIED_50,
+  }),
+  t(
+    "SUCTION_PUMP",
+    "VACUUM_SUCTION",
+    "VACUUM_GAUGE_ACCURACY",
+    "SUCT_VACUUM_GAUGE",
+    "Vacuum Gauge Accuracy",
+    "MMHG",
+    PCT_10,
+  ),
+  t(
+    "SUCTION_PUMP",
+    "VACUUM_SUCTION",
+    "MAXIMUM_VACUUM",
+    "SUCT_MAX_VACUUM",
+    "Maximum Vacuum",
+    "MMHG",
+    noteOnly(
+      "Low Vacuum < 150 mmHg; Medium Vacuum 150 mmHg – 450 mmHg; High Vacuum ˃ 450 mmHg. *isi salah satu sesuai dengan UUT",
+    ),
+  ),
+  t(
+    "SUCTION_PUMP",
+    "VACUUM_SUCTION",
+    "TIME_TO_MAX_VACUUM",
+    "SUCT_TIME_MAX_VACUUM",
+    "Time to Maximum Vacuum",
+    "SEC",
+    maxOnly(15, "≤ 15 detik"),
+  ),
+
+  // LK Blanket Warmer.docx
+  ...envElec("BLANKET_WARMER", "BLNW", {
+    temp: pm(25, 5, "25 ± 5 °C"),
+    humidity: HUMIDITY_55_20,
+    voltage: VOLTAGE_220_10,
+    earth: EARTH_03,
+    iso: ISO_GT2_NOSPACE,
+    leak: LEAK_500,
+    applied: APPLIED_500,
+  }),
+  t(
+    "BLANKET_WARMER",
+    "WARMER_SURFACE_TEMPERATURE",
+    "HIGH_TEMP_PROTECTION",
+    "BLNW_HIGH_TEMP",
+    "High Temperature Protection",
+    "DEG_C",
+    noteOnly("< 53°C ± 3℃"),
+  ),
+  t(
+    "BLANKET_WARMER",
+    "WARMER_SURFACE_TEMPERATURE",
+    "WARMER_TEMPERATURE_CALIBRATION",
+    "BLNW_TEMP_CALIBRATION",
+    "Temperature Calibration",
+    "DEG_C",
+    noteOnly("± 3°C"),
+  ),
+];
+
+const EXPECTED_COUNT = 239;
+const EXTENSION_DEVICE_TYPE_CODES = [
+  "AUDIOMETER",
+  "AUTOCLAVE",
+  "BIO_SAFETY_CABINET",
+  "CENTRIFUGE",
+  "CENTRIFUGE_REFRIGERATOR",
+  "CPAP",
+  "DENTAL_UNIT",
+  "DENTAL_XRAY",
+  "ELECTRO_ACCUPUNTURE",
+  "EXAMINATION_LAMP",
+  "HEAD_LAMP_MEDIK",
+  "LAMPU_OPERASI",
+  "LARYNGOSKOP",
+  "FETAL_DOPPLER",
+  "INFUSION_PUMP",
+  "SYRINGE_PUMP",
+  "LAMINAR_AIR_FLOW",
+  "MIKROSKOP_LABORATORIUM",
+  "PHOTOTHERAPY",
+  "PLATELET_AGITATOR_INCUBATOR",
+  "ROTATOR",
+  "SPIROMETER",
+  "SUCTION_PUMP",
+  "BLANKET_WARMER",
+] as const;
+
+const EXCLUDED_TYPE_CODES = [
+  "AUTO_CHEMISTRY_ANALYZER",
+  "HEMATOLOGI_ANALYZER",
+  "PH_METER",
+  "THERMOHYGROMETER",
+  "OTOSCOPE",
+  "PHACO_EMULSIFIKASI",
+];
+
+interface FailedRow {
+  code: string;
+  reason: string;
+}
+
+async function seedExtensionParameters() {
+  if (PARAMETERS.length !== EXPECTED_COUNT) {
+    throw new Error(
+      `[seed] Expected ${EXPECTED_COUNT} extension DeviceCalibrationParameter rows, got ${PARAMETERS.length}`,
+    );
+  }
+
+  const codes = PARAMETERS.map((row) => row.code);
+  if (new Set(codes).size !== codes.length) {
+    const dupes = codes.filter((code, i) => codes.indexOf(code) !== i);
+    throw new Error(`[seed] Duplicate parameter codes: ${[...new Set(dupes)].join(", ")}`);
+  }
+
+  for (const row of PARAMETERS) {
+    if (!EXTENSION_DEVICE_TYPE_CODES.includes(row.deviceTypeCode as (typeof EXTENSION_DEVICE_TYPE_CODES)[number])) {
+      throw new Error(`[seed] Unexpected deviceTypeCode ${row.deviceTypeCode} for ${row.code}`);
+    }
+  }
+
+  const [deviceTypeCount, capabilityCount, itemCount, originalParamCount] = await Promise.all([
+    prisma.deviceType.count(),
+    prisma.deviceCapability.count(),
+    prisma.deviceCapabilityItem.count(),
+    prisma.deviceCalibrationParameter.count({
+      where: { deviceType: { code: { notIn: [...EXTENSION_DEVICE_TYPE_CODES] } } },
+    }),
+  ]);
+
+  if (deviceTypeCount < 59) {
+    throw new Error(`[seed] DeviceType count ${deviceTypeCount} < 59 — run seed:device-types first`);
+  }
+  if (capabilityCount < 30) {
+    throw new Error(
+      `[seed] DeviceCapability count ${capabilityCount} < 30 — run seed:device-capabilities first`,
+    );
+  }
+  if (itemCount < 98) {
+    throw new Error(
+      `[seed] DeviceCapabilityItem count ${itemCount} < 98 — run seed:device-capabilities first`,
+    );
+  }
+
+  const excludedPresent = await prisma.deviceType.findMany({
+    where: { code: { in: EXCLUDED_TYPE_CODES } },
+    select: { code: true },
+  });
+  if (excludedPresent.length > 0) {
+    throw new Error(
+      `[seed] Excluded DeviceType(s) unexpectedly present: ${excludedPresent.map((r) => r.code).join(", ")}`,
+    );
+  }
+
+  const deviceTypes = await prisma.deviceType.findMany({ select: { id: true, code: true } });
+  const deviceTypeIdByCode = new Map(deviceTypes.map((row) => [row.code, row.id]));
+  const capabilities = await prisma.deviceCapability.findMany({ select: { id: true, code: true } });
+  const capabilityIdByCode = new Map(capabilities.map((row) => [row.code, row.id]));
+  const items = await prisma.deviceCapabilityItem.findMany({
+    select: { id: true, code: true, capabilityId: true },
+  });
+  const itemIdByCapabilityAndCode = new Map(
+    items.map((row) => [`${row.capabilityId}::${row.code}`, row.id]),
+  );
+  const uoms = await prisma.uom.findMany({ select: { id: true, code: true } });
+  const uomIdByCode = new Map(uoms.map((row) => [row.code, row.id]));
+
+  const failed: FailedRow[] = [];
+  let upserted = 0;
+
+  for (const row of PARAMETERS) {
+    const deviceTypeId = deviceTypeIdByCode.get(row.deviceTypeCode);
+    if (!deviceTypeId) {
+      failed.push({ code: row.code, reason: `missing DeviceType.code=${row.deviceTypeCode}` });
+      continue;
+    }
+    const capabilityId = capabilityIdByCode.get(row.capabilityCode);
+    if (!capabilityId) {
+      failed.push({
+        code: row.code,
+        reason: `missing DeviceCapability.code=${row.capabilityCode}`,
+      });
+      continue;
+    }
+    const capabilityItemId = itemIdByCapabilityAndCode.get(
+      `${capabilityId}::${row.capabilityItemCode}`,
+    );
+    if (!capabilityItemId) {
+      failed.push({
+        code: row.code,
+        reason: `missing DeviceCapabilityItem (${row.capabilityCode}, ${row.capabilityItemCode})`,
+      });
+      continue;
+    }
+
+    let uomId: string | null = null;
+    if (row.uomCode) {
+      const resolved = uomIdByCode.get(row.uomCode);
+      if (!resolved) {
+        failed.push({ code: row.code, reason: `missing Uom.code=${row.uomCode}` });
+        continue;
+      }
+      uomId = resolved;
+    } else if ((row.valueType ?? "NUMBER") === "NUMBER") {
+      failed.push({ code: row.code, reason: "NUMBER valueType requires uomCode" });
+      continue;
+    }
+
+    await prisma.deviceCalibrationParameter.upsert({
+      where: {
+        deviceTypeId_capabilityItemId_code: {
+          deviceTypeId,
+          capabilityItemId,
+          code: row.code,
+        },
+      },
+      create: {
+        deviceTypeId,
+        capabilityItemId,
+        code: row.code,
+        name: row.name,
+        description: null,
+        uomId,
+        toleranceMin: row.toleranceMin,
+        toleranceMax: row.toleranceMax,
+        toleranceNote: row.toleranceNote,
+        ...(row.valueType ? { valueType: row.valueType } : {}),
+      },
+      update: {
+        name: row.name,
+        uomId,
+        toleranceMin: row.toleranceMin,
+        toleranceMax: row.toleranceMax,
+        toleranceNote: row.toleranceNote,
+        ...(row.valueType ? { valueType: row.valueType } : {}),
+      },
+    });
+    upserted += 1;
+  }
+
+  const [tableCount, extensionCount, bpmSystolic] = await Promise.all([
+    prisma.deviceCalibrationParameter.count(),
+    prisma.deviceCalibrationParameter.count({
+      where: { deviceType: { code: { in: [...EXTENSION_DEVICE_TYPE_CODES] } } },
+    }),
+    prisma.deviceCalibrationParameter.findFirst({
+      where: { code: "BPM_SYSTOLIC" },
+      select: {
+        code: true,
+        toleranceMin: true,
+        toleranceMax: true,
+        toleranceNote: true,
+      },
+    }),
+  ]);
+
+  const originalAfter = await prisma.deviceCalibrationParameter.count({
+    where: { deviceType: { code: { notIn: [...EXTENSION_DEVICE_TYPE_CODES] } } },
+  });
+
+  console.log(
+    `[seed] ${upserted} extension DeviceCalibrationParameter rows upserted (extension table count: ${extensionCount}, total: ${tableCount}).`,
+  );
+  console.log(
+    `[seed] Original (non-extension) DeviceCalibrationParameter count: ${originalParamCount} → ${originalAfter}.`,
+  );
+  if (bpmSystolic) {
+    console.log(
+      `[seed] Spot-check BPM_SYSTOLIC unchanged: note=${JSON.stringify(bpmSystolic.toleranceNote)} min=${bpmSystolic.toleranceMin} max=${bpmSystolic.toleranceMax}.`,
+    );
+  } else {
+    console.log("[seed] Spot-check BPM_SYSTOLIC: not found.");
+  }
+  console.log(
+    "[seed] FLAG: LARYN_INTENSITY illuminance 40,000–160,000 lux seeded as-is from LK Laryngoskop.docx — needs human review.",
+  );
+
+  if (failed.length > 0) {
+    console.error(
+      `[seed] ${failed.length} row(s) failed FK resolution:\n${failed.map((row) => `  - ${row.code}: ${row.reason}`).join("\n")}`,
+    );
+    throw new Error(`[seed] ${failed.length} row(s) failed FK resolution`);
+  }
+
+  if (originalAfter !== originalParamCount) {
+    throw new Error(
+      `[seed] Original parameter row count changed: ${originalParamCount} → ${originalAfter}`,
+    );
+  }
+
+  await prisma.$disconnect();
+}
+
+seedExtensionParameters().catch((error) => {
+  console.error("[seed] Failed:", error);
+  process.exit(1);
+});

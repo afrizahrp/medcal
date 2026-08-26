@@ -1,7 +1,8 @@
 /**
- * Seeds DeviceCapability (21) + DeviceCapabilityItem (66) from real LK worksheets.
- * Data extracted from Penilaian_Kemampuan.zip — global reusable catalog, not
- * scoped to DeviceType. evidence_source is kept as comments only (not a DB column).
+ * Seeds DeviceCapability + DeviceCapabilityItem from real LK worksheets.
+ * Original catalog: 21 capabilities / 66 items from Penilaian_Kemampuan.zip.
+ * Extension: 9 capabilities + 32 items from technician-docs (new device types).
+ * evidence_source is kept as comments only (not a DB column).
  * Run manually: pnpm --filter @medcal/db run seed:device-capabilities
  */
 import { prisma } from "../src/index";
@@ -19,7 +20,8 @@ interface ItemSeedRow {
 }
 
 /**
- * 21 DeviceCapability rows from seed_device_capability.csv.
+ * Original 21 DeviceCapability rows from seed_device_capability.csv,
+ * plus 9 extension capabilities from technician-docs.
  * evidence_source (CSV, not persisted) is noted in the comment above each row.
  */
 const CAPABILITIES: CapabilitySeedRow[] = [
@@ -164,10 +166,73 @@ const CAPABILITIES: CapabilitySeedRow[] = [
     description:
       "Scale repeatability and deviation-from-nominal testing for infant/adult weighing scales.",
   },
+  // LK Audiometer.docx
+  {
+    code: "AUDIOMETRIC_PERFORMANCE",
+    name: "Audiometric Performance",
+    description:
+      "Pure-tone linearity (dB) and frequency response accuracy for audiometers.",
+  },
+  // LK Bio Safety Cabinet.docx; LK Laminar Air Flow.docx
+  {
+    code: "CLEAN_AIR_CONTAINMENT",
+    name: "Clean Air Containment",
+    description:
+      "Particle count, airflow velocity, lighting, sound, UV radiation, and HEPA integrity for biosafety cabinets and laminar air flow.",
+  },
+  // LK Dental Unit.docx
+  {
+    code: "DENTAL_UNIT_PERFORMANCE",
+    name: "Dental Unit Performance",
+    description:
+      "Handpiece speed/pressure, operatory illuminance, spray-air pressure, and suction for dental units.",
+  },
+  // LK Dental X-Ray.docx
+  {
+    code: "XRAY_PERFORMANCE",
+    name: "X-Ray Performance",
+    description:
+      "Collimation, kV accuracy, exposure time, dose linearity, output reproducibility, and HVL for dental X-ray.",
+  },
+  // LK Electro Accupunture (EST).docx
+  {
+    code: "ELECTROTHERAPY_STIMULATION",
+    name: "Electrotherapy Stimulation",
+    description:
+      "Stimulation frequency, intensity, pulse duration, and treatment timer for electro-acupuncture (EST).",
+  },
+  // LK Examination Lamp.docx; LK Head Lamp Medik.docx; LK Lampu Operasi.docx; LK Laryngoskop.docx
+  {
+    code: "LIGHT_SOURCE_PERFORMANCE",
+    name: "Light Source Performance",
+    description:
+      "Illuminance, color temperature, and color rendering index for medical light sources.",
+  },
+  // LK Fetal Doppler.docx — dedicated capability (not VITAL_SIGNS_MONITORING.HEART_RATE)
+  {
+    code: "FETAL_HEART_RATE",
+    name: "Fetal Heart Rate",
+    description:
+      "Fetal heart-rate accuracy using a fetal heart rate simulator (multi-point sweep).",
+  },
+  // LK Phototherapy.docx
+  {
+    code: "SPECTRAL_IRRADIANCE",
+    name: "Spectral Irradiance",
+    description:
+      "Phototherapy lamp spectral irradiance output at multiple positions.",
+  },
+  // LK Spirometer.docx
+  {
+    code: "SPIROMETRY_VOLUME_ACCURACY",
+    name: "Spirometry Volume Accuracy",
+    description: "Forced vital capacity (FVC) volume accuracy against a 3 L syringe calibrator.",
+  },
 ];
 
 /**
- * 66 DeviceCapabilityItem rows from seed_device_capability_item.csv.
+ * Original 66 DeviceCapabilityItem rows from seed_device_capability_item.csv,
+ * plus 32 extension items from technician-docs.
  * evidence_source (CSV, not persisted) is noted in the comment above each group.
  */
 const ITEMS: ItemSeedRow[] = [
@@ -430,14 +495,195 @@ const ITEMS: ItemSeedRow[] = [
     code: "DEVIATION_FROM_NOMINAL",
     name: "Deviation from Nominal Value",
   },
+
+  // AUDIOMETRIC_PERFORMANCE — LK Audiometer.docx
+  {
+    capabilityCode: "AUDIOMETRIC_PERFORMANCE",
+    code: "PURE_TONE_LINEARITY",
+    name: "Pure Tone Linearity",
+  },
+  {
+    capabilityCode: "AUDIOMETRIC_PERFORMANCE",
+    code: "FREQUENCY_RESPONSE",
+    name: "Frequency Response",
+  },
+
+  // CLEAN_AIR_CONTAINMENT — LK Bio Safety Cabinet.docx; LK Laminar Air Flow.docx
+  {
+    capabilityCode: "CLEAN_AIR_CONTAINMENT",
+    code: "PARTICLE_COUNT",
+    name: "Particle Count",
+  },
+  {
+    capabilityCode: "CLEAN_AIR_CONTAINMENT",
+    code: "DOWNFLOW_VELOCITY",
+    name: "Downflow Velocity",
+  },
+  {
+    capabilityCode: "CLEAN_AIR_CONTAINMENT",
+    code: "INFLOW_VELOCITY",
+    name: "Inflow Velocity",
+  },
+  {
+    capabilityCode: "CLEAN_AIR_CONTAINMENT",
+    code: "LIGHT_INTENSITY",
+    name: "Light Intensity",
+  },
+  {
+    capabilityCode: "CLEAN_AIR_CONTAINMENT",
+    code: "SOUND_LEVEL",
+    name: "Sound Level",
+  },
+  {
+    capabilityCode: "CLEAN_AIR_CONTAINMENT",
+    code: "UV_RADIATION",
+    name: "UV Radiation",
+  },
+  {
+    capabilityCode: "CLEAN_AIR_CONTAINMENT",
+    code: "HEPA_LEAK_TEST",
+    name: "HEPA / ULPA Leak Test",
+  },
+
+  // DENTAL_UNIT_PERFORMANCE — LK Dental Unit.docx
+  {
+    capabilityCode: "DENTAL_UNIT_PERFORMANCE",
+    code: "HANDPIECE_SPEED_LOW",
+    name: "Handpiece Speed (Low)",
+  },
+  {
+    capabilityCode: "DENTAL_UNIT_PERFORMANCE",
+    code: "HANDPIECE_SPEED_HIGH",
+    name: "Handpiece Speed (High)",
+  },
+  {
+    capabilityCode: "DENTAL_UNIT_PERFORMANCE",
+    code: "HANDPIECE_PRESSURE",
+    name: "Handpiece Pressure",
+  },
+  {
+    capabilityCode: "DENTAL_UNIT_PERFORMANCE",
+    code: "LIGHT_ILLUMINANCE",
+    name: "Light Illuminance",
+  },
+  {
+    capabilityCode: "DENTAL_UNIT_PERFORMANCE",
+    code: "AIR_SPRAY_PRESSURE",
+    name: "Air Spray Pressure",
+  },
+  {
+    capabilityCode: "DENTAL_UNIT_PERFORMANCE",
+    code: "SUCTION_PRESSURE",
+    name: "Suction Pressure",
+  },
+
+  // XRAY_PERFORMANCE — LK Dental X-Ray.docx
+  {
+    capabilityCode: "XRAY_PERFORMANCE",
+    code: "COLLIMATION_ACCURACY",
+    name: "Collimation Accuracy",
+  },
+  { capabilityCode: "XRAY_PERFORMANCE", code: "KV_ACCURACY", name: "kV Accuracy" },
+  {
+    capabilityCode: "XRAY_PERFORMANCE",
+    code: "EXPOSURE_TIME_ACCURACY",
+    name: "Exposure Time Accuracy",
+  },
+  { capabilityCode: "XRAY_PERFORMANCE", code: "DOSE_LINEARITY", name: "Dose Linearity" },
+  {
+    capabilityCode: "XRAY_PERFORMANCE",
+    code: "OUTPUT_REPRODUCIBILITY",
+    name: "Output Reproducibility",
+  },
+  {
+    capabilityCode: "XRAY_PERFORMANCE",
+    code: "HALF_VALUE_LAYER",
+    name: "Half Value Layer",
+  },
+
+  // ELECTROTHERAPY_STIMULATION — LK Electro Accupunture (EST).docx
+  {
+    capabilityCode: "ELECTROTHERAPY_STIMULATION",
+    code: "STIMULATION_FREQUENCY",
+    name: "Stimulation Frequency",
+  },
+  {
+    capabilityCode: "ELECTROTHERAPY_STIMULATION",
+    code: "STIMULATION_INTENSITY",
+    name: "Stimulation Intensity",
+  },
+  {
+    capabilityCode: "ELECTROTHERAPY_STIMULATION",
+    code: "PULSE_DURATION",
+    name: "Pulse Duration",
+  },
+  {
+    capabilityCode: "ELECTROTHERAPY_STIMULATION",
+    code: "TREATMENT_TIMER",
+    name: "Treatment Timer",
+  },
+
+  // LIGHT_SOURCE_PERFORMANCE — light-source family
+  {
+    capabilityCode: "LIGHT_SOURCE_PERFORMANCE",
+    code: "LIGHT_INTENSITY",
+    name: "Light Intensity",
+  },
+  {
+    capabilityCode: "LIGHT_SOURCE_PERFORMANCE",
+    code: "COLOR_TEMPERATURE",
+    name: "Color Temperature",
+  },
+  {
+    capabilityCode: "LIGHT_SOURCE_PERFORMANCE",
+    code: "COLOR_RENDERING_INDEX",
+    name: "Color Rendering Index",
+  },
+
+  // FETAL_HEART_RATE — LK Fetal Doppler.docx
+  {
+    capabilityCode: "FETAL_HEART_RATE",
+    code: "FETAL_HR_ACCURACY",
+    name: "Fetal Heart Rate Accuracy",
+  },
+
+  // SPECTRAL_IRRADIANCE — LK Phototherapy.docx
+  {
+    capabilityCode: "SPECTRAL_IRRADIANCE",
+    code: "SPECTRAL_IRRADIANCE_ACCURACY",
+    name: "Spectral Irradiance Accuracy",
+  },
+
+  // SPIROMETRY_VOLUME_ACCURACY — LK Spirometer.docx
+  {
+    capabilityCode: "SPIROMETRY_VOLUME_ACCURACY",
+    code: "FVC_VOLUME_ACCURACY",
+    name: "FVC Volume Accuracy",
+  },
+
+  // WARMER_SURFACE_TEMPERATURE — extra item for Blanket Warmer (LK Blanket Warmer.docx)
+  {
+    capabilityCode: "WARMER_SURFACE_TEMPERATURE",
+    code: "HIGH_TEMP_PROTECTION",
+    name: "High Temperature Protection",
+  },
 ];
 
+const ORIGINAL_CAPABILITY_COUNT = 21;
+const EXTENSION_CAPABILITY_COUNT = 9;
+const ORIGINAL_ITEM_COUNT = 66;
+const EXTENSION_ITEM_COUNT = 32;
+
 async function seedDeviceCapabilities() {
-  if (CAPABILITIES.length !== 21) {
-    throw new Error(`[seed] Expected 21 DeviceCapability rows, got ${CAPABILITIES.length}`);
+  if (CAPABILITIES.length !== ORIGINAL_CAPABILITY_COUNT + EXTENSION_CAPABILITY_COUNT) {
+    throw new Error(
+      `[seed] Expected ${ORIGINAL_CAPABILITY_COUNT + EXTENSION_CAPABILITY_COUNT} DeviceCapability rows, got ${CAPABILITIES.length}`,
+    );
   }
-  if (ITEMS.length !== 66) {
-    throw new Error(`[seed] Expected 66 DeviceCapabilityItem rows, got ${ITEMS.length}`);
+  if (ITEMS.length !== ORIGINAL_ITEM_COUNT + EXTENSION_ITEM_COUNT) {
+    throw new Error(
+      `[seed] Expected ${ORIGINAL_ITEM_COUNT + EXTENSION_ITEM_COUNT} DeviceCapabilityItem rows, got ${ITEMS.length}`,
+    );
   }
 
   const capabilityIdByCode = new Map<string, string>();

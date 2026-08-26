@@ -1288,14 +1288,15 @@ model CalibrationJob {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
-  workOrder         WorkOrder           @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  purchaseOrderItem PurchaseOrderItem?  @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
-  device            Device              @relation(fields: [deviceId], references: [id])
-  results           MeasurementResult[]
-  evidences         JobEvidence[]
-  signature         CustomerSignature?
-  reviews           QualityReview[]
-  certificate       Certificate?
+  workOrder              WorkOrder                   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  purchaseOrderItem      PurchaseOrderItem?          @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
+  device                 Device                      @relation(fields: [deviceId], references: [id])
+  results                MeasurementResult[]
+  evidences              JobEvidence[]
+  referenceEquipmentUsed JobReferenceEquipmentUsed[]
+  signature              CustomerSignature?
+  reviews                QualityReview[]
+  certificate            Certificate?
 
   @@unique([workOrderId, deviceId])
   @@index([companyId, status])
@@ -1326,6 +1327,21 @@ model JobEvidence {
 
   calibrationJob CalibrationJob @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
   fileObject     FileObject     @relation(fields: [fileObjectId], references: [id])
+
+  @@index([calibrationJobId])
+}
+
+model JobReferenceEquipmentUsed {
+  id               String   @id @default(cuid())
+  calibrationJobId String
+  equipmentName    String
+  brand            String?
+  model            String?
+  serialNumber     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  calibrationJob CalibrationJob @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
 
   @@index([calibrationJobId])
 }

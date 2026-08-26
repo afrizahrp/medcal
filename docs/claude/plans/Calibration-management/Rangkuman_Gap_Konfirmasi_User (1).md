@@ -110,23 +110,29 @@ baris ini kosong, sistem sekarang tidak bisa menilai lolos/tidak untuk item ini 
 masih perlu dicek (dan angkanya tetap 15 menit), atau memang sudah tidak relevan lagi dan
 sengaja dihapus? Kalau masih perlu, saya bisa masukkan angka 15 menit itu ke sistem.
 
-### H3. Alat-alat baru yang perlu ditambahkan ke sistem (21 alat)
+### H3. Alat-alat baru yang perlu ditambahkan ke sistem
+✅ **SELESAI.** Bukan 21 seperti perkiraan awal, tapi **24 jenis alat baru** berhasil
+ditambahkan (koreksi dari perkiraan saya sebelumnya — beberapa alat yang saya kira "satu
+kelompok" ternyata beberapa alat terpisah, misal 4 jenis lampu medis dan Infusion
+Pump/Syringe Pump yang punya dokumen sendiri-sendiri). Detail:
+- 4 kategori baru: Laboratory & Diagnostic Equipment, Dental Equipment, Medical Lighting,
+  Audiology & Physiological Testing.
+- 9 cara penilaian (capability) baru ditambahkan untuk alat yang belum ada pola
+  pengukurannya (tes pendengaran, tes udara bersih ruangan, unit gigi, X-ray, terapi
+  listrik, sumber cahaya, detak jantung janin, radiasi cahaya fototerapi, volume pernapasan).
+- 12 satuan ukur (Uom) baru ditambahkan (lux, bar, dBA, kV, dll) — **termasuk temuan penting**:
+  ternyata kode "RPM" yang sudah ada di sistem itu artinya "napas per menit" (dipakai di
+  Ventilator), BUKAN "putaran per menit". Kalau tidak ketahuan, alat seperti Centrifuge/Rotator
+  bisa salah pakai satuan. Sudah dipisah jadi kode baru `REV_MIN` khusus untuk putaran mesin.
+- Data 27 alat lama (242 baris) **tidak disentuh sama sekali** — dicek dan dikonfirmasi aman.
+- **Phototherapy** (alat terapi sinar untuk bayi kuning) tidak ada arahan eksplisit soal
+  kategorinya di laporan investigasi — sistem menempatkannya di kategori "Neonatal & Infant
+  Care" sebagai keputusan otonom (masuk akal secara klinis). Belum ada penolakan dari kamu,
+  jadi dianggap diterima — kabari kalau ternyata perlu dipindah kategori lain.
 
-Setelah semua 50 dokumen LK dicek satu-satu, ketahuan ada **21 jenis alat** yang sering
-ditangani perusahaan tapi **belum ada di sistem sama sekali** — baik sebagai pilihan device
-type maupun cara penilaiannya. Contoh: Audiometer (alat tes pendengaran), Autoclave, Bio
-Safety Cabinet, Centrifuge, CPAP, alat-alat gigi (Dental Unit, Dental X-Ray), alat terapi
-listrik, lampu-lampu medis (Lampu Periksa, Lampu Kepala, Lampu Operasi, Laryngoskop), Fetal
-Doppler, Infusion Pump, Laminar Air Flow, Mikroskop Lab, alat fototerapi, inkubator platelet,
-Rotator, Spirometer, Suction Pump, Penghangat Selimut (Blanket Warmer), dan Thermohygrometer.
-
-**Kabar baiknya**: lebih dari separuh dari 21 alat ini **bisa langsung pakai cara penilaian
-yang sudah ada** di sistem (misalnya Infusion Pump bisa pakai cara penilaian yang sama dengan
-yang sudah ada untuk alat sejenis). Sisanya perlu ditambahkan cara penilaian baru, tapi semua
-sudah berbasis dokumen LK asli, bukan tebakan.
-
-**Tidak perlu keputusan dari kamu untuk item ini** — bisa langsung dikerjakan (lihat prompt
-implementasi di bawah), KECUALI 2 hal berikut:
+Yang **sengaja belum dimasukkan** (masih menunggu H4, H5): Auto Chemistry Analyzer,
+Hematologi Analyzer, pH Meter, Thermohygrometer, dan (memang bukan alat sungguhan)
+Otoscope, Phaco Emulsifikasi.
 
 ### H4. 3 alat laboratorium butuh cara kerja yang beda total
 
@@ -325,8 +331,9 @@ pekerjaan berikutnya):
 3. **F1** (Device.deviceTypeId) — ✅ sudah selesai dieksekusi dan terverifikasi.
 4. **G1** (field toleransi di DeviceCalibrationParameter) — ✅ sudah selesai, 242/242 baris
    ter-backfill, 1 baris tidak bisa di-resolve (`INCU_RECOVERY_TIME`, wajar — lihat H2).
-5. **H3** (21 alat baru) — bisa langsung dikerjakan, tidak perlu tunggu keputusan kamu.
-6. **G3** (JobReferenceEquipmentUsed) — prioritas berikutnya setelah H3, low-risk.
+5. **H3** (24 alat baru) — ✅ selesai, sudah masuk sistem lengkap dengan toleransinya.
+6. **G3** (JobReferenceEquipmentUsed) — ✅ selesai (schema saja, CRUD/UI menyusul saat modul
+   CalibrationJob dibangun).
 7. **C3** (WorkOrder butuh purchaseOrderId) — memblokir modul WorkOrder (Blocker B4).
 8. **A1** (I:E Ratio) — ✅ sudah diputuskan dan diimplementasikan (`valueType` enum).
 9. **H4** (3 alat lab butuh cara kerja beda) — perlu keputusan desain dulu, ditunda.

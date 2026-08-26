@@ -1,7 +1,10 @@
 /**
- * Seeds DeviceCategory + the 35 confirmed Kemenkes DeviceType rows.
- * Taxonomy is an internal domain grouping — DeviceType.name is source-locked.
- * Pending-review items are intentionally not seeded.
+ * Seeds DeviceCategory + DeviceType rows.
+ * Original 9 categories / 35 Kemenkes types are source-locked and unchanged.
+ * Extension (technician-docs coverage): 4 categories + 24 device types.
+ * Out of scope (not seeded): Auto Chemistry Analyzer, Hematologi Analyzer,
+ * pH Meter (free-form), Thermohygrometer (category pending), Otoscope and
+ * Phaco Emulsifikasi (mislabeled duplicates).
  * Run manually: pnpm --filter @medcal/db run seed:device-types
  */
 import { prisma } from "../src/index";
@@ -64,11 +67,34 @@ const CATEGORIES: CategorySeedRow[] = [
     name: "Patient Care",
     description: "Patient-support equipment whose primary capability is electrical/mechanical care.",
   },
+  {
+    code: "LABORATORY_DIAGNOSTIC",
+    name: "Laboratory & Diagnostic Equipment",
+    description:
+      "In-vitro/laboratory sample processing, analysis, and laboratory containment equipment.",
+  },
+  {
+    code: "DENTAL_EQUIPMENT",
+    name: "Dental Equipment",
+    description: "Dedicated dental-practice equipment (units and intraoral X-ray).",
+  },
+  {
+    code: "MEDICAL_LIGHTING",
+    name: "Medical Lighting",
+    description:
+      "Medical light sources calibrated by illuminance, color temperature, and CRI.",
+  },
+  {
+    code: "AUDIOLOGY_PHYSIOLOGICAL",
+    name: "Audiology & Physiological Testing",
+    description:
+      "Single-session diagnostic instruments for hearing, lung volume, and fetal heart rate.",
+  },
 ];
 
 /**
- * Exactly 35 confirmed Kemenkes DeviceTypes. Names are copied from
- * Sertifikat Standar PT Presisi Kalibrasi Medika and must not be renamed.
+ * Original 35 confirmed Kemenkes DeviceTypes (unchanged) plus 24 extension
+ * types from technician-docs. Kemenkes names are source-locked.
  *
  * Ambiguous mappings (documented):
  * - Oxymeter monitor → Patient Monitoring: source spelling kept; same domain as Pulse Oximeters.
@@ -139,11 +165,57 @@ const TYPES: TypeSeedRow[] = [
 
   // Patient Care
   { categoryCode: "PATIENT_CARE", code: "ELECTRIC_BEDS", name: "Electric Beds (kelistrikan)" },
+
+  // Laboratory & Diagnostic Equipment
+  { categoryCode: "LABORATORY_DIAGNOSTIC", code: "MIKROSKOP_LABORATORIUM", name: "Mikroskop Laboratorium" },
+  { categoryCode: "LABORATORY_DIAGNOSTIC", code: "CENTRIFUGE", name: "Centrifuge" },
+  { categoryCode: "LABORATORY_DIAGNOSTIC", code: "CENTRIFUGE_REFRIGERATOR", name: "Centrifuge Refrigerator" },
+  { categoryCode: "LABORATORY_DIAGNOSTIC", code: "ROTATOR", name: "Rotator" },
+  { categoryCode: "LABORATORY_DIAGNOSTIC", code: "PLATELET_AGITATOR_INCUBATOR", name: "Platelet Agitator Incubator" },
+  { categoryCode: "LABORATORY_DIAGNOSTIC", code: "BIO_SAFETY_CABINET", name: "Bio Safety Cabinet" },
+  { categoryCode: "LABORATORY_DIAGNOSTIC", code: "LAMINAR_AIR_FLOW", name: "Laminar Air Flow" },
+
+  // Dental Equipment
+  { categoryCode: "DENTAL_EQUIPMENT", code: "DENTAL_UNIT", name: "Dental Unit" },
+  { categoryCode: "DENTAL_EQUIPMENT", code: "DENTAL_XRAY", name: "Dental X-Ray" },
+
+  // Medical Lighting
+  { categoryCode: "MEDICAL_LIGHTING", code: "EXAMINATION_LAMP", name: "Examination Lamp" },
+  { categoryCode: "MEDICAL_LIGHTING", code: "HEAD_LAMP_MEDIK", name: "Head Lamp Medik" },
+  { categoryCode: "MEDICAL_LIGHTING", code: "LAMPU_OPERASI", name: "Lampu Operasi" },
+  { categoryCode: "MEDICAL_LIGHTING", code: "LARYNGOSKOP", name: "Laryngoskop" },
+
+  // Audiology & Physiological Testing
+  { categoryCode: "AUDIOLOGY_PHYSIOLOGICAL", code: "AUDIOMETER", name: "Audiometer" },
+  { categoryCode: "AUDIOLOGY_PHYSIOLOGICAL", code: "SPIROMETER", name: "Spirometer" },
+  { categoryCode: "AUDIOLOGY_PHYSIOLOGICAL", code: "FETAL_DOPPLER", name: "Fetal Doppler" },
+
+  // Existing categories — new types
+  { categoryCode: "RESPIRATORY_OXYGEN", code: "CPAP", name: "CPAP" },
+  { categoryCode: "STERILIZATION", code: "AUTOCLAVE", name: "Autoclave" },
+  { categoryCode: "SUCTION_FLUID", code: "INFUSION_PUMP", name: "Infusion Pump" },
+  { categoryCode: "SUCTION_FLUID", code: "SYRINGE_PUMP", name: "Syringe Pump" },
+  { categoryCode: "SUCTION_FLUID", code: "SUCTION_PUMP", name: "Suction Pump" },
+  { categoryCode: "TEMPERATURE_THERAPY", code: "BLANKET_WARMER", name: "Blanket Warmer" },
+  { categoryCode: "PATIENT_CARE", code: "ELECTRO_ACCUPUNTURE", name: "Electro Accupunture (EST)" },
+  { categoryCode: "NEONATAL_INFANT_CARE", code: "PHOTOTHERAPY", name: "Phototherapy" },
 ];
 
+const ORIGINAL_TYPE_COUNT = 35;
+const EXTENSION_TYPE_COUNT = 24;
+const ORIGINAL_CATEGORY_COUNT = 9;
+const EXTENSION_CATEGORY_COUNT = 4;
+
 async function seedDeviceTypes() {
-  if (TYPES.length !== 35) {
-    throw new Error(`[seed] Expected 35 DeviceType rows, got ${TYPES.length}`);
+  if (CATEGORIES.length !== ORIGINAL_CATEGORY_COUNT + EXTENSION_CATEGORY_COUNT) {
+    throw new Error(
+      `[seed] Expected ${ORIGINAL_CATEGORY_COUNT + EXTENSION_CATEGORY_COUNT} DeviceCategory rows, got ${CATEGORIES.length}`,
+    );
+  }
+  if (TYPES.length !== ORIGINAL_TYPE_COUNT + EXTENSION_TYPE_COUNT) {
+    throw new Error(
+      `[seed] Expected ${ORIGINAL_TYPE_COUNT + EXTENSION_TYPE_COUNT} DeviceType rows, got ${TYPES.length}`,
+    );
   }
 
   const categoryIdByCode = new Map<string, string>();

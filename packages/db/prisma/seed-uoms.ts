@@ -70,6 +70,23 @@ const ROWS: UomSeedRow[] = [
   // Velocity / sound — no dedicated UomCategory; required by calibration-parameter seed
   { code: "M_S", name: "Meter per Second", symbol: "m/s", category: "OTHER" },
   { code: "DB", name: "Decibel", symbol: "dB", category: "OTHER" },
+  { code: "DBA", name: "A-weighted Decibel", symbol: "dBA", category: "OTHER" },
+  { code: "LUX", name: "Lux", symbol: "lux", category: "OTHER" },
+  { code: "BAR", name: "Bar", symbol: "bar", category: "PRESSURE" },
+  { code: "REV_MIN", name: "Revolutions per Minute", symbol: "rpm", category: "RATE" },
+  { code: "UW_CM2", name: "Microwatt per Square Centimeter", symbol: "µW/cm²", category: "OTHER" },
+  {
+    code: "UW_CM2_NM",
+    name: "Microwatt per Square Centimeter per Nanometer",
+    symbol: "µW/cm²/nm",
+    category: "OTHER",
+  },
+  { code: "KV", name: "Kilovolt", symbol: "kV", category: "ELECTRICAL" },
+  { code: "MGY", name: "Milligray", symbol: "mGy", category: "OTHER" },
+  { code: "UM", name: "Micrometer", symbol: "µm", category: "LENGTH" },
+  { code: "MMAL", name: "Millimeter Aluminum", symbol: "mmAl", category: "LENGTH" },
+  { code: "RA", name: "Color Rendering Index", symbol: "Ra", category: "OTHER" },
+  { code: "PARTICLE", name: "Particle Count", symbol: "particles", category: "OTHER" },
 ];
 
 async function seedUoms() {

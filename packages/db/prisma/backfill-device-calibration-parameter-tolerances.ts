@@ -623,9 +623,9 @@ async function backfillTolerances() {
 
   const countBefore = await prisma.deviceCalibrationParameter.count();
   console.log(`[backfill] DeviceCalibrationParameter count before: ${countBefore}`);
-  if (countBefore !== EXPECTED_COUNT) {
+  if (countBefore < EXPECTED_COUNT) {
     throw new Error(
-      `[backfill] Refusing to run: table has ${countBefore} rows, expected ${EXPECTED_COUNT}`,
+      `[backfill] Refusing to run: table has ${countBefore} rows, expected at least ${EXPECTED_COUNT}`,
     );
   }
 
@@ -650,10 +650,9 @@ async function backfillTolerances() {
   });
   const existingByCode = new Map(existing.map((row) => [row.code, row]));
   const missingInDb = ROWS.filter((row) => !existingByCode.has(row.code)).map((row) => row.code);
-  const extraInDb = existing.filter((row) => !codes.includes(row.code)).map((row) => row.code);
-  if (missingInDb.length > 0 || extraInDb.length > 0) {
+  if (missingInDb.length > 0) {
     throw new Error(
-      `[backfill] Code mismatch. missingInDb=${missingInDb.join(",") || "-"} extraInDb=${extraInDb.join(",") || "-"}`,
+      `[backfill] Code mismatch. missingInDb=${missingInDb.join(",") || "-"}`,
     );
   }
 
@@ -746,7 +745,10 @@ async function backfillTolerances() {
     );
   }
 
-  if (countAfter !== EXPECTED_COUNT) {
+  if (countAfter < EXPECTED_COUNT) {
+    throw new Error(`[backfill] Row count dropped below original ${EXPECTED_COUNT}: ${countBefore} → ${countAfter}`);
+  }
+  if (countAfter !== countBefore) {
     throw new Error(`[backfill] Row count changed: ${countBefore} → ${countAfter}`);
   }
 
