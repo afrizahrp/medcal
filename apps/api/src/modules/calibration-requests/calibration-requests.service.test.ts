@@ -11,6 +11,9 @@ const createdCalibrationRequestIds: string[] = [];
 const createdCustomerIds: string[] = [];
 const createdDeviceIds: string[] = [];
 const createdCompanyIds: string[] = [];
+const createdDeviceTypeIds: string[] = [];
+const createdDeviceCategoryIds: string[] = [];
+let testDeviceTypeId: string | undefined;
 
 async function cleanupCalibrationRequests(ids: string[]) {
   if (ids.length === 0) return;
@@ -49,11 +52,33 @@ async function createTestCustomer(companyId: string, name?: string) {
   return customer;
 }
 
+async function getTestDeviceTypeId(): Promise<string> {
+  if (testDeviceTypeId) return testDeviceTypeId;
+  const category = await prisma.deviceCategory.create({
+    data: {
+      code: `C${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`,
+      name: "Test Category",
+    },
+  });
+  createdDeviceCategoryIds.push(category.id);
+  const deviceType = await prisma.deviceType.create({
+    data: {
+      categoryId: category.id,
+      code: `T${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`,
+      name: "Test Device Type",
+    },
+  });
+  createdDeviceTypeIds.push(deviceType.id);
+  testDeviceTypeId = deviceType.id;
+  return deviceType.id;
+}
+
 async function createTestDevice(companyId: string, customerId: string) {
   const device = await prisma.device.create({
     data: {
       companyId,
       customerId,
+      deviceTypeId: await getTestDeviceTypeId(),
       brand: "Test Brand",
       model: `Model ${randomUUID().slice(0, 6)}`,
       serialNumber: `SN-${randomUUID().slice(0, 8)}`,
@@ -66,6 +91,12 @@ async function createTestDevice(companyId: string, customerId: string) {
 afterAll(async () => {
   await cleanupCalibrationRequests(createdCalibrationRequestIds);
   await cleanupDevices(createdDeviceIds);
+  if (createdDeviceTypeIds.length > 0) {
+    await prisma.deviceType.deleteMany({ where: { id: { in: createdDeviceTypeIds } } });
+  }
+  if (createdDeviceCategoryIds.length > 0) {
+    await prisma.deviceCategory.deleteMany({ where: { id: { in: createdDeviceCategoryIds } } });
+  }
   await cleanupCustomers(createdCustomerIds);
   await cleanupSequences(realCompanyId);
   for (const companyId of createdCompanyIds) {

@@ -149,6 +149,90 @@ is done). Payment can also proceed independently. PurchaseOrder should follow Qu
 WorkOrder must wait for B4. Certificate/Invoice/CreditNote can proceed once B2 (done) and their
 own upstream dependencies are ready.
 
+## 5B. Device Management Sub-System — Detailed Status
+
+This is a separate but related sub-system, discovered and built AFTER the initial audit above
+(it wasn't in the original lifecycle audit's scope — it underpins the `deviceId` field
+referenced by `CalibrationRequestItem`, `QuotationItem`, `PurchaseOrderItem`, `CalibrationJob`,
+and `Certificate`). Its purpose: a structured catalog of device types, models, and calibration
+parameters, sourced from the company's own real accreditation/capability documentation
+(35 device types officially recognized by Kemenkes per PT Presisi Kalibrasi Medika's
+Sertifikat Standar, cross-referenced against ~30 unique real calibration worksheets — "LK",
+Lembar Kerja — the company already uses operationally).
+
+**Schema (all in `packages/db/prisma/schema.prisma`):**
+- `DeviceCategory` — top-level grouping (9 rows: Patient Monitoring, Respiratory & Oxygen,
+  Neonatal & Infant Care, Resuscitation, Suction & Fluid Management, Sterilization,
+  Temperature Therapy, Cold Chain & Storage, Patient Care).
+- `DeviceType` — the 35 officially-recognized device types, each FK'd to a `DeviceCategory`.
+- `DeviceModel` — brand/model catalog, FK'd to `DeviceType`. Schema exists; **NOT backfilled**
+  (deliberately deferred — inventorying real brand/model data was judged too time-consuming
+  for now; see "Known gaps" below).
+- `Uom` — centralized unit-of-measure master, global (not FK'd to anything else), same
+  convention intentionally shared by `DeviceCapability`.
+- `DeviceCapability` / `DeviceCapabilityItem` — a GLOBAL, REUSABLE catalog of measurement
+  categories and specific measurable items (e.g. capability `NIBP` → items `Systolic Pressure`,
+  `Diastolic Pressure`, `Mean Arterial Pressure`). Deliberately NOT tied to any DeviceType —
+  the same item (e.g. `Electrical Safety` items) is reused across dozens of device types.
+- `DeviceCalibrationParameter` — the actual per-DeviceType master definition of what gets
+  measured during calibration. Links `DeviceType` + `DeviceCapabilityItem` + `Uom` +
+  code/name/description. THIS is scoped per-DeviceType (confirmed business rule: calibration
+  procedures/parameters are standardized per device TYPE, not per brand/model — e.g. all
+  Blood Pressure Monitors share the same parameter set regardless of manufacturer). Unique
+  constraint: `[deviceTypeId, capabilityItemId, code]`.
+- `Device` — the actual physical unit owned by a customer (`companyId`, `customerId`, `brand`,
+  `model`, `serialNumber`, `category` — all free-text strings today, `status` enum). **Known
+  gap**: `Device` has NO foreign key to `DeviceType`/`DeviceModel`/`DeviceCategory` — it cannot
+  currently be validated against or linked to the catalog above. A schema decision was made
+  (add `deviceTypeId` as a required FK on `Device`, keep `brand`/`model` as free-text fallback
+  fields rather than also requiring `deviceModelId`, given `DeviceModel` backfill is deferred)
+  but **this migration has NOT yet been implemented** — no Cursor prompt has been written or
+  run for it yet. This is a real pending task, not just a "nice to have."
+
+**IMPORTANT lesson learned mid-implementation**: a lookup table keyed by an enum/code
+(`DOCUMENT_TYPE_NUMBER_TABLE` earlier, but the same class of bug) must use a full/non-partial
+type. This was reinforced here too — always verify actual field types/constraints in the live
+schema rather than trusting an earlier description of it, since schemas evolve.
+
+**Data status (as of this handoff):**
+
+| Table | Rows Ready | Seeding Status |
+|---|---|---|
+| `DeviceCategory` | 9 | ✅ Seeded (confirmed by project owner) |
+| `DeviceType` | 35 | ✅ Seeded (confirmed by project owner) |
+| `Uom` | 34 (31 original + `UA` microampere, `M_S` meter/second, `DB` decibel added later) | ✅ Seeded (confirmed by project owner) |
+| `DeviceModel` | 0 | ⏸️ Deliberately deferred — no real brand/model inventory data available yet |
+| `DeviceCapability` | 21 rows prepared (CSV: `seed_device_capability.csv`) | 🟡 Cursor prompt issued (`Seed_DeviceCapability_and_Item.md`), **execution result not yet confirmed back** — check with project owner whether this ran and passed verification |
+| `DeviceCapabilityItem` | 66 rows prepared (CSV: `seed_device_capability_item.csv`) | 🟡 Same prompt as above, same unconfirmed status |
+| `DeviceCalibrationParameter` | 241 rows prepared + 1 intentionally excluded (CSV: `seed_device_calibration_parameter.csv`) | 🟡 Cursor prompt issued (`Seed_DeviceCalibrationParameter.md`), **execution result not yet confirmed back** |
+| `Device.deviceTypeId` FK | N/A — schema change, not data | ❌ Decided but not yet implemented — no migration written yet |
+
+**Why 241 not 242**: one row (`VENT_IE_RATIO`, Ventilator's I:E Ratio parameter) was
+deliberately excluded because it's expressed as a ratio (e.g. "1:2") rather than a standard
+physical quantity with a `Uom`, and `uomId` is a required field on `DeviceCalibrationParameter`.
+This needs a separate design decision (dimensionless Uom entry vs. a different modeling
+approach) before it can be seeded — flagged, not resolved.
+
+**Coverage note**: of the 35 official DeviceTypes, 27 have real LK-worksheet evidence backing
+their `DeviceCalibrationParameter` rows. The remaining 8 (Ambulatory ECG, Aspirators/Suction,
+Cardiac Output Units, Oxygen-Air Proportioners, Radiant Warmers (Adult), Regulators (Air/O2/
+Suction), Regulators (Low-Volume Suction), Paraffin Baths) have NO calibration-parameter data
+yet — deliberately not fabricated, per the "no invented seed data" policy that governed this
+entire sub-system's build. Separately, 8 MORE device types exist in the company's real LK
+documentation but are NOT among the official 35 (Autoclave, Centrifuge, Infuse Pump,
+Mikroskop, Syringe Pump, Timbangan Bayi, Timbangan Dewasa, USG) — these have real evidence but
+no `DeviceType` row exists for them yet; a deliberate decision was made to defer adding them
+(Option 1 of 3 offered: "tunda dulu, fokus 27 yang sudah match") rather than expand the
+DeviceType taxonomy in the same pass.
+
+**Source material**: all `DeviceCalibrationParameter` evidence was extracted directly from
+`Penilaian_Kemampuan.zip` (real company calibration worksheets), which was uploaded to a chat
+session, not necessarily saved anywhere in the repo/docs folder. **If further verification or
+extension of this data is needed later, that zip (or the 30 extracted LK PDFs within it) should
+be placed somewhere accessible in the repo** (e.g. alongside the CSVs — see Section 7) so future
+work doesn't require re-uploading it to a new chat session.
+
+
 ## 6. Process / Methodology Established (please continue this discipline)
 
 This is the most important section for how to actually work with Cursor effectively on this
@@ -208,12 +292,63 @@ Key files there:
 - Original planning docs referenced throughout: `Audit and design Purchase Order.md`,
   `centralized-document-numbering-phase1-2.md`, `audit_before_customer_implementation.md`
 
-## 8. Immediate Next Step at Handoff Time
+**Device Management deliverables — IMPORTANT: these currently only exist as chat outputs and
+have NOT been confirmed saved into the repo/docs folder yet. Verify with the project owner
+where these actually live before assuming they're accessible, and if not yet saved, save them
+into the docs folder above (or wherever the project owner prefers) before Cursor needs them:**
+- `seed_device_capability.csv` (21 rows) and `seed_device_capability_item.csv` (66 rows) —
+  source data for the Device Capability catalog seed.
+- `seed_device_calibration_parameter.csv` (241 confirmed + 1 intentionally-excluded row) —
+  source data for the per-DeviceType calibration parameter seed.
+- `Seed_DeviceCapability_and_Item.md` and `Seed_DeviceCalibrationParameter.md` — the Cursor
+  prompts written to consume the above CSVs.
+- `Refine_DeviceCalibrationParameter_AddDeviceTypeId.md` — the revision prompt that added
+  `deviceTypeId` to `DeviceCalibrationParameter` after it was initially built without it
+  (already executed and confirmed done).
+- The original `Penilaian_Kemampuan.zip` (real company LK/IK calibration worksheets) and/or
+  its extracted contents — this was the evidentiary source for the two CSVs above. Not
+  confirmed to be saved anywhere in the repo; see the note at the end of Section 5B.
+- No Cursor prompt exists yet for the `Device.deviceTypeId` FK migration (see Section 5B,
+  "Known gap") — this still needs to be written.
 
-A Cursor prompt to build the **Portal UI for CalibrationRequest** has just been issued
-(`Implementation_Portal_UI_CalibrationRequest.md`, scope: `apps/portal` only, reuses the
-`customers` module's UI patterns and the already-built CalibrationRequest backend API). Check
-with the project owner whether Cursor has completed this and whether its output has been
-reviewed yet before deciding what to do next. Likely next candidates after that: the Quotation
+## 9. Open Architecture Questions (unresolved, needs a decision before relevant modules are built)
+
+1. **`MeasurementResult` ↔ `DeviceCalibrationParameter` linkage is undefined.** The schema
+   already has a `MeasurementResult` model (`schema.prisma` ~line 1126-1138, related to
+   `CalibrationJob`) using unstructured `payloadJson`/`summaryJson` fields to store what a
+   technician measures in the field. Separately, `DeviceCalibrationParameter` (built in the
+   Device Management work — see Section 5) is a structured, relational master catalog of
+   exactly which parameters must be measured per DeviceType, each with a defined `Uom`.
+   **There is currently no foreign key or other link between the two** — nothing ties a given
+   `MeasurementResult` entry back to the specific `DeviceCalibrationParameter` it's fulfilling.
+   Left as-is, technician-entered results (free-form JSON) could drift from the structured
+   parameter catalog (typos in field names, missed parameters, no automatic validation against
+   the expected Uom/parameter set). This should be resolved — likely by adding a
+   `deviceCalibrationParameterId` FK (or an array of structured entries) to
+   `MeasurementResult`, or restructuring how a `CalibrationJob`'s expected parameters are
+   derived from `DeviceCalibrationParameter` — before the Tech-PWA job-execution UI and the
+   `CalibrationJob`/`MeasurementResult` backend are built. Not yet designed; flagged here so
+   it isn't lost before that phase starts.
+
+## 10. Immediate Next Steps at Handoff Time (was Section 8; renumbered)
+
+Multiple threads are in-flight simultaneously. Check status of each with the project owner
+before assuming any is complete:
+
+1. **Portal UI for CalibrationRequest** — a Cursor prompt was issued
+   (`Implementation_Portal_UI_CalibrationRequest.md`, scope: `apps/portal` only). Completion
+   status unconfirmed as of this handoff.
+2. **DeviceCapability + DeviceCapabilityItem seeding** — prompt issued, execution result not
+   yet reported back (see Section 5B table).
+3. **DeviceCalibrationParameter seeding** — prompt issued, execution result not yet reported
+   back (see Section 5B table).
+4. **`Device.deviceTypeId` FK migration** — decided (Option A: required FK to DeviceType,
+   `brand`/`model` remain free-text) but no Cursor prompt written yet. This should probably be
+   done before or alongside the Device Management seeding above, since without it the seeded
+   catalog data has no way to actually connect to real customer-owned devices yet.
+5. **`VENT_IE_RATIO` design decision** — still open (see Section 5B).
+6. **`MeasurementResult` ↔ `DeviceCalibrationParameter` linkage** — still open (see Section 9).
+
+Beyond these in-flight items, the next lifecycle-module candidates remain: the Quotation
 module (backend, following the same pattern as CalibrationRequest), or resolving B4 to unblock
 WorkOrder.

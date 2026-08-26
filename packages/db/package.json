@@ -16,7 +16,8 @@
     "seed:role-permissions": "tsx prisma/seed-role-permissions.ts",
     "seed:uoms": "tsx prisma/seed-uoms.ts",
     "seed:device-types": "tsx prisma/seed-device-types.ts",
-    "seed:device-capabilities": "tsx prisma/seed-device-capabilities.ts"
+    "seed:device-capabilities": "tsx prisma/seed-device-capabilities.ts",
+    "seed:device-calibration-parameters": "tsx prisma/seed-device-calibration-parameters.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0"

@@ -876,8 +876,8 @@ model CustomerContact {
 
 // Device taxonomy master data — global (no companyId), same convention as Uom.
 // DeviceCategory is an internal domain grouping; DeviceType.name is the
-// confirmed Kemenkes capability list (35 types). Device.category remains a
-// free-text snapshot this phase — do not FK Device to these models yet.
+// confirmed Kemenkes capability list (35 types). Device.deviceTypeId is the
+// required FK to DeviceType; Device.category remains a free-text snapshot.
 model DeviceCategory {
   id          String   @id @default(cuid())
   code        String   @unique
@@ -904,6 +904,7 @@ model DeviceType {
 
   category              DeviceCategory               @relation(fields: [categoryId], references: [id])
   models                DeviceModel[]
+  devices               Device[]
   calibrationParameters DeviceCalibrationParameter[]
 
   @@index([categoryId])
@@ -991,6 +992,7 @@ model Device {
   id           String       @id @default(cuid())
   companyId    String
   customerId   String
+  deviceTypeId String
   brand        String?
   model        String?
   serialNumber String?
@@ -1000,8 +1002,9 @@ model Device {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  deviceType DeviceType @relation(fields: [deviceTypeId], references: [id])
 
   requestItems       CalibrationRequestItem[]
   quotationItems     QuotationItem[]
@@ -1011,6 +1014,7 @@ model Device {
 
   @@index([companyId, customerId])
   @@index([companyId, serialNumber])
+  @@index([deviceTypeId])
 }
 
 model CalibrationRequest {
