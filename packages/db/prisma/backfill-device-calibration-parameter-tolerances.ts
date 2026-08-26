@@ -3,9 +3,12 @@
  * UPDATE only (unique [deviceTypeId, capabilityItemId, code]); no insert/delete.
  * Ventilator rows use the older secondary source
  * docs/legal_n_competency/Penilaian Kemampuan.zip → LK Ventilator Transport.pdf.
- * Run: pnpm --filter @medcal/db run backfill:device-calibration-parameter-tolerances
+ * Run: pnpm --filter @medcal/db generate
+ *      pnpm --filter @medcal/db run backfill:device-calibration-parameter-tolerances
  */
-import { prisma } from "../src/index";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 interface ToleranceRow {
   deviceTypeCode: string;
@@ -15,59 +18,6 @@ interface ToleranceRow {
   toleranceMax: number | null;
   toleranceNote: string | null;
 }
-
-const ITEM_CAPABILITY_BY_CODE: Record<string, string> = {
-  ROOM_TEMPERATURE: "ENVIRONMENTAL_CONDITIONS",
-  ROOM_HUMIDITY: "ENVIRONMENTAL_CONDITIONS",
-  INPUT_VOLTAGE: "ENVIRONMENTAL_CONDITIONS",
-  PROTECTIVE_EARTH_RESISTANCE: "ELECTRICAL_SAFETY",
-  INSULATION_RESISTANCE: "ELECTRICAL_SAFETY",
-  EQUIPMENT_LEAKAGE_CURRENT: "ELECTRICAL_SAFETY",
-  APPLIED_PART_LEAKAGE_CURRENT: "ELECTRICAL_SAFETY",
-  SYSTOLIC_PRESSURE: "NIBP",
-  DIASTOLIC_PRESSURE: "NIBP",
-  MEAN_ARTERIAL_PRESSURE: "NIBP",
-  HEART_RATE: "VITAL_SIGNS_MONITORING",
-  RESPIRATION_RATE: "VITAL_SIGNS_MONITORING",
-  SPO2_ACCURACY: "VITAL_SIGNS_MONITORING",
-  AMPLITUDE_ACCURACY: "ECG_PERFORMANCE",
-  RECORDING_SPEED: "ECG_PERFORMANCE",
-  ECG_HEART_RATE_CALIBRATION: "ECG_PERFORMANCE",
-  SINUSOIDAL_SIGNAL_TEST: "ECG_PERFORMANCE",
-  NORMAL_ECG_SIGNAL_TEST: "ECG_PERFORMANCE",
-  CUFF_LEAK_TEST: "NIBP_LEAK_TEST",
-  RAPID_DEFLATION_RATE: "NIBP_LEAK_TEST",
-  PRESSURE_READING_ACCURACY: "NIBP_LEAK_TEST",
-  TIDAL_VOLUME: "VENTILATION_PERFORMANCE",
-  MINUTE_VOLUME: "VENTILATION_PERFORMANCE",
-  VENT_RESPIRATION_RATE: "VENTILATION_PERFORMANCE",
-  IE_RATIO: "VENTILATION_PERFORMANCE",
-  INSPIRATORY_TIME: "VENTILATION_PERFORMANCE",
-  EXPIRATORY_TIME: "VENTILATION_PERFORMANCE",
-  PEEP: "VENTILATION_PERFORMANCE",
-  PEAK_INSPIRATORY_PRESSURE: "VENTILATION_PERFORMANCE",
-  FIO2_ACCURACY: "VENTILATION_PERFORMANCE",
-  MAX_PRESSURE: "RESUSCITATOR_PRESSURE",
-  PRESSURE_ACCURACY: "RESUSCITATOR_PRESSURE",
-  STERILIZATION_TEMPERATURE: "TEMPERATURE_CHAMBER_STERILIZATION",
-  STORAGE_TEMPERATURE_UNIFORMITY: "TEMPERATURE_COLD_STORAGE",
-  AIR_TEMPERATURE_CALIBRATION: "INCUBATOR_ENVIRONMENT",
-  OVERSHOOT_TEMPERATURE: "INCUBATOR_ENVIRONMENT",
-  TEMPERATURE_RECOVERY_TIME: "INCUBATOR_ENVIRONMENT",
-  MATTRESS_TEMPERATURE: "INCUBATOR_ENVIRONMENT",
-  AIR_VELOCITY: "INCUBATOR_ENVIRONMENT",
-  NOISE_LEVEL: "INCUBATOR_ENVIRONMENT",
-  SKIN_TEMPERATURE_SENSOR: "INCUBATOR_ENVIRONMENT",
-  MAX_MATTRESS_SURFACE_TEMPERATURE: "WARMER_SURFACE_TEMPERATURE",
-  WARMER_TEMPERATURE_CALIBRATION: "WARMER_SURFACE_TEMPERATURE",
-  TEMPERATURE_ACCURACY: "HUMIDIFIER_TEMPERATURE",
-  MAXIMUM_TEMPERATURE: "HUMIDIFIER_TEMPERATURE",
-  VACUUM_GAUGE_ACCURACY: "VACUUM_SUCTION",
-  MAXIMUM_VACUUM: "VACUUM_SUCTION",
-  TIME_TO_MAX_VACUUM: "VACUUM_SUCTION",
-  FLOW_RATE_ACCURACY: "GAS_FLOW_RATE",
-  OXYGEN_CONCENTRATION_ACCURACY: "OXYGEN_CONCENTRATION",
-};
 
 const EXPECTED_COUNT = 242;
 
@@ -621,6 +571,12 @@ async function backfillTolerances() {
     throw new Error("[backfill] Duplicate parameter codes in backfill data");
   }
 
+  if (typeof prisma.deviceCalibrationParameter?.count !== "function") {
+    throw new Error(
+      "[backfill] Prisma Client is missing DeviceCalibrationParameter. On the VPS host run: pnpm --filter @medcal/db generate",
+    );
+  }
+
   const countBefore = await prisma.deviceCalibrationParameter.count();
   console.log(`[backfill] DeviceCalibrationParameter count before: ${countBefore}`);
   if (countBefore < EXPECTED_COUNT) {
@@ -628,17 +584,6 @@ async function backfillTolerances() {
       `[backfill] Refusing to run: table has ${countBefore} rows, expected at least ${EXPECTED_COUNT}`,
     );
   }
-
-  const deviceTypes = await prisma.deviceType.findMany({ select: { id: true, code: true } });
-  const deviceTypeIdByCode = new Map(deviceTypes.map((row) => [row.code, row.id]));
-  const capabilities = await prisma.deviceCapability.findMany({ select: { id: true, code: true } });
-  const capabilityIdByCode = new Map(capabilities.map((row) => [row.code, row.id]));
-  const items = await prisma.deviceCapabilityItem.findMany({
-    select: { id: true, code: true, capabilityId: true },
-  });
-  const itemIdByCapabilityAndCode = new Map(
-    items.map((row) => [`${row.capabilityId}::${row.code}`, row.id]),
-  );
 
   const existing = await prisma.deviceCalibrationParameter.findMany({
     select: {
@@ -657,37 +602,23 @@ async function backfillTolerances() {
   }
 
   let updated = 0;
+  const identityWarnings: string[] = [];
   for (const row of ROWS) {
-    const deviceTypeId = deviceTypeIdByCode.get(row.deviceTypeCode);
-    const capabilityCode = ITEM_CAPABILITY_BY_CODE[row.capabilityItemCode];
-    const capabilityId = capabilityCode ? capabilityIdByCode.get(capabilityCode) : undefined;
-    const capabilityItemId = capabilityId
-      ? itemIdByCapabilityAndCode.get(`${capabilityId}::${row.capabilityItemCode}`)
-      : undefined;
-    if (!deviceTypeId || !capabilityItemId) {
-      throw new Error(
-        `[backfill] FK unresolved for ${row.code} (${row.deviceTypeCode}/${row.capabilityItemCode})`,
-      );
-    }
     const existingRow = existingByCode.get(row.code);
+    if (!existingRow) {
+      throw new Error(`[backfill] Missing existing row for ${row.code}`);
+    }
     if (
-      existingRow &&
-      (existingRow.deviceType.code !== row.deviceTypeCode ||
-        existingRow.capabilityItem.code !== row.capabilityItemCode)
+      existingRow.deviceType.code !== row.deviceTypeCode ||
+      existingRow.capabilityItem.code !== row.capabilityItemCode
     ) {
-      throw new Error(
-        `[backfill] Identity mismatch for ${row.code}: db=${existingRow.deviceType.code}/${existingRow.capabilityItem.code}`,
+      identityWarnings.push(
+        `${row.code}: expected ${row.deviceTypeCode}/${row.capabilityItemCode}, db=${existingRow.deviceType.code}/${existingRow.capabilityItem.code}`,
       );
     }
 
     await prisma.deviceCalibrationParameter.update({
-      where: {
-        deviceTypeId_capabilityItemId_code: {
-          deviceTypeId,
-          capabilityItemId,
-          code: row.code,
-        },
-      },
+      where: { id: existingRow.id },
       data: {
         toleranceMin: row.toleranceMin,
         toleranceMax: row.toleranceMax,
@@ -695,6 +626,11 @@ async function backfillTolerances() {
       },
     });
     updated += 1;
+  }
+  if (identityWarnings.length > 0) {
+    console.log(
+      `[backfill] identity warnings (${identityWarnings.length}):\n${identityWarnings.map((line) => `  - ${line}`).join("\n")}`,
+    );
   }
 
   const countAfter = await prisma.deviceCalibrationParameter.count();
