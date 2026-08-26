@@ -20,6 +20,7 @@ import {
   formSurfaceClass,
   formatQuotationApiError,
   itemsFromQuotation,
+  isPositiveIntegerQty,
   moneyNumber,
 } from "../../quotations-ui";
 import { useQuotation, useUpdateQuotation } from "../../use-quotations-query";
@@ -131,8 +132,8 @@ export default function EditQuotationPage() {
         setError("Setiap item wajib memiliki deskripsi.");
         return;
       }
-      if (!(moneyNumber(item.qty) > 0)) {
-        setError("Qty setiap item harus lebih dari 0.");
+      if (!isPositiveIntegerQty(item.qty)) {
+        setError("Qty setiap item harus bilangan bulat lebih dari 0.");
         return;
       }
       if (item.unitPrice.trim() === "" || moneyNumber(item.unitPrice) < 0) {
@@ -173,7 +174,7 @@ export default function EditQuotationPage() {
         ]}
       />
 
-      <form onSubmit={submit}>
+      <form noValidate onSubmit={submit}>
         <Surface className={formSurfaceClass}>
           {error ? (
             <div className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">

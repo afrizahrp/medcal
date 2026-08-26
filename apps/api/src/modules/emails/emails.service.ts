@@ -19,6 +19,7 @@ import {
 } from "@medcal/shared";
 import { hasPermission } from "@medcal/auth";
 import { resolveSortOrder } from "../../common/sort-query";
+import { QuotationsService } from "../quotations/quotations.service";
 import { emailNotConfigured, smtpDeliveryFailed } from "./email-errors";
 import { ImapSyncService } from "./imap-sync.service";
 import { LeadSuggestionService } from "./lead-suggestion.service";
@@ -77,6 +78,8 @@ export class EmailsService {
     private readonly suggestions: LeadSuggestionService,
     @Inject(ImapSyncService)
     private readonly imapSync: ImapSyncService,
+    @Inject(QuotationsService)
+    private readonly quotations: QuotationsService,
   ) {}
 
   mailer: EmailMailer = { sendEmail: notificationsEmail.sendEmail };
@@ -207,9 +210,14 @@ export class EmailsService {
       leadId = contact.leadId;
     }
 
-    const smtp = smtpConfig();
     const rfcInReplyTo = parent?.messageId ?? null;
     const rfcReferences = buildReferences(parent?.rfcReferences, parent?.messageId);
+
+    const quotationAttachment = input.quotationId
+      ? await this.quotations.buildPdf(companyId, input.quotationId)
+      : null;
+
+    const smtp = smtpConfig();
 
     let result: { messageId: string };
     try {
@@ -223,6 +231,15 @@ export class EmailsService {
           text: input.body,
           inReplyTo: rfcInReplyTo ?? undefined,
           references: rfcReferences ?? undefined,
+          attachments: quotationAttachment
+            ? [
+                {
+                  filename: quotationAttachment.filename,
+                  content: quotationAttachment.buffer,
+                  contentType: "application/pdf",
+                },
+              ]
+            : undefined,
         },
         smtp,
       );
@@ -262,6 +279,19 @@ export class EmailsService {
       },
     });
     this.logger.log(`SMTP send persisted id=${created.id} messageId=${created.messageId ? "set" : "missing"}`);
+
+    if (input.quotationId) {
+      try {
+        await this.quotations.send(companyId, input.quotationId);
+      } catch (err) {
+        this.logger.warn(
+          `Quotation ${input.quotationId} was not marked SENT after email ${created.id}: ${
+            err instanceof Error ? err.message : "unknown error"
+          }`,
+        );
+      }
+    }
+
     return created;
   }
 

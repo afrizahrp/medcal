@@ -247,6 +247,7 @@ export type EmailComposePayload = {
   parentEmailId?: string;
   contactMessageId?: string;
   leadId?: string;
+  quotationId?: string;
 };
 
 export type EmailDraftPayload = {

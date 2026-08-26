@@ -1,25 +1,27 @@
 import { randomUUID } from "node:crypto";
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@medcal/db";
 import { EmailsService } from "./emails.service";
 import { ImapSyncService } from "./imap-sync.service";
 import { LeadSuggestionService } from "./lead-suggestion.service";
+import { QuotationsService } from "../quotations/quotations.service";
 
 const suggestions = new LeadSuggestionService();
 const imapSync = new ImapSyncService(suggestions);
-const service = new EmailsService(suggestions, imapSync);
+const quotations = new QuotationsService();
+const service = new EmailsService(suggestions, imapSync, quotations);
 const companyId = "PKM";
 const createdEmailIds: string[] = [];
 const createdLeadIds: string[] = [];
 let senderUserId: string;
 
 function smtpEnv() {
-  process.env.SMTP_HOST ??= "smtp.example.com";
-  process.env.SMTP_USER ??= "info@example.com";
-  process.env.SMTP_PASS ??= "test-pass-not-real";
-  process.env.SMTP_FROM ??= "MedCal <info@example.com>";
-  process.env.SMTP_SECURE ??= "true";
+  process.env.SMTP_HOST = "smtp.example.com";
+  process.env.SMTP_USER = "info@example.com";
+  process.env.SMTP_PASS = "test-pass-not-real";
+  process.env.SMTP_FROM = "MedCal <info@example.com>";
+  process.env.SMTP_SECURE = "true";
 }
 
 beforeAll(async () => {
@@ -174,6 +176,63 @@ describe("EmailsService SMTP send/reply", () => {
     expect(reply.parentEmailId).toBe(parent.id);
     expect(reply.rfcInReplyTo).toBe("<parent-rfc@example.com>");
     expect(reply.rfcReferences).toContain("<parent-rfc@example.com>");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("attaches the quotation PDF before SMTP send", async () => {
+    const pdfBuffer = Buffer.from("%PDF-fake");
+    vi.spyOn(quotations, "buildPdf").mockResolvedValue({
+      buffer: pdfBuffer,
+      filename: "QUO-2026-08-00001.pdf",
+    });
+    vi.spyOn(quotations, "send").mockResolvedValue({} as never);
+
+    let captured: { attachments?: Array<{ filename: string; content: Buffer }> } | undefined;
+    service.mailer = {
+      sendEmail: async (input) => {
+        captured = input;
+        return { messageId: "<with-pdf@example.com>", accepted: ["to@example.com"], rejected: [] };
+      },
+    };
+
+    const sent = await service.send(companyId, senderUserId, {
+      to: "to@example.com",
+      subject: "Quotation",
+      body: "Please find attached",
+      quotationId: "q-1",
+    });
+    createdEmailIds.push(sent.id);
+
+    expect(captured?.attachments).toHaveLength(1);
+    expect(captured?.attachments?.[0]?.filename).toBe("QUO-2026-08-00001.pdf");
+    expect(captured?.attachments?.[0]?.content.equals(pdfBuffer)).toBe(true);
+    expect(quotations.send).toHaveBeenCalledWith(companyId, "q-1");
+  });
+
+  it("does not call SMTP when quotation PDF generation fails", async () => {
+    vi.spyOn(quotations, "buildPdf").mockRejectedValue(
+      new NotFoundException({ message: "Quotation not found", code: "QUOTATION_NOT_FOUND" }),
+    );
+    let smtpCalled = false;
+    service.mailer = {
+      sendEmail: async () => {
+        smtpCalled = true;
+        return { messageId: "<should-not@example.com>", accepted: [], rejected: [] };
+      },
+    };
+
+    await expect(
+      service.send(companyId, senderUserId, {
+        to: "to@example.com",
+        subject: "Missing PDF",
+        body: "x",
+        quotationId: "missing",
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(smtpCalled).toBe(false);
   });
 });
 

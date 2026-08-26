@@ -162,10 +162,17 @@ export function QuotationFormFields({
                     <td className="px-3 py-3 align-top">
                       <Input
                         type="number"
-                        min="0.0001"
-                        step="1"
+                        inputMode="numeric"
+                        min={1}
+                        step={1}
                         value={item.qty}
-                        onChange={(e) => updateItem(index, { qty: e.target.value })}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (next === "" || /^\d+$/.test(next)) {
+                            updateItem(index, { qty: next });
+                          }
+                        }}
+                        onInvalid={(e) => e.preventDefault()}
                         required
                         aria-label={`Qty item ${index + 1}`}
                       />
@@ -195,7 +202,6 @@ export function QuotationFormFields({
           subtotal={totals.subtotal}
           taxAmount={null}
           totalAmount={totals.totalAmount}
-          preview
         />
       </section>
     </div>

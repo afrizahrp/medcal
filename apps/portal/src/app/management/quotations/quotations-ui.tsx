@@ -23,10 +23,22 @@ export type QuotationSource = "PORTAL" | "PHONE" | "WHATSAPP" | "OTHER";
 
 export type MoneyValue = string | number;
 
+export interface QuotationCustomerContact {
+  id?: string;
+  name: string;
+  isPrimary: boolean;
+}
+
 export interface QuotationCustomer {
   id: string;
   name: string;
   number: string;
+  email: string | null;
+  legalName?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  taxId?: string | null;
+  contacts?: QuotationCustomerContact[];
 }
 
 export interface QuotationRequestRef {
@@ -149,6 +161,15 @@ export function moneyNumber(value: MoneyValue | null | undefined): number {
   if (value == null || value === "") return 0;
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** Qty is a whole unit count — never a decimal. */
+export function formatQty(value: MoneyValue | null | undefined): string {
+  return String(Math.trunc(moneyNumber(value)));
+}
+
+export function isPositiveIntegerQty(value: string): boolean {
+  return /^\d+$/.test(value) && Number(value) > 0;
 }
 
 export function formatIdr(value: MoneyValue | null | undefined): string {
@@ -307,19 +328,14 @@ export function QuotationTotals({
   taxAmount,
   tax,
   totalAmount,
-  preview,
 }: {
   subtotal: MoneyValue;
   taxAmount: MoneyValue | null;
   tax?: QuotationTax | null;
   totalAmount: MoneyValue;
-  preview?: boolean;
 }) {
   return (
     <dl className="ml-auto w-full max-w-sm space-y-2 text-sm">
-      {preview ? (
-        <p className="text-xs text-slate-400">Perkiraan — total final dihitung backend.</p>
-      ) : null}
       <div className="flex justify-between gap-4">
         <dt className="text-slate-500">Subtotal</dt>
         <dd className="font-medium text-slate-900">{formatIdr(subtotal)}</dd>
@@ -384,7 +400,7 @@ export function itemsFromQuotation(quotation: QuotationRow): QuotationFormItem[]
   return quotation.items.map((item) => ({
     requestItemId: item.requestItemId ?? "",
     description: item.description,
-    qty: String(item.qty),
+    qty: formatQty(item.qty),
     unitPrice: String(item.unitPrice),
     deviceLabel: item.requestItem?.deviceType.name ?? item.description,
     deviceIdLabel: item.requestItem?.deviceId ?? "—",
@@ -440,4 +456,69 @@ export function formatQuotationApiError(
     return { message: err.message, quotationId };
   }
   return { message: fallback };
+}
+
+export function customerContactAddressee(customer: QuotationCustomer): string {
+  const contacts = customer.contacts ?? [];
+  const primary = contacts.find((contact) => contact.isPrimary) ?? contacts[0];
+  const name = primary?.name?.trim();
+  if (!name) return "Bapak/Ibu";
+  return `Bapak/Ibu ${name}`;
+}
+
+export function customerRegisteredEmail(customer: QuotationCustomer): string | null {
+  const email = customer.email?.trim();
+  return email || null;
+}
+
+export function quotationPdfFilename(input: {
+  number: string;
+  companyId: string;
+  issuedAt: Date | string;
+}): string {
+  const companyId = input.companyId.trim().toUpperCase() || "PKM";
+  const issuedAt = input.issuedAt instanceof Date ? input.issuedAt : new Date(input.issuedAt);
+  const match = input.number.trim().match(/^([A-Z]{3})\/(\d{4})\/(\d{2})\/(\d{5})$/);
+  if (match && !Number.isNaN(issuedAt.getTime())) {
+    const prefix = match[1];
+    const sequence = match[4];
+    const yyyy = String(issuedAt.getUTCFullYear());
+    const mm = String(issuedAt.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(issuedAt.getUTCDate()).padStart(2, "0");
+    return `${companyId}-${prefix}-${yyyy}${mm}${dd}-${sequence}.pdf`;
+  }
+
+  const fallback = input.number.replace(/[/\\]+/g, "-");
+  return `${companyId}-${fallback}.pdf`;
+}
+
+export function quotationPdfFilenameForRow(
+  quotation: Pick<QuotationRow, "number" | "companyId" | "createdAt">,
+): string {
+  return quotationPdfFilename({
+    number: quotation.number,
+    companyId: quotation.companyId,
+    issuedAt: quotation.createdAt,
+  });
+}
+
+export function quotationComposeHref(quotation: QuotationRow, to: string): string {
+  const qs = new URLSearchParams({
+    to,
+    subject: `Quotation ${quotation.number} — ${quotation.customer.name}`,
+    body: [
+      `Yth. ${customerContactAddressee(quotation.customer)},`,
+      "",
+      `Terlampir quotation ${quotation.number} untuk Calibration Request ${quotation.request.number}.`,
+      `Total: ${formatIdr(quotation.totalAmount)}.`,
+      quotation.validUntil ? `Berlaku hingga: ${formatDate(quotation.validUntil)}.` : "",
+      "",
+      "Hormat kami.",
+    ]
+      .filter((line, index, all) => line !== "" || all[index - 1] !== "")
+      .join("\n")
+      .trim(),
+    quotationId: quotation.id,
+  });
+  return `/email/compose?${qs.toString()}`;
 }

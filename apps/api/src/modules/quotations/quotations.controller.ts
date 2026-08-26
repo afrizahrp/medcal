@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -65,6 +66,19 @@ export class QuotationsController {
       });
     }
     return this.service.findAll(companyId, parsed.data);
+  }
+
+  @Get(":id/pdf")
+  @RequirePermission("quotation", "read")
+  async downloadPdf(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<StreamableFile> {
+    const pdf = await this.service.buildPdf(companyId, id);
+    return new StreamableFile(pdf.buffer, {
+      type: "application/pdf",
+      disposition: `attachment; filename="${pdf.filename}"`,
+    });
   }
 
   @Get(":id")

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiError, isForbidden } from "@medcal/shared";
+import { Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AccessDenied } from "../../../../components/access-denied";
@@ -17,18 +18,22 @@ import {
   useSendEmail,
   useUpdateDraft,
 } from "../use-emails-query";
+import { quotationPdfFilenameForRow } from "../../quotations/quotations-ui";
+import { fetchQuotationPdf, useQuotation } from "../../quotations/use-quotations-query";
 
 export default function EmailComposePageClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const replyToId = searchParams.get("replyTo") ?? "";
   const draftId = searchParams.get("draftId") ?? "";
+  const quotationId = searchParams.get("quotationId") ?? "";
   const isEditingDraft = Boolean(draftId);
   const { status: sessionStatus } = useRequireSession();
   const { capabilities } = useAuthz();
   const statsQuery = useEmailStatisticsQuery();
   const replyQuery = useEmailDetailQuery(replyToId);
   const draftQuery = useEmailDetailQuery(draftId);
+  const quotationQuery = useQuotation(quotationId || undefined);
   const sendMutation = useSendEmail();
   const draftMutation = useSaveDraft();
   const updateDraftMutation = useUpdateDraft();
@@ -37,7 +42,7 @@ export default function EmailComposePageClient() {
   const [to, setTo] = useState(searchParams.get("to") ?? "");
   const [cc, setCc] = useState("");
   const [subject, setSubject] = useState(searchParams.get("subject") ?? "");
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(searchParams.get("body") ?? "");
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [seededReply, setSeededReply] = useState(false);
@@ -92,6 +97,7 @@ export default function EmailComposePageClient() {
         subject: subject.trim(),
         body: body.trim(),
         parentEmailId: replyToId || undefined,
+        quotationId: quotationId || undefined,
       });
       setSuccessMessage("Email berhasil dikirim.");
       setTo("");
@@ -150,7 +156,28 @@ export default function EmailComposePageClient() {
   const busy = isEditingDraft
     ? updateDraftMutation.isPending || sendDraftMutation.isPending
     : sendMutation.isPending || draftMutation.isPending;
-  const canSend = Boolean(to.trim() && subject.trim() && body.trim());
+  const quotationReady = !quotationId || Boolean(quotationQuery.data);
+  const quotationFailed = Boolean(quotationId) && quotationQuery.isError;
+  const canSend = Boolean(to.trim() && subject.trim() && body.trim()) && quotationReady && !quotationFailed;
+
+  async function downloadQuotationPdf() {
+    if (!quotationId || !quotationQuery.data) return;
+    try {
+      const blob = await fetchQuotationPdf(quotationId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = quotationPdfFilenameForRow(quotationQuery.data);
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setFormError(err.message || "Gagal mengunduh PDF quotation.");
+      } else {
+        setFormError("Gagal mengunduh PDF quotation.");
+      }
+    }
+  }
 
   return (
     <div className="w-full px-4 py-6 md:px-6 md:py-6">
@@ -209,6 +236,33 @@ export default function EmailComposePageClient() {
           </label>
         </div>
 
+        {quotationId ? (
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            {quotationQuery.isLoading ? (
+              <p className="text-sm text-slate-500">Menyiapkan lampiran quotation…</p>
+            ) : quotationQuery.isError || !quotationQuery.data ? (
+              <p className="text-sm text-red-600">
+                Lampiran quotation tidak dapat dimuat. Email tidak dikirim sampai PDF tersedia.
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-sm text-slate-700">
+                  <Paperclip className="h-4 w-4 shrink-0 text-slate-500" />
+                  <span>
+                    Lampiran:{" "}
+                    <span className="font-medium">
+                      {quotationPdfFilenameForRow(quotationQuery.data)}
+                    </span>
+                  </span>
+                </p>
+                <Button type="button" variant="outline" size="sm" onClick={downloadQuotationPdf}>
+                  Unduh PDF
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : null}
+
         {!isEditingDraft && replyToId && replyQuery.data ? (
           <p className="mt-4 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-600">
             Membalas:{" "}
@@ -252,9 +306,15 @@ export default function EmailComposePageClient() {
               <Button type="button" size="sm" disabled={!canSend || busy} onClick={handleSend}>
                 {sendMutation.isPending ? "Mengirim…" : "Kirim"}
               </Button>
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={handleSaveDraft}>
-                {draftMutation.isPending ? "Menyimpan…" : "Simpan Draft"}
-              </Button>
+              {quotationId ? (
+                <p className="self-center text-xs text-slate-500">
+                  Draft tidak tersedia: lampiran PDF quotation hanya terkirim saat Anda menekan Kirim.
+                </p>
+              ) : (
+                <Button type="button" variant="outline" size="sm" disabled={busy} onClick={handleSaveDraft}>
+                  {draftMutation.isPending ? "Menyimpan…" : "Simpan Draft"}
+                </Button>
+              )}
               <Button asChild variant="ghost" size="sm">
                 <Link href="/email/inbox">Batal</Link>
               </Button>

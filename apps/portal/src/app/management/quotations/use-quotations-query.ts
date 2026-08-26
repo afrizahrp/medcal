@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@medcal/shared";
+import { apiFetch, apiFetchBlob } from "@medcal/shared";
 import type { QuotationCreateInput, QuotationUpdateInput } from "@medcal/shared";
 import { CALIBRATION_REQUESTS_QUERY_KEY } from "../calibration-requests/use-calibration-requests-query";
 import type {
@@ -143,4 +143,27 @@ export function useCancelQuotation() {
       invalidateQuotationQueries(queryClient, id);
     },
   });
+}
+
+export async function fetchQuotationPdf(id: string): Promise<Blob> {
+  const blob = await apiFetchBlob(`/quotations/${id}/pdf`);
+  if (blob.size === 0) {
+    throw new Error("Empty quotation PDF");
+  }
+  return blob;
+}
+
+export async function openQuotationPdf(id: string, filename?: string): Promise<void> {
+  const blob = await fetchQuotationPdf(id);
+  const url = URL.createObjectURL(blob);
+  const tab = window.open(url, "_blank", "noopener,noreferrer");
+  if (!tab) {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    if (filename) anchor.download = filename;
+    anchor.click();
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

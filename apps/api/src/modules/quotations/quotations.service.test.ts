@@ -169,6 +169,17 @@ describe("quotationCreateSchema", () => {
     ).toBe(false);
   });
 
+  it("rejects a decimal qty", () => {
+    expect(
+      quotationCreateSchema.safeParse({
+        requestId: "req-1",
+        items: [
+          { requestItemId: "item-1", description: "Kalibrasi BPM", qty: 1.5, unitPrice: 150000 },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects a negative unitPrice", () => {
     expect(
       quotationCreateSchema.safeParse({
@@ -752,5 +763,26 @@ describe("QuotationsService transaction rollback", () => {
       where: { id: request.id },
     });
     expect(cr.status).toBe("SUBMITTED");
+  });
+});
+
+describe("QuotationsService.buildPdf", () => {
+  it("returns a PDF without changing quotation status", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+    const created = await quotationsService.create(realCompanyId, {
+      requestId: request.id,
+      items: quotationItemsFor(request, 150_000),
+    });
+    createdQuotationIds.push(created.id);
+
+    const pdf = await quotationsService.buildPdf(realCompanyId, created.id);
+    expect(pdf.filename).toMatch(/^PKM-QUO-\d{8}-\d{5}\.pdf$/);
+    expect(pdf.buffer.subarray(0, 4).toString()).toBe("%PDF");
+    expect(pdf.buffer.length).toBeGreaterThan(100);
+    const pdfLatin1 = pdf.buffer.toString("latin1");
+    expect(pdfLatin1).toContain("/Subtype /Image");
+
+    const after = await prisma.quotation.findFirstOrThrow({ where: { id: created.id } });
+    expect(after.status).toBe("DRAFT");
   });
 });

@@ -12,6 +12,7 @@ import {
   type QuotationUpdateInput,
 } from "@medcal/shared";
 import { resolveSortOrder } from "../../common/sort-query";
+import { renderQuotationPdf, type QuotationPdfResult } from "./quotation-pdf";
 
 const DEFAULT_PAGE_SIZE = 10;
 const MONEY_DECIMAL_PLACES = 2;
@@ -33,7 +34,7 @@ const quotationInclude = {
       device: { select: { id: true, brand: true, model: true, serialNumber: true } },
     },
   },
-  customer: true,
+  customer: { include: { contacts: true } },
   request: { select: { id: true, number: true, status: true, customerId: true } },
   tax: true,
 } as const;
@@ -349,6 +350,18 @@ export class QuotationsService {
       });
     }
     return quotation;
+  }
+
+  async buildPdf(companyId: string, id: string): Promise<QuotationPdfResult> {
+    const quotation = await this.findOne(companyId, id);
+    const company = await prisma.company.findFirst({ where: { id: companyId } });
+    if (!company) {
+      throw new NotFoundException({
+        message: "Company not found",
+        code: "COMPANY_NOT_FOUND",
+      });
+    }
+    return renderQuotationPdf({ quotation, company });
   }
 
   async update(

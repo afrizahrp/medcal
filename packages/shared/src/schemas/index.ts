@@ -193,6 +193,7 @@ export const emailComposeSchema = z.object({
   parentEmailId: z.string().optional(),
   contactMessageId: z.string().optional(),
   leadId: z.string().optional(),
+  quotationId: z.string().min(1).optional(),
 });
 
 export type EmailComposeInput = z.infer<typeof emailComposeSchema>;
@@ -361,7 +362,7 @@ const quotationItemInputSchema = z.object({
   deviceId: z.string().min(1).optional(),
   tariffId: z.string().min(1).optional(),
   description: z.string().min(1).max(500),
-  qty: quotationDecimalSchema.positive().optional(),
+  qty: z.coerce.number().int().positive().optional(),
   unitPrice: quotationDecimalSchema.nonnegative(),
 });
 

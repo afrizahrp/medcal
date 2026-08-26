@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@medcal/auth/client";
+import { TechPwaSymbolPicker } from "../components/global-symbol-picker-host";
 
 function isPublicAuthRoute(pathname: string | null): boolean {
   if (!pathname) return false;
@@ -40,7 +41,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TechPwaAuthProvider>{children}</TechPwaAuthProvider>
+      <TechPwaAuthProvider>
+        {children}
+        <TechPwaSymbolPicker />
+      </TechPwaAuthProvider>
     </QueryClientProvider>
   );
 }

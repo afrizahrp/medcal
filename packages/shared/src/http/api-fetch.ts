@@ -37,6 +37,27 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return (await response.json()) as T;
 }
 
+export async function apiFetchBlob(path: string, init: RequestInit = {}): Promise<Blob> {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...init,
+    credentials: "include",
+    headers: { ...init.headers },
+  });
+
+  if (!response.ok) {
+    let data: ({ code?: string; message?: string } & Record<string, unknown>) | undefined;
+    try {
+      data = (await response.json()) as typeof data;
+    } catch {
+      data = undefined;
+    }
+    throw new ApiError(response.status, data?.message ?? response.statusText, data);
+  }
+
+  return response.blob();
+}
+
 export function isUnauthorized(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401;
 }

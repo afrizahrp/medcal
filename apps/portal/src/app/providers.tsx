@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@medcal/auth/client";
+import { PortalSymbolPicker } from "../components/global/portal-symbol-picker";
 
 function isPublicAuthRoute(pathname: string | null): boolean {
   if (!pathname) return false;
@@ -51,7 +52,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <PortalAuthProvider>{children}</PortalAuthProvider>
+      <PortalAuthProvider>
+        {children}
+        <PortalSymbolPicker />
+      </PortalAuthProvider>
     </QueryClientProvider>
   );
 }

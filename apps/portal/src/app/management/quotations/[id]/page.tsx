@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, Edit, Send, X } from "lucide-react";
+import { ArrowLeft, Check, Edit, Mail, Printer, X } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
+import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
 import {
@@ -20,30 +21,34 @@ import {
   formatDate,
   formatDateTime,
   formatIdr,
+  formatQty,
   formatQuotationApiError,
+  quotationPdfFilenameForRow,
+  type QuotationRow,
 } from "../quotations-ui";
+import { useQuotationEmailCompose } from "../use-quotation-email-compose";
 import {
+  openQuotationPdf,
   useApproveQuotation,
   useCancelQuotation,
   useQuotation,
   useRejectQuotation,
-  useSendQuotation,
 } from "../use-quotations-query";
 
 export default function QuotationDetailPage() {
   const params = useParams<{ id: string }>();
+  const { capabilities } = useAuthz();
 
   const query = useQuotation(params.id);
-  const sendMutation = useSendQuotation();
   const approveMutation = useApproveQuotation();
   const rejectMutation = useRejectQuotation();
   const cancelMutation = useCancelQuotation();
+  const { compose, pending: composePending } = useQuotationEmailCompose();
 
-  const [confirmAction, setConfirmAction] = useState<
-    "send" | "approve" | "reject" | "cancel" | null
-  >(null);
+  const [confirmAction, setConfirmAction] = useState<"approve" | "reject" | "cancel" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [printPending, setPrintPending] = useState(false);
 
   const quotation = query.data;
 
@@ -84,27 +89,23 @@ export default function QuotationDetailPage() {
 
   const isDraft = quotation.status === "DRAFT";
   const isSent = quotation.status === "SENT";
-  const canCancel =
-    quotation.status !== "CANCELLED" && quotation.status !== "APPROVED";
+  const canCancel = quotation.status !== "CANCELLED" && quotation.status !== "APPROVED";
   const isFrozen = !isDraft;
 
-  async function runAction(action: "send" | "approve" | "reject" | "cancel") {
+  async function runAction(action: "approve" | "reject" | "cancel") {
     setError(null);
     setSuccess(null);
     const mutations = {
-      send: sendMutation,
       approve: approveMutation,
       reject: rejectMutation,
       cancel: cancelMutation,
     };
     const successMessages = {
-      send: "Quotation berhasil dikirim.",
       approve: "Quotation berhasil di-approve.",
       reject: "Quotation berhasil di-reject.",
       cancel: "Quotation berhasil dibatalkan.",
     };
     const fallbacks = {
-      send: "Gagal mengirim quotation.",
       approve: "Gagal approve quotation.",
       reject: "Gagal reject quotation.",
       cancel: "Gagal membatalkan quotation.",
@@ -121,10 +122,31 @@ export default function QuotationDetailPage() {
   }
 
   const actionPending =
-    sendMutation.isPending ||
     approveMutation.isPending ||
     rejectMutation.isPending ||
-    cancelMutation.isPending;
+    cancelMutation.isPending ||
+    composePending ||
+    printPending;
+
+  async function handleComposeEmail() {
+    setError(null);
+    setSuccess(null);
+    const message = await compose(quotation!);
+    if (message) setError(message);
+  }
+
+  async function handlePrint() {
+    setError(null);
+    setSuccess(null);
+    setPrintPending(true);
+    try {
+      await openQuotationPdf(quotation!.id, quotationPdfFilenameForRow(quotation!));
+    } catch (err) {
+      setError(formatQuotationApiError(err, "Gagal membuka PDF quotation.").message);
+    } finally {
+      setPrintPending(false);
+    }
+  }
 
   return (
     <div className={formPageClass}>
@@ -140,10 +162,28 @@ export default function QuotationDetailPage() {
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
       {success ? <p className="mt-3 text-sm text-emerald-700">{success}</p> : null}
 
+      <Suspense fallback={null}>
+        <CreatedNextSteps
+          quotation={quotation}
+          composing={composePending}
+          printing={printPending}
+          onCompose={handleComposeEmail}
+          onPrint={handlePrint}
+        />
+      </Suspense>
+
       <Surface className={formSurfaceClass}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="font-mono text-sm text-slate-600">{quotation.number}</p>
-          <StatusBadge status={quotation.status} />
+          <div className="flex flex-col items-end gap-2">
+            <StatusBadge status={quotation.status} />
+            <Button type="button" variant="outline" size="sm" asChild>
+              <Link href="/quotations">
+                <ArrowLeft className="h-4 w-4" />
+                Back to List
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {isFrozen ? (
@@ -193,9 +233,7 @@ export default function QuotationDetailPage() {
         </dl>
 
         <div className="mt-5 border-t border-slate-100 pt-5">
-          <h3 className="text-sm font-semibold text-slate-900">
-            Items ({quotation.items.length})
-          </h3>
+          <h3 className="text-sm font-semibold text-slate-900">Items ({quotation.items.length})</h3>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[640px]">
               <thead>
@@ -222,7 +260,7 @@ export default function QuotationDetailPage() {
                       ) : null}
                     </td>
                     <td className="px-3 py-3 text-right text-sm text-slate-600">
-                      {String(item.qty)}
+                      {formatQty(item.qty)}
                     </td>
                     <td className="px-3 py-3 text-right text-sm text-slate-600">
                       {formatIdr(item.unitPrice)}
@@ -246,11 +284,9 @@ export default function QuotationDetailPage() {
         </div>
 
         <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
-          <Button type="button" variant="outline" asChild>
-            <Link href="/quotations">
-              <ArrowLeft className="h-4 w-4" />
-              Back to List
-            </Link>
+          <Button type="button" variant="outline" onClick={handlePrint} disabled={printPending}>
+            <Printer className="h-4 w-4" />
+            {printPending ? "Membuka PDF…" : "Print"}
           </Button>
 
           {isDraft ? (
@@ -261,11 +297,25 @@ export default function QuotationDetailPage() {
                   Edit
                 </Link>
               </Button>
-              <Button type="button" onClick={() => setConfirmAction("send")}>
-                <Send className="h-4 w-4" />
-                Send
-              </Button>
+              {capabilities?.emailSend !== false ? (
+                <Button type="button" onClick={handleComposeEmail} disabled={composePending}>
+                  <Mail className="h-4 w-4" />
+                  {composePending ? "Menyiapkan PDF…" : "Kirim via Email"}
+                </Button>
+              ) : null}
             </>
+          ) : null}
+
+          {isSent && capabilities?.emailSend !== false ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleComposeEmail}
+              disabled={composePending}
+            >
+              <Mail className="h-4 w-4" />
+              {composePending ? "Menyiapkan PDF…" : "Kirim via Email"}
+            </Button>
           ) : null}
 
           {isSent ? (
@@ -274,11 +324,7 @@ export default function QuotationDetailPage() {
                 <Check className="h-4 w-4" />
                 Approve
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setConfirmAction("reject")}
-              >
+              <Button type="button" variant="outline" onClick={() => setConfirmAction("reject")}>
                 <X className="h-4 w-4" />
                 Reject
               </Button>
@@ -286,11 +332,7 @@ export default function QuotationDetailPage() {
           ) : null}
 
           {canCancel ? (
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => setConfirmAction("cancel")}
-            >
+            <Button type="button" variant="destructive" onClick={() => setConfirmAction("cancel")}>
               <X className="h-4 w-4" />
               Cancel Quotation
             </Button>
@@ -298,15 +340,6 @@ export default function QuotationDetailPage() {
         </div>
       </Surface>
 
-      <ConfirmDialog
-        open={confirmAction === "send"}
-        title="Send Quotation?"
-        description="Setelah dikirim, quotation tidak dapat diedit lagi. Lanjutkan?"
-        confirmLabel="Send"
-        onConfirm={() => runAction("send")}
-        onCancel={() => setConfirmAction(null)}
-        loading={actionPending}
-      />
       <ConfirmDialog
         open={confirmAction === "approve"}
         title="Approve Quotation?"
@@ -336,6 +369,45 @@ export default function QuotationDetailPage() {
         loading={actionPending}
         variant="destructive"
       />
+    </div>
+  );
+}
+
+function CreatedNextSteps({
+  quotation,
+  composing,
+  printing,
+  onCompose,
+  onPrint,
+}: {
+  quotation: QuotationRow;
+  composing: boolean;
+  printing: boolean;
+  onCompose: () => void;
+  onPrint: () => void;
+}) {
+  const searchParams = useSearchParams();
+  if (searchParams.get("created") !== "1") return null;
+
+  return (
+    <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+      <p className="text-sm font-medium text-emerald-900">Quotation berhasil dibuat.</p>
+      <p className="mt-1 text-sm text-emerald-800">
+        Tinjau dokumen quotation terlebih dahulu, lalu kirim PDF ke email customer jika sudah sesuai.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" asChild>
+          <Link href={`/quotations/${quotation.id}`}>View Quotation</Link>
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={onPrint} disabled={printing}>
+          <Printer className="h-4 w-4" />
+          {printing ? "Membuka PDF…" : "Print"}
+        </Button>
+        <Button type="button" size="sm" onClick={onCompose} disabled={composing}>
+          <Mail className="h-4 w-4" />
+          {composing ? "Menyiapkan PDF…" : "Generate PDF & Compose Email"}
+        </Button>
+      </div>
     </div>
   );
 }

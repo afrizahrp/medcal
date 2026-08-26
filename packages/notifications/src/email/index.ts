@@ -12,6 +12,11 @@ export type SendEmailInput = {
   replyTo?: string;
   inReplyTo?: string;
   references?: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer;
+    contentType?: string;
+  }>;
 };
 
 export type SendEmailResult = {
@@ -83,6 +88,7 @@ export async function sendEmail(
     replyTo: input.replyTo,
     inReplyTo: input.inReplyTo,
     references: input.references,
+    attachments: input.attachments,
   };
 
   const result = await transport.sendMail(mailOptions);
