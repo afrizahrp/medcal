@@ -364,6 +364,7 @@ const quotationItemInputSchema = z.object({
   description: z.string().min(1).max(500),
   qty: z.coerce.number().int().positive().optional(),
   unitPrice: quotationDecimalSchema.nonnegative(),
+  discountAmount: quotationDecimalSchema.nonnegative().optional(),
 });
 
 /** POST /quotations body — customerId is derived from the CalibrationRequest. */
@@ -371,7 +372,8 @@ export const quotationCreateSchema = z.object({
   requestId: z.string().min(1),
   source: z.enum(quotationSourceValues).optional(),
   validUntil: z.coerce.date().optional(),
-  taxId: z.string().min(1).optional(),
+  taxCode: z.string().min(1).max(50).optional(),
+  headerDiscountAmount: quotationDecimalSchema.nonnegative().optional(),
   items: z.array(quotationItemInputSchema).min(1),
 });
 
@@ -393,7 +395,8 @@ export const QUOTATION_SORTABLE_FIELDS = ["createdAt", "number", "status"] as co
 export const quotationUpdateSchema = z.object({
   source: z.enum(quotationSourceValues).optional(),
   validUntil: z.coerce.date().nullable().optional(),
-  taxId: z.string().min(1).nullable().optional(),
+  taxCode: z.string().min(1).max(50).nullable().optional(),
+  headerDiscountAmount: quotationDecimalSchema.nonnegative().optional(),
   items: z.array(quotationItemInputSchema).min(1).optional(),
 });
 
@@ -453,6 +456,44 @@ export const uomUpdateSchema = z.object({
 });
 
 export type UomUpdateInput = z.infer<typeof uomUpdateSchema>;
+
+// =============================================================================
+// Tax Master Data (company-scoped)
+// =============================================================================
+
+/** POST /taxes body — taxRate is a fraction (0.11 = 11%). */
+export const taxCreateSchema = z.object({
+  taxCode: z.string().min(1).max(20).toUpperCase(),
+  description: z.string().min(1).max(200),
+  taxRate: z.number().finite().min(0).max(1),
+  isExclude: z.boolean().optional(),
+});
+
+export type TaxCreateInput = z.infer<typeof taxCreateSchema>;
+
+/** GET /taxes query params */
+export const taxListQuerySchema = baseListQuerySchema.extend({
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type TaxListQuery = z.infer<typeof taxListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /taxes — see resolveSortOrder. */
+export const TAX_SORTABLE_FIELDS = ["createdAt", "taxCode", "description", "taxRate"] as const;
+
+/** PATCH /taxes/:id body */
+export const taxUpdateSchema = z.object({
+  taxCode: z.string().min(1).max(20).toUpperCase().optional(),
+  description: z.string().min(1).max(200).optional(),
+  taxRate: z.number().finite().min(0).max(1).optional(),
+  isExclude: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type TaxUpdateInput = z.infer<typeof taxUpdateSchema>;
 
 // =============================================================================
 // DeviceCategory & DeviceType Master Data

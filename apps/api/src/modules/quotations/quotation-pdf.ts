@@ -27,8 +27,11 @@ export type QuotationPdfSource = {
   createdAt: Date;
   validUntil: Date | null;
   subtotal: Prisma.Decimal | string | number;
+  headerDiscountAmount: Prisma.Decimal | string | number;
   taxAmount: Prisma.Decimal | string | number | null;
   totalAmount: Prisma.Decimal | string | number;
+  taxCode: string | null;
+  taxRate: Prisma.Decimal | string | number | null;
   customer: {
     name: string;
     number: string;
@@ -43,11 +46,11 @@ export type QuotationPdfSource = {
     }>;
   };
   request: { number: string };
-  tax: { taxCode: string } | null;
   items: Array<{
     description: string;
     qty: Prisma.Decimal | string | number;
     unitPrice: Prisma.Decimal | string | number;
+    discountAmount: Prisma.Decimal | string | number;
     lineTotal: Prisma.Decimal | string | number;
     requestItem: {
       deviceId: string;
@@ -198,15 +201,17 @@ export function renderQuotationPdf(input: {
 
     const cols = {
       desc: 50,
-      qty: 320,
-      unit: 370,
-      total: 460,
+      qty: 250,
+      unit: 290,
+      disc: 370,
+      total: 450,
     };
     doc.font("Helvetica-Bold").fontSize(8).fillColor("#64748b");
-    doc.text("DESKRIPSI", cols.desc, y, { width: 260 });
-    doc.text("QTY", cols.qty, y, { width: 45, align: "right" });
-    doc.text("HARGA SATUAN", cols.unit, y, { width: 85, align: "right" });
-    doc.text("JUMLAH", cols.total, y, { width: 85, align: "right" });
+    doc.text("DESKRIPSI", cols.desc, y, { width: 195 });
+    doc.text("QTY", cols.qty, y, { width: 35, align: "right" });
+    doc.text("HARGA SATUAN", cols.unit, y, { width: 75, align: "right" });
+    doc.text("DISKON", cols.disc, y, { width: 75, align: "right" });
+    doc.text("JUMLAH", cols.total, y, { width: 95, align: "right" });
     y += 14;
     doc.moveTo(50, y).lineTo(545, y).strokeColor("#e2e8f0").stroke();
     y += 8;
@@ -219,17 +224,18 @@ export function renderQuotationPdf(input: {
       if (deviceName && deviceName !== item.description) descLines.push(deviceName);
       if (deviceId) descLines.push(`Device ID: ${deviceId}`);
 
-      const descHeight = doc.heightOfString(descLines.join("\n"), { width: 260 });
+      const descHeight = doc.heightOfString(descLines.join("\n"), { width: 195 });
       if (y + descHeight > doc.page.height - 80) {
         doc.addPage();
         y = 50;
       }
 
-      doc.text(descLines.join("\n"), cols.desc, y, { width: 260 });
+      doc.text(descLines.join("\n"), cols.desc, y, { width: 195 });
       const rowY = y;
-      doc.text(String(item.qty), cols.qty, rowY, { width: 45, align: "right" });
-      doc.text(formatIdr(item.unitPrice), cols.unit, rowY, { width: 85, align: "right" });
-      doc.text(formatIdr(item.lineTotal), cols.total, rowY, { width: 85, align: "right" });
+      doc.text(String(item.qty), cols.qty, rowY, { width: 35, align: "right" });
+      doc.text(formatIdr(item.unitPrice), cols.unit, rowY, { width: 75, align: "right" });
+      doc.text(formatIdr(item.discountAmount), cols.disc, rowY, { width: 75, align: "right" });
+      doc.text(formatIdr(item.lineTotal), cols.total, rowY, { width: 95, align: "right" });
       y += Math.max(descHeight, 16) + 8;
     }
 
@@ -246,8 +252,20 @@ export function renderQuotationPdf(input: {
     });
     y = doc.y + 4;
 
-    if (quotation.tax || quotation.taxAmount != null) {
-      const taxLabel = quotation.tax ? `Tax (${quotation.tax.taxCode})` : "Tax";
+    doc.fillColor("#334155").text("Header Discount", totalsX, y, { width: 80 });
+    doc.fillColor("#0f172a").text(formatIdr(quotation.headerDiscountAmount), totalsX + 80, y, {
+      width: 95,
+      align: "right",
+    });
+    y = doc.y + 4;
+
+    if (quotation.taxCode || quotation.taxAmount != null) {
+      const rate = moneyNumber(quotation.taxRate);
+      const rateLabel =
+        quotation.taxCode && rate > 0
+          ? ` ${new Intl.NumberFormat("id-ID", { style: "percent", maximumFractionDigits: 2 }).format(rate)}`
+          : "";
+      const taxLabel = quotation.taxCode ? `Tax (${quotation.taxCode}${rateLabel})` : "Tax";
       doc.fillColor("#334155").text(taxLabel, totalsX, y, { width: 80 });
       doc.fillColor("#0f172a").text(formatIdr(quotation.taxAmount), totalsX + 80, y, {
         width: 95,

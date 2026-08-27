@@ -23,8 +23,10 @@ import {
   itemsFromQuotation,
   isPositiveIntegerQty,
   moneyNumber,
+  previewTotals,
 } from "../../quotations-ui";
 import { useQuotation, useUpdateQuotation } from "../../use-quotations-query";
+import { useTaxes } from "../../use-taxes-query";
 
 function parseValidUntil(dateStr: string | null): Date | undefined {
   if (!dateStr) return undefined;
@@ -41,11 +43,14 @@ export default function EditQuotationPage() {
   const { capabilities } = useAuthz();
 
   const query = useQuotation(params.id);
+  const taxesQuery = useTaxes();
   const updateMutation = useUpdateQuotation();
 
   const [form, setForm] = useState<QuotationFormValue>({
     source: "PORTAL",
     validUntil: undefined,
+    taxCode: "",
+    headerDiscountAmount: "0",
     items: [],
   });
   const [dateOpen, setDateOpen] = useState(false);
@@ -59,6 +64,8 @@ export default function EditQuotationPage() {
       setForm({
         source: quotation.source,
         validUntil: parseValidUntil(quotation.validUntil),
+        taxCode: quotation.taxCode ?? "",
+        headerDiscountAmount: String(quotation.headerDiscountAmount ?? 0),
         items: itemsFromQuotation(quotation),
       });
       setInitialized(true);
@@ -142,6 +149,30 @@ export default function EditQuotationPage() {
         setError("Setiap item wajib memiliki unit price yang valid.");
         return;
       }
+      const gross = moneyNumber(item.qty || "1") * moneyNumber(item.unitPrice);
+      if (moneyNumber(item.discountAmount) < 0) {
+        setError("Diskon item tidak boleh negatif.");
+        return;
+      }
+      if (moneyNumber(item.discountAmount) > gross) {
+        setError("Diskon item tidak boleh melebihi jumlah bruto item.");
+        return;
+      }
+    }
+
+    const preview = previewTotals(form.items, null, form.headerDiscountAmount);
+    if (moneyNumber(form.headerDiscountAmount) < 0) {
+      setError("Header discount tidak boleh negatif.");
+      return;
+    }
+    if (moneyNumber(form.headerDiscountAmount) > preview.subtotal) {
+      setError("Header discount tidak boleh melebihi subtotal.");
+      return;
+    }
+
+    if (!form.taxCode) {
+      setError("Pilih tax pada header quotation.");
+      return;
     }
 
     try {
@@ -150,11 +181,14 @@ export default function EditQuotationPage() {
         input: {
           source: form.source,
           validUntil: form.validUntil ?? null,
+          taxCode: form.taxCode,
+          headerDiscountAmount: moneyNumber(form.headerDiscountAmount),
           items: form.items.map((item) => ({
             requestItemId: item.requestItemId,
             description: item.description.trim(),
             qty: moneyNumber(item.qty),
             unitPrice: moneyNumber(item.unitPrice),
+            discountAmount: moneyNumber(item.discountAmount),
           })),
         },
       });
@@ -208,6 +242,8 @@ export default function EditQuotationPage() {
             onChange={setForm}
             dateOpen={dateOpen}
             onDateOpenChange={setDateOpen}
+            taxes={taxesQuery.data?.data ?? []}
+            taxesLoading={taxesQuery.isLoading}
           />
 
           <div className={formActionsClass}>

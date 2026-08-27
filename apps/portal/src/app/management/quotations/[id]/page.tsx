@@ -243,6 +243,7 @@ export default function QuotationDetailPage() {
                   <th className="px-3 py-2">Device</th>
                   <th className="px-3 py-2 text-right">Qty</th>
                   <th className="px-3 py-2 text-right">Unit Price</th>
+                  <th className="px-3 py-2 text-right">Discount</th>
                   <th className="px-3 py-2 text-right">Line Total</th>
                 </tr>
               </thead>
@@ -266,6 +267,9 @@ export default function QuotationDetailPage() {
                     <td className="px-3 py-3 text-right text-sm text-slate-600">
                       {formatIdr(item.unitPrice)}
                     </td>
+                    <td className="px-3 py-3 text-right text-sm text-slate-600">
+                      {formatIdr(item.discountAmount)}
+                    </td>
                     <td className="px-3 py-3 text-right text-sm font-medium text-slate-900">
                       {formatIdr(item.lineTotal)}
                     </td>
@@ -277,8 +281,10 @@ export default function QuotationDetailPage() {
           <div className="mt-4">
             <QuotationTotals
               subtotal={quotation.subtotal}
+              headerDiscountAmount={quotation.headerDiscountAmount}
+              taxCode={quotation.taxCode}
+              taxRate={quotation.taxRate}
               taxAmount={quotation.taxAmount}
-              tax={quotation.tax}
               totalAmount={quotation.totalAmount}
             />
           </div>

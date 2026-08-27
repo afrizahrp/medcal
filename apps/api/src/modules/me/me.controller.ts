@@ -113,6 +113,7 @@ export class MeController {
       quotationUpdate: hasPermission(membership.role, "quotation", "update"),
       quotationCancel: hasPermission(membership.role, "quotation", "cancel"),
       quotationApprove: hasPermission(membership.role, "quotation", "approve"),
+      taxManage: hasPermission(membership.role, "tax", "manage"),
     };
 
     return {

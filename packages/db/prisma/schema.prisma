@@ -1115,10 +1115,12 @@ model Quotation {
   source             QuotationSource @default(PORTAL)
   status             QuotationStatus @default(DRAFT)
   validUntil         DateTime?
-  subtotal           Decimal         @db.Decimal(18, 2)
-  taxId              String?
-  taxAmount          Decimal?        @db.Decimal(18, 2)
-  totalAmount        Decimal         @db.Decimal(18, 2)
+  subtotal             Decimal         @db.Decimal(18, 2)
+  headerDiscountAmount Decimal         @default(0) @db.Decimal(18, 2)
+  taxCode              String?
+  taxRate              Decimal?        @db.Decimal(5, 4)
+  taxAmount            Decimal?        @db.Decimal(18, 2)
+  totalAmount          Decimal         @db.Decimal(18, 2)
   currency           String          @default("IDR")
   approvedAt         DateTime?
   approvedByUserId   String?
@@ -1129,7 +1131,6 @@ model Quotation {
   company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer   Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   request        CalibrationRequest @relation(fields: [requestId], references: [id])
-  tax            Tax?              @relation(fields: [taxId], references: [id])
   items          QuotationItem[]
   purchaseOrders PurchaseOrder[]
   workOrders     WorkOrder[]
@@ -1137,7 +1138,7 @@ model Quotation {
   @@unique([companyId, number])
   @@index([companyId, status])
   @@index([customerId])
-  @@index([taxId])
+  @@index([companyId, taxCode])
 }
 
 model QuotationItem {
@@ -1148,9 +1149,10 @@ model QuotationItem {
   requestItemId String?
   tariffId      String?
   description   String
-  qty           Decimal  @default(1) @db.Decimal(18, 4)
-  unitPrice     Decimal  @db.Decimal(18, 2)
-  lineTotal     Decimal  @db.Decimal(18, 2)
+  qty            Decimal  @default(1) @db.Decimal(18, 4)
+  unitPrice      Decimal  @db.Decimal(18, 2)
+  discountAmount Decimal  @default(0) @db.Decimal(18, 2)
+  lineTotal      Decimal  @db.Decimal(18, 2)
   createdAt     DateTime @default(now())
 
   quotation          Quotation            @relation(fields: [quotationId], references: [id], onDelete: Cascade)
@@ -1174,7 +1176,7 @@ model PurchaseOrder {
   subtotal             Decimal             @db.Decimal(18, 2)
   headerDiscountAmount Decimal             @default(0) @db.Decimal(18, 2)
   taxCode              String
-  taxRateSnapshot      Decimal             @db.Decimal(5, 4)
+  taxRate              Decimal             @db.Decimal(5, 4)
   taxAmount            Decimal             @db.Decimal(18, 2)
   totalAmount          Decimal             @db.Decimal(18, 2)
   currency             String              @default("IDR")
@@ -1439,7 +1441,6 @@ model Tax {
   updatedAt   DateTime @updatedAt
 
   company    Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  quotations Quotation[]
   invoices   Invoice[]
 
   @@unique([companyId, taxCode])

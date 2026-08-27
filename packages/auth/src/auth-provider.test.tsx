@@ -73,6 +73,7 @@ const ME_A = {
     quotationUpdate: true,
     quotationCancel: true,
     quotationApprove: true,
+    taxManage: true,
   },
 };
 
@@ -129,6 +130,7 @@ const ME_B = {
     quotationUpdate: false,
     quotationCancel: false,
     quotationApprove: false,
+    taxManage: false,
   },
 };
 

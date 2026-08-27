@@ -22,6 +22,7 @@ import { DeviceModelsModule } from "./modules/device-models/device-models.module
 import { DeviceCapabilitiesModule } from "./modules/device-capabilities/device-capabilities.module";
 import { DeviceCalibrationParametersModule } from "./modules/device-calibration-parameters/device-calibration-parameters.module";
 import { DevicesModule } from "./modules/devices/devices.module";
+import { TaxesModule } from "./modules/taxes/taxes.module";
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { DevicesModule } from "./modules/devices/devices.module";
     DeviceCapabilitiesModule,
     DeviceCalibrationParametersModule,
     DevicesModule,
+    TaxesModule,
     WhitelistModule,
     MeModule,
     ChatModule,

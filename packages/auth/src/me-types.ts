@@ -51,6 +51,7 @@ export type MeCapabilities = {
   quotationUpdate: boolean;
   quotationCancel: boolean;
   quotationApprove: boolean;
+  taxManage: boolean;
 };
 
 export type MeUser = {

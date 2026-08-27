@@ -36,7 +36,6 @@ const quotationInclude = {
   },
   customer: { include: { contacts: true } },
   request: { select: { id: true, number: true, status: true, customerId: true } },
-  tax: true,
 } as const;
 
 export type QuotationWithItems = Prisma.QuotationGetPayload<{
@@ -61,22 +60,99 @@ function money(value: Prisma.Decimal): Prisma.Decimal {
   return value.toDecimalPlaces(MONEY_DECIMAL_PLACES, Prisma.Decimal.ROUND_HALF_UP);
 }
 
-function computeLineTotal(qty: Prisma.Decimal, unitPrice: Prisma.Decimal): Prisma.Decimal {
+function computeGrossLine(qty: Prisma.Decimal, unitPrice: Prisma.Decimal): Prisma.Decimal {
   return money(qty.mul(unitPrice));
+}
+
+function computeItemLine(
+  qty: Prisma.Decimal,
+  unitPrice: Prisma.Decimal,
+  discountAmount: Prisma.Decimal,
+): { discountAmount: Prisma.Decimal; lineTotal: Prisma.Decimal } {
+  const grossLineAmount = computeGrossLine(qty, unitPrice);
+  const discount = money(discountAmount);
+  if (discount.isNegative()) {
+    throw new BadRequestException({
+      message: "Item discount cannot be negative",
+      code: "INVALID_ITEM_DISCOUNT",
+    });
+  }
+  if (discount.greaterThan(grossLineAmount)) {
+    throw new BadRequestException({
+      message: "Item discount cannot exceed the line gross amount",
+      code: "ITEM_DISCOUNT_EXCEEDS_GROSS",
+    });
+  }
+  return { discountAmount: discount, lineTotal: money(grossLineAmount.minus(discount)) };
 }
 
 function computeHeaderTotals(
   lineTotals: Prisma.Decimal[],
-  taxRate: Prisma.Decimal | null,
-): { subtotal: Prisma.Decimal; taxAmount: Prisma.Decimal | null; totalAmount: Prisma.Decimal } {
+  headerDiscountAmount: Prisma.Decimal,
+  tax: { taxRate: Prisma.Decimal; isExclude: boolean } | null,
+): {
+  subtotal: Prisma.Decimal;
+  headerDiscountAmount: Prisma.Decimal;
+  taxAmount: Prisma.Decimal | null;
+  totalAmount: Prisma.Decimal;
+} {
   const subtotal = money(
     lineTotals.reduce((acc, line) => acc.plus(line), new Prisma.Decimal(0)),
   );
-  if (taxRate == null) {
-    return { subtotal, taxAmount: null, totalAmount: subtotal };
+  const headerDiscount = money(headerDiscountAmount);
+  if (headerDiscount.isNegative()) {
+    throw new BadRequestException({
+      message: "Header discount cannot be negative",
+      code: "INVALID_HEADER_DISCOUNT",
+    });
   }
-  const taxAmount = money(subtotal.mul(taxRate));
-  return { subtotal, taxAmount, totalAmount: money(subtotal.plus(taxAmount)) };
+  if (headerDiscount.greaterThan(subtotal)) {
+    throw new BadRequestException({
+      message: "Header discount cannot exceed subtotal",
+      code: "HEADER_DISCOUNT_EXCEEDS_SUBTOTAL",
+    });
+  }
+  const netAmount = money(subtotal.minus(headerDiscount));
+  if (tax == null) {
+    return { subtotal, headerDiscountAmount: headerDiscount, taxAmount: null, totalAmount: netAmount };
+  }
+  if (tax.taxRate.isZero()) {
+    return {
+      subtotal,
+      headerDiscountAmount: headerDiscount,
+      taxAmount: money(new Prisma.Decimal(0)),
+      totalAmount: netAmount,
+    };
+  }
+  if (tax.isExclude) {
+    const taxAmount = money(netAmount.mul(tax.taxRate));
+    return {
+      subtotal,
+      headerDiscountAmount: headerDiscount,
+      taxAmount,
+      totalAmount: money(netAmount.plus(taxAmount)),
+    };
+  }
+  const taxAmount = money(netAmount.mul(tax.taxRate).div(tax.taxRate.plus(1)));
+  return { subtotal, headerDiscountAmount: headerDiscount, taxAmount, totalAmount: netAmount };
+}
+
+async function resolveDocumentTax(
+  tx: Prisma.TransactionClient,
+  companyId: string,
+  taxCode: string | null | undefined,
+): Promise<{ taxCode: string; taxRate: Prisma.Decimal; isExclude: boolean } | null> {
+  if (taxCode == null) return null;
+  const tax = await tx.tax.findFirst({
+    where: { companyId, taxCode, isActive: true },
+  });
+  if (!tax) {
+    throw new BadRequestException({
+      message: "Tax not found",
+      code: "TAX_NOT_FOUND",
+    });
+  }
+  return { taxCode: tax.taxCode, taxRate: tax.taxRate, isExclude: tax.isExclude };
 }
 
 async function assertTariffsExist(
@@ -114,24 +190,6 @@ async function assertDevicesBelongToCustomer(
       code: "DEVICE_NOT_FOUND",
     });
   }
-}
-
-async function resolveTaxRate(
-  tx: Prisma.TransactionClient,
-  companyId: string,
-  taxId: string | null | undefined,
-): Promise<Prisma.Decimal | null> {
-  if (taxId == null) return null;
-  const tax = await tx.tax.findFirst({
-    where: { id: taxId, companyId },
-  });
-  if (!tax) {
-    throw new BadRequestException({
-      message: "Tax not found",
-      code: "TAX_NOT_FOUND",
-    });
-  }
-  return tax.taxRate;
 }
 
 async function assertFullScopeItems(
@@ -176,11 +234,13 @@ function buildItemRows(
   description: string;
   qty: Prisma.Decimal;
   unitPrice: Prisma.Decimal;
+  discountAmount: Prisma.Decimal;
   lineTotal: Prisma.Decimal;
 }> {
   return items.map((item) => {
     const qty = toDecimal(item.qty ?? DEFAULT_QTY);
     const unitPrice = toDecimal(item.unitPrice);
+    const line = computeItemLine(qty, unitPrice, toDecimal(item.discountAmount ?? 0));
     return {
       companyId,
       quotationId,
@@ -190,7 +250,8 @@ function buildItemRows(
       description: item.description,
       qty,
       unitPrice,
-      lineTotal: computeLineTotal(qty, unitPrice),
+      discountAmount: line.discountAmount,
+      lineTotal: line.lineTotal,
     };
   });
 }
@@ -246,7 +307,7 @@ export class QuotationsService {
         input.items.flatMap((item) => (item.deviceId ? [item.deviceId] : [])),
       );
 
-      const taxRate = await resolveTaxRate(tx, companyId, input.taxId);
+      const documentTax = await resolveDocumentTax(tx, companyId, input.taxCode);
       const issuedAt = new Date();
       const number = await DocumentNumberService.allocate({
         companyId,
@@ -258,7 +319,8 @@ export class QuotationsService {
       const draftRows = buildItemRows(companyId, "pending", input.items);
       const totals = computeHeaderTotals(
         draftRows.map((row) => row.lineTotal),
-        taxRate,
+        toDecimal(input.headerDiscountAmount ?? 0),
+        documentTax,
       );
 
       const quotation = await tx.quotation.create({
@@ -270,8 +332,10 @@ export class QuotationsService {
           source: input.source ?? "PORTAL",
           status: "DRAFT",
           validUntil: input.validUntil,
-          taxId: input.taxId,
+          taxCode: documentTax?.taxCode ?? null,
+          taxRate: documentTax?.taxRate ?? null,
           subtotal: totals.subtotal,
+          headerDiscountAmount: totals.headerDiscountAmount,
           taxAmount: totals.taxAmount,
           totalAmount: totals.totalAmount,
         },
@@ -411,13 +475,18 @@ export class QuotationsService {
         });
       }
 
-      const taxId = input.taxId !== undefined ? input.taxId : existing.taxId;
-      const taxRate = await resolveTaxRate(tx, companyId, taxId);
+      const taxCode = input.taxCode !== undefined ? input.taxCode : existing.taxCode;
+      const documentTax = await resolveDocumentTax(tx, companyId, taxCode);
+      const headerDiscountAmount =
+        input.headerDiscountAmount !== undefined
+          ? toDecimal(input.headerDiscountAmount)
+          : toDecimal(existing.headerDiscountAmount);
 
       const itemRows = await tx.quotationItem.findMany({ where: { quotationId: id } });
       const totals = computeHeaderTotals(
         itemRows.map((row) => toDecimal(row.lineTotal)),
-        taxRate,
+        headerDiscountAmount,
+        documentTax,
       );
 
       await tx.quotation.update({
@@ -425,8 +494,10 @@ export class QuotationsService {
         data: {
           ...(input.source !== undefined ? { source: input.source } : {}),
           ...(input.validUntil !== undefined ? { validUntil: input.validUntil } : {}),
-          ...(input.taxId !== undefined ? { taxId: input.taxId } : {}),
+          taxCode: documentTax?.taxCode ?? null,
+          taxRate: documentTax?.taxRate ?? null,
           subtotal: totals.subtotal,
+          headerDiscountAmount: totals.headerDiscountAmount,
           taxAmount: totals.taxAmount,
           totalAmount: totals.totalAmount,
         },

@@ -83,6 +83,39 @@ async function getTestDeviceTypeId(): Promise<string> {
   return deviceType.id;
 }
 
+async function ensureTestTax(input: {
+  taxCode: string;
+  taxRate: number;
+  isExclude: boolean;
+  description: string;
+}) {
+  const existing = await prisma.tax.findUnique({
+    where: { companyId_taxCode: { companyId: realCompanyId, taxCode: input.taxCode } },
+  });
+  if (existing) {
+    return prisma.tax.update({
+      where: { id: existing.id },
+      data: {
+        taxRate: input.taxRate,
+        isExclude: input.isExclude,
+        description: input.description,
+        isActive: true,
+      },
+    });
+  }
+  const tax = await prisma.tax.create({
+    data: {
+      companyId: realCompanyId,
+      taxCode: input.taxCode,
+      taxRate: input.taxRate,
+      isExclude: input.isExclude,
+      description: input.description,
+    },
+  });
+  createdTaxIds.push(tax.id);
+  return tax;
+}
+
 async function createSubmittedRequest(
   companyId: string,
   itemCount = 1,
@@ -188,6 +221,32 @@ describe("quotationCreateSchema", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("rejects a negative item discountAmount", () => {
+    expect(
+      quotationCreateSchema.safeParse({
+        requestId: "req-1",
+        items: [
+          {
+            requestItemId: "item-1",
+            description: "Kalibrasi BPM",
+            unitPrice: 100000,
+            discountAmount: -1,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a negative headerDiscountAmount", () => {
+    expect(
+      quotationCreateSchema.safeParse({
+        requestId: "req-1",
+        headerDiscountAmount: -1,
+        items: [{ requestItemId: "item-1", description: "Kalibrasi BPM", unitPrice: 100000 }],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("QuotationsService.create", () => {
@@ -211,8 +270,10 @@ describe("QuotationsService.create", () => {
     expect(result.items[0]?.description).toBe("Kalibrasi DEV-1");
     expect(Number(result.items[0]?.qty)).toBe(1);
     expect(Number(result.items[0]?.unitPrice)).toBe(150_000);
+    expect(Number(result.items[0]?.discountAmount)).toBe(0);
     expect(Number(result.items[0]?.lineTotal)).toBe(150_000);
     expect(Number(result.subtotal)).toBe(150_000);
+    expect(Number(result.headerDiscountAmount)).toBe(0);
     expect(result.taxAmount).toBeNull();
     expect(Number(result.totalAmount)).toBe(150_000);
   });
@@ -252,28 +313,311 @@ describe("QuotationsService.create", () => {
     expect(Number(result.totalAmount)).toBe(150_000);
   });
 
-  it("applies tax to header totals when taxId is provided", async () => {
+  it("applies exclusive tax at document header when isExclude is true", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const tax = await prisma.tax.create({
-      data: {
-        companyId: realCompanyId,
-        taxCode: `PPN${randomUUID().slice(0, 6).toUpperCase()}`,
-        taxRate: 0.11,
-        description: "PPN 11%",
-      },
+    await ensureTestTax({
+      taxCode: "T1",
+      taxRate: 0.11,
+      description: "PPN 11%",
+      isExclude: true,
     });
-    createdTaxIds.push(tax.id);
 
     const result = await quotationsService.create(realCompanyId, {
       requestId: request.id,
-      taxId: tax.id,
+      taxCode: "T1",
+      items: quotationItemsFor(request, 100_000),
+    });
+    createdQuotationIds.push(result.id);
+
+    expect(result.taxCode).toBe("T1");
+    expect(Number(result.taxRate)).toBe(0.11);
+    expect(Number(result.subtotal)).toBe(100_000);
+    expect(Number(result.taxAmount)).toBe(11_000);
+    expect(Number(result.totalAmount)).toBe(111_000);
+    expect(result).not.toHaveProperty("taxId");
+    expect(result).not.toHaveProperty("taxRateSnapshot");
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).not.toHaveProperty("taxCode");
+    expect(result.items[0]).not.toHaveProperty("taxRate");
+    expect(result.items[0]).not.toHaveProperty("taxAmount");
+  });
+
+  it("applies inclusive tax at document header when isExclude is false", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+    await ensureTestTax({
+      taxCode: "T2",
+      taxRate: 0.11,
+      description: "PPN 11%",
+      isExclude: false,
+    });
+
+    const result = await quotationsService.create(realCompanyId, {
+      requestId: request.id,
+      taxCode: "T2",
+      items: quotationItemsFor(request, 111_000),
+    });
+    createdQuotationIds.push(result.id);
+
+    expect(result.taxCode).toBe("T2");
+    expect(Number(result.taxRate)).toBe(0.11);
+    expect(Number(result.subtotal)).toBe(111_000);
+    expect(Number(result.taxAmount)).toBe(11_000);
+    expect(Number(result.totalAmount)).toBe(111_000);
+    expect(result).not.toHaveProperty("taxId");
+    expect(result.items[0]).not.toHaveProperty("taxCode");
+    expect(result.items[0]).not.toHaveProperty("taxRate");
+  });
+
+  it("applies zero-rate tax T0 with taxAmount 0", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+    await ensureTestTax({
+      taxCode: "T0",
+      taxRate: 0,
+      description: "Non PPN",
+      isExclude: false,
+    });
+
+    const result = await quotationsService.create(realCompanyId, {
+      requestId: request.id,
+      taxCode: "T0",
+      items: quotationItemsFor(request, 100_000),
+    });
+    createdQuotationIds.push(result.id);
+
+    expect(result.taxCode).toBe("T0");
+    expect(Number(result.taxRate)).toBe(0);
+    expect(Number(result.taxAmount)).toBe(0);
+    expect(Number(result.totalAmount)).toBe(100_000);
+    expect(result).not.toHaveProperty("taxId");
+    expect(result.items[0]).not.toHaveProperty("taxCode");
+    expect(result.items[0]).not.toHaveProperty("taxRate");
+  });
+
+  it("applies item-level discountAmount to lineTotal", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+
+    const result = await quotationsService.create(realCompanyId, {
+      requestId: request.id,
+      items: request.items.map((item) => ({
+        requestItemId: item.id,
+        description: `Kalibrasi ${item.deviceId}`,
+        qty: 2,
+        unitPrice: 100_000,
+        discountAmount: 20_000,
+      })),
+    });
+    createdQuotationIds.push(result.id);
+
+    expect(Number(result.items[0]?.discountAmount)).toBe(20_000);
+    expect(Number(result.items[0]?.lineTotal)).toBe(180_000);
+    expect(Number(result.subtotal)).toBe(180_000);
+    expect(Number(result.headerDiscountAmount)).toBe(0);
+    expect(Number(result.totalAmount)).toBe(180_000);
+    expect(result.items[0]).not.toHaveProperty("taxCode");
+    expect(result.items[0]).not.toHaveProperty("taxAmount");
+  });
+
+  it("sums multiple item discounts into subtotal", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId, 2);
+
+    const result = await quotationsService.create(realCompanyId, {
+      requestId: request.id,
+      items: request.items.map((item, index) => ({
+        requestItemId: item.id,
+        description: `Item ${index + 1}`,
+        qty: 1,
+        unitPrice: 100_000,
+        discountAmount: index === 0 ? 10_000 : 25_000,
+      })),
+    });
+    createdQuotationIds.push(result.id);
+
+    expect(Number(result.subtotal)).toBe(165_000);
+    expect(Number(result.totalAmount)).toBe(165_000);
+  });
+
+  it("applies headerDiscountAmount after item discounts", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+
+    const result = await quotationsService.create(realCompanyId, {
+      requestId: request.id,
+      headerDiscountAmount: 30_000,
       items: quotationItemsFor(request, 100_000),
     });
     createdQuotationIds.push(result.id);
 
     expect(Number(result.subtotal)).toBe(100_000);
+    expect(Number(result.headerDiscountAmount)).toBe(30_000);
+    expect(Number(result.totalAmount)).toBe(70_000);
+  });
+
+  it("applies item discount then header discount then exclusive tax", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+    await ensureTestTax({
+      taxCode: "T1",
+      taxRate: 0.11,
+      description: "PPN 11%",
+      isExclude: true,
+    });
+
+    const result = await quotationsService.create(realCompanyId, {
+      requestId: request.id,
+      taxCode: "T1",
+      headerDiscountAmount: 30_000,
+      items: request.items.map((item) => ({
+        requestItemId: item.id,
+        description: `Kalibrasi ${item.deviceId}`,
+        qty: 2,
+        unitPrice: 100_000,
+        discountAmount: 20_000,
+      })),
+    });
+    createdQuotationIds.push(result.id);
+
+    expect(Number(result.items[0]?.lineTotal)).toBe(180_000);
+    expect(Number(result.subtotal)).toBe(180_000);
+    expect(Number(result.headerDiscountAmount)).toBe(30_000);
+    expect(Number(result.taxAmount)).toBe(16_500);
+    expect(Number(result.totalAmount)).toBe(166_500);
+  });
+
+  it("applies item discount then header discount then inclusive tax", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+    await ensureTestTax({
+      taxCode: "T2",
+      taxRate: 0.11,
+      description: "PPN 11%",
+      isExclude: false,
+    });
+
+    const result = await quotationsService.create(realCompanyId, {
+      requestId: request.id,
+      taxCode: "T2",
+      headerDiscountAmount: 39_000,
+      items: request.items.map((item) => ({
+        requestItemId: item.id,
+        description: `Kalibrasi ${item.deviceId}`,
+        qty: 2,
+        unitPrice: 80_000,
+        discountAmount: 10_000,
+      })),
+    });
+    createdQuotationIds.push(result.id);
+
+    expect(Number(result.items[0]?.lineTotal)).toBe(150_000);
+    expect(Number(result.subtotal)).toBe(150_000);
+    expect(Number(result.headerDiscountAmount)).toBe(39_000);
     expect(Number(result.taxAmount)).toBe(11_000);
     expect(Number(result.totalAmount)).toBe(111_000);
+  });
+
+  it("keeps taxAmount 0 for T0 after discounts", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+    await ensureTestTax({
+      taxCode: "T0",
+      taxRate: 0,
+      description: "Non PPN",
+      isExclude: false,
+    });
+
+    const result = await quotationsService.create(realCompanyId, {
+      requestId: request.id,
+      taxCode: "T0",
+      headerDiscountAmount: 30_000,
+      items: request.items.map((item) => ({
+        requestItemId: item.id,
+        description: `Kalibrasi ${item.deviceId}`,
+        qty: 2,
+        unitPrice: 100_000,
+        discountAmount: 20_000,
+      })),
+    });
+    createdQuotationIds.push(result.id);
+
+    expect(Number(result.taxAmount)).toBe(0);
+    expect(Number(result.totalAmount)).toBe(150_000);
+  });
+
+  it("rejects a negative item discountAmount", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+
+    try {
+      await quotationsService.create(realCompanyId, {
+        requestId: request.id,
+        items: request.items.map((item) => ({
+          requestItemId: item.id,
+          description: `Kalibrasi ${item.deviceId}`,
+          qty: 1,
+          unitPrice: 100_000,
+          discountAmount: -1,
+        })),
+      });
+      expect.fail("expected INVALID_ITEM_DISCOUNT");
+    } catch (err) {
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: "INVALID_ITEM_DISCOUNT" }),
+      );
+    }
+  });
+
+  it("rejects item discount greater than gross line amount", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+
+    try {
+      await quotationsService.create(realCompanyId, {
+        requestId: request.id,
+        items: request.items.map((item) => ({
+          requestItemId: item.id,
+          description: `Kalibrasi ${item.deviceId}`,
+          qty: 1,
+          unitPrice: 100_000,
+          discountAmount: 100_001,
+        })),
+      });
+      expect.fail("expected ITEM_DISCOUNT_EXCEEDS_GROSS");
+    } catch (err) {
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: "ITEM_DISCOUNT_EXCEEDS_GROSS" }),
+      );
+    }
+  });
+
+  it("rejects a negative headerDiscountAmount", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+
+    try {
+      await quotationsService.create(realCompanyId, {
+        requestId: request.id,
+        headerDiscountAmount: -1,
+        items: quotationItemsFor(request, 100_000),
+      });
+      expect.fail("expected INVALID_HEADER_DISCOUNT");
+    } catch (err) {
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: "INVALID_HEADER_DISCOUNT" }),
+      );
+    }
+  });
+
+  it("rejects headerDiscountAmount greater than subtotal", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+
+    try {
+      await quotationsService.create(realCompanyId, {
+        requestId: request.id,
+        headerDiscountAmount: 100_001,
+        items: quotationItemsFor(request, 100_000),
+      });
+      expect.fail("expected HEADER_DISCOUNT_EXCEEDS_SUBTOTAL");
+    } catch (err) {
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: "HEADER_DISCOUNT_EXCEEDS_SUBTOTAL" }),
+      );
+    }
   });
 
   it("rejects creation when CalibrationRequest is still DRAFT", async () => {
@@ -524,10 +868,28 @@ describe("QuotationsService.update", () => {
     expect(updated.source).toBe("PHONE");
     expect(updated.validUntil).toEqual(validUntil);
     expect(Number(updated.subtotal)).toBe(200_000);
+    expect(Number(updated.headerDiscountAmount)).toBe(0);
     expect(Number(updated.totalAmount)).toBe(200_000);
   });
 
-  it("clears tax when taxId is set to null", async () => {
+  it("updates headerDiscountAmount and recomputes totals", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+    const created = await quotationsService.create(realCompanyId, {
+      requestId: request.id,
+      items: quotationItemsFor(request, 100_000),
+    });
+    createdQuotationIds.push(created.id);
+
+    const updated = await quotationsService.update(realCompanyId, created.id, {
+      headerDiscountAmount: 20_000,
+    });
+
+    expect(Number(updated.subtotal)).toBe(100_000);
+    expect(Number(updated.headerDiscountAmount)).toBe(20_000);
+    expect(Number(updated.totalAmount)).toBe(80_000);
+  });
+
+  it("clears tax when taxCode is set to null", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
     const tax = await prisma.tax.create({
       data: {
@@ -535,20 +897,22 @@ describe("QuotationsService.update", () => {
         taxCode: `CLR${randomUUID().slice(0, 6).toUpperCase()}`,
         taxRate: 0.11,
         description: "PPN",
+        isExclude: true,
       },
     });
     createdTaxIds.push(tax.id);
 
     const created = await quotationsService.create(realCompanyId, {
       requestId: request.id,
-      taxId: tax.id,
+      taxCode: tax.taxCode,
       items: quotationItemsFor(request, 100_000),
     });
     createdQuotationIds.push(created.id);
     expect(Number(created.taxAmount)).toBe(11_000);
 
-    const updated = await quotationsService.update(realCompanyId, created.id, { taxId: null });
-    expect(updated.taxId).toBeNull();
+    const updated = await quotationsService.update(realCompanyId, created.id, { taxCode: null });
+    expect(updated.taxCode).toBeNull();
+    expect(updated.taxRate).toBeNull();
     expect(updated.taxAmount).toBeNull();
     expect(Number(updated.totalAmount)).toBe(100_000);
   });

@@ -18,11 +18,14 @@ import {
   selectClassName,
   type QuotationFormItem,
   type QuotationSource,
+  type TaxOption,
 } from "./quotations-ui";
 
 export type QuotationFormValue = {
   source: QuotationSource;
   validUntil: Date | undefined;
+  taxCode: string;
+  headerDiscountAmount: string;
   items: QuotationFormItem[];
 };
 
@@ -31,13 +34,18 @@ export function QuotationFormFields({
   onChange,
   dateOpen,
   onDateOpenChange,
+  taxes,
+  taxesLoading,
 }: {
   value: QuotationFormValue;
   onChange: (next: QuotationFormValue) => void;
   dateOpen: boolean;
   onDateOpenChange: (open: boolean) => void;
+  taxes: TaxOption[];
+  taxesLoading?: boolean;
 }) {
-  const totals = previewTotals(value.items);
+  const selectedTax = taxes.find((tax) => tax.taxCode === value.taxCode) ?? null;
+  const totals = previewTotals(value.items, selectedTax, value.headerDiscountAmount);
 
   function updateItem(index: number, patch: Partial<QuotationFormItem>) {
     onChange({
@@ -50,8 +58,8 @@ export function QuotationFormFields({
     <div className="space-y-6">
       <section className="space-y-4">
         <h2 className="text-base font-semibold text-slate-900">Quotation Information</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="min-w-0">
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Source</label>
             <select
               value={value.source}
@@ -67,7 +75,7 @@ export function QuotationFormFields({
               ))}
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Valid Until</label>
             <Popover open={dateOpen} onOpenChange={onDateOpenChange}>
               <PopoverTrigger asChild>
@@ -75,7 +83,7 @@ export function QuotationFormFields({
                   type="button"
                   variant="outline"
                   className={cn(
-                    "w-full justify-start font-normal",
+                    "h-9 w-full justify-start font-normal",
                     !value.validUntil && "text-slate-400",
                   )}
                 >
@@ -119,6 +127,24 @@ export function QuotationFormFields({
               </PopoverContent>
             </Popover>
           </div>
+          <div className="min-w-0">
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Tax</label>
+            <select
+              value={value.taxCode}
+              onChange={(e) => onChange({ ...value, taxCode: e.target.value })}
+              className={cn(selectClassName, "w-full")}
+              disabled={taxesLoading}
+              required
+              aria-label="Tax code"
+            >
+              <option value="">{taxesLoading ? "Memuat tax…" : "Pilih tax…"}</option>
+              {taxes.map((tax) => (
+                <option key={tax.taxCode} value={tax.taxCode}>
+                  {tax.taxCode} — {tax.description}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </section>
 
@@ -131,19 +157,22 @@ export function QuotationFormFields({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px]">
+          <table className="w-full min-w-[840px]">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                 <th className="px-3 py-2">Device</th>
                 <th className="px-3 py-2">Deskripsi</th>
                 <th className="px-3 py-2 w-24">Qty</th>
-                <th className="px-3 py-2 w-40">Unit Price</th>
+                <th className="px-3 py-2 w-36">Unit Price</th>
+                <th className="px-3 py-2 w-36">Discount</th>
                 <th className="px-3 py-2 text-right">Line Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {value.items.map((item, index) => {
-                const lineTotal = moneyNumber(item.qty || "1") * moneyNumber(item.unitPrice);
+                const lineTotal =
+                  moneyNumber(item.qty || "1") * moneyNumber(item.unitPrice) -
+                  moneyNumber(item.discountAmount);
                 return (
                   <tr key={item.requestItemId}>
                     <td className="px-3 py-3 align-top">
@@ -188,6 +217,16 @@ export function QuotationFormFields({
                         aria-label={`Unit price item ${index + 1}`}
                       />
                     </td>
+                    <td className="px-3 py-3 align-top">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={item.discountAmount}
+                        onChange={(e) => updateItem(index, { discountAmount: e.target.value })}
+                        aria-label={`Discount item ${index + 1}`}
+                      />
+                    </td>
                     <td className="px-3 py-3 align-top text-right text-sm font-medium text-slate-900">
                       {formatIdr(lineTotal)}
                     </td>
@@ -200,7 +239,13 @@ export function QuotationFormFields({
 
         <QuotationTotals
           subtotal={totals.subtotal}
-          taxAmount={null}
+          headerDiscountInput={value.headerDiscountAmount}
+          onHeaderDiscountChange={(headerDiscountAmount) =>
+            onChange({ ...value, headerDiscountAmount })
+          }
+          taxCode={selectedTax?.taxCode ?? null}
+          taxRate={selectedTax?.taxRate ?? null}
+          taxAmount={totals.taxAmount}
           totalAmount={totals.totalAmount}
         />
       </section>

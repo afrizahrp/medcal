@@ -48,11 +48,12 @@ export interface QuotationRequestRef {
   customerId: string;
 }
 
-export interface QuotationTax {
-  id: string;
+export interface TaxOption {
   taxCode: string;
   taxRate: MoneyValue;
   description: string;
+  isExclude: boolean;
+  isActive: boolean;
 }
 
 export interface QuotationItemDeviceType {
@@ -76,6 +77,7 @@ export interface QuotationItem {
   description: string;
   qty: MoneyValue;
   unitPrice: MoneyValue;
+  discountAmount: MoneyValue;
   lineTotal: MoneyValue;
   requestItem: QuotationItemRequestItem | null;
   tariff: { id: string; code: string; name: string; unitPrice: MoneyValue; currency: string } | null;
@@ -92,7 +94,9 @@ export interface QuotationRow {
   status: QuotationStatus;
   validUntil: string | null;
   subtotal: MoneyValue;
-  taxId: string | null;
+  headerDiscountAmount: MoneyValue;
+  taxCode: string | null;
+  taxRate: MoneyValue | null;
   taxAmount: MoneyValue | null;
   totalAmount: MoneyValue;
   currency: string;
@@ -104,7 +108,6 @@ export interface QuotationRow {
   items: QuotationItem[];
   customer: QuotationCustomer;
   request: QuotationRequestRef;
-  tax: QuotationTax | null;
 }
 
 export interface QuotationListResponse {
@@ -325,13 +328,21 @@ export function QuotationEmptyState({
 
 export function QuotationTotals({
   subtotal,
+  headerDiscountAmount,
+  headerDiscountInput,
+  onHeaderDiscountChange,
+  taxCode,
+  taxRate,
   taxAmount,
-  tax,
   totalAmount,
 }: {
   subtotal: MoneyValue;
+  headerDiscountAmount?: MoneyValue | null;
+  headerDiscountInput?: string;
+  onHeaderDiscountChange?: (value: string) => void;
+  taxCode?: string | null;
+  taxRate?: MoneyValue | null;
   taxAmount: MoneyValue | null;
-  tax?: QuotationTax | null;
   totalAmount: MoneyValue;
 }) {
   return (
@@ -340,15 +351,33 @@ export function QuotationTotals({
         <dt className="text-slate-500">Subtotal</dt>
         <dd className="font-medium text-slate-900">{formatIdr(subtotal)}</dd>
       </div>
-      {tax || taxAmount != null ? (
+      <div className="flex items-center justify-between gap-4">
+        <dt className="text-slate-500">Header Discount</dt>
+        <dd>
+          {onHeaderDiscountChange ? (
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              value={headerDiscountInput ?? ""}
+              onChange={(e) => onHeaderDiscountChange(e.target.value)}
+              className="h-8 w-32 text-right"
+              aria-label="Header discount"
+            />
+          ) : (
+            <span className="font-medium text-slate-900">{formatIdr(headerDiscountAmount)}</span>
+          )}
+        </dd>
+      </div>
+      {taxCode || taxAmount != null ? (
         <div className="flex justify-between gap-4">
           <dt className="text-slate-500">
             Tax
-            {tax ? (
+            {taxCode ? (
               <span className="ml-1 text-xs text-slate-400">
-                ({tax.taxCode}
-                {moneyNumber(tax.taxRate) > 0
-                  ? ` ${new Intl.NumberFormat("id-ID", { style: "percent", maximumFractionDigits: 2 }).format(moneyNumber(tax.taxRate))}`
+                ({taxCode}
+                {moneyNumber(taxRate) > 0
+                  ? ` ${new Intl.NumberFormat("id-ID", { style: "percent", maximumFractionDigits: 2 }).format(moneyNumber(taxRate))}`
                   : ""}
                 )
               </span>
@@ -375,6 +404,7 @@ export type QuotationFormItem = {
   description: string;
   qty: string;
   unitPrice: string;
+  discountAmount: string;
   deviceLabel: string;
   deviceIdLabel: string;
 };
@@ -391,6 +421,7 @@ export function itemsFromRequest(
     description: item.deviceType.name,
     qty: "1",
     unitPrice: "",
+    discountAmount: "0",
     deviceLabel: item.deviceType.name,
     deviceIdLabel: item.deviceId,
   }));
@@ -402,21 +433,48 @@ export function itemsFromQuotation(quotation: QuotationRow): QuotationFormItem[]
     description: item.description,
     qty: formatQty(item.qty),
     unitPrice: String(item.unitPrice),
+    discountAmount: String(item.discountAmount ?? 0),
     deviceLabel: item.requestItem?.deviceType.name ?? item.description,
     deviceIdLabel: item.requestItem?.deviceId ?? "—",
   }));
 }
 
-export function previewTotals(items: QuotationFormItem[]): {
+export function previewTotals(
+  items: QuotationFormItem[],
+  tax?: Pick<TaxOption, "taxRate" | "isExclude"> | null,
+  headerDiscountAmount?: MoneyValue | null,
+): {
   subtotal: number;
+  headerDiscountAmount: number;
+  taxAmount: number | null;
   totalAmount: number;
 } {
   const subtotal = items.reduce((sum, item) => {
     const qty = moneyNumber(item.qty || "1");
     const unitPrice = moneyNumber(item.unitPrice);
-    return sum + qty * unitPrice;
+    const discount = moneyNumber(item.discountAmount);
+    return sum + (qty * unitPrice - discount);
   }, 0);
-  return { subtotal, totalAmount: subtotal };
+  const headerDiscount = moneyNumber(headerDiscountAmount);
+  const netAmount = subtotal - headerDiscount;
+  if (!tax) {
+    return { subtotal, headerDiscountAmount: headerDiscount, taxAmount: null, totalAmount: netAmount };
+  }
+  const rate = moneyNumber(tax.taxRate);
+  if (rate === 0) {
+    return { subtotal, headerDiscountAmount: headerDiscount, taxAmount: 0, totalAmount: netAmount };
+  }
+  if (tax.isExclude) {
+    const taxAmount = netAmount * rate;
+    return {
+      subtotal,
+      headerDiscountAmount: headerDiscount,
+      taxAmount,
+      totalAmount: netAmount + taxAmount,
+    };
+  }
+  const taxAmount = (netAmount * rate) / (1 + rate);
+  return { subtotal, headerDiscountAmount: headerDiscount, taxAmount, totalAmount: netAmount };
 }
 
 export function formatQuotationApiError(
@@ -439,6 +497,10 @@ export function formatQuotationApiError(
       TARIFF_NOT_FOUND: "Satu atau lebih tariff tidak ditemukan.",
       DEVICE_NOT_FOUND: "Satu atau lebih device tidak ditemukan untuk customer ini.",
       TAX_NOT_FOUND: "Tax tidak ditemukan.",
+      INVALID_ITEM_DISCOUNT: "Diskon item tidak boleh negatif.",
+      ITEM_DISCOUNT_EXCEEDS_GROSS: "Diskon item tidak boleh melebihi jumlah bruto item.",
+      INVALID_HEADER_DISCOUNT: "Header discount tidak boleh negatif.",
+      HEADER_DISCOUNT_EXCEEDS_SUBTOTAL: "Header discount tidak boleh melebihi subtotal.",
       INVALID_STATUS_FOR_UPDATE: "Hanya quotation DRAFT yang dapat diedit.",
       INVALID_STATUS_FOR_SEND: "Hanya quotation DRAFT yang dapat dikirim.",
       INVALID_STATUS_FOR_APPROVE: "Hanya quotation SENT yang dapat di-approve.",
