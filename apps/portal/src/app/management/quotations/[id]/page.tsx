@@ -381,7 +381,7 @@ export default function QuotationDetailPage() {
       <ConfirmDialog
         open={confirmAction === "approve"}
         title="Approve this Quotation?"
-        description="After approval, all Quotation inputs will be locked."
+        description="Setelah disetujui, semua input quotation akan terkunci."
         confirmLabel="Approve"
         onConfirm={() => runAction("approve")}
         onCancel={() => setConfirmAction(null)}

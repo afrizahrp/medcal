@@ -58,6 +58,11 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "ADMIN", resource: "purchaseOrder", action: "update" },
   { role: "ADMIN", resource: "purchaseOrder", action: "cancel" },
   { role: "ADMIN", resource: "purchaseOrder", action: "approve" },
+  { role: "ADMIN", resource: "workOrder", action: "read" },
+  { role: "ADMIN", resource: "workOrder", action: "create" },
+  { role: "ADMIN", resource: "workOrder", action: "update" },
+  { role: "ADMIN", resource: "workOrder", action: "cancel" },
+  { role: "ADMIN", resource: "workOrder", action: "assign" },
   // System Settings (2026-08-26)
   { role: "ADMIN", resource: "tax", action: "manage" },
   // UOM Master Data (2026-08-26)

@@ -148,9 +148,13 @@ enum WorkOrderStatus {
   PLANNED
   ASSIGNED
   IN_PROGRESS
+  /// Legacy value retained for migration safety. WorkOrder API must not use it.
   TECHNICALLY_DONE
+  /// Legacy value retained for migration safety. WorkOrder API must not use it.
   CLOSED
   CANCELLED
+  /// MVP terminal-complete status. Replaces TECHNICALLY_DONE / CLOSED in the API.
+  DONE
 }
 
 enum AssignmentRole {
@@ -1223,6 +1227,7 @@ model PurchaseOrderItem {
   tariff          ServiceTariff?   @relation(fields: [tariffId], references: [id], onDelete: SetNull)
   workOrder       WorkOrder?       @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
   calibrationJobs CalibrationJob[]
+  workOrderItems  WorkOrderItem[]
 
   @@unique([purchaseOrderId, quotationItemId])
   @@index([purchaseOrderId])
@@ -1233,7 +1238,7 @@ model WorkOrder {
   id              String          @id @default(cuid())
   companyId       String
   quotationId     String
-  purchaseOrderId String?
+  purchaseOrderId String
   customerId      String
   number          String
   serviceMode     ServiceMode
@@ -1249,16 +1254,39 @@ model WorkOrder {
 
   company            Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   quotation          Quotation             @relation(fields: [quotationId], references: [id])
-  purchaseOrder      PurchaseOrder?        @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  purchaseOrder      PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
   customer           Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items              WorkOrderItem[]
   assignments        WorkOrderAssignment[]
   jobs               CalibrationJob[]
+  /// Legacy allocation pointer on PurchaseOrderItem. Unused by WorkOrder MVP.
   purchaseOrderItems PurchaseOrderItem[]
 
   @@unique([companyId, number])
   @@index([companyId, status])
   @@index([quotationId])
   @@index([purchaseOrderId])
+  /// Partial unique index `WorkOrder_purchaseOrderId_active_key` (status <> CANCELLED)
+  /// is created in SQL. Prisma cannot model it; do not add @@unique([purchaseOrderId]).
+}
+
+/// Operational snapshot of a PurchaseOrderItem. MVP copies every PO item 1:1.
+/// Quantity and source identity are immutable after create.
+model WorkOrderItem {
+  id                  String   @id @default(cuid())
+  companyId           String
+  workOrderId         String
+  purchaseOrderItemId String
+  description         String
+  qty                 Decimal  @default(1) @db.Decimal(18, 4)
+  createdAt           DateTime @default(now())
+
+  workOrder         WorkOrder         @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  purchaseOrderItem PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+
+  @@unique([workOrderId, purchaseOrderItemId])
+  @@index([workOrderId])
+  @@index([purchaseOrderItemId])
 }
 
 model WorkOrderAssignment {

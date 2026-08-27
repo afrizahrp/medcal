@@ -44,6 +44,7 @@ const ICONS = [
   "gauge",
   "clipboardList",
   "messageSquareQuote",
+  "wrench",
 ] as const;
 
 const selectClassName =

@@ -84,6 +84,11 @@ const FIXTURE: GrantRow[] = [
   { role: "ADMIN", resource: "purchaseOrder", action: "update" },
   { role: "ADMIN", resource: "purchaseOrder", action: "cancel" },
   { role: "ADMIN", resource: "purchaseOrder", action: "approve" },
+  { role: "ADMIN", resource: "workOrder", action: "read" },
+  { role: "ADMIN", resource: "workOrder", action: "create" },
+  { role: "ADMIN", resource: "workOrder", action: "update" },
+  { role: "ADMIN", resource: "workOrder", action: "cancel" },
+  { role: "ADMIN", resource: "workOrder", action: "assign" },
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   { role: "SUPERVISOR", resource: "users", action: "read" },
   { role: "SUPERVISOR", resource: "membership", action: "manage" },
@@ -342,6 +347,23 @@ describe("hasPermission — purchaseOrder resource", () => {
     expect(hasPermission("ADMIN", "purchaseOrder", "update")).toBe(true);
     expect(hasPermission("ADMIN", "purchaseOrder", "cancel")).toBe(true);
     expect(hasPermission("ADMIN", "purchaseOrder", "approve")).toBe(true);
+  });
+});
+
+describe("hasPermission — workOrder resource", () => {
+  it("grants ADMIN workOrder read/create/update/cancel/assign", () => {
+    expect(hasPermission("ADMIN", "workOrder", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "workOrder", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "workOrder", "update")).toBe(true);
+    expect(hasPermission("ADMIN", "workOrder", "cancel")).toBe(true);
+    expect(hasPermission("ADMIN", "workOrder", "assign")).toBe(true);
+  });
+
+  it("denies roles with no workOrder grant", () => {
+    expect(hasPermission("SUPERVISOR", "workOrder", "read")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "workOrder", "assign")).toBe(false);
+    expect(hasPermission("FINANCE", "workOrder", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER", "workOrder", "read")).toBe(false);
   });
 });
 

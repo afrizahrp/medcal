@@ -216,6 +216,17 @@ const ROWS: MenuSeedRow[] = [
     viewResource: "purchaseOrder",
     viewAction: "read",
   },
+  {
+    application: "MANAGEMENT",
+    code: "calibration-management.work-orders",
+    parentCode: "calibration-management",
+    label: "Work Order",
+    href: "/work-orders",
+    icon: "wrench",
+    order: 4,
+    viewResource: "workOrder",
+    viewAction: "read",
+  },
 
   // ─────────────────────────────────────────────────────────────────────────
   // User Management (group) → order: 4

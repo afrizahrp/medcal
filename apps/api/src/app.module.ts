@@ -16,6 +16,7 @@ import { CustomersModule } from "./modules/customers/customers.module";
 import { CalibrationRequestsModule } from "./modules/calibration-requests/calibration-requests.module";
 import { QuotationsModule } from "./modules/quotations/quotations.module";
 import { PurchaseOrdersModule } from "./modules/purchase-orders/purchase-orders.module";
+import { WorkOrdersModule } from "./modules/work-orders/work-orders.module";
 import { UomsModule } from "./modules/uoms/uoms.module";
 import { DeviceCategoriesModule } from "./modules/device-categories/device-categories.module";
 import { DeviceTypesModule } from "./modules/device-types/device-types.module";
@@ -34,6 +35,7 @@ import { TaxesModule } from "./modules/taxes/taxes.module";
     CalibrationRequestsModule,
     QuotationsModule,
     PurchaseOrdersModule,
+    WorkOrdersModule,
     UomsModule,
     DeviceCategoriesModule,
     DeviceTypesModule,

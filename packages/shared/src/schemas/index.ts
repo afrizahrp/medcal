@@ -440,6 +440,77 @@ export const purchaseOrderUpdateSchema = z.object({
 export type PurchaseOrderUpdateInput = z.infer<typeof purchaseOrderUpdateSchema>;
 
 // =============================================================================
+// WorkOrder (APPROVED PurchaseOrder → WorkOrder)
+// =============================================================================
+
+const workOrderStatusValues = [
+  "PLANNED",
+  "ASSIGNED",
+  "IN_PROGRESS",
+  "DONE",
+  "CANCELLED",
+] as const;
+
+const assignmentRoleValues = ["LEAD", "ASSIST"] as const;
+
+const workOrderNullableString = z.string().max(2000).nullable().optional();
+const workOrderNullableCoord = z.coerce.number().finite().nullable().optional();
+const workOrderNullableDate = z.coerce.date().nullable().optional();
+
+/** POST /work-orders body — source/commercial values are derived from the PO. */
+export const workOrderCreateSchema = z.object({
+  purchaseOrderId: z.string().min(1),
+  addressText: workOrderNullableString,
+  geoLat: workOrderNullableCoord,
+  geoLng: workOrderNullableCoord,
+  locationNotes: workOrderNullableString,
+  scheduledStart: workOrderNullableDate,
+  scheduledEnd: workOrderNullableDate,
+});
+
+export type WorkOrderCreateInput = z.infer<typeof workOrderCreateSchema>;
+
+/** GET /work-orders query params */
+export const workOrderListQuerySchema = baseListQuerySchema.extend({
+  status: z.enum(workOrderStatusValues).optional(),
+  customerId: z.string().optional(),
+  purchaseOrderId: z.string().optional(),
+  quotationId: z.string().optional(),
+});
+
+export type WorkOrderListQuery = z.infer<typeof workOrderListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /work-orders — see resolveSortOrder. */
+export const WORK_ORDER_SORTABLE_FIELDS = ["createdAt", "number", "status"] as const;
+
+/** PATCH /work-orders/:id body (only allowed while non-terminal). */
+export const workOrderUpdateSchema = z.object({
+  serviceMode: z.enum(serviceModeValues).optional(),
+  addressText: workOrderNullableString,
+  geoLat: workOrderNullableCoord,
+  geoLng: workOrderNullableCoord,
+  locationNotes: workOrderNullableString,
+  scheduledStart: workOrderNullableDate,
+  scheduledEnd: workOrderNullableDate,
+});
+
+export type WorkOrderUpdateInput = z.infer<typeof workOrderUpdateSchema>;
+
+/** POST /work-orders/:id/assign body */
+export const workOrderAssignSchema = z.object({
+  technicians: z
+    .array(
+      z.object({
+        technicianUserId: z.string().min(1),
+        roleOnJob: z.enum(assignmentRoleValues).optional(),
+      }),
+    )
+    .min(1),
+});
+
+export type WorkOrderAssignInput = z.infer<typeof workOrderAssignSchema>;
+
+// =============================================================================
 // UOM (Unit of Measurement) Master Data
 // =============================================================================
 

@@ -21,7 +21,8 @@ export type ManagementNavIcon =
   | "fileText"
   | "gauge"
   | "clipboardList"
-  | "messageSquareQuote";
+  | "messageSquareQuote"
+  | "wrench";
 
 export interface NavItem {
   label: string;

@@ -78,6 +78,11 @@ const ME_A = {
     purchaseOrderUpdate: true,
     purchaseOrderCancel: true,
     purchaseOrderApprove: true,
+    workOrderRead: true,
+    workOrderCreate: true,
+    workOrderUpdate: true,
+    workOrderCancel: true,
+    workOrderAssign: true,
     taxManage: true,
   },
 };
@@ -140,6 +145,11 @@ const ME_B = {
     purchaseOrderUpdate: false,
     purchaseOrderCancel: false,
     purchaseOrderApprove: false,
+    workOrderRead: false,
+    workOrderCreate: false,
+    workOrderUpdate: false,
+    workOrderCancel: false,
+    workOrderAssign: false,
     taxManage: false,
   },
 };

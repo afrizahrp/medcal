@@ -10,6 +10,7 @@ import {
   MessageSquareQuote,
   SlidersHorizontal,
   Tags,
+  Wrench,
 } from "lucide-react";
 import type { ManagementNavIcon } from "../../app/management/nav-config";
 
@@ -292,6 +293,8 @@ export function NavIcon({
       return <ClipboardList {...props} />;
     case "messageSquareQuote":
       return <MessageSquareQuote {...props} />;
+    case "wrench":
+      return <Wrench {...props} />;
     default:
       return null;
   }

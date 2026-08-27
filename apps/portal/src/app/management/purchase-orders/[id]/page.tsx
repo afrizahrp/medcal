@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, Edit, Printer, X } from "lucide-react";
+import { ArrowLeft, Check, Edit, Plus, Printer, Wrench, X } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,12 @@ import {
   useCancelPurchaseOrder,
   usePurchaseOrder,
 } from "../use-purchase-orders-query";
+import {
+  canCreateWorkOrderFromPurchaseOrder,
+  findActiveWorkOrder,
+} from "../../work-orders/work-order-form-utils";
+import { StatusBadge as WorkOrderStatusBadge, type WorkOrderRow } from "../../work-orders/work-orders-ui";
+import { useWorkOrders } from "../../work-orders/use-work-orders-query";
 
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -45,6 +51,18 @@ export default function PurchaseOrderDetailPage() {
   const taxesQuery = useTaxes();
   const approveMutation = useApprovePurchaseOrder();
   const cancelMutation = useCancelPurchaseOrder();
+  const workOrderQuery = useWorkOrders(
+    {
+      search: "",
+      status: "",
+      purchaseOrderId: params.id,
+      sortBy: "createdAt",
+      sortDir: "desc",
+      page: 1,
+      pageSize: 20,
+    },
+    Boolean(params.id && capabilities?.workOrderRead),
+  );
 
   const [confirmAction, setConfirmAction] = useState<"approve" | "cancel" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -238,6 +256,19 @@ export default function PurchaseOrderDetailPage() {
           />
         </div>
 
+        {capabilities?.workOrderRead || capabilities?.workOrderCreate ? (
+          <PurchaseOrderWorkOrderSection
+            purchaseOrderId={purchaseOrder.id}
+            purchaseOrderStatus={purchaseOrder.status}
+            canCreate={Boolean(capabilities?.workOrderCreate)}
+            canRead={Boolean(capabilities?.workOrderRead)}
+            queryLoading={workOrderQuery.isLoading}
+            queryError={workOrderQuery.isError}
+            queryForbidden={isForbidden(workOrderQuery.error)}
+            rows={workOrderQuery.data?.data ?? []}
+          />
+        ) : null}
+
         <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" onClick={handlePrint} disabled={printPending}>
             <Printer className="h-4 w-4" />
@@ -272,7 +303,7 @@ export default function PurchaseOrderDetailPage() {
       <ConfirmDialog
         open={confirmAction === "approve"}
         title="Approve this Purchase Order?"
-        description="After approval, all PO fields will be locked."
+        description="Setelah disetujui, semua field PO akan terkunci."
         confirmLabel="Approve"
         onConfirm={() => runAction("approve")}
         onCancel={() => setConfirmAction(null)}
@@ -281,7 +312,7 @@ export default function PurchaseOrderDetailPage() {
       <ConfirmDialog
         open={confirmAction === "cancel"}
         title="Cancel this Purchase Order?"
-        description="This action cannot be undone."
+        description="Tindakan ini tidak dapat dibatalkan."
         confirmLabel="Cancel Purchase Order"
         onConfirm={() => runAction("cancel")}
         onCancel={() => setConfirmAction(null)}
@@ -302,6 +333,83 @@ function CreatedBanner() {
       <p className="mt-1 text-sm text-emerald-800">
         Lengkapi Customer PO No jika perlu, lalu approve untuk mengunci dokumen.
       </p>
+    </div>
+  );
+}
+
+function PurchaseOrderWorkOrderSection({
+  purchaseOrderId,
+  purchaseOrderStatus,
+  canCreate,
+  canRead,
+  queryLoading,
+  queryError,
+  queryForbidden,
+  rows,
+}: {
+  purchaseOrderId: string;
+  purchaseOrderStatus: string;
+  canCreate: boolean;
+  canRead: boolean;
+  queryLoading: boolean;
+  queryError: boolean;
+  queryForbidden: boolean;
+  rows: WorkOrderRow[];
+}) {
+  const activeWorkOrder = findActiveWorkOrder(rows);
+  const cancelledOnly = rows.length > 0 && !activeWorkOrder;
+  const eligible = canCreateWorkOrderFromPurchaseOrder({ status: purchaseOrderStatus });
+  const showCreate =
+    canCreate && eligible && !queryLoading && !activeWorkOrder && (!canRead || !queryError);
+
+  return (
+    <div className="mt-5 border-t border-slate-100 pt-5">
+      <h3 className="text-sm font-semibold text-slate-900">Work Order</h3>
+      {queryForbidden ? null : queryLoading ? (
+        <p className="mt-2 text-sm text-slate-400">Memuat…</p>
+      ) : canRead && queryError ? (
+        <p className="mt-2 text-sm text-red-600">Gagal memuat work order.</p>
+      ) : activeWorkOrder ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+          <div>
+            <Link
+              href={`/work-orders/${activeWorkOrder.id}`}
+              className="font-mono text-sm font-medium text-brand-700 hover:underline"
+            >
+              {activeWorkOrder.number}
+            </Link>
+            <div className="mt-1">
+              <WorkOrderStatusBadge status={activeWorkOrder.status} />
+            </div>
+          </div>
+          <Button type="button" variant="outline" size="sm" asChild>
+            <Link href={`/work-orders/${activeWorkOrder.id}`}>
+              <Wrench className="h-4 w-4" />
+              View Work Order
+            </Link>
+          </Button>
+        </div>
+      ) : showCreate ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-3">
+          <p className="text-sm text-slate-600">
+            {cancelledOnly
+              ? "Work Order sebelumnya dibatalkan. Purchase Order ini dapat dibuatkan SPK baru."
+              : "Belum ada work order untuk purchase order ini."}
+          </p>
+          <Button type="button" size="sm" asChild>
+            <Link href={`/work-orders/new?purchaseOrderId=${purchaseOrderId}`}>
+              <Plus className="h-4 w-4" />
+              Create Work Order
+            </Link>
+          </Button>
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-slate-500">
+          {eligible
+            ? "Belum ada work order."
+            : "Work Order dapat dibuat setelah purchase order APPROVED."}
+        </p>
+      )}
     </div>
   );
 }
