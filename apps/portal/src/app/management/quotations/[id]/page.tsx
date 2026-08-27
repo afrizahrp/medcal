@@ -167,6 +167,7 @@ export default function QuotationDetailPage() {
           quotation={quotation}
           composing={composePending}
           printing={printPending}
+          canCompose={Boolean(capabilities?.emailSend)}
           onCompose={handleComposeEmail}
           onPrint={handlePrint}
         />
@@ -289,7 +290,7 @@ export default function QuotationDetailPage() {
             {printPending ? "Membuka PDF…" : "Print"}
           </Button>
 
-          {isDraft ? (
+          {isDraft && capabilities?.quotationUpdate ? (
             <>
               <Button type="button" variant="outline" asChild>
                 <Link href={`/quotations/${quotation.id}/edit`}>
@@ -297,7 +298,7 @@ export default function QuotationDetailPage() {
                   Edit
                 </Link>
               </Button>
-              {capabilities?.emailSend !== false ? (
+              {capabilities.emailSend ? (
                 <Button type="button" onClick={handleComposeEmail} disabled={composePending}>
                   <Mail className="h-4 w-4" />
                   {composePending ? "Menyiapkan PDF…" : "Kirim via Email"}
@@ -306,7 +307,7 @@ export default function QuotationDetailPage() {
             </>
           ) : null}
 
-          {isSent && capabilities?.emailSend !== false ? (
+          {isSent && capabilities?.emailSend ? (
             <Button
               type="button"
               variant="outline"
@@ -320,18 +321,22 @@ export default function QuotationDetailPage() {
 
           {isSent ? (
             <>
-              <Button type="button" onClick={() => setConfirmAction("approve")}>
-                <Check className="h-4 w-4" />
-                Approve
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setConfirmAction("reject")}>
-                <X className="h-4 w-4" />
-                Reject
-              </Button>
+              {capabilities?.quotationApprove ? (
+                <Button type="button" onClick={() => setConfirmAction("approve")}>
+                  <Check className="h-4 w-4" />
+                  Approve
+                </Button>
+              ) : null}
+              {capabilities?.quotationUpdate ? (
+                <Button type="button" variant="outline" onClick={() => setConfirmAction("reject")}>
+                  <X className="h-4 w-4" />
+                  Reject
+                </Button>
+              ) : null}
             </>
           ) : null}
 
-          {canCancel ? (
+          {canCancel && capabilities?.quotationCancel ? (
             <Button type="button" variant="destructive" onClick={() => setConfirmAction("cancel")}>
               <X className="h-4 w-4" />
               Cancel Quotation
@@ -377,12 +382,14 @@ function CreatedNextSteps({
   quotation,
   composing,
   printing,
+  canCompose,
   onCompose,
   onPrint,
 }: {
   quotation: QuotationRow;
   composing: boolean;
   printing: boolean;
+  canCompose: boolean;
   onCompose: () => void;
   onPrint: () => void;
 }) {
@@ -403,10 +410,12 @@ function CreatedNextSteps({
           <Printer className="h-4 w-4" />
           {printing ? "Membuka PDF…" : "Print"}
         </Button>
-        <Button type="button" size="sm" onClick={onCompose} disabled={composing}>
-          <Mail className="h-4 w-4" />
-          {composing ? "Menyiapkan PDF…" : "Generate PDF & Compose Email"}
-        </Button>
+        {canCompose ? (
+          <Button type="button" size="sm" onClick={onCompose} disabled={composing}>
+            <Mail className="h-4 w-4" />
+            {composing ? "Menyiapkan PDF…" : "Generate PDF & Compose Email"}
+          </Button>
+        ) : null}
       </div>
     </div>
   );

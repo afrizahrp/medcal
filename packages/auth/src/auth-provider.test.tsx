@@ -64,6 +64,15 @@ const ME_A = {
     deviceCreate: true,
     deviceUpdate: true,
     deviceDelete: true,
+    calibrationRequestRead: true,
+    calibrationRequestCreate: true,
+    calibrationRequestUpdate: true,
+    calibrationRequestCancel: true,
+    quotationRead: true,
+    quotationCreate: true,
+    quotationUpdate: true,
+    quotationCancel: true,
+    quotationApprove: true,
   },
 };
 
@@ -111,6 +120,15 @@ const ME_B = {
     deviceCreate: false,
     deviceUpdate: false,
     deviceDelete: false,
+    calibrationRequestRead: false,
+    calibrationRequestCreate: false,
+    calibrationRequestUpdate: false,
+    calibrationRequestCancel: false,
+    quotationRead: false,
+    quotationCreate: false,
+    quotationUpdate: false,
+    quotationCancel: false,
+    quotationApprove: false,
   },
 };
 

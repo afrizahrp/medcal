@@ -23,7 +23,9 @@ const userListQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).optional(),
   search: z.string().optional(),
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).optional(),
-  role: z.enum(["SUPERADMIN", "ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER"]).optional(),
+  role: z
+    .enum(["SUPERADMIN", "ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER", "CUSTOMER_SERVICE"])
+    .optional(),
 });
 
 const userStatusUpdateSchema = z.object({
@@ -31,11 +33,11 @@ const userStatusUpdateSchema = z.object({
 });
 
 const membershipAssignSchema = z.object({
-  role: z.enum(["ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER"]),
+  role: z.enum(["ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER", "CUSTOMER_SERVICE"]),
 });
 
 const membershipUpdateSchema = z.object({
-  role: z.enum(["ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER"]),
+  role: z.enum(["ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER", "CUSTOMER_SERVICE"]),
 });
 
 const membershipNotificationSettingsSchema = z.object({

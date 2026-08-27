@@ -42,6 +42,15 @@ export type MeCapabilities = {
   deviceCreate: boolean;
   deviceUpdate: boolean;
   deviceDelete: boolean;
+  calibrationRequestRead: boolean;
+  calibrationRequestCreate: boolean;
+  calibrationRequestUpdate: boolean;
+  calibrationRequestCancel: boolean;
+  quotationRead: boolean;
+  quotationCreate: boolean;
+  quotationUpdate: boolean;
+  quotationCancel: boolean;
+  quotationApprove: boolean;
 };
 
 export type MeUser = {

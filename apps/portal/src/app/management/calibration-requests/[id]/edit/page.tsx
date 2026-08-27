@@ -7,6 +7,7 @@ import { format, parseISO } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { CalendarIcon, Check, ChevronsUpDown, Plus, Save, Trash2 } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
+import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
@@ -61,6 +62,7 @@ function parseExpectedDate(dateStr: string | null): Date | undefined {
 export default function EditCalibrationRequestPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { capabilities } = useAuthz();
 
   const query = useCalibrationRequest(params.id);
   const updateMutation = useUpdateCalibrationRequest();
@@ -119,7 +121,7 @@ export default function EditCalibrationRequestPage() {
     }
   }, [request, initialized]);
 
-  if (isForbidden(query.error)) {
+  if (isForbidden(query.error) || !capabilities?.calibrationRequestUpdate) {
     return <AccessDenied />;
   }
 

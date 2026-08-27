@@ -104,6 +104,15 @@ export class MeController {
       deviceCreate: hasPermission(membership.role, "device", "create"),
       deviceUpdate: hasPermission(membership.role, "device", "update"),
       deviceDelete: hasPermission(membership.role, "device", "delete"),
+      calibrationRequestRead: hasPermission(membership.role, "calibrationRequest", "read"),
+      calibrationRequestCreate: hasPermission(membership.role, "calibrationRequest", "create"),
+      calibrationRequestUpdate: hasPermission(membership.role, "calibrationRequest", "update"),
+      calibrationRequestCancel: hasPermission(membership.role, "calibrationRequest", "cancel"),
+      quotationRead: hasPermission(membership.role, "quotation", "read"),
+      quotationCreate: hasPermission(membership.role, "quotation", "create"),
+      quotationUpdate: hasPermission(membership.role, "quotation", "update"),
+      quotationCancel: hasPermission(membership.role, "quotation", "cancel"),
+      quotationApprove: hasPermission(membership.role, "quotation", "approve"),
     };
 
     return {

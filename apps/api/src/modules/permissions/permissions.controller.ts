@@ -7,7 +7,15 @@ import { RequirePermission } from "../../common/decorators/require-permission.de
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import { PermissionsService } from "./permissions.service";
 
-const roleEnum = z.enum(["SUPERADMIN", "ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER"]);
+const roleEnum = z.enum([
+  "SUPERADMIN",
+  "ADMIN",
+  "SUPERVISOR",
+  "TECHNICIAN",
+  "FINANCE",
+  "CUSTOMER",
+  "CUSTOMER_SERVICE",
+]);
 
 const replaceGrantsSchema = z.object({
   grants: z.array(

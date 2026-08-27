@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { isForbidden } from "@medcal/shared";
+import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
@@ -23,6 +24,7 @@ import { useCalibrationRequests } from "./use-calibration-requests-query";
 const URL_KEYS = ["search", "status", "sortBy", "sortDir", "page", "pageSize"] as const;
 
 export default function CalibrationRequestsPageClient() {
+  const { capabilities } = useAuthz();
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
   const status: CalibrationRequestStatus | "" =
@@ -59,7 +61,7 @@ export default function CalibrationRequestsPageClient() {
   const error = query.isError && !forbidden ? "Gagal memuat daftar requisition." : null;
   const totalPages = result ? Math.max(1, result.totalPages) : 1;
 
-  if (forbidden) {
+  if (!capabilities?.calibrationRequestRead || forbidden) {
     return <AccessDenied />;
   }
 
@@ -74,12 +76,14 @@ export default function CalibrationRequestsPageClient() {
           ]}
         />
 
-        <Button asChild className="shrink-0">
-          <Link href="/calibration-requests/new">
-            <Plus className="h-4 w-4" />
-            New Requisition
-          </Link>
-        </Button>
+        {capabilities.calibrationRequestCreate ? (
+          <Button asChild className="shrink-0">
+            <Link href="/calibration-requests/new">
+              <Plus className="h-4 w-4" />
+              New Requisition
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       <Surface className={cn("mt-6 p-4 md:p-6", fetching && "opacity-70")}>

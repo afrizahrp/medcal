@@ -38,6 +38,7 @@ enum MembershipRole {
   TECHNICIAN
   FINANCE
   CUSTOMER
+  CUSTOMER_SERVICE
 }
 
 enum MenuApplication {

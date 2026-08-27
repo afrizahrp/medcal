@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Edit, FileText, Plus, Send, X } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
+import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
 import {
@@ -30,6 +31,7 @@ import { useQuotations } from "../../quotations/use-quotations-query";
 export default function CalibrationRequestDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { capabilities } = useAuthz();
 
   const query = useCalibrationRequest(params.id);
   const submitMutation = useSubmitCalibrationRequest();
@@ -97,6 +99,7 @@ export default function CalibrationRequestDetailPage() {
   const quotationReady = !quotationQuery.isLoading && !quotationQuery.isError;
   const existingQuotation = quotationReady ? quotationQuery.data?.data[0] : undefined;
   const canCreateQuotation =
+    Boolean(capabilities?.quotationCreate) &&
     quotationReady &&
     !existingQuotation &&
     (request.status === "SUBMITTED" || request.status === "IN_QUOTATION");
@@ -283,20 +286,24 @@ export default function CalibrationRequestDetailPage() {
 
           {isDraft ? (
             <>
-              <Button type="button" variant="outline" asChild>
-                <Link href={`/calibration-requests/${request.id}/edit`}>
-                  <Edit className="h-4 w-4" />
-                  Edit
-                </Link>
-              </Button>
-              <Button type="button" onClick={() => setShowSubmitConfirm(true)}>
-                <Send className="h-4 w-4" />
-                Submit
-              </Button>
+              {capabilities?.calibrationRequestUpdate ? (
+                <Button type="button" variant="outline" asChild>
+                  <Link href={`/calibration-requests/${request.id}/edit`}>
+                    <Edit className="h-4 w-4" />
+                    Edit
+                  </Link>
+                </Button>
+              ) : null}
+              {capabilities?.calibrationRequestUpdate ? (
+                <Button type="button" onClick={() => setShowSubmitConfirm(true)}>
+                  <Send className="h-4 w-4" />
+                  Submit
+                </Button>
+              ) : null}
             </>
           ) : null}
 
-          {canCancel ? (
+          {canCancel && capabilities?.calibrationRequestCancel ? (
             <Button
               type="button"
               variant="destructive"

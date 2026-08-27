@@ -49,7 +49,15 @@ function assertKnownGrants(grants: GrantInput[]): void {
 @Injectable()
 export class PermissionsService {
   async listRoles(): Promise<RoleGrantSummary[]> {
-    const roles: MembershipRole[] = ["SUPERADMIN", "ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER"];
+    const roles: MembershipRole[] = [
+      "SUPERADMIN",
+      "ADMIN",
+      "SUPERVISOR",
+      "TECHNICIAN",
+      "FINANCE",
+      "CUSTOMER",
+      "CUSTOMER_SERVICE",
+    ];
     return Promise.all(roles.map((role) => this.getRole(role)));
   }
 

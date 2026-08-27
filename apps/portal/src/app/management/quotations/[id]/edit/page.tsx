@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { parseISO } from "date-fns";
 import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
+import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../../components/access-denied";
 import {
@@ -37,6 +38,7 @@ function parseValidUntil(dateStr: string | null): Date | undefined {
 export default function EditQuotationPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { capabilities } = useAuthz();
 
   const query = useQuotation(params.id);
   const updateMutation = useUpdateQuotation();
@@ -63,7 +65,7 @@ export default function EditQuotationPage() {
     }
   }, [quotation, initialized]);
 
-  if (isForbidden(query.error)) {
+  if (isForbidden(query.error) || !capabilities?.quotationUpdate) {
     return <AccessDenied />;
   }
 

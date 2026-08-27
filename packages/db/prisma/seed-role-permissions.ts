@@ -110,7 +110,26 @@ const SUPERVISOR_ADDITIONS: GrantRow[] = [
   { role: "SUPERVISOR", resource: "whitelist", action: "manage" },
 ];
 
-const ROWS: GrantRow[] = [...PRESERVED_BASELINE, ...SUPERVISOR_ADDITIONS];
+// Customer Service (2026-08-27): staff role for customer-facing pre-sales
+// (Customer → Calibration Request → Quotation). Does not grant quotation
+// approval, email inbox, user/role admin, calibration execution, or accounting.
+const CUSTOMER_SERVICE_GRANTS: GrantRow[] = [
+  { role: "CUSTOMER_SERVICE", resource: "managementDashboard", action: "read" },
+  { role: "CUSTOMER_SERVICE", resource: "customer", action: "read" },
+  { role: "CUSTOMER_SERVICE", resource: "customer", action: "create" },
+  { role: "CUSTOMER_SERVICE", resource: "customer", action: "update" },
+  { role: "CUSTOMER_SERVICE", resource: "calibrationRequest", action: "read" },
+  { role: "CUSTOMER_SERVICE", resource: "calibrationRequest", action: "create" },
+  { role: "CUSTOMER_SERVICE", resource: "calibrationRequest", action: "update" },
+  { role: "CUSTOMER_SERVICE", resource: "calibrationRequest", action: "cancel" },
+  { role: "CUSTOMER_SERVICE", resource: "quotation", action: "read" },
+  { role: "CUSTOMER_SERVICE", resource: "quotation", action: "create" },
+  { role: "CUSTOMER_SERVICE", resource: "quotation", action: "update" },
+  { role: "CUSTOMER_SERVICE", resource: "quotation", action: "cancel" },
+  { role: "CUSTOMER_SERVICE", resource: "deviceType", action: "read" },
+];
+
+const ROWS: GrantRow[] = [...PRESERVED_BASELINE, ...SUPERVISOR_ADDITIONS, ...CUSTOMER_SERVICE_GRANTS];
 
 async function seedRolePermissions() {
   for (const row of ROWS) {

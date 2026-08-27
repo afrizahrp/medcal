@@ -11,7 +11,14 @@ import { hasPermission, loadRolePermissionCache } from "./access-control";
 // shared dev DB, the non-SUPERADMIN roles under test are reset to a known
 // fixture in beforeAll and the DB's original rows are restored in afterAll.
 
-const TEST_ROLES: MembershipRole[] = ["ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER"];
+const TEST_ROLES: MembershipRole[] = [
+  "ADMIN",
+  "SUPERVISOR",
+  "TECHNICIAN",
+  "FINANCE",
+  "CUSTOMER",
+  "CUSTOMER_SERVICE",
+];
 
 interface GrantRow {
   role: MembershipRole;
@@ -79,6 +86,19 @@ const FIXTURE: GrantRow[] = [
   { role: "TECHNICIAN", resource: "managementDashboard", action: "read" },
   { role: "FINANCE", resource: "managementDashboard", action: "read" },
   { role: "CUSTOMER", resource: "customerDashboard", action: "read" },
+  { role: "CUSTOMER_SERVICE", resource: "managementDashboard", action: "read" },
+  { role: "CUSTOMER_SERVICE", resource: "customer", action: "read" },
+  { role: "CUSTOMER_SERVICE", resource: "customer", action: "create" },
+  { role: "CUSTOMER_SERVICE", resource: "customer", action: "update" },
+  { role: "CUSTOMER_SERVICE", resource: "calibrationRequest", action: "read" },
+  { role: "CUSTOMER_SERVICE", resource: "calibrationRequest", action: "create" },
+  { role: "CUSTOMER_SERVICE", resource: "calibrationRequest", action: "update" },
+  { role: "CUSTOMER_SERVICE", resource: "calibrationRequest", action: "cancel" },
+  { role: "CUSTOMER_SERVICE", resource: "quotation", action: "read" },
+  { role: "CUSTOMER_SERVICE", resource: "quotation", action: "create" },
+  { role: "CUSTOMER_SERVICE", resource: "quotation", action: "update" },
+  { role: "CUSTOMER_SERVICE", resource: "quotation", action: "cancel" },
+  { role: "CUSTOMER_SERVICE", resource: "deviceType", action: "read" },
 ];
 
 let backup: GrantRow[] = [];
@@ -285,11 +305,12 @@ describe("hasPermission — menu resource (Menu Registry, locked 2026-08-19)", (
 });
 
 describe("hasPermission — managementDashboard/customerDashboard (Menu Registry, locked 2026-08-19)", () => {
-  it("grants managementDashboard:read to ADMIN, SUPERVISOR, TECHNICIAN, FINANCE", () => {
+  it("grants managementDashboard:read to ADMIN, SUPERVISOR, TECHNICIAN, FINANCE, CUSTOMER_SERVICE", () => {
     expect(hasPermission("ADMIN", "managementDashboard", "read")).toBe(true);
     expect(hasPermission("SUPERVISOR", "managementDashboard", "read")).toBe(true);
     expect(hasPermission("TECHNICIAN", "managementDashboard", "read")).toBe(true);
     expect(hasPermission("FINANCE", "managementDashboard", "read")).toBe(true);
+    expect(hasPermission("CUSTOMER_SERVICE", "managementDashboard", "read")).toBe(true);
   });
 
   it("denies managementDashboard:read to CUSTOMER", () => {
@@ -301,10 +322,11 @@ describe("hasPermission — managementDashboard/customerDashboard (Menu Registry
     expect(hasPermission("ADMIN", "customerDashboard", "read")).toBe(true);
   });
 
-  it("denies customerDashboard:read to SUPERVISOR, TECHNICIAN, FINANCE", () => {
+  it("denies customerDashboard:read to SUPERVISOR, TECHNICIAN, FINANCE, CUSTOMER_SERVICE", () => {
     expect(hasPermission("SUPERVISOR", "customerDashboard", "read")).toBe(false);
     expect(hasPermission("TECHNICIAN", "customerDashboard", "read")).toBe(false);
     expect(hasPermission("FINANCE", "customerDashboard", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "customerDashboard", "read")).toBe(false);
   });
 });
 
@@ -317,5 +339,62 @@ describe("hasPermission — SUPERVISOR grants (Permission Management, business d
 
   it("does NOT grant SUPERVISOR users:manage — matches ADMIN's shape exactly, not broader", () => {
     expect(hasPermission("SUPERVISOR", "users", "manage")).toBe(false);
+  });
+});
+
+describe("hasPermission — CUSTOMER_SERVICE (customer-facing pre-sales, 2026-08-27)", () => {
+  it("grants customer CRM read/create/update", () => {
+    expect(hasPermission("CUSTOMER_SERVICE", "customer", "read")).toBe(true);
+    expect(hasPermission("CUSTOMER_SERVICE", "customer", "create")).toBe(true);
+    expect(hasPermission("CUSTOMER_SERVICE", "customer", "update")).toBe(true);
+  });
+
+  it("grants calibrationRequest read/create/update/cancel", () => {
+    expect(hasPermission("CUSTOMER_SERVICE", "calibrationRequest", "read")).toBe(true);
+    expect(hasPermission("CUSTOMER_SERVICE", "calibrationRequest", "create")).toBe(true);
+    expect(hasPermission("CUSTOMER_SERVICE", "calibrationRequest", "update")).toBe(true);
+    expect(hasPermission("CUSTOMER_SERVICE", "calibrationRequest", "cancel")).toBe(true);
+  });
+
+  it("grants quotation read/create/update/cancel but NOT approve", () => {
+    expect(hasPermission("CUSTOMER_SERVICE", "quotation", "read")).toBe(true);
+    expect(hasPermission("CUSTOMER_SERVICE", "quotation", "create")).toBe(true);
+    expect(hasPermission("CUSTOMER_SERVICE", "quotation", "update")).toBe(true);
+    expect(hasPermission("CUSTOMER_SERVICE", "quotation", "cancel")).toBe(true);
+    expect(hasPermission("CUSTOMER_SERVICE", "quotation", "approve")).toBe(false);
+  });
+
+  it("grants deviceType:read for requisition item lookup", () => {
+    expect(hasPermission("CUSTOMER_SERVICE", "deviceType", "read")).toBe(true);
+    expect(hasPermission("CUSTOMER_SERVICE", "deviceType", "create")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "deviceType", "update")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "deviceType", "delete")).toBe(false);
+  });
+
+  it("denies user, role, and permission administration", () => {
+    expect(hasPermission("CUSTOMER_SERVICE", "users", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "users", "manage")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "membership", "manage")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "permission", "manage")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "menu", "manage")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "whitelist", "manage")).toBe(false);
+  });
+
+  it("denies calibration execution, certificate, accounting, and payment", () => {
+    expect(hasPermission("CUSTOMER_SERVICE", "workOrder", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "calibrationJob", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "certificate", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "invoice", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "payment", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "purchaseOrder", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "tax", "manage")).toBe(false);
+  });
+
+  it("denies lead, chat, and email modules", () => {
+    expect(hasPermission("CUSTOMER_SERVICE", "lead", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "chat", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "email", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "email", "send")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "contactMessage", "read")).toBe(false);
   });
 });

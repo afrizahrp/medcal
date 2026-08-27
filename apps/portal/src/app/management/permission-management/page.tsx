@@ -15,7 +15,8 @@ type Role =
   | "ADMIN"
   | "TECHNICIAN"
   | "FINANCE"
-  | "CUSTOMER";
+  | "CUSTOMER"
+  | "CUSTOMER_SERVICE";
 
 interface Grant {
   resource: string;
@@ -35,6 +36,7 @@ const ROLES: Role[] = [
   "TECHNICIAN",
   "FINANCE",
   "CUSTOMER",
+  "CUSTOMER_SERVICE",
 ];
 
 // Human-readable labels for the code-defined permission catalog's resources.
@@ -56,7 +58,9 @@ const RESOURCE_LABELS: Record<string, string> = {
   deviceCapabilityItem: "Device Capability Item",
   deviceCalibrationParameter: "Calibration Parameter",
   device: "Device",
+  customer: "Customer",
   calibrationRequest: "Requisition",
+  quotation: "Quotation",
 };
 
 const ACTION_LABELS: Record<string, string> = {

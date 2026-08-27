@@ -12,7 +12,14 @@ import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
 
 type UserStatus = "INVITED" | "ACTIVE" | "DISABLED";
-type MembershipRole = "SUPERADMIN" | "ADMIN" | "SUPERVISOR" | "TECHNICIAN" | "FINANCE" | "CUSTOMER";
+type MembershipRole =
+  | "SUPERADMIN"
+  | "ADMIN"
+  | "SUPERVISOR"
+  | "TECHNICIAN"
+  | "FINANCE"
+  | "CUSTOMER"
+  | "CUSTOMER_SERVICE";
 
 interface UserDetail {
   id: string;
@@ -42,9 +49,17 @@ const ROLE_LABELS: Record<MembershipRole, string> = {
   TECHNICIAN: "Teknisi",
   FINANCE: "Keuangan",
   CUSTOMER: "Customer",
+  CUSTOMER_SERVICE: "Customer Service",
 };
 
-const EDITABLE_ROLES: MembershipRole[] = ["ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER"];
+const EDITABLE_ROLES: MembershipRole[] = [
+  "ADMIN",
+  "SUPERVISOR",
+  "TECHNICIAN",
+  "FINANCE",
+  "CUSTOMER",
+  "CUSTOMER_SERVICE",
+];
 
 const selectClassName =
   "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";

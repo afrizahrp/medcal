@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
+import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
 import { useCalibrationRequest } from "../../calibration-requests/use-calibration-requests-query";
@@ -31,6 +32,7 @@ function NewQuotationPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestId = searchParams.get("requestId") ?? "";
+  const { capabilities } = useAuthz();
 
   const requestQuery = useCalibrationRequest(requestId || undefined);
   const existingQuery = useQuotations(
@@ -66,6 +68,10 @@ function NewQuotationPageInner() {
       setInitialized(true);
     }
   }, [request, initialized]);
+
+  if (!capabilities?.quotationCreate) {
+    return <AccessDenied />;
+  }
 
   if (!requestId) {
     return (

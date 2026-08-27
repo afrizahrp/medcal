@@ -10,7 +10,14 @@ import { Input } from "@/components/ui/input";
 import { AccessDenied } from "../../../components/access-denied";
 
 type UserStatus = "INVITED" | "ACTIVE" | "DISABLED";
-type MembershipRole = "SUPERADMIN" | "ADMIN" | "SUPERVISOR" | "TECHNICIAN" | "FINANCE" | "CUSTOMER";
+type MembershipRole =
+  | "SUPERADMIN"
+  | "ADMIN"
+  | "SUPERVISOR"
+  | "TECHNICIAN"
+  | "FINANCE"
+  | "CUSTOMER"
+  | "CUSTOMER_SERVICE";
 
 interface UserListRow {
   id: string;
@@ -51,6 +58,7 @@ const ROLE_LABELS: Record<MembershipRole, string> = {
   TECHNICIAN: "Teknisi",
   FINANCE: "Keuangan",
   CUSTOMER: "Customer",
+  CUSTOMER_SERVICE: "Customer Service",
 };
 
 export default function UsersPage() {

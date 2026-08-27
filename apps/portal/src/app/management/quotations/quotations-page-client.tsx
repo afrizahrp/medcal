@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { isForbidden } from "@medcal/shared";
+import { useAuthz } from "@medcal/auth/client";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ import { useQuotations } from "./use-quotations-query";
 const URL_KEYS = ["search", "status", "sortBy", "sortDir", "page", "pageSize"] as const;
 
 export default function QuotationsPageClient() {
+  const { capabilities } = useAuthz();
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
   const status: QuotationStatus | "" = (params.status as QuotationStatus | undefined) ?? "";
@@ -55,7 +57,7 @@ export default function QuotationsPageClient() {
   const error = query.isError && !forbidden ? "Gagal memuat daftar quotation." : null;
   const totalPages = result ? Math.max(1, result.totalPages) : 1;
 
-  if (forbidden) {
+  if (!capabilities?.quotationRead || forbidden) {
     return <AccessDenied />;
   }
 

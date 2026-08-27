@@ -7,7 +7,9 @@ import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import { CalendarIcon, Check, ChevronsUpDown, Plus, Save, Trash2 } from "lucide-react";
 import { ApiError } from "@medcal/shared";
+import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
+import { AccessDenied } from "../../../../components/access-denied";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -46,6 +48,7 @@ const emptyItem = (): ItemInput => ({ deviceTypeId: "", deviceId: "", notes: "" 
 
 export default function NewCalibrationRequestPage() {
   const router = useRouter();
+  const { capabilities } = useAuthz();
   const createMutation = useCreateCalibrationRequest();
 
   const [customerId, setCustomerId] = useState("");
@@ -142,6 +145,10 @@ export default function NewCalibrationRequestPage() {
         setError("Gagal membuat requisition.");
       }
     }
+  }
+
+  if (!capabilities?.calibrationRequestCreate) {
+    return <AccessDenied />;
   }
 
   return (
