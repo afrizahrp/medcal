@@ -110,15 +110,41 @@ ke dokumen sumbernya di `docs/technician-docs/`:
 
 ## Step 0 — Persiapan
 
-1. Konfirmasi jumlah baris saat ini di keempat tabel (jangan asumsikan dari laporan lama —
+1. **Konfirmasi target database dulu, sebelum update apapun**: pastikan koneksi yang dipakai
+   menunjuk ke database lokal native (`pkmdb` di `localhost:5432`, via `.env` — pola yang sama
+   dengan semua migration/fix sebelumnya di proyek ini), BUKAN Docker, BUKAN database
+   shared/staging/production. Kalau ada keraguan sama sekali soal target koneksi, BERHENTI dan
+   tanya dulu sebelum lanjut — jangan asumsikan.
+2. Konfirmasi jumlah baris saat ini di keempat tabel (jangan asumsikan dari laporan lama —
    sudah ada perbaikan 7 baris Pattern C baru-baru ini yang mungkin mengubah jumlah).
-2. Baca field `name` seluruh 4 tabel saat ini sebagai baseline "sebelum".
+3. Baca field `name` seluruh 4 tabel saat ini sebagai baseline "sebelum".
 
 ## Step 1-2 — Terapkan sesuai pembagian di atas
 
 (Lihat cakupan per tabel di atas.)
 
-## Step 3 — Verifikasi
+## Step 4 — Sinkronkan file seed script (WAJIB, jangan lewati)
+
+Setelah update database berhasil, cari dan update juga file seed script sumber untuk keempat
+tabel ini (kemungkinan nama file: `seed-device-categories.ts`, `seed-device-capability.ts`
+atau serupa, `seed-device-capability-items.ts`, `seed-device-calibration-parameters.ts`,
+`seed-device-taxonomy-extension-parameters.ts`, `backfill-device-calibration-parameter-tolerances.ts`
+— sesuaikan dengan nama aktual yang ada di `packages/db/prisma/`) supaya nilai `name` di
+DALAM KODE seed script itu sendiri juga diperbarui, bukan cuma di database.
+
+Ini WAJIB, mengikuti pola yang sudah dipakai di task perbaikan sebelumnya (`fix-collapsed-
+pattern-c-parameters.ts` yang juga meng-update `seed-device-taxonomy-extension-parameters.ts`
+supaya tetap sinkron). Alasannya: kalau file seed script dibiarkan dengan nama Inggris lama,
+setiap kali seed dijalankan ulang di masa depan (database baru, reset environment, staging),
+nama yang sudah diperbaiki ini bisa tertimpa balik ke versi lama atau jadi tidak konsisten
+dengan database saat ini.
+
+Setelah update file seed, jalankan seed itu sebagai verifikasi (bukan untuk apply perubahan
+lagi, tapi untuk konfirmasi seed script yang sudah diupdate menghasilkan data yang SAMA dengan
+yang sudah di-update langsung ke database di Step 1-2) — pastikan tidak ada perbedaan/konflik
+antara hasil re-run seed vs kondisi database saat ini.
+
+## Step 5 — Verifikasi
 
 1. Konfirmasi jumlah baris di 4 tabel tidak berubah (tugas ini cuma UPDATE field `name`,
    bukan tambah/hapus baris).
@@ -132,6 +158,8 @@ ke dokumen sumbernya di `docs/technician-docs/`:
 ## Output
 
 Laporkan:
+- Konfirmasi target database yang dipakai (pastikan `pkmdb` lokal, sebutkan connection string
+  yang dipakai tanpa password, sebagai bukti bukan salah target).
 - Untuk `DeviceCategory` dan `DeviceCapability`: tabel sebelum/sesudah lengkap (semua 13 + 30
   baris, meski tidak berubah semua).
 - Untuk `DeviceCapabilityItem` dan `DeviceCalibrationParameter`: HANYA baris yang benar-benar
@@ -142,3 +170,6 @@ Laporkan:
   ditebak, masukkan ke daftar terpisah untuk diputuskan manusia.
 - Konfirmasi jumlah baris tidak berubah di 4 tabel, dan field selain `name` tidak tersentuh.
 - Hasil typecheck/lint/build.
+- **Konfirmasi file seed script sudah disinkronkan** (Step 4) — sebutkan nama file yang
+  diupdate, dan konfirmasi hasil re-run seed cocok dengan kondisi database saat ini (tidak ada
+  selisih).

@@ -24,69 +24,69 @@ interface TypeSeedRow {
 const CATEGORIES: CategorySeedRow[] = [
   {
     code: "PATIENT_MONITORING",
-    name: "Patient Monitoring",
+    name: "Pemantauan Pasien",
     description: "Vital-sign and bedside monitoring, including ECG and oximetry.",
   },
   {
     code: "RESPIRATORY_OXYGEN",
-    name: "Respiratory & Oxygen",
+    name: "Alat Pernapasan & Oksigen",
     description: "Ventilation, oxygen delivery, humidification, nebulization, and gas flow.",
   },
   {
     code: "NEONATAL_INFANT_CARE",
-    name: "Neonatal & Infant Care",
+    name: "Perawatan Bayi & Neonatal",
     description: "Incubators and warmers used primarily for neonates and infants.",
   },
   {
     code: "RESUSCITATION",
-    name: "Resuscitation",
+    name: "Resusitasi",
     description: "Cardiac and pulmonary resuscitators.",
   },
   {
     code: "SUCTION_FLUID",
-    name: "Suction & Fluid Management",
+    name: "Suction & Pengelolaan Cairan",
     description: "Surgical aspirators, suction regulators, and suction-tagged pumps.",
   },
   {
     code: "STERILIZATION",
-    name: "Sterilization",
+    name: "Sterilisasi",
     description: "Sterilizers and medical ovens used for sterilization or drying.",
   },
   {
     code: "TEMPERATURE_THERAPY",
-    name: "Temperature Therapy",
+    name: "Terapi Suhu",
     description: "Adult warming and therapeutic heating devices (not cold-chain storage).",
   },
   {
     code: "COLD_CHAIN_STORAGE",
-    name: "Cold Chain & Storage",
+    name: "Penyimpanan Dingin (Cold Chain)",
     description: "Medical refrigerators, freezers, and vaccine/blood-bank cold storage.",
   },
   {
     code: "PATIENT_CARE",
-    name: "Patient Care",
+    name: "Perawatan Pasien",
     description: "Patient-support equipment whose primary capability is electrical/mechanical care.",
   },
   {
     code: "LABORATORY_DIAGNOSTIC",
-    name: "Laboratory & Diagnostic Equipment",
+    name: "Alat Laboratorium & Diagnostik",
     description:
       "In-vitro/laboratory sample processing, analysis, and laboratory containment equipment.",
   },
   {
     code: "DENTAL_EQUIPMENT",
-    name: "Dental Equipment",
+    name: "Alat Kedokteran Gigi",
     description: "Dedicated dental-practice equipment (units and intraoral X-ray).",
   },
   {
     code: "MEDICAL_LIGHTING",
-    name: "Medical Lighting",
+    name: "Pencahayaan Medis",
     description:
       "Medical light sources calibrated by illuminance, color temperature, and CRI.",
   },
   {
     code: "AUDIOLOGY_PHYSIOLOGICAL",
-    name: "Audiology & Physiological Testing",
+    name: "Audiologi & Uji Fisiologi",
     description:
       "Single-session diagnostic instruments for hearing, lung volume, and fetal heart rate.",
   },

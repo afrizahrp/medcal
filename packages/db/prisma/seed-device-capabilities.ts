@@ -28,204 +28,204 @@ const CAPABILITIES: CapabilitySeedRow[] = [
   // LK Blood Pressure Monitor.pdf p1; LK Ventilator Transport.pdf p1; LK Sterilisator.pdf p1
   {
     code: "ENVIRONMENTAL_CONDITIONS",
-    name: "Environmental Conditions",
+    name: "Kondisi Lingkungan",
     description:
       "Room temperature, humidity, and input voltage readings recorded before/after calibration. Present in nearly all LK worksheets (Section B).",
   },
   // LK Blood Pressure Monitor.pdf p2; LK Ventilator Transport.pdf p2; LK Sterilisator.pdf p2
   {
     code: "ELECTRICAL_SAFETY",
-    name: "Electrical Safety",
+    name: "Keselamatan Listrik",
     description:
       "Standard electrical safety test block (earth resistance, insulation resistance, leakage currents) per IEC 62353-style testing. Present in nearly all LK worksheets (Section D).",
   },
   // LK Blood Pressure Monitor.pdf p2; LK Bed Side Monitor.pdf (Kalibrasi NIBP)
   {
     code: "NIBP",
-    name: "Non-Invasive Blood Pressure",
+    name: "Tekanan Darah Non-Invasif (NIBP)",
     description: "Blood pressure measurement accuracy (systolic/diastolic/mean).",
   },
   // LK Bed Side Monitor.pdf; LK Pulse Oxymeter.pdf
   {
     code: "VITAL_SIGNS_MONITORING",
-    name: "Vital Signs Monitoring",
+    name: "Pemantauan Tanda Vital",
     description: "Heart rate, respiration rate, and SpO2 accuracy as measured on patient monitors.",
   },
   // LK Electrocardiograph.pdf (Pengukuran Amplitudo; Laju Rekaman; Kalibrasi Detak Jantung; Uji Sinyal Sinusoida; Uji Sinyal EKG Normal)
   {
     code: "ECG_PERFORMANCE",
-    name: "ECG Performance",
+    name: "Kinerja Elektrokardiografi (EKG)",
     description:
       "Electrocardiograph signal accuracy: amplitude, recording speed, heart rate, waveform tests.",
   },
   // LK Sphygmomanometer.pdf (Uji kebocoran; Laju buang cepat; Pengukuran akurasi tekanan)
   {
     code: "NIBP_LEAK_TEST",
-    name: "NIBP Cuff/Manometer Leak & Deflation",
+    name: "Uji Kebocoran Manset NIBP",
     description:
       "Sphygmomanometer-specific pneumatic tests: leak test, rapid deflation rate, pressure accuracy.",
   },
   // LK Ventilator Transport.pdf p2-4 (9 numbered sub-tests)
   {
     code: "VENTILATION_PERFORMANCE",
-    name: "Ventilation Performance",
+    name: "Kinerja Ventilasi",
     description:
       "Ventilator-specific respiratory mechanics: tidal/minute volume, respiration rate, I:E ratio, inspiratory/expiratory time, PEEP, peak inspiratory pressure, FiO2.",
   },
   // LK Resusitator Paru dan Neopuff.pdf (nilai tekanan maksimum; Kalibrasi akurasi tekanan resuscitator)
   {
     code: "RESUSCITATOR_PRESSURE",
-    name: "Resuscitator Pressure",
+    name: "Tekanan Resusitator",
     description:
       "Maximum pressure and pressure accuracy for manual/mechanical resuscitators (Cardiac/Pulmonary/Neopuff).",
   },
   // LK Autoclave.pdf; LK Sterilisator.pdf p2; LK Oven.pdf
   {
     code: "TEMPERATURE_CHAMBER_STERILIZATION",
-    name: "Sterilization Chamber Temperature",
+    name: "Suhu Ruang Sterilisasi",
     description:
       "Chamber temperature, sterilization temperature, and sterilization time for autoclaves/dry sterilizers/ovens.",
   },
   // LK Blood Bank Refrigerator.pdf p2; LK Medical Refrigerator.pdf p2; LK Medical Freezer.pdf p2; LK Cold Chain, Vaccine Refrigerator.pdf p2
   {
     code: "TEMPERATURE_COLD_STORAGE",
-    name: "Cold Storage Temperature Uniformity",
+    name: "Suhu Penyimpanan Dingin",
     description:
       "Multi-point temperature uniformity inside refrigerators/freezers/cold-chain storage.",
   },
   // LK Baby Incubator.pdf
   {
     code: "INCUBATOR_ENVIRONMENT",
-    name: "Incubator Environment",
+    name: "Lingkungan Inkubator",
     description:
       "Baby incubator air temperature calibration, overshoot temperature, temperature recovery time, mattress temperature, air velocity, noise level, and skin temperature sensor calibration.",
   },
   // LK Infant Warmer.pdf (Kalibrasi suhu maksimum pada permukaan matras; Kalibrasi suhu)
   {
     code: "WARMER_SURFACE_TEMPERATURE",
-    name: "Warmer Surface Temperature",
+    name: "Suhu Permukaan Alat Penghangat",
     description:
       "Infant/radiant warmer mattress surface maximum temperature and general temperature calibration.",
   },
   // LK Humidifier.pdf (Akurasi Suhu; Suhu Maksimum)
   {
     code: "HUMIDIFIER_TEMPERATURE",
-    name: "Humidifier Temperature",
+    name: "Suhu Humidifier",
     description: "Humidifier temperature accuracy and maximum temperature.",
   },
   // LK Suction Pump.pdf (Akurasi Vacuum Gauge; Maximum Vacuum; Waktu Yang Dibutuhkan Saat Daya Hisap Maksimum)
   {
     code: "VACUUM_SUCTION",
-    name: "Vacuum / Suction Performance",
+    name: "Kinerja Vakum/Suction",
     description:
       "Vacuum gauge accuracy, maximum vacuum level, and time-to-maximum-vacuum for suction/breast pump devices.",
   },
   // LK Centrifuge.pdf (Kalibrasi Kecepatan Putar; Kalibrasi Waktu Putar)
   {
     code: "ROTATIONAL_SPEED",
-    name: "Rotational Speed & Timing",
+    name: "Kecepatan Putar",
     description: "Centrifuge rotation speed and rotation time accuracy.",
   },
   // LK Infusion Pump.pdf; LK Syringe Pump.pdf
   {
     code: "INFUSION_FLOW",
-    name: "Infusion Flow Performance",
+    name: "Laju Aliran Infus",
     description: "Infusion/syringe pump occlusion test and flow rate calibration.",
   },
   // LK Mikroskop Laboratorium.pdf (Pembesaran Objektif 4x; Pembesaran Objektif 10x; Nilai Ratio Pembesaran)
   {
     code: "OPTICAL_MAGNIFICATION",
-    name: "Optical Magnification",
+    name: "Pembesaran Optik",
     description:
       "Microscope objective magnification accuracy at multiple magnification levels and magnification ratio.",
   },
   // LK Flow Meter.pdf; LK Nebulizer Compressor.pdf; LK Nebulizer Ultrasonic.pdf; LK Oksigen Concentrator.pdf
   {
     code: "GAS_FLOW_RATE",
-    name: "Gas Flow Rate",
+    name: "Laju Aliran Gas",
     description:
       "Gas flow rate accuracy for flow meters, nebulizer compressors, and oxygen concentrators.",
   },
   // LK Oksigen Concentrator.pdf (Konsentrasi Oksigen)
   {
     code: "OXYGEN_CONCENTRATION",
-    name: "Oxygen Concentration",
+    name: "Konsentrasi Oksigen",
     description: "Output oxygen concentration accuracy for oxygen concentrators.",
   },
   // LK Ultrasonograph (USG).pdf
   {
     code: "ULTRASOUND_IMAGING",
-    name: "Ultrasound Imaging Performance",
+    name: "Pencitraan Ultrasonografi (USG)",
     description:
       "Ultrasonograph (USG) image quality tests: dead zone, axial/lateral resolution, penetration depth, vertical/horizontal distance calibration.",
   },
   // LK Timbangan Bayi.pdf; LK Timbangan Dewasa.pdf
   {
     code: "MASS_WEIGHING",
-    name: "Mass Weighing Performance",
+    name: "Penimbangan Massa",
     description:
       "Scale repeatability and deviation-from-nominal testing for infant/adult weighing scales.",
   },
   // LK Audiometer.docx
   {
     code: "AUDIOMETRIC_PERFORMANCE",
-    name: "Audiometric Performance",
+    name: "Kinerja Audiometri",
     description:
       "Pure-tone linearity (dB) and frequency response accuracy for audiometers.",
   },
   // LK Bio Safety Cabinet.docx; LK Laminar Air Flow.docx
   {
     code: "CLEAN_AIR_CONTAINMENT",
-    name: "Clean Air Containment",
+    name: "Kebersihan & Kontainmen Udara",
     description:
       "Particle count, airflow velocity, lighting, sound, UV radiation, and HEPA integrity for biosafety cabinets and laminar air flow.",
   },
   // LK Dental Unit.docx
   {
     code: "DENTAL_UNIT_PERFORMANCE",
-    name: "Dental Unit Performance",
+    name: "Kinerja Unit Gigi",
     description:
       "Handpiece speed/pressure, operatory illuminance, spray-air pressure, and suction for dental units.",
   },
   // LK Dental X-Ray.docx
   {
     code: "XRAY_PERFORMANCE",
-    name: "X-Ray Performance",
+    name: "Kinerja Sinar-X",
     description:
       "Collimation, kV accuracy, exposure time, dose linearity, output reproducibility, and HVL for dental X-ray.",
   },
   // LK Electro Accupunture (EST).docx
   {
     code: "ELECTROTHERAPY_STIMULATION",
-    name: "Electrotherapy Stimulation",
+    name: "Stimulasi Elektroterapi",
     description:
       "Stimulation frequency, intensity, pulse duration, and treatment timer for electro-acupuncture (EST).",
   },
   // LK Examination Lamp.docx; LK Head Lamp Medik.docx; LK Lampu Operasi.docx; LK Laryngoskop.docx
   {
     code: "LIGHT_SOURCE_PERFORMANCE",
-    name: "Light Source Performance",
+    name: "Kinerja Sumber Cahaya",
     description:
       "Illuminance, color temperature, and color rendering index for medical light sources.",
   },
   // LK Fetal Doppler.docx — dedicated capability (not VITAL_SIGNS_MONITORING.HEART_RATE)
   {
     code: "FETAL_HEART_RATE",
-    name: "Fetal Heart Rate",
+    name: "Detak Jantung Janin",
     description:
       "Fetal heart-rate accuracy using a fetal heart rate simulator (multi-point sweep).",
   },
   // LK Phototherapy.docx
   {
     code: "SPECTRAL_IRRADIANCE",
-    name: "Spectral Irradiance",
+    name: "Iradiansi Spektral (Fototerapi)",
     description:
       "Phototherapy lamp spectral irradiance output at multiple positions.",
   },
   // LK Spirometer.docx
   {
     code: "SPIROMETRY_VOLUME_ACCURACY",
-    name: "Spirometry Volume Accuracy",
+    name: "Akurasi Volume Spirometri",
     description: "Forced vital capacity (FVC) volume accuracy against a 3 L syringe calibrator.",
   },
 ];
@@ -240,135 +240,135 @@ const ITEMS: ItemSeedRow[] = [
   {
     capabilityCode: "ENVIRONMENTAL_CONDITIONS",
     code: "ROOM_TEMPERATURE",
-    name: "Room Temperature",
+    name: "Suhu Ruangan",
   },
   {
     capabilityCode: "ENVIRONMENTAL_CONDITIONS",
     code: "ROOM_HUMIDITY",
-    name: "Room Relative Humidity",
+    name: "Kelembaban / RH",
   },
   {
     capabilityCode: "ENVIRONMENTAL_CONDITIONS",
     code: "INPUT_VOLTAGE",
-    name: "Input Voltage (L-N/L-G/N-G)",
+    name: "Tegangan Input (L-N/L-G/N-G)",
   },
 
   // ELECTRICAL_SAFETY — Section D, all LK docs
   {
     capabilityCode: "ELECTRICAL_SAFETY",
     code: "PROTECTIVE_EARTH_RESISTANCE",
-    name: "Protective Earth Resistance",
+    name: "Resistansi Pembumian Protektif",
   },
   {
     capabilityCode: "ELECTRICAL_SAFETY",
     code: "INSULATION_RESISTANCE",
-    name: "Insulation Resistance",
+    name: "Resistansi Isolasi",
   },
   {
     capabilityCode: "ELECTRICAL_SAFETY",
     code: "EQUIPMENT_LEAKAGE_CURRENT",
-    name: "Equipment Leakage Current",
+    name: "Arus Bocor Peralatan",
   },
   {
     capabilityCode: "ELECTRICAL_SAFETY",
     code: "APPLIED_PART_LEAKAGE_CURRENT",
-    name: "Applied Part Leakage Current",
+    name: "Arus Bocor Bagian yang Diaplikasikan",
   },
 
   // NIBP — LK Blood Pressure Monitor.pdf
-  { capabilityCode: "NIBP", code: "SYSTOLIC_PRESSURE", name: "Systolic Pressure" },
-  { capabilityCode: "NIBP", code: "DIASTOLIC_PRESSURE", name: "Diastolic Pressure" },
-  { capabilityCode: "NIBP", code: "MEAN_ARTERIAL_PRESSURE", name: "Mean Arterial Pressure" },
+  { capabilityCode: "NIBP", code: "SYSTOLIC_PRESSURE", name: "Systole" },
+  { capabilityCode: "NIBP", code: "DIASTOLIC_PRESSURE", name: "Diastole" },
+  { capabilityCode: "NIBP", code: "MEAN_ARTERIAL_PRESSURE", name: "Mean" },
 
   // VITAL_SIGNS_MONITORING — LK Bed Side Monitor.pdf; LK Pulse Oxymeter.pdf
   { capabilityCode: "VITAL_SIGNS_MONITORING", code: "HEART_RATE", name: "Heart Rate" },
-  { capabilityCode: "VITAL_SIGNS_MONITORING", code: "RESPIRATION_RATE", name: "Respiration Rate" },
-  { capabilityCode: "VITAL_SIGNS_MONITORING", code: "SPO2_ACCURACY", name: "SpO2 Accuracy" },
+  { capabilityCode: "VITAL_SIGNS_MONITORING", code: "RESPIRATION_RATE", name: "Respirasi" },
+  { capabilityCode: "VITAL_SIGNS_MONITORING", code: "SPO2_ACCURACY", name: "Saturasi Oxygen (SPO2)" },
 
   // ECG_PERFORMANCE — LK Electrocardiograph.pdf
-  { capabilityCode: "ECG_PERFORMANCE", code: "AMPLITUDE_ACCURACY", name: "Amplitude Accuracy" },
-  { capabilityCode: "ECG_PERFORMANCE", code: "RECORDING_SPEED", name: "Recording/Paper Speed" },
+  { capabilityCode: "ECG_PERFORMANCE", code: "AMPLITUDE_ACCURACY", name: "Pengukuran Amplitudo" },
+  { capabilityCode: "ECG_PERFORMANCE", code: "RECORDING_SPEED", name: "Laju Rekaman" },
   {
     capabilityCode: "ECG_PERFORMANCE",
     code: "ECG_HEART_RATE_CALIBRATION",
-    name: "Heart Rate Calibration",
+    name: "Kalibrasi Detak Jantung",
   },
   {
     capabilityCode: "ECG_PERFORMANCE",
     code: "SINUSOIDAL_SIGNAL_TEST",
-    name: "Sinusoidal Signal Test",
+    name: "Uji Sinyal Sinusoida",
   },
   {
     capabilityCode: "ECG_PERFORMANCE",
     code: "NORMAL_ECG_SIGNAL_TEST",
-    name: "Normal ECG Signal Test",
+    name: "Uji Sinyal EKG Normal",
   },
 
   // NIBP_LEAK_TEST — LK Sphygmomanometer.pdf
-  { capabilityCode: "NIBP_LEAK_TEST", code: "CUFF_LEAK_TEST", name: "Cuff/Manometer Leak Test" },
-  { capabilityCode: "NIBP_LEAK_TEST", code: "RAPID_DEFLATION_RATE", name: "Rapid Deflation Rate" },
+  { capabilityCode: "NIBP_LEAK_TEST", code: "CUFF_LEAK_TEST", name: "Uji Kebocoran" },
+  { capabilityCode: "NIBP_LEAK_TEST", code: "RAPID_DEFLATION_RATE", name: "Laju Buang Cepat" },
   {
     capabilityCode: "NIBP_LEAK_TEST",
     code: "PRESSURE_READING_ACCURACY",
-    name: "Pressure Reading Accuracy",
+    name: "Pengukuran Akurasi Tekanan",
   },
 
   // VENTILATION_PERFORMANCE — LK Ventilator Transport.pdf
-  { capabilityCode: "VENTILATION_PERFORMANCE", code: "TIDAL_VOLUME", name: "Tidal Volume" },
-  { capabilityCode: "VENTILATION_PERFORMANCE", code: "MINUTE_VOLUME", name: "Minute Volume" },
+  { capabilityCode: "VENTILATION_PERFORMANCE", code: "TIDAL_VOLUME", name: "Pengukuran Tidal Volume" },
+  { capabilityCode: "VENTILATION_PERFORMANCE", code: "MINUTE_VOLUME", name: "Pengukuran Minute Volume" },
   {
     capabilityCode: "VENTILATION_PERFORMANCE",
     code: "VENT_RESPIRATION_RATE",
-    name: "Respiration Rate",
+    name: "Pengukuran Respiration Rate",
   },
-  { capabilityCode: "VENTILATION_PERFORMANCE", code: "IE_RATIO", name: "I:E Ratio" },
-  { capabilityCode: "VENTILATION_PERFORMANCE", code: "INSPIRATORY_TIME", name: "Inspiratory Time" },
-  { capabilityCode: "VENTILATION_PERFORMANCE", code: "EXPIRATORY_TIME", name: "Expiratory Time" },
+  { capabilityCode: "VENTILATION_PERFORMANCE", code: "IE_RATIO", name: "Pengukuran I : E Ratio" },
+  { capabilityCode: "VENTILATION_PERFORMANCE", code: "INSPIRATORY_TIME", name: "Inspiratory Time (Ti)" },
+  { capabilityCode: "VENTILATION_PERFORMANCE", code: "EXPIRATORY_TIME", name: "Expiratory Time (Te)" },
   {
     capabilityCode: "VENTILATION_PERFORMANCE",
     code: "PEEP",
-    name: "Positive End-Expiratory Pressure",
+    name: "Pengukuran Positive End-Expiratory Pressure (PEEP)",
   },
   {
     capabilityCode: "VENTILATION_PERFORMANCE",
     code: "PEAK_INSPIRATORY_PRESSURE",
-    name: "Peak Inspiratory Pressure",
+    name: "Peak Inspiratory Pressure (Ppeak)",
   },
-  { capabilityCode: "VENTILATION_PERFORMANCE", code: "FIO2_ACCURACY", name: "FiO2 Accuracy" },
+  { capabilityCode: "VENTILATION_PERFORMANCE", code: "FIO2_ACCURACY", name: "Pengukuran FIO2" },
 
   // RESUSCITATOR_PRESSURE — LK Resusitator Paru dan Neopuff.pdf
-  { capabilityCode: "RESUSCITATOR_PRESSURE", code: "MAX_PRESSURE", name: "Maximum Pressure" },
-  { capabilityCode: "RESUSCITATOR_PRESSURE", code: "PRESSURE_ACCURACY", name: "Pressure Accuracy" },
+  { capabilityCode: "RESUSCITATOR_PRESSURE", code: "MAX_PRESSURE", name: "Nilai Tekanan Maksimum" },
+  { capabilityCode: "RESUSCITATOR_PRESSURE", code: "PRESSURE_ACCURACY", name: "Kalibrasi Akurasi Tekanan Resuscitator" },
 
   // TEMPERATURE_CHAMBER_STERILIZATION — LK Autoclave.pdf; LK Sterilisator.pdf; LK Oven.pdf
   {
     capabilityCode: "TEMPERATURE_CHAMBER_STERILIZATION",
     code: "CHAMBER_TEMPERATURE",
-    name: "Chamber Temperature",
+    name: "Suhu Chamber",
   },
   {
     capabilityCode: "TEMPERATURE_CHAMBER_STERILIZATION",
     code: "STERILIZATION_TEMPERATURE",
-    name: "Sterilization Temperature",
+    name: "Suhu Sterilisasi",
   },
   {
     capabilityCode: "TEMPERATURE_CHAMBER_STERILIZATION",
     code: "STERILIZATION_TIME",
-    name: "Sterilization Time",
+    name: "Waktu Sterilisasi",
   },
 
   // TEMPERATURE_COLD_STORAGE — LK Blood Bank Refrigerator.pdf; LK Medical Refrigerator.pdf; LK Medical Freezer.pdf; LK Cold Chain, Vaccine Refrigerator.pdf
   {
     capabilityCode: "TEMPERATURE_COLD_STORAGE",
     code: "STORAGE_TEMPERATURE_UNIFORMITY",
-    name: "Storage Temperature Uniformity (Multi-Point)",
+    name: "Keseragaman Suhu Penyimpanan (multi-titik T1–T9)",
   },
 
   // INCUBATOR_ENVIRONMENT — LK Baby Incubator.pdf
   {
     capabilityCode: "INCUBATOR_ENVIRONMENT",
     code: "AIR_TEMPERATURE_CALIBRATION",
-    name: "Air Temperature Calibration",
+    name: "Kalibrasi Pengontrol Suhu dan Keseragaman Suhu Inkubator",
   },
   {
     capabilityCode: "INCUBATOR_ENVIRONMENT",
@@ -378,95 +378,95 @@ const ITEMS: ItemSeedRow[] = [
   {
     capabilityCode: "INCUBATOR_ENVIRONMENT",
     code: "TEMPERATURE_RECOVERY_TIME",
-    name: "Temperature Recovery Time",
+    name: "Waktu Pemulihan Lonjakan Suhu",
   },
   {
     capabilityCode: "INCUBATOR_ENVIRONMENT",
     code: "MATTRESS_TEMPERATURE",
-    name: "Mattress Temperature",
+    name: "Suhu Matras",
   },
-  { capabilityCode: "INCUBATOR_ENVIRONMENT", code: "AIR_VELOCITY", name: "Air Velocity" },
-  { capabilityCode: "INCUBATOR_ENVIRONMENT", code: "NOISE_LEVEL", name: "Noise Level" },
+  { capabilityCode: "INCUBATOR_ENVIRONMENT", code: "AIR_VELOCITY", name: "Kecepatan Udara Dalam Kompartemen" },
+  { capabilityCode: "INCUBATOR_ENVIRONMENT", code: "NOISE_LEVEL", name: "Kebisingan Kompartemen" },
   {
     capabilityCode: "INCUBATOR_ENVIRONMENT",
     code: "SKIN_TEMPERATURE_SENSOR",
-    name: "Skin Temperature Sensor Calibration",
+    name: "Kalibrasi Sensor Suhu Kulit",
   },
 
   // WARMER_SURFACE_TEMPERATURE — LK Infant Warmer.pdf
   {
     capabilityCode: "WARMER_SURFACE_TEMPERATURE",
     code: "MAX_MATTRESS_SURFACE_TEMPERATURE",
-    name: "Maximum Mattress Surface Temperature",
+    name: "Kalibrasi Suhu Maksimum pada Permukaan Matras",
   },
   {
     capabilityCode: "WARMER_SURFACE_TEMPERATURE",
     code: "WARMER_TEMPERATURE_CALIBRATION",
-    name: "Temperature Calibration",
+    name: "Kalibrasi Suhu",
   },
 
   // HUMIDIFIER_TEMPERATURE — LK Humidifier.pdf
   {
     capabilityCode: "HUMIDIFIER_TEMPERATURE",
     code: "TEMPERATURE_ACCURACY",
-    name: "Temperature Accuracy",
+    name: "Akurasi Suhu",
   },
   {
     capabilityCode: "HUMIDIFIER_TEMPERATURE",
     code: "MAXIMUM_TEMPERATURE",
-    name: "Maximum Temperature",
+    name: "Suhu Maksimum",
   },
 
   // VACUUM_SUCTION — LK Suction Pump.pdf
   {
     capabilityCode: "VACUUM_SUCTION",
     code: "VACUUM_GAUGE_ACCURACY",
-    name: "Vacuum Gauge Accuracy",
+    name: "Akurasi Vacuum Gauge",
   },
   { capabilityCode: "VACUUM_SUCTION", code: "MAXIMUM_VACUUM", name: "Maximum Vacuum" },
-  { capabilityCode: "VACUUM_SUCTION", code: "TIME_TO_MAX_VACUUM", name: "Time to Maximum Vacuum" },
+  { capabilityCode: "VACUUM_SUCTION", code: "TIME_TO_MAX_VACUUM", name: "Waktu Yang Dibutuhkan Saat Daya Hisap Maksimum" },
 
   // ROTATIONAL_SPEED — LK Centrifuge.pdf
   {
     capabilityCode: "ROTATIONAL_SPEED",
     code: "ROTATION_SPEED_ACCURACY",
-    name: "Rotation Speed Accuracy",
+    name: "Kalibrasi Kecepatan Putar",
   },
   {
     capabilityCode: "ROTATIONAL_SPEED",
     code: "ROTATION_TIME_ACCURACY",
-    name: "Rotation Time Accuracy",
+    name: "Kalibrasi Waktu Putar",
   },
 
   // INFUSION_FLOW — LK Infusion Pump.pdf; LK Syringe Pump.pdf
-  { capabilityCode: "INFUSION_FLOW", code: "OCCLUSION_TEST", name: "Occlusion Test" },
-  { capabilityCode: "INFUSION_FLOW", code: "FLOW_RATE_CALIBRATION", name: "Flow Rate Calibration" },
+  { capabilityCode: "INFUSION_FLOW", code: "OCCLUSION_TEST", name: "Pengujian Occlusion/Pemampatan" },
+  { capabilityCode: "INFUSION_FLOW", code: "FLOW_RATE_CALIBRATION", name: "Kalibrasi Laju Aliran" },
 
   // OPTICAL_MAGNIFICATION — LK Mikroskop Laboratorium.pdf
   {
     capabilityCode: "OPTICAL_MAGNIFICATION",
     code: "MAGNIFICATION_4X",
-    name: "Objective Magnification 4x",
+    name: "Pembesaran Objektif 4x",
   },
   {
     capabilityCode: "OPTICAL_MAGNIFICATION",
     code: "MAGNIFICATION_10X",
-    name: "Objective Magnification 10x",
+    name: "Pembesaran Objektif 10x",
   },
   {
     capabilityCode: "OPTICAL_MAGNIFICATION",
     code: "MAGNIFICATION_RATIO",
-    name: "Magnification Ratio",
+    name: "Nilai Ratio Pembesaran",
   },
 
   // GAS_FLOW_RATE — LK Flow Meter.pdf; LK Nebulizer Compressor.pdf; LK Nebulizer Ultrasonic.pdf; LK Oksigen Concentrator.pdf
-  { capabilityCode: "GAS_FLOW_RATE", code: "FLOW_RATE_ACCURACY", name: "Flow Rate Accuracy" },
+  { capabilityCode: "GAS_FLOW_RATE", code: "FLOW_RATE_ACCURACY", name: "Laju Aliran Gas" },
 
   // OXYGEN_CONCENTRATION — LK Oksigen Concentrator.pdf
   {
     capabilityCode: "OXYGEN_CONCENTRATION",
     code: "OXYGEN_CONCENTRATION_ACCURACY",
-    name: "Oxygen Concentration Accuracy",
+    name: "Konsentrasi Oksigen",
   },
 
   // ULTRASOUND_IMAGING — LK Ultrasonograph (USG).pdf
@@ -500,117 +500,117 @@ const ITEMS: ItemSeedRow[] = [
   {
     capabilityCode: "AUDIOMETRIC_PERFORMANCE",
     code: "PURE_TONE_LINEARITY",
-    name: "Pure Tone Linearity",
+    name: "Linieritas dB Pure Tone",
   },
   {
     capabilityCode: "AUDIOMETRIC_PERFORMANCE",
     code: "FREQUENCY_RESPONSE",
-    name: "Frequency Response",
+    name: "Frekuensi Respon / Tanggap",
   },
 
   // CLEAN_AIR_CONTAINMENT — LK Bio Safety Cabinet.docx; LK Laminar Air Flow.docx
   {
     capabilityCode: "CLEAN_AIR_CONTAINMENT",
     code: "PARTICLE_COUNT",
-    name: "Particle Count",
+    name: "Pengujian Particle Counter",
   },
   {
     capabilityCode: "CLEAN_AIR_CONTAINMENT",
     code: "DOWNFLOW_VELOCITY",
-    name: "Downflow Velocity",
+    name: "Pengujian Downflow",
   },
   {
     capabilityCode: "CLEAN_AIR_CONTAINMENT",
     code: "INFLOW_VELOCITY",
-    name: "Inflow Velocity",
+    name: "Pengujian Inflow Velocity",
   },
   {
     capabilityCode: "CLEAN_AIR_CONTAINMENT",
     code: "LIGHT_INTENSITY",
-    name: "Light Intensity",
+    name: "Pengukuran Nilai Intensitas Cahaya (Lighting)",
   },
   {
     capabilityCode: "CLEAN_AIR_CONTAINMENT",
     code: "SOUND_LEVEL",
-    name: "Sound Level",
+    name: "Pengukuran Sound Level",
   },
   {
     capabilityCode: "CLEAN_AIR_CONTAINMENT",
     code: "UV_RADIATION",
-    name: "UV Radiation",
+    name: "Pengukuran Radiasi UV",
   },
   {
     capabilityCode: "CLEAN_AIR_CONTAINMENT",
     code: "HEPA_LEAK_TEST",
-    name: "HEPA / ULPA Leak Test",
+    name: "Pengukuran Kebocoran Hepa / Ulpa Filter",
   },
 
   // DENTAL_UNIT_PERFORMANCE — LK Dental Unit.docx
   {
     capabilityCode: "DENTAL_UNIT_PERFORMANCE",
     code: "HANDPIECE_SPEED_LOW",
-    name: "Handpiece Speed (Low)",
+    name: "Kecepatan Putar Handpiece (Low Speed)",
   },
   {
     capabilityCode: "DENTAL_UNIT_PERFORMANCE",
     code: "HANDPIECE_SPEED_HIGH",
-    name: "Handpiece Speed (High)",
+    name: "Kecepatan Putar Handpiece (High Speed)",
   },
   {
     capabilityCode: "DENTAL_UNIT_PERFORMANCE",
     code: "HANDPIECE_PRESSURE",
-    name: "Handpiece Pressure",
+    name: "Tekanan Handpiece",
   },
   {
     capabilityCode: "DENTAL_UNIT_PERFORMANCE",
     code: "LIGHT_ILLUMINANCE",
-    name: "Light Illuminance",
+    name: "Illuminance",
   },
   {
     capabilityCode: "DENTAL_UNIT_PERFORMANCE",
     code: "AIR_SPRAY_PRESSURE",
-    name: "Air Spray Pressure",
+    name: "Tekanan Semprot Udara",
   },
   {
     capabilityCode: "DENTAL_UNIT_PERFORMANCE",
     code: "SUCTION_PRESSURE",
-    name: "Suction Pressure",
+    name: "Daya Hisap",
   },
 
   // XRAY_PERFORMANCE — LK Dental X-Ray.docx
   {
     capabilityCode: "XRAY_PERFORMANCE",
     code: "COLLIMATION_ACCURACY",
-    name: "Collimation Accuracy",
+    name: "Uji Kolimasi",
   },
-  { capabilityCode: "XRAY_PERFORMANCE", code: "KV_ACCURACY", name: "kV Accuracy" },
+  { capabilityCode: "XRAY_PERFORMANCE", code: "KV_ACCURACY", name: "Akurasi Tegangan Tinggi (kV)" },
   {
     capabilityCode: "XRAY_PERFORMANCE",
     code: "EXPOSURE_TIME_ACCURACY",
-    name: "Exposure Time Accuracy",
+    name: "Akurasi Waktu Penyinaran",
   },
-  { capabilityCode: "XRAY_PERFORMANCE", code: "DOSE_LINEARITY", name: "Dose Linearity" },
+  { capabilityCode: "XRAY_PERFORMANCE", code: "DOSE_LINEARITY", name: "Linearitas Pengukuran" },
   {
     capabilityCode: "XRAY_PERFORMANCE",
     code: "OUTPUT_REPRODUCIBILITY",
-    name: "Output Reproducibility",
+    name: "Reproduksibilitas Keluaran Sinar-X",
   },
   {
     capabilityCode: "XRAY_PERFORMANCE",
     code: "HALF_VALUE_LAYER",
-    name: "Half Value Layer",
+    name: "Pengujian Half Value Layer (HVL)",
   },
 
   // ELECTROTHERAPY_STIMULATION — LK Electro Accupunture (EST).docx
   {
     capabilityCode: "ELECTROTHERAPY_STIMULATION",
     code: "STIMULATION_FREQUENCY",
-    name: "Stimulation Frequency",
+    name: "Frekuensi",
   },
   {
     capabilityCode: "ELECTROTHERAPY_STIMULATION",
     code: "STIMULATION_INTENSITY",
-    name: "Stimulation Intensity",
+    name: "Intensitas Terapi",
   },
   {
     capabilityCode: "ELECTROTHERAPY_STIMULATION",
@@ -620,14 +620,14 @@ const ITEMS: ItemSeedRow[] = [
   {
     capabilityCode: "ELECTROTHERAPY_STIMULATION",
     code: "TREATMENT_TIMER",
-    name: "Treatment Timer",
+    name: "Waktu",
   },
 
   // LIGHT_SOURCE_PERFORMANCE — light-source family
   {
     capabilityCode: "LIGHT_SOURCE_PERFORMANCE",
     code: "LIGHT_INTENSITY",
-    name: "Light Intensity",
+    name: "Intensitas Cahaya",
   },
   {
     capabilityCode: "LIGHT_SOURCE_PERFORMANCE",
@@ -644,28 +644,28 @@ const ITEMS: ItemSeedRow[] = [
   {
     capabilityCode: "FETAL_HEART_RATE",
     code: "FETAL_HR_ACCURACY",
-    name: "Fetal Heart Rate Accuracy",
+    name: "Kalibrasi Detak Jantung Bayi",
   },
 
   // SPECTRAL_IRRADIANCE — LK Phototherapy.docx
   {
     capabilityCode: "SPECTRAL_IRRADIANCE",
     code: "SPECTRAL_IRRADIANCE_ACCURACY",
-    name: "Spectral Irradiance Accuracy",
+    name: "Pengujian Keluaran Spectral Irradiance",
   },
 
   // SPIROMETRY_VOLUME_ACCURACY — LK Spirometer.docx
   {
     capabilityCode: "SPIROMETRY_VOLUME_ACCURACY",
     code: "FVC_VOLUME_ACCURACY",
-    name: "FVC Volume Accuracy",
+    name: "Pengukuran Akurasi Total Volume Forced Vital Capacity (FVC)",
   },
 
   // WARMER_SURFACE_TEMPERATURE — extra item for Blanket Warmer (LK Blanket Warmer.docx)
   {
     capabilityCode: "WARMER_SURFACE_TEMPERATURE",
     code: "HIGH_TEMP_PROTECTION",
-    name: "High Temperature Protection",
+    name: "Pengujian Proteksi Suhu Tinggi",
   },
 ];
 

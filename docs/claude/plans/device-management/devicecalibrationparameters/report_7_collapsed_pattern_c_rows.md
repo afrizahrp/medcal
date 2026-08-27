@@ -213,15 +213,13 @@ Output (abridged):
 | `pnpm turbo run typecheck` | ✅ **10 successful / 10 total** |
 | `pnpm turbo run lint` | ✅ 10/10 (all packages' lint scripts are `echo … skipped` stubs — project has no real linter wired) |
 | `prettier --check` on both changed files | ✅ "All matched files use Prettier code style" |
-| `pnpm turbo run build` | in progress at time of writing — see note below |
+| `pnpm turbo run build` | ✅ **5 successful / 5 total** (58s) |
 | `tsc --noEmit` on both prisma scripts (not in turbo pipeline; `packages/db/tsconfig.json` only includes `src`) | ✅ no errors |
 
 > Build note: the working tree contains a large amount of **pre-existing, unrelated uncommitted
 > work** (a `CommandPopover` refactor across ~9 `apps/portal` files, deletion of ~15 `docs/claude`
 > planning files, `.tsbuildinfo` churn) that was already present before this task and is outside
-> its scope. `typecheck` (which compiles every buildable package) passed cleanly, so this change
-> does not introduce type errors. If `turbo run build` fails it will be on that unrelated portal
-> code, not on `packages/db`.
+> its scope. `typecheck` and `build` both passed cleanly regardless.
 
 ### Confirmation: scope
 

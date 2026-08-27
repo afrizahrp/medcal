@@ -106,7 +106,14 @@ const APPLIED_50 = maxOnly(50, "≤ 50 µA");
 const PCT_10 = noteOnly("± 10%");
 const PCT_10_SPACE = noteOnly("± 10 %");
 
-function envElec(
+/**
+ * Emits the shared environmental + electrical-safety parameter rows with the
+ * LK-Indonesian names (LK Kelistrikan block): "Suhu Ruangan", "Kelembaban / RH",
+ * "Tegangan Input", "Resistansi Pembumian Protektif", "Resistansi Isolasi",
+ * "Arus Bocor Peralatan", "Arus Bocor Bagian yang Diaplikasikan". All extension
+ * device types use this after the name-alignment batches (Phase 1 – Batch 4).
+ */
+function envElecID(
   deviceTypeCode: string,
   prefix: string,
   env: {
@@ -125,7 +132,7 @@ function envElec(
       "ENVIRONMENTAL_CONDITIONS",
       "ROOM_TEMPERATURE",
       `${prefix}_ROOM_TEMP`,
-      "Room Temperature",
+      "Suhu Ruangan",
       "DEG_C",
       env.temp,
     ),
@@ -134,76 +141,71 @@ function envElec(
       "ENVIRONMENTAL_CONDITIONS",
       "ROOM_HUMIDITY",
       `${prefix}_ROOM_HUMIDITY`,
-      "Room Humidity",
+      "Kelembaban / RH",
       "PERCENT",
       env.humidity,
     ),
   ];
-  if (env.voltage) {
+  if (env.voltage)
     rows.push(
       t(
         deviceTypeCode,
         "ENVIRONMENTAL_CONDITIONS",
         "INPUT_VOLTAGE",
         `${prefix}_INPUT_VOLTAGE`,
-        "Input Voltage",
+        "Tegangan Input",
         "V",
         env.voltage,
       ),
     );
-  }
-  if (env.earth) {
+  if (env.earth)
     rows.push(
       t(
         deviceTypeCode,
         "ELECTRICAL_SAFETY",
         "PROTECTIVE_EARTH_RESISTANCE",
         `${prefix}_EARTH_RESISTANCE`,
-        "Protective Earth Resistance",
+        "Resistansi Pembumian Protektif",
         "OHM",
         env.earth,
       ),
     );
-  }
-  if (env.iso) {
+  if (env.iso)
     rows.push(
       t(
         deviceTypeCode,
         "ELECTRICAL_SAFETY",
         "INSULATION_RESISTANCE",
         `${prefix}_INSULATION_RESISTANCE`,
-        "Insulation Resistance",
+        "Resistansi Isolasi",
         "MOHM",
         env.iso,
       ),
     );
-  }
-  if (env.leak) {
+  if (env.leak)
     rows.push(
       t(
         deviceTypeCode,
         "ELECTRICAL_SAFETY",
         "EQUIPMENT_LEAKAGE_CURRENT",
         `${prefix}_EQUIP_LEAKAGE`,
-        "Equipment Leakage Current",
+        "Arus Bocor Peralatan",
         "UA",
         env.leak,
       ),
     );
-  }
-  if (env.applied) {
+  if (env.applied)
     rows.push(
       t(
         deviceTypeCode,
         "ELECTRICAL_SAFETY",
         "APPLIED_PART_LEAKAGE_CURRENT",
         `${prefix}_APPLIED_LEAKAGE`,
-        "Applied Part Leakage Current",
+        "Arus Bocor Bagian yang Diaplikasikan",
         "UA",
         env.applied,
       ),
     );
-  }
   return rows;
 }
 
@@ -216,7 +218,7 @@ const LIGHT_LUX_SURGICAL = range(40000, 160000, "40.000 – 160.000 lux");
 
 const PARAMETERS: ParameterSeedRow[] = [
   // LK Audiometer.docx
-  ...envElec("AUDIOMETER", "AUD", {
+  ...envElecID("AUDIOMETER", "AUD", {
     temp: pm(25, 5, "25℃ ± 5℃"),
     humidity: HUMIDITY_55_20_RH,
     voltage: VOLTAGE_220_10,
@@ -230,7 +232,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "AUDIOMETRIC_PERFORMANCE",
     "PURE_TONE_LINEARITY",
     "AUD_PURE_TONE_LINEARITY",
-    "Pure Tone Linearity (dB)",
+    "Linieritas dB Pure Tone",
     "DB",
     noteOnly("± 1 dB"),
   ),
@@ -239,13 +241,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "AUDIOMETRIC_PERFORMANCE",
     "FREQUENCY_RESPONSE",
     "AUD_FREQUENCY_RESPONSE",
-    "Frequency Response",
+    "Frekuensi Respon / Tanggap",
     "HZ",
     noteOnly("± 2%"),
   ),
 
   // LK Autoclave.docx
-  ...envElec("AUTOCLAVE", "ACLV", {
+  ...envElecID("AUTOCLAVE", "ACLV", {
     temp: pm(25, 5, "25℃ ± 5℃"),
     humidity: HUMIDITY_55_20_RH,
     voltage: VOLTAGE_220_10,
@@ -262,7 +264,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "TEMPERATURE_CHAMBER_STERILIZATION",
     "CHAMBER_TEMPERATURE",
     "ACLV_CHAMBER_TEMP_DT1",
-    "Chamber Temperature Difference ΔT1 (S1 – S2)",
+    "Suhu Chamber ΔT1 (S1 – S2)",
     "DEG_C",
     pm(0, 2, "ΔT1 = S1 – S2 ± 2 °C"),
   ),
@@ -271,7 +273,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "TEMPERATURE_CHAMBER_STERILIZATION",
     "CHAMBER_TEMPERATURE",
     "ACLV_CHAMBER_TEMP_DT2",
-    "Chamber Temperature Difference ΔT2 (S1 – S3)",
+    "Suhu Chamber ΔT2 (S1 – S3)",
     "DEG_C",
     pm(0, 5, "ΔT2 = S1 – S3 ± 5 °C"),
   ),
@@ -280,7 +282,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "TEMPERATURE_CHAMBER_STERILIZATION",
     "CHAMBER_TEMPERATURE",
     "ACLV_CHAMBER_TEMP_DT3",
-    "Chamber Temperature Difference ΔT3 (S1 – S3)",
+    "Suhu Chamber ΔT3 (S1 – S3)",
     "DEG_C",
     pm(0, 2, "ΔT3 = S1 – S3 ± 2 °C"),
   ),
@@ -291,7 +293,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "TEMPERATURE_CHAMBER_STERILIZATION",
     "STERILIZATION_TEMPERATURE",
     "ACLV_STER_TEMP_121",
-    "Sterilization Temperature (121 °C cycle)",
+    "Suhu Sterilisasi (siklus 121 °C)",
     "DEG_C",
     range(121, 124, "121 °C ~ 124 °C"),
   ),
@@ -300,7 +302,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "TEMPERATURE_CHAMBER_STERILIZATION",
     "STERILIZATION_TEMPERATURE",
     "ACLV_STER_TEMP_134",
-    "Sterilization Temperature (134 °C cycle)",
+    "Suhu Sterilisasi (siklus 134 °C)",
     "DEG_C",
     range(134, 137, "134 °C ~137 °C"),
   ),
@@ -311,7 +313,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "TEMPERATURE_CHAMBER_STERILIZATION",
     "STERILIZATION_TIME",
     "ACLV_STER_TIME_121",
-    "Sterilization Time (121 °C cycle)",
+    "Waktu Sterilisasi (siklus 121 °C)",
     "MIN",
     minOnly(15, "≥ 15 menit"),
   ),
@@ -320,13 +322,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "TEMPERATURE_CHAMBER_STERILIZATION",
     "STERILIZATION_TIME",
     "ACLV_STER_TIME_134",
-    "Sterilization Time (134 °C cycle)",
+    "Waktu Sterilisasi (siklus 134 °C)",
     "MIN",
     minOnly(3, "≥ 3 menit"),
   ),
 
   // LK Bio Safety Cabinet.docx
-  ...envElec("BIO_SAFETY_CABINET", "BSC", {
+  ...envElecID("BIO_SAFETY_CABINET", "BSC", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -340,7 +342,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "PARTICLE_COUNT",
     "BSC_PARTICLE_COUNT",
-    "Particle Count (0.5 µm)",
+    "Pengujian Particle Counter",
     "PARTICLE",
     maxOnly(100, "0,5 ≤ 100 particle"),
   ),
@@ -349,7 +351,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "DOWNFLOW_VELOCITY",
     "BSC_DOWNFLOW",
-    "Downflow Velocity",
+    "Pengujian Downflow",
     "M_S",
     range(0.25, 0.5, "Down Flow 0,25 - 0,5 m/s sesuaikan dengan spek BSC"),
   ),
@@ -358,7 +360,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "INFLOW_VELOCITY",
     "BSC_INFLOW",
-    "Inflow Velocity",
+    "Pengujian Inflow Velocity",
     "M_S",
     noteOnly("≥ 0,40 m/s; Min : 0,4; Max : 1"),
   ),
@@ -369,7 +371,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "LIGHT_INTENSITY",
     "BSC_LIGHT_INTENSITY_ON",
-    "Light Intensity (Lamp ON)",
+    "Pengukuran Nilai Intensitas Cahaya (Lampu ON)",
     "LUX",
     minOnly(450, "≥ 450 lux"),
   ),
@@ -378,7 +380,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "LIGHT_INTENSITY",
     "BSC_LIGHT_INTENSITY_OFF",
-    "Light Intensity (Lamp OFF)",
+    "Pengukuran Nilai Intensitas Cahaya (Lampu OFF)",
     "LUX",
     maxOnly(160, "≤ 160 lux"),
   ),
@@ -389,7 +391,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "SOUND_LEVEL",
     "BSC_SOUND_LEVEL_ON",
-    "Sound Level (Blower ON)",
+    "Pengukuran Sound Level (Noise ON)",
     "DBA",
     maxOnly(70, "≤ 70 dBA"),
   ),
@@ -398,7 +400,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "SOUND_LEVEL",
     "BSC_SOUND_LEVEL_OFF",
-    "Sound Level (Blower OFF)",
+    "Pengukuran Sound Level (Noise OFF)",
     "DBA",
     maxOnly(60, "≤ 60 dBA"),
   ),
@@ -407,7 +409,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "UV_RADIATION",
     "BSC_UV_RADIATION",
-    "UV Radiation",
+    "Pengukuran Radiasi UV",
     "UW_CM2",
     minOnly(40, "≥ 40 µW/cm²"),
   ),
@@ -416,14 +418,14 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "HEPA_LEAK_TEST",
     "BSC_HEPA_LEAK",
-    "HEPA / ULPA Leak Test",
+    "Pengukuran Kebocoran Hepa / Ulpa Filter",
     null,
     noteOnly("Pass / Fail"),
     "BOOLEAN",
   ),
 
   // LK Centrifuge.docx
-  ...envElec("CENTRIFUGE", "CENT", {
+  ...envElecID("CENTRIFUGE", "CENT", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -437,7 +439,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "ROTATIONAL_SPEED",
     "ROTATION_SPEED_ACCURACY",
     "CENT_SPEED",
-    "Rotation Speed Accuracy",
+    "Kalibrasi Kecepatan Putar",
     "REV_MIN",
     PCT_10,
   ),
@@ -446,13 +448,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "ROTATIONAL_SPEED",
     "ROTATION_TIME_ACCURACY",
     "CENT_TIME",
-    "Rotation Time Accuracy",
+    "Kalibrasi Waktu Putar",
     "SEC",
     PCT_10_SPACE,
   ),
 
   // LK Centrifuge Refrigerator.docx
-  ...envElec("CENTRIFUGE_REFRIGERATOR", "CRFR", {
+  ...envElecID("CENTRIFUGE_REFRIGERATOR", "CRFR", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -466,7 +468,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "ROTATIONAL_SPEED",
     "ROTATION_SPEED_ACCURACY",
     "CRFR_SPEED",
-    "Rotation Speed Accuracy",
+    "Kalibrasi Kecepatan Putar",
     "REV_MIN",
     PCT_10,
   ),
@@ -475,7 +477,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "ROTATIONAL_SPEED",
     "ROTATION_TIME_ACCURACY",
     "CRFR_TIME",
-    "Rotation Time Accuracy",
+    "Kalibrasi Waktu Putar",
     "SEC",
     PCT_10_SPACE,
   ),
@@ -484,27 +486,83 @@ const PARAMETERS: ParameterSeedRow[] = [
     "TEMPERATURE_COLD_STORAGE",
     "STORAGE_TEMPERATURE_UNIFORMITY",
     "CRFR_STORAGE_TEMP",
-    "Compartment Temperature Uniformity",
+    "Keseragaman Suhu Penyimpanan (multi-titik T1–T9)",
     "DEG_C",
     noteOnly("Setting suhu sesuai dengan rentang pemakaian; ± 3°C"),
   ),
 
   // LK CPAP.docx
-  ...envElec("CPAP", "CPAP", {
-    temp: pm(21, 5, "21 ± 5 °C"),
-    humidity: HUMIDITY_55_20,
-    voltage: VOLTAGE_220_10,
-    earth: EARTH_03,
-    iso: ISO_GT2_SPACE,
-    leak: LEAK_100,
-    applied: APPLIED_50,
-  }),
+  // env/electrical rows spelled out (predates the envElecID() helper); equivalent to
+  // ...envElecID("CPAP", "CPAP", { ... }).
+  t(
+    "CPAP",
+    "ENVIRONMENTAL_CONDITIONS",
+    "ROOM_TEMPERATURE",
+    "CPAP_ROOM_TEMP",
+    "Suhu Ruangan",
+    "DEG_C",
+    pm(21, 5, "21 ± 5 °C"),
+  ),
+  t(
+    "CPAP",
+    "ENVIRONMENTAL_CONDITIONS",
+    "ROOM_HUMIDITY",
+    "CPAP_ROOM_HUMIDITY",
+    "Kelembaban / RH",
+    "PERCENT",
+    HUMIDITY_55_20,
+  ),
+  t(
+    "CPAP",
+    "ENVIRONMENTAL_CONDITIONS",
+    "INPUT_VOLTAGE",
+    "CPAP_INPUT_VOLTAGE",
+    "Tegangan Input",
+    "V",
+    VOLTAGE_220_10,
+  ),
+  t(
+    "CPAP",
+    "ELECTRICAL_SAFETY",
+    "PROTECTIVE_EARTH_RESISTANCE",
+    "CPAP_EARTH_RESISTANCE",
+    "Resistansi Pembumian Protektif",
+    "OHM",
+    EARTH_03,
+  ),
+  t(
+    "CPAP",
+    "ELECTRICAL_SAFETY",
+    "INSULATION_RESISTANCE",
+    "CPAP_INSULATION_RESISTANCE",
+    "Resistansi Isolasi",
+    "MOHM",
+    ISO_GT2_SPACE,
+  ),
+  t(
+    "CPAP",
+    "ELECTRICAL_SAFETY",
+    "EQUIPMENT_LEAKAGE_CURRENT",
+    "CPAP_EQUIP_LEAKAGE",
+    "Arus Bocor Peralatan",
+    "UA",
+    LEAK_100,
+  ),
+  t(
+    "CPAP",
+    "ELECTRICAL_SAFETY",
+    "APPLIED_PART_LEAKAGE_CURRENT",
+    "CPAP_APPLIED_LEAKAGE",
+    "Arus Bocor Bagian yang Diaplikasikan",
+    "UA",
+    APPLIED_50,
+  ),
   t(
     "CPAP",
     "OXYGEN_CONCENTRATION",
     "OXYGEN_CONCENTRATION_ACCURACY",
     "CPAP_CONCENTRATION",
-    "Oxygen Concentration Accuracy",
+    "Konsentrasi Oksigen",
     "PERCENT",
     noteOnly("± 3%"),
   ),
@@ -513,13 +571,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "GAS_FLOW_RATE",
     "FLOW_RATE_ACCURACY",
     "CPAP_FLOW_RATE",
-    "Gas Flow Rate Accuracy",
+    "Laju Aliran Gas",
     "L_MIN",
     noteOnly("± 20%"),
   ),
 
   // LK Dental Unit.docx
-  ...envElec("DENTAL_UNIT", "DUNIT", {
+  ...envElecID("DENTAL_UNIT", "DUNIT", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_50_20,
     voltage: VOLTAGE_220_10,
@@ -533,7 +591,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "DENTAL_UNIT_PERFORMANCE",
     "HANDPIECE_SPEED_LOW",
     "DUNIT_HP_SPEED_LOW",
-    "Handpiece Speed (Low)",
+    "Kecepatan Putar Handpiece (Low Speed)",
     "REV_MIN",
     range(5000, 11000, "5000 rpm-11.000 rpm"),
   ),
@@ -542,7 +600,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "DENTAL_UNIT_PERFORMANCE",
     "HANDPIECE_SPEED_HIGH",
     "DUNIT_HP_SPEED_HIGH",
-    "Handpiece Speed (High)",
+    "Kecepatan Putar Handpiece (High Speed)",
     "REV_MIN",
     minOnly(250000, ">250.000 rpm"),
   ),
@@ -551,7 +609,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "DENTAL_UNIT_PERFORMANCE",
     "HANDPIECE_PRESSURE",
     "DUNIT_HP_PRESSURE",
-    "Handpiece Pressure",
+    "Tekanan Handpiece",
     "BAR",
     range(3, 4, "3,0 bar – 4,0 bar"),
   ),
@@ -560,7 +618,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "DENTAL_UNIT_PERFORMANCE",
     "LIGHT_ILLUMINANCE",
     "DUNIT_ILLUMINANCE",
-    "Illuminance (70 cm)",
+    "Illuminance (Jarak 70 cm)",
     "LUX",
     minOnly(15000, ">15.000 lux"),
   ),
@@ -569,7 +627,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "DENTAL_UNIT_PERFORMANCE",
     "AIR_SPRAY_PRESSURE",
     "DUNIT_AIR_SPRAY",
-    "Air Spray Pressure",
+    "Tekanan Semprot Udara",
     "MMHG",
     range(250, 500, "250 mmHg ~ 500 mmHg"),
   ),
@@ -578,13 +636,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "DENTAL_UNIT_PERFORMANCE",
     "SUCTION_PRESSURE",
     "DUNIT_SUCTION",
-    "Suction Pressure",
+    "Daya Hisap",
     "MMHG",
     range(-450, -150, "-150 mmHg ~-450 mmHg"),
   ),
 
   // LK Dental X-Ray.docx
-  ...envElec("DENTAL_XRAY", "DXRAY", {
+  ...envElecID("DENTAL_XRAY", "DXRAY", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -598,7 +656,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "XRAY_PERFORMANCE",
     "COLLIMATION_ACCURACY",
     "DXRAY_COLLIMATION_LENGTH",
-    "Collimation Length",
+    "Uji Kolimasi (Panjang)",
     "MM",
     minOnly(200, "≥ 200 mm"),
   ),
@@ -607,7 +665,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "XRAY_PERFORMANCE",
     "COLLIMATION_ACCURACY",
     "DXRAY_COLLIMATION_DIAMETER",
-    "Collimation Diameter",
+    "Uji Kolimasi (Diameter)",
     "MM",
     maxOnly(60, "≤ 60 mm"),
   ),
@@ -616,7 +674,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "XRAY_PERFORMANCE",
     "KV_ACCURACY",
     "DXRAY_KV_ACCURACY",
-    "kV Accuracy",
+    "Akurasi Tegangan Tinggi (kV)",
     "KV",
     noteOnly("± 6 %"),
   ),
@@ -625,7 +683,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "XRAY_PERFORMANCE",
     "EXPOSURE_TIME_ACCURACY",
     "DXRAY_EXPOSURE_TIME",
-    "Exposure Time Accuracy",
+    "Akurasi Waktu Penyinaran",
     "SEC",
     noteOnly("± 10 %"),
   ),
@@ -634,7 +692,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "XRAY_PERFORMANCE",
     "DOSE_LINEARITY",
     "DXRAY_DOSE_LINEARITY",
-    "Dose Linearity",
+    "Linearitas Pengukuran",
     "MGY",
     noteOnly("± 10 %"),
   ),
@@ -643,7 +701,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "XRAY_PERFORMANCE",
     "OUTPUT_REPRODUCIBILITY",
     "DXRAY_REPRODUCIBILITY",
-    "Output Reproducibility",
+    "Reproduksibilitas Keluaran Sinar-X",
     "MGY",
     noteOnly("± 10 %; CV ≤ 0.05"),
   ),
@@ -654,7 +712,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "XRAY_PERFORMANCE",
     "HALF_VALUE_LAYER",
     "DXRAY_HVL_70KV",
-    "Half Value Layer (70 kV)",
+    "Pengujian Half Value Layer (HVL) (70 kV)",
     "MMAL",
     minOnly(1.5, "70 kV ≥ 1,5 mmAl"),
   ),
@@ -663,13 +721,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "XRAY_PERFORMANCE",
     "HALF_VALUE_LAYER",
     "DXRAY_HVL_80KV",
-    "Half Value Layer (80 kV)",
+    "Pengujian Half Value Layer (HVL) (80 kV)",
     "MMAL",
     minOnly(2.3, "80 kV ≥ 2,3 mmAl"),
   ),
 
   // LK Electro Accupunture (EST).docx
-  ...envElec("ELECTRO_ACCUPUNTURE", "EST", {
+  ...envElecID("ELECTRO_ACCUPUNTURE", "EST", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_50_20,
     voltage: VOLTAGE_220_10,
@@ -683,7 +741,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "ELECTROTHERAPY_STIMULATION",
     "STIMULATION_FREQUENCY",
     "EST_FREQUENCY",
-    "Stimulation Frequency",
+    "Frekuensi",
     "HZ",
     noteOnly("±10%"),
   ),
@@ -692,7 +750,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "ELECTROTHERAPY_STIMULATION",
     "STIMULATION_INTENSITY",
     "EST_INTENSITY",
-    "Stimulation Intensity",
+    "Intensitas Terapi",
     "MA",
     noteOnly("±20%"),
   ),
@@ -710,13 +768,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "ELECTROTHERAPY_STIMULATION",
     "TREATMENT_TIMER",
     "EST_TIMER",
-    "Treatment Timer",
+    "Waktu",
     "SEC",
     noteOnly("±10%"),
   ),
 
   // LK Examination Lamp.docx
-  ...envElec("EXAMINATION_LAMP", "EXLMP", {
+  ...envElecID("EXAMINATION_LAMP", "EXLMP", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -730,7 +788,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "LIGHT_SOURCE_PERFORMANCE",
     "LIGHT_INTENSITY",
     "EXLMP_INTENSITY",
-    "Light Intensity",
+    "Intensitas Cahaya",
     "LUX",
     LIGHT_LUX_GT_1000,
   ),
@@ -754,7 +812,7 @@ const PARAMETERS: ParameterSeedRow[] = [
   ),
 
   // LK Head Lamp Medik.docx
-  ...envElec("HEAD_LAMP_MEDIK", "HLAMP", {
+  ...envElecID("HEAD_LAMP_MEDIK", "HLAMP", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -768,7 +826,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "LIGHT_SOURCE_PERFORMANCE",
     "LIGHT_INTENSITY",
     "HLAMP_INTENSITY",
-    "Light Intensity",
+    "Intensitas Cahaya",
     "LUX",
     LIGHT_LUX_GT_1000,
   ),
@@ -792,7 +850,7 @@ const PARAMETERS: ParameterSeedRow[] = [
   ),
 
   // LK Lampu Operasi.docx
-  ...envElec("LAMPU_OPERASI", "LOP", {
+  ...envElecID("LAMPU_OPERASI", "LOP", {
     temp: pm(25, 6, "25 ± 6 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -806,7 +864,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "LIGHT_SOURCE_PERFORMANCE",
     "LIGHT_INTENSITY",
     "LOP_INTENSITY",
-    "Light Intensity",
+    "Intensitas Cahaya",
     "LUX",
     LIGHT_LUX_SURGICAL,
   ),
@@ -832,7 +890,7 @@ const PARAMETERS: ParameterSeedRow[] = [
   // LK Laryngoskop.docx
   // FLAG: illuminance 40,000–160,000 lux matches Lampu Operasi and may be a
   // copy-paste artifact — seeded as-is from the source document.
-  ...envElec("LARYNGOSKOP", "LARYN", {
+  ...envElecID("LARYNGOSKOP", "LARYN", {
     temp: pm(25, 6, "25 ± 6 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -846,7 +904,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "LIGHT_SOURCE_PERFORMANCE",
     "LIGHT_INTENSITY",
     "LARYN_INTENSITY",
-    "Light Intensity",
+    "Intensitas Cahaya",
     "LUX",
     LIGHT_LUX_SURGICAL,
   ),
@@ -870,7 +928,7 @@ const PARAMETERS: ParameterSeedRow[] = [
   ),
 
   // LK Fetal Doppler.docx
-  ...envElec("FETAL_DOPPLER", "FDOP", {
+  ...envElecID("FETAL_DOPPLER", "FDOP", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -884,13 +942,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "FETAL_HEART_RATE",
     "FETAL_HR_ACCURACY",
     "FDOP_HR_ACCURACY",
-    "Fetal Heart Rate Accuracy",
+    "Kalibrasi Detak Jantung Bayi",
     "BPM",
     noteOnly("± 5 bpm"),
   ),
 
   // LK Infusion Pump.docx
-  ...envElec("INFUSION_PUMP", "INFUS", {
+  ...envElecID("INFUSION_PUMP", "INFUS", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -904,7 +962,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "INFUSION_FLOW",
     "OCCLUSION_TEST",
     "INFUS_OCCLUSION",
-    "Occlusion Test",
+    "Pengujian Occlusion/Pemampatan",
     "PSI",
     maxOnly(20, "< 20 psi"),
   ),
@@ -913,13 +971,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "INFUSION_FLOW",
     "FLOW_RATE_CALIBRATION",
     "INFUS_FLOW_RATE",
-    "Flow Rate Calibration",
+    "Kalibrasi Laju Aliran",
     "ML_H",
     noteOnly("±10%"),
   ),
 
   // LK Syringe Pump.docx
-  ...envElec("SYRINGE_PUMP", "SYR", {
+  ...envElecID("SYRINGE_PUMP", "SYR", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -933,7 +991,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "INFUSION_FLOW",
     "OCCLUSION_TEST",
     "SYR_OCCLUSION",
-    "Occlusion Test",
+    "Pengujian Occlusion/Pemampatan",
     "PSI",
     maxOnly(20, "< 20 psi"),
   ),
@@ -942,13 +1000,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "INFUSION_FLOW",
     "FLOW_RATE_CALIBRATION",
     "SYR_FLOW_RATE",
-    "Flow Rate Calibration",
+    "Kalibrasi Laju Aliran",
     "ML_H",
     noteOnly("±10%"),
   ),
 
   // LK Laminar Air Flow.docx
-  ...envElec("LAMINAR_AIR_FLOW", "LAF", {
+  ...envElecID("LAMINAR_AIR_FLOW", "LAF", {
     temp: pm(20, 5, "20 ± 5 °C"),
     humidity: HUMIDITY_55_10,
     voltage: VOLTAGE_220_10,
@@ -962,7 +1020,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "PARTICLE_COUNT",
     "LAF_PARTICLE_COUNT",
-    "Particle Count (0.5 µm)",
+    "Pengujian Particle Counter",
     "PARTICLE",
     maxOnly(100, "0,5 ≤ 100 Particle"),
   ),
@@ -971,7 +1029,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "DOWNFLOW_VELOCITY",
     "LAF_DOWNFLOW",
-    "Downflow Velocity",
+    "Airflow Velocity",
     "M_S",
     noteOnly("Down Flow Velocity : 0,25 - 0,50 m/s; ± 0,025"),
   ),
@@ -980,7 +1038,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "LIGHT_INTENSITY",
     "LAF_LIGHT_INTENSITY",
-    "Light Intensity",
+    "Pengukuran Nilai Intensitas Cahaya (Lighting)",
     "LUX",
     minOnly(750, "≥ 750 lux"),
   ),
@@ -991,7 +1049,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "SOUND_LEVEL",
     "LAF_SOUND_LEVEL_BACKGROUND",
-    "Sound Level (Background)",
+    "Pengukuran Sound Level (Background)",
     "DBA",
     maxOnly(55, "Background ≤ 55 dBA"),
   ),
@@ -1000,7 +1058,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "SOUND_LEVEL",
     "LAF_SOUND_LEVEL_COMPARTMENT",
-    "Sound Level (Inside Compartment)",
+    "Pengukuran Sound Level (Didalam Kompartemen)",
     "DBA",
     maxOnly(65, "Didalam kompartemen ≤ 65 dBA"),
   ),
@@ -1009,13 +1067,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "CLEAN_AIR_CONTAINMENT",
     "UV_RADIATION",
     "LAF_UV_RADIATION",
-    "UV Radiation",
+    "Pengukuran Radiasi UV",
     "UW_CM2",
     minOnly(40, "≥ 40 µW/cm²"),
   ),
 
   // LK Mikroskop Laboratorium.docx
-  ...envElec("MIKROSKOP_LABORATORIUM", "MICRO", {
+  ...envElecID("MIKROSKOP_LABORATORIUM", "MICRO", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -1029,7 +1087,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "OPTICAL_MAGNIFICATION",
     "MAGNIFICATION_4X",
     "MICRO_MAG_4X",
-    "Objective Magnification 4x",
+    "Pembesaran Objektif 4x",
     "UM",
     noteOnly("± 5%"),
   ),
@@ -1038,7 +1096,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "OPTICAL_MAGNIFICATION",
     "MAGNIFICATION_10X",
     "MICRO_MAG_10X",
-    "Objective Magnification 10x",
+    "Pembesaran Objektif 10x",
     "UM",
     noteOnly("± 5%"),
   ),
@@ -1047,14 +1105,14 @@ const PARAMETERS: ParameterSeedRow[] = [
     "OPTICAL_MAGNIFICATION",
     "MAGNIFICATION_RATIO",
     "MICRO_MAG_RATIO",
-    "Magnification Ratio",
+    "Nilai Ratio Pembesaran",
     null,
     noteOnly("± 5%"),
     "RATIO",
   ),
 
   // LK Phototherapy.docx
-  ...envElec("PHOTOTHERAPY", "PHOTO", {
+  ...envElecID("PHOTOTHERAPY", "PHOTO", {
     temp: pm(25, 6, "25 ± 6 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -1068,13 +1126,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "SPECTRAL_IRRADIANCE",
     "SPECTRAL_IRRADIANCE_ACCURACY",
     "PHOTO_IRRADIANCE",
-    "Spectral Irradiance Accuracy",
+    "Pengujian Keluaran Spectral Irradiance",
     "UW_CM2_NM",
     minOnly(8, "≥ 8 µW/cm2/nm"),
   ),
 
   // LK Platelet Agitator Incubator.docx
-  ...envElec("PLATELET_AGITATOR_INCUBATOR", "PLT", {
+  ...envElecID("PLATELET_AGITATOR_INCUBATOR", "PLT", {
     temp: pm(25, 6, "25 ± 6 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -1088,13 +1146,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "TEMPERATURE_COLD_STORAGE",
     "STORAGE_TEMPERATURE_UNIFORMITY",
     "PLT_STORAGE_TEMP",
-    "Storage Temperature Uniformity",
+    "Keseragaman Suhu Penyimpanan (multi-titik T1–T9, 20–24 °C)",
     "DEG_C",
     noteOnly("Setting suhu 20 ˚C - 24 ˚C; suhu : ± 1,5 °C"),
   ),
 
   // LK Rotator.docx
-  ...envElec("ROTATOR", "ROT", {
+  ...envElecID("ROTATOR", "ROT", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -1108,7 +1166,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "ROTATIONAL_SPEED",
     "ROTATION_SPEED_ACCURACY",
     "ROT_SPEED",
-    "Rotation Speed Accuracy",
+    "Kalibrasi Kecepatan Putar",
     "REV_MIN",
     PCT_10,
   ),
@@ -1117,13 +1175,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "ROTATIONAL_SPEED",
     "ROTATION_TIME_ACCURACY",
     "ROT_TIME",
-    "Rotation Time Accuracy",
+    "Kalibrasi Waktu Putar",
     "SEC",
     noteOnly("± 10 %"),
   ),
 
   // LK Spirometer.docx
-  ...envElec("SPIROMETER", "SPIRO", {
+  ...envElecID("SPIROMETER", "SPIRO", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -1137,13 +1195,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "SPIROMETRY_VOLUME_ACCURACY",
     "FVC_VOLUME_ACCURACY",
     "SPIRO_FVC",
-    "FVC Volume Accuracy",
+    "Pengukuran Akurasi Total Volume Forced Vital Capacity (FVC)",
     "L",
     noteOnly("±3%"),
   ),
 
   // LK Suction Pump.docx
-  ...envElec("SUCTION_PUMP", "SUCT", {
+  ...envElecID("SUCTION_PUMP", "SUCT", {
     temp: range(19, 31, "19 – 31 oC"),
     humidity: range(35, 75, "35 – 75 % RH"),
     voltage: VOLTAGE_220_10,
@@ -1157,7 +1215,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "VACUUM_SUCTION",
     "VACUUM_GAUGE_ACCURACY",
     "SUCT_VACUUM_GAUGE",
-    "Vacuum Gauge Accuracy",
+    "Akurasi Vacuum Gauge",
     "MMHG",
     PCT_10,
   ),
@@ -1177,13 +1235,13 @@ const PARAMETERS: ParameterSeedRow[] = [
     "VACUUM_SUCTION",
     "TIME_TO_MAX_VACUUM",
     "SUCT_TIME_MAX_VACUUM",
-    "Time to Maximum Vacuum",
+    "Waktu Yang Dibutuhkan Saat Daya Hisap Maksimum",
     "SEC",
     maxOnly(15, "≤ 15 detik"),
   ),
 
   // LK Blanket Warmer.docx
-  ...envElec("BLANKET_WARMER", "BLNW", {
+  ...envElecID("BLANKET_WARMER", "BLNW", {
     temp: pm(25, 5, "25 ± 5 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -1197,7 +1255,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "WARMER_SURFACE_TEMPERATURE",
     "HIGH_TEMP_PROTECTION",
     "BLNW_HIGH_TEMP",
-    "High Temperature Protection",
+    "Pengujian Proteksi Suhu Tinggi",
     "DEG_C",
     noteOnly("< 53°C ± 3℃"),
   ),
@@ -1206,7 +1264,7 @@ const PARAMETERS: ParameterSeedRow[] = [
     "WARMER_SURFACE_TEMPERATURE",
     "WARMER_TEMPERATURE_CALIBRATION",
     "BLNW_TEMP_CALIBRATION",
-    "Temperature Calibration",
+    "Kalibrasi Suhu",
     "DEG_C",
     noteOnly("± 3°C"),
   ),
