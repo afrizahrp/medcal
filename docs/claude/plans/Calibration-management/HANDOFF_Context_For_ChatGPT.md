@@ -204,10 +204,95 @@ schema rather than trusting an earlier description of it, since schemas evolve.
 | `DeviceModel` | 0 | ⏸️ Still deliberately deferred — no real brand/model inventory data available yet |
 | `DeviceCapability` | 30 (21 original + 9 new: `AUDIOMETRIC_PERFORMANCE`, `CLEAN_AIR_CONTAINMENT`, `DENTAL_UNIT_PERFORMANCE`, `XRAY_PERFORMANCE`, `ELECTROTHERAPY_STIMULATION`, `LIGHT_SOURCE_PERFORMANCE`, `FETAL_HEART_RATE`, `SPECTRAL_IRRADIANCE`, `SPIROMETRY_VOLUME_ACCURACY`) | ✅ Fully seeded and verified |
 | `DeviceCapabilityItem` | 98 (66 original + 32 new, including one new item `HIGH_TEMP_PROTECTION` added to the existing `WARMER_SURFACE_TEMPERATURE` capability for Blanket Warmer) | ✅ Fully seeded and verified |
-| `DeviceCalibrationParameter` | 481 (242 original, untouched — 27 pre-existing device types confirmed unchanged — + 239 new rows for the 24 new device types, each with `toleranceMin`/`toleranceMax`/`toleranceNote` backfilled from real `docs/technician-docs/` source, spot-checked against literal source text) | ✅ Fully seeded and verified. Idempotency confirmed (re-running the seed twice produces identical row counts, no duplicates). **One flagged-not-corrected anomaly**: Laryngoskop's light-intensity tolerance (40,000–160,000 lux) is identical to Lampu Operasi's — seeded as-is from the source document since that's what it literally says, but flagged as a likely copy-paste artifact in the source LK itself, needing calibration-team confirmation (this is Rangkuman item H6, still open). |
+| `DeviceCalibrationParameter` | **489** (242 original + 239 taxonomy-extension + 8 net from a Pattern-C data-correctness fix — see Section 5C) — `toleranceMin`/`toleranceMax`/`toleranceNote` backfilled from real `docs/technician-docs/` source, spot-checked against literal source text | ✅ Fully seeded and verified. Idempotency confirmed. **One flagged-not-corrected anomaly**: Laryngoskop's light-intensity tolerance (40,000–160,000 lux) is identical to Lampu Operasi's — seeded as-is from the source, flagged as a likely copy-paste artifact in the source LK itself, needing calibration-team confirmation (Rangkuman item H6, still open). |
+| `DeviceCategory`/`DeviceCapability`/`DeviceCapabilityItem`/`DeviceCalibrationParameter` `name` field | 13/30/98/489 | ✅ **Aligned to real LK terminology** (was English/mixed, now matches what's literally printed on the technician's paper worksheet) — see Section 5C for the full effort and its one remaining gap (7 orphan items). |
 | `Device.deviceTypeId` FK | N/A — schema change | ✅ Confirmed done and verified (see below, unchanged from before) |
 | `Device` CRUD + Portal UI | N/A — application code, not data | ✅ Confirmed done (see below, unchanged from before) |
 | `JobReferenceEquipmentUsed` | N/A — schema only, no data (transactional table, intentionally empty) | ✅ Schema + migration done and verified. CRUD/API/UI intentionally NOT built yet — deferred until the `CalibrationJob` module itself exists (building a reference-equipment UI before the job module it belongs to would be premature). |
+
+## 5C. Data-Correctness Fix (Pattern C) + Full Name-Alignment Effort (post-taxonomy-extension)
+
+Two follow-on efforts happened after the initial 481-row taxonomy extension seed, both worth
+understanding before touching `DeviceCalibrationParameter`/`DeviceCapabilityItem` again.
+
+**1. Pattern-C data-correctness fix (481 → 489 rows).** A dedicated investigation
+(`investigation-measurement-pattern-classification.md`) classified every performance-
+measurement item across all 50 LK documents into shape patterns (A: single target + replicates
+only; B: multiple setting points sharing ONE tolerance — this is what the still-open G2
+`MeasurementEntry`/test-point design needs to handle; C: multiple named variants each with
+their OWN distinct tolerance, e.g. Dental Handpiece "Low Speed" vs "High Speed"; D+: other
+shapes, deferred). That investigation found **7 rows had been incorrectly collapsed** — a
+Pattern C case squeezed into one row with `toleranceMin`/`toleranceMax = NULL` and both
+variants' limits concatenated into `toleranceNote`, meaning neither variant's limit could
+actually be validated against. These 7 were split into 15 correctly-toleranced rows (Autoclave
+chamber-temp/sterilization-temp/time, Bio Safety Cabinet light/sound, Laminar Air Flow sound,
+Dental X-Ray HVL). One borderline case (`SUCT_MAX_VACUUM`, Suction Pump) was investigated and
+deliberately LEFT AS ONE ROW — its three vacuum-class bands are a per-physical-unit
+classification (a pump belongs to exactly one class), not three tests performed on every unit,
+so splitting would misrepresent it. **Established precedent for future Pattern-C decisions**:
+same conceptual measurement at different modes/settings → same `capabilityItemId`, different
+`code` suffix per variant, own `toleranceMin`/`toleranceMax`/`toleranceNote` each.
+
+**2. Full name-alignment effort (43 + 587 rows).** Separately, it was noticed that the `name`
+field across all four catalog tables was inconsistently English/mixed, while every real LK
+worksheet staff actually work from is written in Indonesian (with certain medical terms kept
+in English/mixed form as a matter of course, e.g. "Heart Rate," "NIBP," "SPO2," "Color
+Temperature"). **The goal was never "translate everything to Indonesian"** — it was "make the
+system say exactly what the paper worksheet says," so there's zero gap between what a
+technician reads on the LK and what they see on screen. This was done in 5 passes, each
+verified against the live DB and the actual LK documents (not assumption/memory), each
+re-syncing the seed script source files so a full reseed reproduces the same result:
+- **Phase 1**: `DeviceCategory` (13) + `DeviceCapability` (30) — these are the project's own
+  organizational groupings (no single LK document defines them), so a drafted Indonesian list
+  was applied directly rather than hunting for a literal source.
+- **Batch 1** (+ a Ventilator follow-up, since `technician-docs/` has no Ventilator LK — the
+  same G1-era fallback source `docs/legal_n_competency/Penilaian Kemampuan.zip` was used
+  again): Patient Monitoring, Respiratory & Oxygen, Resuscitation categories.
+- **Batch 2**: Neonatal & Infant Care, Temperature Therapy, Sterilization, Patient Care.
+- **Batch 3**: Suction & Fluid Management, Cold Chain & Storage.
+- **Batch 4 (final)**: Laboratory & Diagnostic Equipment, Dental Equipment, Medical Lighting,
+  Audiology & Physiological Testing — plus a whole-catalogue final sweep.
+
+**Result: 13/13 categories, 30/30 capabilities, 85/98 items, 473/489 parameters aligned.**
+The 13 items + 16 parameters NOT changed are almost all intentional (the LK itself writes them
+in English — `HEART_RATE`, `MAXIMUM_VACUUM`, `PULSE_DURATION`, `COLOR_TEMPERATURE`,
+`COLOR_RENDERING_INDEX`, an `OVERSHOOT_TEMPERATURE` typo-correction case, etc.) — confirmed
+correct, not oversights. A retroactive check across the entire codebase confirmed **no
+application code branches on any `name` string value** (all logic keys off `code`/`id`; the
+only string-literal hits were in the seed files themselves, which are the source of the names,
+and in tests that create their own fixtures rather than read seeded data) — safe to keep
+relying on `name` for iteration without fear of hidden breakage.
+
+**Open follow-up from the final sweep — 7 orphan `DeviceCapabilityItem` rows, NOT part of any
+batch's scope, still English:**
+`ULTRASOUND_IMAGING` → `AXIAL_LATERAL_RESOLUTION`, `DEAD_ZONE_TEST`,
+`HORIZONTAL_DISTANCE_CALIBRATION`, `PENETRATION_DEPTH`, `VERTICAL_DISTANCE_CALIBRATION`;
+`MASS_WEIGHING` → `DEVIATION_FROM_NOMINAL`, `REPEATABILITY`. These items exist (created
+earlier, presumably in anticipation of USG/Ultrasonograph and Timbangan Bayi/Dewasa device
+types) but **no `DeviceType` row or `DeviceCalibrationParameter` row uses them** — USG and
+Timbangan were never actually seeded as device types, so these items fell outside every
+batch's category-based scope (a batch only touches items reachable from a `DeviceType` in its
+target categories). **Needs a decision**: either (a) finish the job — add `DeviceType` rows
+for Ultrasonograph/USG and Timbangan Bayi/Dewasa (real LK documents exist:
+`LK Ultrasonograph (USG).pdf`, `LK Timbangan Bayi.pdf`, `LK Timbangan Dewasa.pdf`, per the
+original 30-document investigation) and seed their `DeviceCalibrationParameter` rows, aligning
+these 7 items' names in the same pass — or (b) delete the 7 orphan items if there's no near-
+term plan to add those device types. Logged as item A10 in
+`Rangkuman_Gap_Konfirmasi_User.md`.
+
+**Small unresolved naming-quality items from the batches** (cosmetic, not blocking, logged in
+`Rangkuman_Gap_Konfirmasi_User.md`):
+- `EST_TIMER` (Electro Accupunture) named "Waktu" verbatim from the LK section header — thin
+  as a standalone display label, candidate for "Waktu Terapi" instead.
+- Several device types (`OVEN`, `STERILLIZER`, all 5 cold-chain-storage types, Centrifuge
+  Refrigerator, Platelet Agitator Incubator) have their storage/chamber-temperature parameter
+  named with an invented-but-consistent label ("Suhu ... (multi-titik T1–T9)") because the
+  source LK tables have no titled parameter row at all — just a bare grid. Not a guess (follows
+  established LK-style phrasing), but worth a calibration-team sanity check.
+- `CENTRIFUGE_REFRIGERATOR`'s rotation-speed/time parameter names were applied by analogy to
+  plain Centrifuge's LK (no dedicated LK document exists for the refrigerated variant).
+
+
 
 
 **Coverage note**: of the 35 official DeviceTypes, 27 have real LK-worksheet evidence backing
@@ -421,10 +506,7 @@ Status of in-flight items as of this update:
 1. **Portal UI for CalibrationRequest** — prompt was issued
    (`Implementation_Portal_UI_CalibrationRequest.md`). Completion status still unconfirmed —
    check with the project owner.
-2. **DeviceCapability + DeviceCapabilityItem seeding** — prompt issued, execution result
-   STILL not reported back as of this update (see Section 5B table). This is the main
-   remaining unknown in the Device Management sub-system — check this first before assuming
-   the capability catalog is usable.
+2. **DeviceCapability + DeviceCapabilityItem seeding** — ✅ DONE, confirmed (see Section 5B).
 3. **DeviceCalibrationParameter seeding** — ✅ DONE, confirmed (see Section 5B).
 4. **`Device.deviceTypeId` FK migration** — ✅ DONE, confirmed (see Section 5B).
 5. **Device CRUD + Portal UI** — ✅ DONE, confirmed (see Section 5B).
@@ -458,9 +540,17 @@ Status of in-flight items as of this update:
     source document but flagged as a likely copy-paste artifact (identical to Lampu Operasi's
     40,000–160,000 lux, unusually high for a handheld device) — needs calibration-team
     confirmation, not blocking.
+12. **Pattern-C data-correctness fix** — ✅ **RESOLVED**. 7 incorrectly-collapsed
+    `DeviceCalibrationParameter` rows split into 15 correctly-toleranced rows (481 → 489
+    total). See Section 5C for detail and the established precedent for future similar cases.
+13. **Full name-alignment effort (Category/Capability/Item/Parameter `name` fields)** — ✅
+    **RESOLVED** (13/13, 30/30, 85/98, 473/489 — see Section 5C). One follow-up open: **7
+    orphan `DeviceCapabilityItem` rows** (Ultrasound Imaging + Mass Weighing items) still
+    English, unreachable from any current `DeviceType`, needing a decision (finish seeding
+    USG/Timbangan device types, or delete the orphans) — Rangkuman item A10.
 
-Given items 7-11 above are now resolved or explicitly non-blocking, active engineering work
-can proceed on lifecycle modules without waiting on the remaining open items — the next
+Given items 2-3 and 7-13 above are now resolved or explicitly non-blocking, active engineering
+work can proceed on lifecycle modules without waiting on the remaining open items — the next
 candidate is the **Quotation module** (backend, following the same pattern as
 CalibrationRequest), or resolving B4 to unblock WorkOrder. A full list of open business/domain
 decisions needing the project owner's or a domain expert's input has been separately compiled

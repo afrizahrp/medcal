@@ -74,7 +74,38 @@ taruh isi.
 
 ### A9. Cakupan device type ternyata lebih luas dari perkiraan
 Setelah dicek ulang lebih teliti: ada **21 jenis alat baru** (bukan 22 seperti dugaan awal, ada
-sedikit koreksi) yang belum dimasukkan ke sistem. Detail lengkapnya di item A12 di bawah.
+sedikit koreksi) yang belum dimasukkan ke sistem. Hasil akhirnya: **24 device type** berhasil
+ditambahkan (lihat item H3 — angka berubah lagi setelah eksekusi karena beberapa "1 dokumen"
+ternyata menaungi lebih dari 1 alat, misal 4 jenis lampu medis dari 1 kelompok dokumen).
+
+### A10. 7 item "yatim piatu" (tidak terhubung ke alat manapun) — ditemukan saat sapuan akhir
+Selesai proses penyelarasan nama ke Bahasa Indonesia (4 batch, lihat bagian H di bawah),
+ditemukan **7 baris "Jenis Pengukuran"** yang masih Bahasa Inggris dan **tidak terhubung ke
+alat manapun** di sistem:
+- 5 terkait USG/Ultrasonografi (Dead Zone Test, Axial & Lateral Resolution, Penetrasi
+  Kedalaman, Kalibrasi Jarak Vertikal, Kalibrasi Jarak Horizontal)
+- 2 terkait Timbangan (Daya Ulang Pembacaan, Penyimpangan dari Nilai Nominal)
+
+Ini terjadi karena USG dan Timbangan Bayi/Dewasa **sempat direncanakan** masuk sistem (dan
+"jenis pengukuran"-nya sudah dibuat), tapi alatnya sendiri **tidak jadi dimasukkan** — mungkin
+karena waktu itu diputuskan ditunda. Dokumen LK asli untuk USG dan Timbangan **sudah ada**
+(sudah pernah dibaca di investigasi awal).
+
+**Pertanyaan buat kamu:** mau dilanjutkan (tambahkan USG dan Timbangan Bayi/Dewasa sebagai
+alat resmi di sistem, sekalian selesaikan nama 7 item ini), atau dihapus saja kalau memang
+tidak ada rencana pakai USG/Timbangan dalam waktu dekat?
+
+### A11. Beberapa keputusan kecil soal penamaan (kumpulan dari 4 batch penyelarasan nama)
+Ini semua tidak mendesak, tapi perlu jawaban sebelum benar-benar dianggap tuntas:
+1. **"Waktu"** (nama pengukuran timer di alat Electro Accupunture/EST) — terlalu singkat
+   berdiri sendiri. Usul: **"Waktu Terapi"**. Setuju?
+2. **Nama untuk tabel suhu tanpa judul resmi di LK** — beberapa alat (Oven, Sterilizer, semua
+   alat pendingin/cold-chain, Centrifuge Refrigerator, Platelet Agitator Incubator) LK-nya
+   cuma punya tabel angka suhu (T1-T9) tanpa nama parameter. Sistem sekarang pakai nama
+   buatan konsisten ("Suhu ... (multi-titik T1-T9)") — sudah pas, atau ada istilah yang lebih
+   familiar dipakai tim kalibrasi sehari-hari?
+3. **Centrifuge Refrigerator** — tidak ada LK khusus untuk versi pendinginnya, nama parameter
+   kecepatan/waktu putarnya disamakan dengan Centrifuge biasa. Sudah tepat?
 
 ---
 
@@ -110,23 +141,29 @@ baris ini kosong, sistem sekarang tidak bisa menilai lolos/tidak untuk item ini 
 masih perlu dicek (dan angkanya tetap 15 menit), atau memang sudah tidak relevan lagi dan
 sengaja dihapus? Kalau masih perlu, saya bisa masukkan angka 15 menit itu ke sistem.
 
-### H3. Alat-alat baru yang perlu ditambahkan ke sistem (21 alat)
+### H3. Alat-alat baru yang perlu ditambahkan ke sistem
+✅ **SELESAI.** Bukan 21 seperti perkiraan awal, tapi **24 jenis alat baru** berhasil
+ditambahkan (koreksi dari perkiraan saya sebelumnya — beberapa alat yang saya kira "satu
+kelompok" ternyata beberapa alat terpisah, misal 4 jenis lampu medis dan Infusion
+Pump/Syringe Pump yang punya dokumen sendiri-sendiri). Detail:
+- 4 kategori baru: Laboratory & Diagnostic Equipment, Dental Equipment, Medical Lighting,
+  Audiology & Physiological Testing.
+- 9 cara penilaian (capability) baru ditambahkan untuk alat yang belum ada pola
+  pengukurannya (tes pendengaran, tes udara bersih ruangan, unit gigi, X-ray, terapi
+  listrik, sumber cahaya, detak jantung janin, radiasi cahaya fototerapi, volume pernapasan).
+- 12 satuan ukur (Uom) baru ditambahkan (lux, bar, dBA, kV, dll) — **termasuk temuan penting**:
+  ternyata kode "RPM" yang sudah ada di sistem itu artinya "napas per menit" (dipakai di
+  Ventilator), BUKAN "putaran per menit". Kalau tidak ketahuan, alat seperti Centrifuge/Rotator
+  bisa salah pakai satuan. Sudah dipisah jadi kode baru `REV_MIN` khusus untuk putaran mesin.
+- Data 27 alat lama (242 baris) **tidak disentuh sama sekali** — dicek dan dikonfirmasi aman.
+- **Phototherapy** (alat terapi sinar untuk bayi kuning) tidak ada arahan eksplisit soal
+  kategorinya di laporan investigasi — sistem menempatkannya di kategori "Neonatal & Infant
+  Care" sebagai keputusan otonom (masuk akal secara klinis). Belum ada penolakan dari kamu,
+  jadi dianggap diterima — kabari kalau ternyata perlu dipindah kategori lain.
 
-Setelah semua 50 dokumen LK dicek satu-satu, ketahuan ada **21 jenis alat** yang sering
-ditangani perusahaan tapi **belum ada di sistem sama sekali** — baik sebagai pilihan device
-type maupun cara penilaiannya. Contoh: Audiometer (alat tes pendengaran), Autoclave, Bio
-Safety Cabinet, Centrifuge, CPAP, alat-alat gigi (Dental Unit, Dental X-Ray), alat terapi
-listrik, lampu-lampu medis (Lampu Periksa, Lampu Kepala, Lampu Operasi, Laryngoskop), Fetal
-Doppler, Infusion Pump, Laminar Air Flow, Mikroskop Lab, alat fototerapi, inkubator platelet,
-Rotator, Spirometer, Suction Pump, Penghangat Selimut (Blanket Warmer), dan Thermohygrometer.
-
-**Kabar baiknya**: lebih dari separuh dari 21 alat ini **bisa langsung pakai cara penilaian
-yang sudah ada** di sistem (misalnya Infusion Pump bisa pakai cara penilaian yang sama dengan
-yang sudah ada untuk alat sejenis). Sisanya perlu ditambahkan cara penilaian baru, tapi semua
-sudah berbasis dokumen LK asli, bukan tebakan.
-
-**Tidak perlu keputusan dari kamu untuk item ini** — bisa langsung dikerjakan (lihat prompt
-implementasi di bawah), KECUALI 2 hal berikut:
+Yang **sengaja belum dimasukkan** (masih menunggu H4, H5): Auto Chemistry Analyzer,
+Hematologi Analyzer, pH Meter, Thermohygrometer, dan (memang bukan alat sungguhan)
+Otoscope, Phaco Emulsifikasi.
 
 ### H4. 3 alat laboratorium butuh cara kerja yang beda total
 
@@ -325,14 +362,22 @@ pekerjaan berikutnya):
 3. **F1** (Device.deviceTypeId) — ✅ sudah selesai dieksekusi dan terverifikasi.
 4. **G1** (field toleransi di DeviceCalibrationParameter) — ✅ sudah selesai, 242/242 baris
    ter-backfill, 1 baris tidak bisa di-resolve (`INCU_RECOVERY_TIME`, wajar — lihat H2).
-5. **H3** (21 alat baru) — bisa langsung dikerjakan, tidak perlu tunggu keputusan kamu.
-6. **G3** (JobReferenceEquipmentUsed) — prioritas berikutnya setelah H3, low-risk.
+5. **H3** (24 alat baru) — ✅ selesai, sudah masuk sistem lengkap dengan toleransinya.
+6. **G3** (JobReferenceEquipmentUsed) — ✅ selesai (schema saja, CRUD/UI menyusul saat modul
+   CalibrationJob dibangun).
 7. **C3** (WorkOrder butuh purchaseOrderId) — memblokir modul WorkOrder (Blocker B4).
 8. **A1** (I:E Ratio) — ✅ sudah diputuskan dan diimplementasikan (`valueType` enum).
 9. **H4** (3 alat lab butuh cara kerja beda) — perlu keputusan desain dulu, ditunda.
 10. **H5** (Thermohygrometer masuk kategori apa) — perlu keputusan cepat, tidak rumit.
 11. **H6** (cek toleransi Laryngoskop) — tidak menghalangi apa-apa, bisa dicek belakangan.
-12. **G2, G4** (desain MeasurementEntry, struktur skor Telaah Teknis) — perlu diskusi desain
+12. **Penyelarasan nama ke Bahasa Indonesia** (Phase 1 + Batch 1-4) — ✅ selesai, 13/13
+    kategori, 30/30 kemampuan pengukuran, 85/98 item, 473/489 parameter sudah sesuai istilah
+    LK asli. Sisa 13 item + 16 parameter memang sengaja tetap Inggris (istilah asli LK).
+13. **A10** (7 item yatim piatu USG/Timbangan) — ditemukan dari sapuan akhir penyelarasan
+    nama, perlu keputusan: lanjutkan atau hapus.
+14. **A11** (3 keputusan kecil penamaan: "Waktu"→"Waktu Terapi"?, nama tabel suhu tanpa judul,
+    Centrifuge Refrigerator by-analogy) — kosmetik, tidak mendesak.
+15. **G2, G4** (desain MeasurementEntry, struktur skor Telaah Teknis) — perlu diskusi desain
     lebih dulu, tidak seurgent G3 tapi tetap memblokir modul CalibrationJob/Tech-PWA.
-13. Sisanya (B1, B2, C1, C2, D1, D2, E1-E3, A2-A3, A5-A7, F2) — penting tapi tidak
+16. Sisanya (B1, B2, C1, C2, D1, D2, E1-E3, A2-A3, A5-A7, F2) — penting tapi tidak
     memblokir pekerjaan yang sedang berjalan saat ini, bisa dikonfirmasi paralel.
