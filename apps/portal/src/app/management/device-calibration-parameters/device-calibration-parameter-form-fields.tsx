@@ -4,16 +4,9 @@ import { useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { ApiError } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { CommandGroup, CommandItem } from "@/components/ui/command";
+import { CommandPopover } from "@/components/ui/command-popover";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { selectClassName } from "./device-calibration-parameters-ui";
 import type { DeviceCapabilityItemRow, DeviceCapabilityRow } from "../device-capabilities/device-capabilities-ui";
@@ -88,8 +81,12 @@ function ComboboxField({
       <label htmlFor={id} className="block text-sm font-medium text-slate-700">
         {label} {required ? <span className="text-red-500">*</span> : null}
       </label>
-      <Popover open={open} onOpenChange={onOpenChange}>
-        <PopoverTrigger asChild>
+      <CommandPopover
+        open={open}
+        onOpenChange={onOpenChange}
+        searchPlaceholder={searchPlaceholder}
+        emptyLabel={disabled ? loadingLabel : emptyLabel}
+        trigger={
           <Button
             id={id}
             type="button"
@@ -107,41 +104,34 @@ function ComboboxField({
             )}
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-          <Command>
-            <CommandInput placeholder={searchPlaceholder} />
-            <CommandList>
-              <CommandEmpty>{disabled ? loadingLabel : emptyLabel}</CommandEmpty>
-              <CommandGroup>
-                {items.map((item) => (
-                  <CommandItem
-                    key={item.id}
-                    value={item.searchValue}
-                    onSelect={() => {
-                      onSelect(item.id);
-                      onOpenChange(false);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        selectedId === item.id ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{item.label}</p>
-                      {item.hint ? (
-                        <p className="truncate font-mono text-xs text-slate-500">{item.hint}</p>
-                      ) : null}
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
+        }
+      >
+        <CommandGroup>
+          {items.map((item) => (
+            <CommandItem
+              key={item.id}
+              value={item.searchValue}
+              onSelect={() => {
+                onSelect(item.id);
+                onOpenChange(false);
+              }}
+            >
+              <Check
+                className={cn(
+                  "mr-2 h-4 w-4",
+                  selectedId === item.id ? "opacity-100" : "opacity-0",
+                )}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{item.label}</p>
+                {item.hint ? (
+                  <p className="truncate font-mono text-xs text-slate-500">{item.hint}</p>
+                ) : null}
+              </div>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandPopover>
     </div>
   );
 }

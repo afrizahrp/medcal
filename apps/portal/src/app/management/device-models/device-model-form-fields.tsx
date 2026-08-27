@@ -4,16 +4,9 @@ import { useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { ApiError } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { CommandGroup, CommandItem } from "@/components/ui/command";
+import { CommandPopover } from "@/components/ui/command-popover";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { selectClassName } from "./device-models-ui";
 import type { DeviceTypeRow } from "../device-types/device-types-ui";
@@ -57,8 +50,12 @@ export function DeviceModelFormFields({
             <label htmlFor="deviceTypeId" className="block text-sm font-medium text-slate-700">
               Device Type <span className="text-red-500">*</span>
             </label>
-            <Popover open={deviceTypeOpen} onOpenChange={setDeviceTypeOpen}>
-              <PopoverTrigger asChild>
+            <CommandPopover
+              open={deviceTypeOpen}
+              onOpenChange={setDeviceTypeOpen}
+              searchPlaceholder="Cari device type…"
+              emptyLabel={deviceTypesLoading ? "Memuat…" : "Device Type tidak ditemukan."}
+              trigger={
                 <Button
                   id="deviceTypeId"
                   type="button"
@@ -78,41 +75,32 @@ export function DeviceModelFormFields({
                   )}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Cari device type…" />
-                  <CommandList>
-                    <CommandEmpty>
-                      {deviceTypesLoading ? "Memuat…" : "Device Type tidak ditemukan."}
-                    </CommandEmpty>
-                    <CommandGroup>
-                      {deviceTypes.map((deviceType) => (
-                        <CommandItem
-                          key={deviceType.id}
-                          value={`${deviceType.name} ${deviceType.code}`}
-                          onSelect={() => {
-                            onChange("deviceTypeId", deviceType.id);
-                            setDeviceTypeOpen(false);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              value.deviceTypeId === deviceType.id ? "opacity-100" : "opacity-0",
-                            )}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium">{deviceType.name}</p>
-                            <p className="truncate font-mono text-xs text-slate-500">{deviceType.code}</p>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+              }
+            >
+              <CommandGroup>
+                {deviceTypes.map((deviceType) => (
+                  <CommandItem
+                    key={deviceType.id}
+                    value={`${deviceType.name} ${deviceType.code}`}
+                    onSelect={() => {
+                      onChange("deviceTypeId", deviceType.id);
+                      setDeviceTypeOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        value.deviceTypeId === deviceType.id ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{deviceType.name}</p>
+                      <p className="truncate font-mono text-xs text-slate-500">{deviceType.code}</p>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandPopover>
           </div>
         </div>
 

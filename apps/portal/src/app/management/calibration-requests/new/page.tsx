@@ -12,14 +12,8 @@ import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { CommandGroup, CommandItem } from "@/components/ui/command";
+import { CommandPopover } from "@/components/ui/command-popover";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
@@ -177,8 +171,13 @@ export default function NewCalibrationRequestPage() {
                   <label className="mb-1.5 block text-sm font-medium text-slate-700">
                     Customer <span className="text-red-500">*</span>
                   </label>
-                  <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
-                    <PopoverTrigger asChild>
+                  <CommandPopover
+                    open={customerOpen}
+                    onOpenChange={setCustomerOpen}
+                    searchPlaceholder="Cari customer…"
+                    emptyLabel={customersQuery.isLoading ? "Memuat…" : "Customer tidak ditemukan."}
+                    contentClassName="w-[400px] p-0"
+                    trigger={
                       <Button
                         variant="outline"
                         role="combobox"
@@ -195,44 +194,33 @@ export default function NewCalibrationRequestPage() {
                         )}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Cari customer…" />
-                        <CommandList>
-                          <CommandEmpty>
-                            {customersQuery.isLoading ? "Memuat…" : "Customer tidak ditemukan."}
-                          </CommandEmpty>
-                          <CommandGroup>
-                            {customers.map((customer) => (
-                              <CommandItem
-                                key={customer.id}
-                                value={`${customer.name} ${customer.number}`}
-                                onSelect={() => {
-                                  setCustomerId(customer.id);
-                                  setCustomerOpen(false);
-                                  setItems([emptyItem()]);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    customerId === customer.id ? "opacity-100" : "opacity-0",
-                                  )}
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate font-medium">{customer.name}</p>
-                                  <p className="truncate text-xs text-slate-500">
-                                    {customer.number}
-                                  </p>
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                    }
+                  >
+                    <CommandGroup>
+                      {customers.map((customer) => (
+                        <CommandItem
+                          key={customer.id}
+                          value={`${customer.name} ${customer.number}`}
+                          onSelect={() => {
+                            setCustomerId(customer.id);
+                            setCustomerOpen(false);
+                            setItems([emptyItem()]);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              customerId === customer.id ? "opacity-100" : "opacity-0",
+                            )}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium">{customer.name}</p>
+                            <p className="truncate text-xs text-slate-500">{customer.number}</p>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandPopover>
                 </div>
 
                 <div className="min-w-0">

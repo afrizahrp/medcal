@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Check, ChevronsUpDown, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CommandGroup, CommandItem } from "@/components/ui/command";
+import { CommandPopover } from "@/components/ui/command-popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../../../components/management/page-header";
@@ -99,6 +102,89 @@ export const deviceCalibrationParameterFormActionsClass =
 
 export { PageHeader, Surface, selectClassName };
 
+function FilterCombobox({
+  value,
+  onChange,
+  items,
+  allLabel,
+  searchPlaceholder,
+  emptyLabel,
+  ariaLabel,
+  disabled,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  items: Array<{ id: string; label: string; searchValue: string; hint?: string }>;
+  allLabel: string;
+  searchPlaceholder: string;
+  emptyLabel: string;
+  ariaLabel: string;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = items.find((item) => item.id === value);
+
+  return (
+    <CommandPopover
+      open={open}
+      onOpenChange={setOpen}
+      searchPlaceholder={searchPlaceholder}
+      emptyLabel={emptyLabel}
+      trigger={
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          aria-label={ariaLabel}
+          disabled={disabled}
+          className={cn("w-full justify-between font-normal lg:w-48", className)}
+        >
+          <span className={cn("truncate", !selected && "text-slate-500")}>
+            {selected ? selected.label : allLabel}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      }
+    >
+      <CommandGroup>
+        <CommandItem
+          value={allLabel}
+          onSelect={() => {
+            onChange("");
+            setOpen(false);
+          }}
+        >
+          <Check className={cn("mr-2 h-4 w-4", value === "" ? "opacity-100" : "opacity-0")} />
+          <span className="truncate">{allLabel}</span>
+        </CommandItem>
+        {items.map((item) => (
+          <CommandItem
+            key={item.id}
+            value={item.searchValue}
+            onSelect={() => {
+              onChange(item.id);
+              setOpen(false);
+            }}
+          >
+            <Check
+              className={cn("mr-2 h-4 w-4", value === item.id ? "opacity-100" : "opacity-0")}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{item.label}</p>
+              {item.hint ? (
+                <p className="truncate font-mono text-xs text-slate-500">{item.hint}</p>
+              ) : null}
+            </div>
+          </CommandItem>
+        ))}
+      </CommandGroup>
+    </CommandPopover>
+  );
+}
+
 export function DeviceCalibrationParameterFilters({
   searchInput,
   onSearchChange,
@@ -142,59 +228,64 @@ export function DeviceCalibrationParameterFilters({
           aria-label="Cari Calibration Parameter"
         />
       </div>
-      <select
+      <FilterCombobox
         value={deviceTypeId}
-        onChange={(e) => onDeviceTypeChange(e.target.value)}
-        className={cn(selectClassName, "w-full lg:w-48")}
-        aria-label="Filter device type"
-      >
-        <option value="">Semua tipe</option>
-        {deviceTypes.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.name}
-          </option>
-        ))}
-      </select>
-      <select
+        onChange={onDeviceTypeChange}
+        allLabel="Semua tipe"
+        searchPlaceholder="Cari device type…"
+        emptyLabel="Device Type tidak ditemukan."
+        ariaLabel="Filter device type"
+        items={deviceTypes.map((deviceType) => ({
+          id: deviceType.id,
+          label: deviceType.name,
+          searchValue: `${deviceType.name} ${deviceType.code}`,
+          hint: deviceType.code,
+        }))}
+      />
+      <FilterCombobox
         value={capabilityId}
-        onChange={(e) => onCapabilityChange(e.target.value)}
-        className={cn(selectClassName, "w-full lg:w-48")}
-        aria-label="Filter capability"
-      >
-        <option value="">Semua capability</option>
-        {capabilities.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
-      <select
+        onChange={onCapabilityChange}
+        allLabel="Semua capability"
+        searchPlaceholder="Cari capability…"
+        emptyLabel="Capability tidak ditemukan."
+        ariaLabel="Filter capability"
+        items={capabilities.map((capability) => ({
+          id: capability.id,
+          label: capability.name,
+          searchValue: `${capability.name} ${capability.code}`,
+          hint: capability.code,
+        }))}
+      />
+      <FilterCombobox
         value={capabilityItemId}
-        onChange={(e) => onCapabilityItemChange(e.target.value)}
-        className={cn(selectClassName, "w-full lg:w-48")}
-        aria-label="Filter capability item"
+        onChange={onCapabilityItemChange}
+        allLabel="Semua item"
+        searchPlaceholder="Cari capability item…"
+        emptyLabel="Capability Item tidak ditemukan."
+        ariaLabel="Filter capability item"
         disabled={!capabilityId}
-      >
-        <option value="">Semua item</option>
-        {capabilityItems.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.name}
-          </option>
-        ))}
-      </select>
-      <select
+        items={capabilityItems.map((item) => ({
+          id: item.id,
+          label: item.name,
+          searchValue: `${item.name} ${item.code}`,
+          hint: item.code,
+        }))}
+      />
+      <FilterCombobox
         value={uomId}
-        onChange={(e) => onUomChange(e.target.value)}
-        className={cn(selectClassName, "w-full lg:w-40")}
-        aria-label="Filter UOM"
-      >
-        <option value="">Semua UOM</option>
-        {uoms.map((uom) => (
-          <option key={uom.id} value={uom.id}>
-            {uom.symbol}
-          </option>
-        ))}
-      </select>
+        onChange={onUomChange}
+        allLabel="Semua UOM"
+        searchPlaceholder="Cari UOM…"
+        emptyLabel="UOM tidak ditemukan."
+        ariaLabel="Filter UOM"
+        className="lg:w-40"
+        items={uoms.map((uom) => ({
+          id: uom.id,
+          label: uom.symbol,
+          searchValue: `${uom.symbol} ${uom.name} ${uom.code}`,
+          hint: uom.name,
+        }))}
+      />
     </div>
   );
 }

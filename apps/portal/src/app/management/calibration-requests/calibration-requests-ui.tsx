@@ -6,15 +6,8 @@ import { Check, ChevronsUpDown, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CommandGroup, CommandItem } from "@/components/ui/command";
+import { CommandPopover } from "@/components/ui/command-popover";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../../../components/management/page-header";
 import { PaginationBar, Surface, selectClassName, formatRelativeTime } from "../leads/leads-ui";
@@ -344,8 +337,12 @@ export function DeviceTypeItemSelect({
       : "Device Type tidak ditemukan.";
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <CommandPopover
+      open={open}
+      onOpenChange={setOpen}
+      searchPlaceholder="Cari device type…"
+      emptyLabel={loading ? "Memuat…" : emptyLabel}
+      trigger={
         <Button
           type="button"
           variant="outline"
@@ -364,37 +361,27 @@ export function DeviceTypeItemSelect({
           )}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Cari device type…" />
-          <CommandList>
-            <CommandEmpty>{loading ? "Memuat…" : emptyLabel}</CommandEmpty>
-            {Array.from(groups.entries()).map(([heading, types]) => (
-              <CommandGroup key={heading} heading={heading}>
-                {types.map((type) => (
-                  <CommandItem
-                    key={type.id}
-                    value={`${type.name} ${type.code ?? ""} ${heading}`}
-                    onSelect={() => {
-                      onChange(type.id);
-                      setOpen(false);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        value === type.id ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                    <span className="truncate">{type.name}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ))}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+      }
+    >
+      {Array.from(groups.entries()).map(([heading, types]) => (
+        <CommandGroup key={heading} heading={heading}>
+          {types.map((type) => (
+            <CommandItem
+              key={type.id}
+              value={`${type.name} ${type.code ?? ""} ${heading}`}
+              onSelect={() => {
+                onChange(type.id);
+                setOpen(false);
+              }}
+            >
+              <Check
+                className={cn("mr-2 h-4 w-4", value === type.id ? "opacity-100" : "opacity-0")}
+              />
+              <span className="truncate">{type.name}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      ))}
+    </CommandPopover>
   );
 }

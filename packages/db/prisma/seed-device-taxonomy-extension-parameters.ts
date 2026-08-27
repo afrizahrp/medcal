@@ -10,6 +10,13 @@
  * Laryngoskop illuminance 40,000–160,000 lux is seeded as-is from LK Laryngoskop.docx
  * and needs human review (possible copy-paste from Lampu Operasi).
  *
+ * 2026-08-27: 7 Pattern-C rows that had crammed two-or-more distinct variant tolerances
+ * into a single toleranceNote were split into their real per-variant rows (net +8):
+ * ACLV_CHAMBER_TEMP → _DT1/_DT2/_DT3; ACLV_STER_TEMP → _121/_134;
+ * ACLV_STER_TIME → _121/_134; BSC_LIGHT_INTENSITY → _ON/_OFF;
+ * BSC_SOUND_LEVEL → _ON/_OFF; LAF_SOUND_LEVEL → _BACKGROUND/_COMPARTMENT;
+ * DXRAY_HVL → _70KV/_80KV. See fix-collapsed-pattern-c-parameters.ts.
+ *
  * Run after seed:uoms, seed:device-types, seed:device-capabilities:
  *   pnpm --filter @medcal/db run seed:device-taxonomy-extension-parameters
  */
@@ -247,32 +254,75 @@ const PARAMETERS: ParameterSeedRow[] = [
     leak: LEAK_500,
     applied: APPLIED_500,
   }),
+  // Chamber temperature spread — three distinct derived differences, each its own
+  // tolerance (LK Autoclave.docx Setting UUT 121/134 table). Split from the former
+  // single ACLV_CHAMBER_TEMP row.
   t(
     "AUTOCLAVE",
     "TEMPERATURE_CHAMBER_STERILIZATION",
     "CHAMBER_TEMPERATURE",
-    "ACLV_CHAMBER_TEMP",
-    "Chamber Temperature",
+    "ACLV_CHAMBER_TEMP_DT1",
+    "Chamber Temperature Difference ΔT1 (S1 – S2)",
     "DEG_C",
-    noteOnly("ΔT1 = S1 – S2 ± 2 °C; ΔT2 = S1 – S3 ± 5 °C; ΔT3 = S1 – S3 ± 2 °C"),
+    pm(0, 2, "ΔT1 = S1 – S2 ± 2 °C"),
+  ),
+  t(
+    "AUTOCLAVE",
+    "TEMPERATURE_CHAMBER_STERILIZATION",
+    "CHAMBER_TEMPERATURE",
+    "ACLV_CHAMBER_TEMP_DT2",
+    "Chamber Temperature Difference ΔT2 (S1 – S3)",
+    "DEG_C",
+    pm(0, 5, "ΔT2 = S1 – S3 ± 5 °C"),
+  ),
+  t(
+    "AUTOCLAVE",
+    "TEMPERATURE_CHAMBER_STERILIZATION",
+    "CHAMBER_TEMPERATURE",
+    "ACLV_CHAMBER_TEMP_DT3",
+    "Chamber Temperature Difference ΔT3 (S1 – S3)",
+    "DEG_C",
+    pm(0, 2, "ΔT3 = S1 – S3 ± 2 °C"),
+  ),
+  // Sterilization temperature — two cycle modes, each its own absolute acceptance
+  // range (LK Autoclave.docx: setting 121 → 121–124 °C, setting 134 → 134–137 °C).
+  t(
+    "AUTOCLAVE",
+    "TEMPERATURE_CHAMBER_STERILIZATION",
+    "STERILIZATION_TEMPERATURE",
+    "ACLV_STER_TEMP_121",
+    "Sterilization Temperature (121 °C cycle)",
+    "DEG_C",
+    range(121, 124, "121 °C ~ 124 °C"),
   ),
   t(
     "AUTOCLAVE",
     "TEMPERATURE_CHAMBER_STERILIZATION",
     "STERILIZATION_TEMPERATURE",
-    "ACLV_STER_TEMP",
-    "Sterilization Temperature",
+    "ACLV_STER_TEMP_134",
+    "Sterilization Temperature (134 °C cycle)",
     "DEG_C",
-    noteOnly("121 °C ~ 124 °C; 134 °C ~137 °C"),
+    range(134, 137, "134 °C ~137 °C"),
+  ),
+  // Sterilization hold time — two cycle modes, each its own minimum
+  // (LK Autoclave.docx: 121 °C ≥ 15 menit, 134 °C ≥ 3 menit).
+  t(
+    "AUTOCLAVE",
+    "TEMPERATURE_CHAMBER_STERILIZATION",
+    "STERILIZATION_TIME",
+    "ACLV_STER_TIME_121",
+    "Sterilization Time (121 °C cycle)",
+    "MIN",
+    minOnly(15, "≥ 15 menit"),
   ),
   t(
     "AUTOCLAVE",
     "TEMPERATURE_CHAMBER_STERILIZATION",
     "STERILIZATION_TIME",
-    "ACLV_STER_TIME",
-    "Sterilization Time",
+    "ACLV_STER_TIME_134",
+    "Sterilization Time (134 °C cycle)",
     "MIN",
-    noteOnly("121 °C ≥ 15 menit; 134 °C ≥ 3 menit"),
+    minOnly(3, "≥ 3 menit"),
   ),
 
   // LK Bio Safety Cabinet.docx
@@ -312,23 +362,45 @@ const PARAMETERS: ParameterSeedRow[] = [
     "M_S",
     noteOnly("≥ 0,40 m/s; Min : 0,4; Max : 1"),
   ),
+  // Light intensity — two distinct lamp states, each its own limit
+  // (LK Bio Safety Cabinet.docx: Lampu ON ≥ 450 lux, Lampu OFF ≤ 160 lux).
   t(
     "BIO_SAFETY_CABINET",
     "CLEAN_AIR_CONTAINMENT",
     "LIGHT_INTENSITY",
-    "BSC_LIGHT_INTENSITY",
-    "Light Intensity",
+    "BSC_LIGHT_INTENSITY_ON",
+    "Light Intensity (Lamp ON)",
     "LUX",
-    noteOnly("Lampu ON ≥ 450 lux; Lampu OFF ≤ 160 lux"),
+    minOnly(450, "≥ 450 lux"),
+  ),
+  t(
+    "BIO_SAFETY_CABINET",
+    "CLEAN_AIR_CONTAINMENT",
+    "LIGHT_INTENSITY",
+    "BSC_LIGHT_INTENSITY_OFF",
+    "Light Intensity (Lamp OFF)",
+    "LUX",
+    maxOnly(160, "≤ 160 lux"),
+  ),
+  // Sound level — two distinct blower states, each its own limit
+  // (LK Bio Safety Cabinet.docx: Noise ON ≤ 70 dBA, Noise OFF ≤ 60 dBA).
+  t(
+    "BIO_SAFETY_CABINET",
+    "CLEAN_AIR_CONTAINMENT",
+    "SOUND_LEVEL",
+    "BSC_SOUND_LEVEL_ON",
+    "Sound Level (Blower ON)",
+    "DBA",
+    maxOnly(70, "≤ 70 dBA"),
   ),
   t(
     "BIO_SAFETY_CABINET",
     "CLEAN_AIR_CONTAINMENT",
     "SOUND_LEVEL",
-    "BSC_SOUND_LEVEL",
-    "Sound Level",
+    "BSC_SOUND_LEVEL_OFF",
+    "Sound Level (Blower OFF)",
     "DBA",
-    noteOnly("Noise ON ≤ 70 dBA; Noise OFF ≤ 60 dBA"),
+    maxOnly(60, "≤ 60 dBA"),
   ),
   t(
     "BIO_SAFETY_CABINET",
@@ -575,14 +647,25 @@ const PARAMETERS: ParameterSeedRow[] = [
     "MGY",
     noteOnly("± 10 %; CV ≤ 0.05"),
   ),
+  // Half Value Layer — two kVp settings, each its own minimum
+  // (LK Dental X-Ray.docx: 70 kV ≥ 1,5 mmAl, 80 kV ≥ 2,3 mmAl; source prints "mmAI").
   t(
     "DENTAL_XRAY",
     "XRAY_PERFORMANCE",
     "HALF_VALUE_LAYER",
-    "DXRAY_HVL",
-    "Half Value Layer",
+    "DXRAY_HVL_70KV",
+    "Half Value Layer (70 kV)",
     "MMAL",
-    noteOnly("70 ≥ 1,5 mmAI; 80 ≥ 2,3 mmAI"),
+    minOnly(1.5, "70 kV ≥ 1,5 mmAl"),
+  ),
+  t(
+    "DENTAL_XRAY",
+    "XRAY_PERFORMANCE",
+    "HALF_VALUE_LAYER",
+    "DXRAY_HVL_80KV",
+    "Half Value Layer (80 kV)",
+    "MMAL",
+    minOnly(2.3, "80 kV ≥ 2,3 mmAl"),
   ),
 
   // LK Electro Accupunture (EST).docx
@@ -901,14 +984,25 @@ const PARAMETERS: ParameterSeedRow[] = [
     "LUX",
     minOnly(750, "≥ 750 lux"),
   ),
+  // Sound level — two distinct measurement zones, each its own limit
+  // (LK Laminar Air Flow.docx: Background ≤ 55 dBA, Didalam kompartemen ≤ 65 dBA).
   t(
     "LAMINAR_AIR_FLOW",
     "CLEAN_AIR_CONTAINMENT",
     "SOUND_LEVEL",
-    "LAF_SOUND_LEVEL",
-    "Sound Level",
+    "LAF_SOUND_LEVEL_BACKGROUND",
+    "Sound Level (Background)",
     "DBA",
-    noteOnly("Background ≤ 55 dBA; Didalam kompartemen ≤ 65 dBA"),
+    maxOnly(55, "Background ≤ 55 dBA"),
+  ),
+  t(
+    "LAMINAR_AIR_FLOW",
+    "CLEAN_AIR_CONTAINMENT",
+    "SOUND_LEVEL",
+    "LAF_SOUND_LEVEL_COMPARTMENT",
+    "Sound Level (Inside Compartment)",
+    "DBA",
+    maxOnly(65, "Didalam kompartemen ≤ 65 dBA"),
   ),
   t(
     "LAMINAR_AIR_FLOW",
@@ -1118,7 +1212,7 @@ const PARAMETERS: ParameterSeedRow[] = [
   ),
 ];
 
-const EXPECTED_COUNT = 239;
+const EXPECTED_COUNT = 247;
 const EXTENSION_DEVICE_TYPE_CODES = [
   "AUDIOMETER",
   "AUTOCLAVE",
@@ -1174,7 +1268,11 @@ async function seedExtensionParameters() {
   }
 
   for (const row of PARAMETERS) {
-    if (!EXTENSION_DEVICE_TYPE_CODES.includes(row.deviceTypeCode as (typeof EXTENSION_DEVICE_TYPE_CODES)[number])) {
+    if (
+      !EXTENSION_DEVICE_TYPE_CODES.includes(
+        row.deviceTypeCode as (typeof EXTENSION_DEVICE_TYPE_CODES)[number],
+      )
+    ) {
       throw new Error(`[seed] Unexpected deviceTypeCode ${row.deviceTypeCode} for ${row.code}`);
     }
   }
@@ -1189,7 +1287,9 @@ async function seedExtensionParameters() {
   ]);
 
   if (deviceTypeCount < 59) {
-    throw new Error(`[seed] DeviceType count ${deviceTypeCount} < 59 — run seed:device-types first`);
+    throw new Error(
+      `[seed] DeviceType count ${deviceTypeCount} < 59 — run seed:device-types first`,
+    );
   }
   if (capabilityCount < 30) {
     throw new Error(

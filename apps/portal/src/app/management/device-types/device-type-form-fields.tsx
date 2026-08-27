@@ -4,16 +4,9 @@ import { useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { ApiError } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { CommandGroup, CommandItem } from "@/components/ui/command";
+import { CommandPopover } from "@/components/ui/command-popover";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { selectClassName } from "./device-types-ui";
 import type { DeviceCategoryRow } from "../device-categories/device-categories-ui";
@@ -54,8 +47,12 @@ export function DeviceTypeFormFields({
             <label htmlFor="categoryId" className="block text-sm font-medium text-slate-700">
               Kategori <span className="text-red-500">*</span>
             </label>
-            <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
-              <PopoverTrigger asChild>
+            <CommandPopover
+              open={categoryOpen}
+              onOpenChange={setCategoryOpen}
+              searchPlaceholder="Cari kategori…"
+              emptyLabel={categoriesLoading ? "Memuat…" : "Kategori tidak ditemukan."}
+              trigger={
                 <Button
                   id="categoryId"
                   type="button"
@@ -75,41 +72,32 @@ export function DeviceTypeFormFields({
                   )}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Cari kategori…" />
-                  <CommandList>
-                    <CommandEmpty>
-                      {categoriesLoading ? "Memuat…" : "Kategori tidak ditemukan."}
-                    </CommandEmpty>
-                    <CommandGroup>
-                      {categories.map((category) => (
-                        <CommandItem
-                          key={category.id}
-                          value={`${category.name} ${category.code}`}
-                          onSelect={() => {
-                            onChange("categoryId", category.id);
-                            setCategoryOpen(false);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              value.categoryId === category.id ? "opacity-100" : "opacity-0",
-                            )}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium">{category.name}</p>
-                            <p className="truncate font-mono text-xs text-slate-500">{category.code}</p>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+              }
+            >
+              <CommandGroup>
+                {categories.map((category) => (
+                  <CommandItem
+                    key={category.id}
+                    value={`${category.name} ${category.code}`}
+                    onSelect={() => {
+                      onChange("categoryId", category.id);
+                      setCategoryOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        value.categoryId === category.id ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{category.name}</p>
+                      <p className="truncate font-mono text-xs text-slate-500">{category.code}</p>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandPopover>
           </div>
         </div>
 
