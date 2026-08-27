@@ -79,6 +79,11 @@ const FIXTURE: GrantRow[] = [
   { role: "ADMIN", resource: "device", action: "create" },
   { role: "ADMIN", resource: "device", action: "update" },
   { role: "ADMIN", resource: "device", action: "delete" },
+  { role: "ADMIN", resource: "purchaseOrder", action: "read" },
+  { role: "ADMIN", resource: "purchaseOrder", action: "create" },
+  { role: "ADMIN", resource: "purchaseOrder", action: "update" },
+  { role: "ADMIN", resource: "purchaseOrder", action: "cancel" },
+  { role: "ADMIN", resource: "purchaseOrder", action: "approve" },
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   { role: "SUPERVISOR", resource: "users", action: "read" },
   { role: "SUPERVISOR", resource: "membership", action: "manage" },
@@ -327,6 +332,16 @@ describe("hasPermission — managementDashboard/customerDashboard (Menu Registry
     expect(hasPermission("TECHNICIAN", "customerDashboard", "read")).toBe(false);
     expect(hasPermission("FINANCE", "customerDashboard", "read")).toBe(false);
     expect(hasPermission("CUSTOMER_SERVICE", "customerDashboard", "read")).toBe(false);
+  });
+});
+
+describe("hasPermission — purchaseOrder resource", () => {
+  it("grants ADMIN purchaseOrder read/create/update/cancel/approve", () => {
+    expect(hasPermission("ADMIN", "purchaseOrder", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "purchaseOrder", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "purchaseOrder", "update")).toBe(true);
+    expect(hasPermission("ADMIN", "purchaseOrder", "cancel")).toBe(true);
+    expect(hasPermission("ADMIN", "purchaseOrder", "approve")).toBe(true);
   });
 });
 

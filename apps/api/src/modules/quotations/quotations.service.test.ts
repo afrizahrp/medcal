@@ -3,7 +3,11 @@ import { BadRequestException, ConflictException, NotFoundException } from "@nest
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@medcal/db";
 import { isValidDocumentNumber } from "@medcal/db";
-import { quotationCreateSchema } from "@medcal/shared";
+import {
+  quotationCreateSchema,
+  quotationUpdateSchema,
+  type QuotationCreateInput,
+} from "@medcal/shared";
 import { CalibrationRequestsService } from "../calibration-requests/calibration-requests.service";
 import { QuotationsService } from "./quotations.service";
 
@@ -83,14 +87,17 @@ async function getTestDeviceTypeId(): Promise<string> {
   return deviceType.id;
 }
 
-async function ensureTestTax(input: {
-  taxCode: string;
-  taxRate: number;
-  isExclude: boolean;
-  description: string;
-}) {
+async function ensureTestTax(
+  input: {
+    taxCode: string;
+    taxRate: number;
+    isExclude: boolean;
+    description: string;
+  },
+  companyId = realCompanyId,
+) {
   const existing = await prisma.tax.findUnique({
-    where: { companyId_taxCode: { companyId: realCompanyId, taxCode: input.taxCode } },
+    where: { companyId_taxCode: { companyId, taxCode: input.taxCode } },
   });
   if (existing) {
     return prisma.tax.update({
@@ -105,7 +112,7 @@ async function ensureTestTax(input: {
   }
   const tax = await prisma.tax.create({
     data: {
-      companyId: realCompanyId,
+      companyId,
       taxCode: input.taxCode,
       taxRate: input.taxRate,
       isExclude: input.isExclude,
@@ -114,6 +121,29 @@ async function ensureTestTax(input: {
   });
   createdTaxIds.push(tax.id);
   return tax;
+}
+
+async function ensureNonPpnTax(companyId = realCompanyId) {
+  return ensureTestTax(
+    {
+      taxCode: "T0",
+      taxRate: 0,
+      isExclude: false,
+      description: "Non PPN",
+    },
+    companyId,
+  );
+}
+
+async function createQuoted(
+  companyId: string,
+  input: Omit<QuotationCreateInput, "taxCode"> & { taxCode?: string },
+) {
+  await ensureNonPpnTax(companyId);
+  return quotationsService.create(companyId, {
+    ...input,
+    taxCode: input.taxCode ?? "T0",
+  });
 }
 
 async function createSubmittedRequest(
@@ -180,9 +210,19 @@ describe("quotationCreateSchema", () => {
   it("accepts a valid payload with requestId and items", () => {
     const parsed = quotationCreateSchema.safeParse({
       requestId: "req-1",
+      taxCode: "T0",
       items: [{ requestItemId: "item-1", description: "Kalibrasi BPM", unitPrice: 150000 }],
     });
     expect(parsed.success).toBe(true);
+  });
+
+  it("rejects a missing taxCode", () => {
+    expect(
+      quotationCreateSchema.safeParse({
+        requestId: "req-1",
+        items: [{ requestItemId: "item-1", description: "Kalibrasi BPM", unitPrice: 150000 }],
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects a missing requestId", () => {
@@ -253,7 +293,7 @@ describe("QuotationsService.create", () => {
   it("creates Quotation with items, allocates QUO number, and links to CalibrationRequest", async () => {
     const { customerId, request } = await createSubmittedRequest(realCompanyId);
 
-    const result = await quotationsService.create(realCompanyId, {
+    const result = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request, 150_000),
     });
@@ -274,7 +314,9 @@ describe("QuotationsService.create", () => {
     expect(Number(result.items[0]?.lineTotal)).toBe(150_000);
     expect(Number(result.subtotal)).toBe(150_000);
     expect(Number(result.headerDiscountAmount)).toBe(0);
-    expect(result.taxAmount).toBeNull();
+    expect(result.taxCode).toBe("T0");
+    expect(Number(result.taxRate)).toBe(0);
+    expect(Number(result.taxAmount)).toBe(0);
     expect(Number(result.totalAmount)).toBe(150_000);
   });
 
@@ -282,7 +324,7 @@ describe("QuotationsService.create", () => {
     const { request } = await createSubmittedRequest(realCompanyId);
     expect(request.status).toBe("SUBMITTED");
 
-    const result = await quotationsService.create(realCompanyId, {
+    const result = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -297,7 +339,7 @@ describe("QuotationsService.create", () => {
   it("creates Quotation with multiple items and computed totals", async () => {
     const { request } = await createSubmittedRequest(realCompanyId, 2);
 
-    const result = await quotationsService.create(realCompanyId, {
+    const result = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: request.items.map((item, index) => ({
         requestItemId: item.id,
@@ -322,7 +364,7 @@ describe("QuotationsService.create", () => {
       isExclude: true,
     });
 
-    const result = await quotationsService.create(realCompanyId, {
+    const result = await createQuoted(realCompanyId, {
       requestId: request.id,
       taxCode: "T1",
       items: quotationItemsFor(request, 100_000),
@@ -351,7 +393,7 @@ describe("QuotationsService.create", () => {
       isExclude: false,
     });
 
-    const result = await quotationsService.create(realCompanyId, {
+    const result = await createQuoted(realCompanyId, {
       requestId: request.id,
       taxCode: "T2",
       items: quotationItemsFor(request, 111_000),
@@ -377,7 +419,7 @@ describe("QuotationsService.create", () => {
       isExclude: false,
     });
 
-    const result = await quotationsService.create(realCompanyId, {
+    const result = await createQuoted(realCompanyId, {
       requestId: request.id,
       taxCode: "T0",
       items: quotationItemsFor(request, 100_000),
@@ -393,10 +435,56 @@ describe("QuotationsService.create", () => {
     expect(result.items[0]).not.toHaveProperty("taxRate");
   });
 
+  it("rejects a nonexistent taxCode", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+    try {
+      await createQuoted(realCompanyId, {
+        requestId: request.id,
+        taxCode: "NOPE",
+        items: quotationItemsFor(request, 100_000),
+      });
+      expect.fail("expected TAX_NOT_FOUND");
+    } catch (err) {
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: "TAX_NOT_FOUND" }),
+      );
+    }
+  });
+
+  it("rejects an inactive taxCode", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+    const tax = await prisma.tax.create({
+      data: {
+        companyId: realCompanyId,
+        taxCode: `IN${randomUUID().slice(0, 6).toUpperCase()}`,
+        taxRate: 0.11,
+        description: "Inactive PPN",
+        isExclude: true,
+        isActive: false,
+      },
+    });
+    createdTaxIds.push(tax.id);
+
+    try {
+      await createQuoted(realCompanyId, {
+        requestId: request.id,
+        taxCode: tax.taxCode,
+        items: quotationItemsFor(request, 100_000),
+      });
+      expect.fail("expected TAX_NOT_FOUND");
+    } catch (err) {
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: "TAX_NOT_FOUND" }),
+      );
+    }
+  });
+
   it("applies item-level discountAmount to lineTotal", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
 
-    const result = await quotationsService.create(realCompanyId, {
+    const result = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: request.items.map((item) => ({
         requestItemId: item.id,
@@ -420,7 +508,7 @@ describe("QuotationsService.create", () => {
   it("sums multiple item discounts into subtotal", async () => {
     const { request } = await createSubmittedRequest(realCompanyId, 2);
 
-    const result = await quotationsService.create(realCompanyId, {
+    const result = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: request.items.map((item, index) => ({
         requestItemId: item.id,
@@ -439,7 +527,7 @@ describe("QuotationsService.create", () => {
   it("applies headerDiscountAmount after item discounts", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
 
-    const result = await quotationsService.create(realCompanyId, {
+    const result = await createQuoted(realCompanyId, {
       requestId: request.id,
       headerDiscountAmount: 30_000,
       items: quotationItemsFor(request, 100_000),
@@ -460,7 +548,7 @@ describe("QuotationsService.create", () => {
       isExclude: true,
     });
 
-    const result = await quotationsService.create(realCompanyId, {
+    const result = await createQuoted(realCompanyId, {
       requestId: request.id,
       taxCode: "T1",
       headerDiscountAmount: 30_000,
@@ -490,7 +578,7 @@ describe("QuotationsService.create", () => {
       isExclude: false,
     });
 
-    const result = await quotationsService.create(realCompanyId, {
+    const result = await createQuoted(realCompanyId, {
       requestId: request.id,
       taxCode: "T2",
       headerDiscountAmount: 39_000,
@@ -520,7 +608,7 @@ describe("QuotationsService.create", () => {
       isExclude: false,
     });
 
-    const result = await quotationsService.create(realCompanyId, {
+    const result = await createQuoted(realCompanyId, {
       requestId: request.id,
       taxCode: "T0",
       headerDiscountAmount: 30_000,
@@ -542,7 +630,7 @@ describe("QuotationsService.create", () => {
     const { request } = await createSubmittedRequest(realCompanyId);
 
     try {
-      await quotationsService.create(realCompanyId, {
+      await createQuoted(realCompanyId, {
         requestId: request.id,
         items: request.items.map((item) => ({
           requestItemId: item.id,
@@ -565,7 +653,7 @@ describe("QuotationsService.create", () => {
     const { request } = await createSubmittedRequest(realCompanyId);
 
     try {
-      await quotationsService.create(realCompanyId, {
+      await createQuoted(realCompanyId, {
         requestId: request.id,
         items: request.items.map((item) => ({
           requestItemId: item.id,
@@ -588,7 +676,7 @@ describe("QuotationsService.create", () => {
     const { request } = await createSubmittedRequest(realCompanyId);
 
     try {
-      await quotationsService.create(realCompanyId, {
+      await createQuoted(realCompanyId, {
         requestId: request.id,
         headerDiscountAmount: -1,
         items: quotationItemsFor(request, 100_000),
@@ -606,7 +694,7 @@ describe("QuotationsService.create", () => {
     const { request } = await createSubmittedRequest(realCompanyId);
 
     try {
-      await quotationsService.create(realCompanyId, {
+      await createQuoted(realCompanyId, {
         requestId: request.id,
         headerDiscountAmount: 100_001,
         items: quotationItemsFor(request, 100_000),
@@ -631,7 +719,7 @@ describe("QuotationsService.create", () => {
     createdCalibrationRequestIds.push(draft.id);
 
     try {
-      await quotationsService.create(realCompanyId, {
+      await createQuoted(realCompanyId, {
         requestId: draft.id,
         items: quotationItemsFor(draft),
       });
@@ -646,7 +734,7 @@ describe("QuotationsService.create", () => {
 
   it("rejects creation with a non-existent calibration request", async () => {
     try {
-      await quotationsService.create(realCompanyId, {
+      await createQuoted(realCompanyId, {
         requestId: "non-existent-request",
         items: [{ requestItemId: "item-1", description: "X", unitPrice: 1 }],
       });
@@ -663,7 +751,7 @@ describe("QuotationsService.create", () => {
     const { request } = await createSubmittedRequest(realCompanyId, 2);
 
     try {
-      await quotationsService.create(realCompanyId, {
+      await createQuoted(realCompanyId, {
         requestId: request.id,
         items: [
           {
@@ -686,7 +774,7 @@ describe("QuotationsService.create", () => {
     const { request } = await createSubmittedRequest(realCompanyId);
 
     try {
-      await quotationsService.create(realCompanyId, {
+      await createQuoted(realCompanyId, {
         requestId: request.id,
         items: [
           {
@@ -713,7 +801,7 @@ describe("QuotationsService.create", () => {
   it("rejects a second quotation for the same CalibrationRequest", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
 
-    const first = await quotationsService.create(realCompanyId, {
+    const first = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request, 100_000),
     });
@@ -725,7 +813,7 @@ describe("QuotationsService.create", () => {
     expect(countBefore).toBe(1);
 
     try {
-      await quotationsService.create(realCompanyId, {
+      await createQuoted(realCompanyId, {
         requestId: request.id,
         items: quotationItemsFor(request, 120_000),
       });
@@ -756,7 +844,7 @@ describe("QuotationsService.create", () => {
   it("enforces one quotation per request at the database unique constraint", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
 
-    const first = await quotationsService.create(realCompanyId, {
+    const first = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request, 100_000),
     });
@@ -770,6 +858,9 @@ describe("QuotationsService.create", () => {
           number: `QUO/TEST/${randomUUID().slice(0, 8)}`,
           requestId: request.id,
           subtotal: 1,
+          taxCode: "T0",
+          taxRate: 0,
+          taxAmount: 0,
           totalAmount: 1,
         },
       }),
@@ -790,7 +881,7 @@ describe("QuotationsService tenant isolation", () => {
 
     await cleanupSequences(otherCompanyId);
     const { request } = await createSubmittedRequest(otherCompanyId);
-    const foreign = await quotationsService.create(otherCompanyId, {
+    const foreign = await createQuoted(otherCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -810,7 +901,7 @@ describe("QuotationsService tenant isolation", () => {
 
     await cleanupSequences(otherCompanyId);
     const { request } = await createSubmittedRequest(otherCompanyId);
-    const foreign = await quotationsService.create(otherCompanyId, {
+    const foreign = await createQuoted(otherCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -824,7 +915,7 @@ describe("QuotationsService tenant isolation", () => {
 describe("QuotationsService.findAll / findOne", () => {
   it("lists quotations for a requestId filter", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -837,7 +928,7 @@ describe("QuotationsService.findAll / findOne", () => {
 
   it("returns a quotation by id with items", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -852,7 +943,7 @@ describe("QuotationsService.findAll / findOne", () => {
 describe("QuotationsService.update", () => {
   it("updates quotation fields and recomputes totals while in DRAFT", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request, 100_000),
     });
@@ -874,7 +965,7 @@ describe("QuotationsService.update", () => {
 
   it("updates headerDiscountAmount and recomputes totals", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request, 100_000),
     });
@@ -889,37 +980,36 @@ describe("QuotationsService.update", () => {
     expect(Number(updated.totalAmount)).toBe(80_000);
   });
 
-  it("clears tax when taxCode is set to null", async () => {
-    const { request } = await createSubmittedRequest(realCompanyId);
-    const tax = await prisma.tax.create({
-      data: {
-        companyId: realCompanyId,
-        taxCode: `CLR${randomUUID().slice(0, 6).toUpperCase()}`,
-        taxRate: 0.11,
-        description: "PPN",
-        isExclude: true,
-      },
-    });
-    createdTaxIds.push(tax.id);
+  it("does not allow clearing taxCode to null", () => {
+    expect(quotationUpdateSchema.safeParse({ taxCode: null }).success).toBe(false);
+  });
 
-    const created = await quotationsService.create(realCompanyId, {
+  it("can change tax from T1 to T0 while DRAFT", async () => {
+    const { request } = await createSubmittedRequest(realCompanyId);
+    await ensureTestTax({
+      taxCode: "T1",
+      taxRate: 0.11,
+      description: "PPN 11%",
+      isExclude: true,
+    });
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
-      taxCode: tax.taxCode,
+      taxCode: "T1",
       items: quotationItemsFor(request, 100_000),
     });
     createdQuotationIds.push(created.id);
     expect(Number(created.taxAmount)).toBe(11_000);
 
-    const updated = await quotationsService.update(realCompanyId, created.id, { taxCode: null });
-    expect(updated.taxCode).toBeNull();
-    expect(updated.taxRate).toBeNull();
-    expect(updated.taxAmount).toBeNull();
+    const updated = await quotationsService.update(realCompanyId, created.id, { taxCode: "T0" });
+    expect(updated.taxCode).toBe("T0");
+    expect(Number(updated.taxRate)).toBe(0);
+    expect(Number(updated.taxAmount)).toBe(0);
     expect(Number(updated.totalAmount)).toBe(100_000);
   });
 
   it("rejects update when status is not DRAFT", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -935,7 +1025,7 @@ describe("QuotationsService.update", () => {
 describe("QuotationsService.send", () => {
   it("sends a DRAFT quotation", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -947,7 +1037,7 @@ describe("QuotationsService.send", () => {
 
   it("rejects sending a non-DRAFT quotation", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -963,7 +1053,7 @@ describe("QuotationsService.send", () => {
 describe("QuotationsService.approve", () => {
   it("approves a SENT quotation and records timestamps", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -979,24 +1069,28 @@ describe("QuotationsService.approve", () => {
     expect(approved.customerApprovedAt).toBeInstanceOf(Date);
   });
 
-  it("rejects approving a DRAFT quotation", async () => {
+  it("approves a DRAFT quotation without requiring send", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
     createdQuotationIds.push(created.id);
 
-    await expect(
-      quotationsService.approve(realCompanyId, created.id, "user-1"),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const userId = `user-${randomUUID().slice(0, 8)}`;
+    const approved = await quotationsService.approve(realCompanyId, created.id, userId);
+
+    expect(approved.status).toBe("APPROVED");
+    expect(approved.approvedByUserId).toBe(userId);
+    expect(approved.approvedAt).toBeInstanceOf(Date);
+    expect(approved.customerApprovedAt).toBeInstanceOf(Date);
   });
 });
 
 describe("QuotationsService.reject", () => {
   it("rejects a SENT quotation without changing CalibrationRequest status", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -1016,7 +1110,7 @@ describe("QuotationsService.reject", () => {
 describe("QuotationsService.cancel", () => {
   it("cancels a DRAFT quotation", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -1028,7 +1122,7 @@ describe("QuotationsService.cancel", () => {
 
   it("cancels a SENT quotation", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -1041,7 +1135,7 @@ describe("QuotationsService.cancel", () => {
 
   it("rejects cancelling an already cancelled quotation", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -1055,7 +1149,7 @@ describe("QuotationsService.cancel", () => {
 
   it("rejects cancelling an approved quotation", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request),
     });
@@ -1078,14 +1172,14 @@ describe("QuotationsService.cancel", () => {
 describe("QuotationsService numbering", () => {
   it("uses DocumentNumberService with company-scoped sequence", async () => {
     const firstCtx = await createSubmittedRequest(realCompanyId);
-    const first = await quotationsService.create(realCompanyId, {
+    const first = await createQuoted(realCompanyId, {
       requestId: firstCtx.request.id,
       items: quotationItemsFor(firstCtx.request),
     });
     createdQuotationIds.push(first.id);
 
     const secondCtx = await createSubmittedRequest(realCompanyId);
-    const second = await quotationsService.create(realCompanyId, {
+    const second = await createQuoted(realCompanyId, {
       requestId: secondCtx.request.id,
       items: quotationItemsFor(secondCtx.request),
     });
@@ -1106,7 +1200,7 @@ describe("QuotationsService transaction rollback", () => {
     });
 
     await expect(
-      quotationsService.create(realCompanyId, {
+      createQuoted(realCompanyId, {
         requestId: request.id,
         items: [
           {
@@ -1133,7 +1227,7 @@ describe("QuotationsService transaction rollback", () => {
 describe("QuotationsService.buildPdf", () => {
   it("returns a PDF without changing quotation status", async () => {
     const { request } = await createSubmittedRequest(realCompanyId);
-    const created = await quotationsService.create(realCompanyId, {
+    const created = await createQuoted(realCompanyId, {
       requestId: request.id,
       items: quotationItemsFor(request, 150_000),
     });

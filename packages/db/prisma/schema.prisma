@@ -130,6 +130,7 @@ enum QuotationStatus {
 
 enum PurchaseOrderStatus {
   DRAFT
+  APPROVED
   RECEIVED
   CONFIRMED
   FULFILLED
@@ -1117,9 +1118,9 @@ model Quotation {
   validUntil         DateTime?
   subtotal             Decimal         @db.Decimal(18, 2)
   headerDiscountAmount Decimal         @default(0) @db.Decimal(18, 2)
-  taxCode              String?
-  taxRate              Decimal?        @db.Decimal(5, 4)
-  taxAmount            Decimal?        @db.Decimal(18, 2)
+  taxCode              String
+  taxRate              Decimal         @db.Decimal(5, 4)
+  taxAmount            Decimal         @db.Decimal(18, 2)
   totalAmount          Decimal         @db.Decimal(18, 2)
   currency           String          @default("IDR")
   approvedAt         DateTime?

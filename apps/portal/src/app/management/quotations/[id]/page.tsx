@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, Edit, Mail, Printer, X } from "lucide-react";
+import { ArrowLeft, Check, Edit, FileText, Mail, Plus, Printer, X } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,12 @@ import {
   useQuotation,
   useRejectQuotation,
 } from "../use-quotations-query";
+import {
+  canCreatePurchaseOrderFromQuotation,
+  findActivePurchaseOrder,
+} from "../../purchase-orders/purchase-order-form-utils";
+import { StatusBadge as PurchaseOrderStatusBadge, type PurchaseOrderRow } from "../../purchase-orders/purchase-orders-ui";
+import { usePurchaseOrders } from "../../purchase-orders/use-purchase-orders-query";
 
 export default function QuotationDetailPage() {
   const params = useParams<{ id: string }>();
@@ -44,6 +50,18 @@ export default function QuotationDetailPage() {
   const rejectMutation = useRejectQuotation();
   const cancelMutation = useCancelQuotation();
   const { compose, pending: composePending } = useQuotationEmailCompose();
+  const purchaseOrderQuery = usePurchaseOrders(
+    {
+      search: "",
+      status: "",
+      quotationId: params.id,
+      sortBy: "createdAt",
+      sortDir: "desc",
+      page: 1,
+      pageSize: 20,
+    },
+    Boolean(params.id && capabilities?.purchaseOrderRead),
+  );
 
   const [confirmAction, setConfirmAction] = useState<"approve" | "reject" | "cancel" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -290,6 +308,18 @@ export default function QuotationDetailPage() {
           </div>
         </div>
 
+        {capabilities?.purchaseOrderRead || capabilities?.purchaseOrderCreate ? (
+          <QuotationPurchaseOrderSection
+            quotation={quotation}
+            canCreate={Boolean(capabilities?.purchaseOrderCreate)}
+            canRead={Boolean(capabilities?.purchaseOrderRead)}
+            queryLoading={purchaseOrderQuery.isLoading}
+            queryError={purchaseOrderQuery.isError}
+            queryForbidden={isForbidden(purchaseOrderQuery.error)}
+            rows={purchaseOrderQuery.data?.data ?? []}
+          />
+        ) : null}
+
         <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" onClick={handlePrint} disabled={printPending}>
             <Printer className="h-4 w-4" />
@@ -325,21 +355,18 @@ export default function QuotationDetailPage() {
             </Button>
           ) : null}
 
-          {isSent ? (
-            <>
-              {capabilities?.quotationApprove ? (
-                <Button type="button" onClick={() => setConfirmAction("approve")}>
-                  <Check className="h-4 w-4" />
-                  Approve
-                </Button>
-              ) : null}
-              {capabilities?.quotationUpdate ? (
-                <Button type="button" variant="outline" onClick={() => setConfirmAction("reject")}>
-                  <X className="h-4 w-4" />
-                  Reject
-                </Button>
-              ) : null}
-            </>
+          {(isDraft || isSent) && capabilities?.quotationApprove ? (
+            <Button type="button" onClick={() => setConfirmAction("approve")}>
+              <Check className="h-4 w-4" />
+              Approve
+            </Button>
+          ) : null}
+
+          {isSent && capabilities?.quotationUpdate ? (
+            <Button type="button" variant="outline" onClick={() => setConfirmAction("reject")}>
+              <X className="h-4 w-4" />
+              Reject
+            </Button>
           ) : null}
 
           {canCancel && capabilities?.quotationCancel ? (
@@ -353,8 +380,8 @@ export default function QuotationDetailPage() {
 
       <ConfirmDialog
         open={confirmAction === "approve"}
-        title="Approve Quotation?"
-        description="Quotation yang sudah di-approve tidak dapat dibatalkan. Lanjutkan?"
+        title="Approve this Quotation?"
+        description="After approval, all Quotation inputs will be locked."
         confirmLabel="Approve"
         onConfirm={() => runAction("approve")}
         onCancel={() => setConfirmAction(null)}
@@ -423,6 +450,80 @@ function CreatedNextSteps({
           </Button>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function QuotationPurchaseOrderSection({
+  quotation,
+  canCreate,
+  canRead,
+  queryLoading,
+  queryError,
+  queryForbidden,
+  rows,
+}: {
+  quotation: QuotationRow;
+  canCreate: boolean;
+  canRead: boolean;
+  queryLoading: boolean;
+  queryError: boolean;
+  queryForbidden: boolean;
+  rows: PurchaseOrderRow[];
+}) {
+  const activePo = findActivePurchaseOrder(rows);
+  const cancelledOnly = rows.length > 0 && !activePo;
+  const eligible = canCreatePurchaseOrderFromQuotation(quotation);
+  const showCreate = canCreate && eligible && !queryLoading && !activePo && (!canRead || !queryError);
+
+  return (
+    <div className="mt-5 border-t border-slate-100 pt-5">
+      <h3 className="text-sm font-semibold text-slate-900">Purchase Order</h3>
+      {queryForbidden ? null : queryLoading ? (
+        <p className="mt-2 text-sm text-slate-400">Memuat…</p>
+      ) : canRead && queryError ? (
+        <p className="mt-2 text-sm text-red-600">Gagal memuat purchase order.</p>
+      ) : activePo ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+          <div>
+            <Link
+              href={`/purchase-orders/${activePo.id}`}
+              className="font-mono text-sm font-medium text-brand-700 hover:underline"
+            >
+              {activePo.number}
+            </Link>
+            <div className="mt-1">
+              <PurchaseOrderStatusBadge status={activePo.status} />
+            </div>
+          </div>
+          <Button type="button" variant="outline" size="sm" asChild>
+            <Link href={`/purchase-orders/${activePo.id}`}>
+              <FileText className="h-4 w-4" />
+              View Purchase Order
+            </Link>
+          </Button>
+        </div>
+      ) : showCreate ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-3">
+          <p className="text-sm text-slate-600">
+            {cancelledOnly
+              ? "Purchase Order sebelumnya dibatalkan. Quotation ini dapat dibuatkan PO baru."
+              : "Belum ada purchase order untuk quotation ini."}
+          </p>
+          <Button type="button" size="sm" asChild>
+            <Link href={`/purchase-orders/new?quotationId=${quotation.id}`}>
+              <Plus className="h-4 w-4" />
+              Create Purchase Order
+            </Link>
+          </Button>
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-slate-500">
+          {eligible
+            ? "Belum ada purchase order."
+            : "Purchase Order dapat dibuat setelah quotation APPROVED dan disetujui customer."}
+        </p>
+      )}
     </div>
   );
 }

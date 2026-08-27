@@ -9,10 +9,7 @@ import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
 import { useCalibrationRequest } from "../../calibration-requests/use-calibration-requests-query";
-import {
-  QuotationFormFields,
-  type QuotationFormValue,
-} from "../quotation-form-fields";
+import { QuotationFormFields, type QuotationFormValue } from "../quotation-form-fields";
 import {
   PageHeader,
   Surface,
@@ -90,8 +87,8 @@ function NewQuotationPageInner() {
           ]}
         />
         <p className="mt-5 text-sm text-slate-600">
-          Quotation hanya dapat dibuat dari Requisition. Buka requisition yang sudah
-          submitted, lalu pilih Create Quotation.
+          Quotation hanya dapat dibuat dari Requisition. Buka requisition yang sudah submitted, lalu
+          pilih Create Quotation.
         </p>
         <Button asChild variant="outline" className="mt-4">
           <Link href="/calibration-requests">Ke Requisitions</Link>
@@ -156,9 +153,7 @@ function NewQuotationPageInner() {
     );
   }
 
-  const canQuote = QUOTABLE_STATUSES.includes(
-    request.status as (typeof QUOTABLE_STATUSES)[number],
-  );
+  const canQuote = QUOTABLE_STATUSES.includes(request.status as (typeof QUOTABLE_STATUSES)[number]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -201,11 +196,11 @@ function NewQuotationPageInner() {
 
     const preview = previewTotals(form.items, null, form.headerDiscountAmount);
     if (moneyNumber(form.headerDiscountAmount) < 0) {
-      setError("Header discount tidak boleh negatif.");
+      setError("Discount tidak boleh negatif.");
       return;
     }
     if (moneyNumber(form.headerDiscountAmount) > preview.subtotal) {
-      setError("Header discount tidak boleh melebihi subtotal.");
+      setError("Discount tidak boleh melebihi subtotal.");
       return;
     }
 

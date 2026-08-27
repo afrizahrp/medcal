@@ -51,6 +51,11 @@ export type MeCapabilities = {
   quotationUpdate: boolean;
   quotationCancel: boolean;
   quotationApprove: boolean;
+  purchaseOrderRead: boolean;
+  purchaseOrderCreate: boolean;
+  purchaseOrderUpdate: boolean;
+  purchaseOrderCancel: boolean;
+  purchaseOrderApprove: boolean;
   taxManage: boolean;
 };
 

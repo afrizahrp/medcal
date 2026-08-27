@@ -61,6 +61,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   customer: "Customer",
   calibrationRequest: "Requisition",
   quotation: "Quotation",
+  purchaseOrder: "Purchase Order",
 };
 
 const ACTION_LABELS: Record<string, string> = {

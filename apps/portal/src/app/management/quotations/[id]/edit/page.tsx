@@ -9,10 +9,7 @@ import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../../components/access-denied";
-import {
-  QuotationFormFields,
-  type QuotationFormValue,
-} from "../../quotation-form-fields";
+import { QuotationFormFields, type QuotationFormValue } from "../../quotation-form-fields";
 import {
   PageHeader,
   Surface,
@@ -118,9 +115,7 @@ export default function EditQuotationPage() {
             { href: `/quotations/${quotation.id}`, label: quotation.number },
           ]}
         />
-        <p className="mt-5 text-sm text-slate-600">
-          Hanya quotation DRAFT yang dapat diedit.
-        </p>
+        <p className="mt-5 text-sm text-slate-600">Hanya quotation DRAFT yang dapat diedit.</p>
         <Button asChild className="mt-4">
           <Link href={`/quotations/${quotation.id}`}>Kembali ke Detail</Link>
         </Button>
@@ -162,11 +157,11 @@ export default function EditQuotationPage() {
 
     const preview = previewTotals(form.items, null, form.headerDiscountAmount);
     if (moneyNumber(form.headerDiscountAmount) < 0) {
-      setError("Header discount tidak boleh negatif.");
+      setError("Discount tidak boleh negatif.");
       return;
     }
     if (moneyNumber(form.headerDiscountAmount) > preview.subtotal) {
-      setError("Header discount tidak boleh melebihi subtotal.");
+      setError("Discount tidak boleh melebihi subtotal.");
       return;
     }
 
@@ -213,9 +208,7 @@ export default function EditQuotationPage() {
       <form noValidate onSubmit={submit}>
         <Surface className={formSurfaceClass}>
           {error ? (
-            <div className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
+            <div className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
           ) : null}
 
           <dl className="mb-6 grid gap-4 text-sm sm:grid-cols-2">

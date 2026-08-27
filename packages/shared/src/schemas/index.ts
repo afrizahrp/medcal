@@ -372,7 +372,7 @@ export const quotationCreateSchema = z.object({
   requestId: z.string().min(1),
   source: z.enum(quotationSourceValues).optional(),
   validUntil: z.coerce.date().optional(),
-  taxCode: z.string().min(1).max(50).optional(),
+  taxCode: z.string().min(1).max(50),
   headerDiscountAmount: quotationDecimalSchema.nonnegative().optional(),
   items: z.array(quotationItemInputSchema).min(1),
 });
@@ -395,12 +395,49 @@ export const QUOTATION_SORTABLE_FIELDS = ["createdAt", "number", "status"] as co
 export const quotationUpdateSchema = z.object({
   source: z.enum(quotationSourceValues).optional(),
   validUntil: z.coerce.date().nullable().optional(),
-  taxCode: z.string().min(1).max(50).nullable().optional(),
+  taxCode: z.string().min(1).max(50).optional(),
   headerDiscountAmount: quotationDecimalSchema.nonnegative().optional(),
   items: z.array(quotationItemInputSchema).min(1).optional(),
 });
 
 export type QuotationUpdateInput = z.infer<typeof quotationUpdateSchema>;
+
+// =============================================================================
+// PurchaseOrder (APPROVED Quotation → PurchaseOrder)
+// =============================================================================
+
+const purchaseOrderStatusValues = ["DRAFT", "APPROVED", "CANCELLED"] as const;
+
+/** POST /purchase-orders body — commercial values are snapshotted from Quotation. */
+export const purchaseOrderCreateSchema = z.object({
+  quotationId: z.string().min(1),
+  customerPoNumber: z.string().trim().min(1).max(100),
+  customerPoDate: z.coerce.date(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export type PurchaseOrderCreateInput = z.infer<typeof purchaseOrderCreateSchema>;
+
+/** GET /purchase-orders query params */
+export const purchaseOrderListQuerySchema = baseListQuerySchema.extend({
+  status: z.enum(purchaseOrderStatusValues).optional(),
+  customerId: z.string().optional(),
+  quotationId: z.string().optional(),
+});
+
+export type PurchaseOrderListQuery = z.infer<typeof purchaseOrderListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /purchase-orders — see resolveSortOrder. */
+export const PURCHASE_ORDER_SORTABLE_FIELDS = ["createdAt", "number", "status"] as const;
+
+/** PATCH /purchase-orders/:id body (only allowed while DRAFT) */
+export const purchaseOrderUpdateSchema = z.object({
+  customerPoNumber: z.string().trim().min(1).max(100).optional(),
+  customerPoDate: z.coerce.date().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export type PurchaseOrderUpdateInput = z.infer<typeof purchaseOrderUpdateSchema>;
 
 // =============================================================================
 // UOM (Unit of Measurement) Master Data

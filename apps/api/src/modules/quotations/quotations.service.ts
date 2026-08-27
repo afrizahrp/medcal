@@ -89,11 +89,11 @@ function computeItemLine(
 function computeHeaderTotals(
   lineTotals: Prisma.Decimal[],
   headerDiscountAmount: Prisma.Decimal,
-  tax: { taxRate: Prisma.Decimal; isExclude: boolean } | null,
+  tax: { taxRate: Prisma.Decimal; isExclude: boolean },
 ): {
   subtotal: Prisma.Decimal;
   headerDiscountAmount: Prisma.Decimal;
-  taxAmount: Prisma.Decimal | null;
+  taxAmount: Prisma.Decimal;
   totalAmount: Prisma.Decimal;
 } {
   const subtotal = money(
@@ -113,9 +113,6 @@ function computeHeaderTotals(
     });
   }
   const netAmount = money(subtotal.minus(headerDiscount));
-  if (tax == null) {
-    return { subtotal, headerDiscountAmount: headerDiscount, taxAmount: null, totalAmount: netAmount };
-  }
   if (tax.taxRate.isZero()) {
     return {
       subtotal,
@@ -140,9 +137,8 @@ function computeHeaderTotals(
 async function resolveDocumentTax(
   tx: Prisma.TransactionClient,
   companyId: string,
-  taxCode: string | null | undefined,
-): Promise<{ taxCode: string; taxRate: Prisma.Decimal; isExclude: boolean } | null> {
-  if (taxCode == null) return null;
+  taxCode: string,
+): Promise<{ taxCode: string; taxRate: Prisma.Decimal; isExclude: boolean }> {
   const tax = await tx.tax.findFirst({
     where: { companyId, taxCode, isActive: true },
   });
@@ -332,8 +328,8 @@ export class QuotationsService {
           source: input.source ?? "PORTAL",
           status: "DRAFT",
           validUntil: input.validUntil,
-          taxCode: documentTax?.taxCode ?? null,
-          taxRate: documentTax?.taxRate ?? null,
+          taxCode: documentTax.taxCode,
+          taxRate: documentTax.taxRate,
           subtotal: totals.subtotal,
           headerDiscountAmount: totals.headerDiscountAmount,
           taxAmount: totals.taxAmount,
@@ -494,8 +490,8 @@ export class QuotationsService {
         data: {
           ...(input.source !== undefined ? { source: input.source } : {}),
           ...(input.validUntil !== undefined ? { validUntil: input.validUntil } : {}),
-          taxCode: documentTax?.taxCode ?? null,
-          taxRate: documentTax?.taxRate ?? null,
+          taxCode: documentTax.taxCode,
+          taxRate: documentTax.taxRate,
           subtotal: totals.subtotal,
           headerDiscountAmount: totals.headerDiscountAmount,
           taxAmount: totals.taxAmount,
@@ -546,9 +542,9 @@ export class QuotationsService {
       });
     }
 
-    if (existing.status !== "SENT") {
+    if (existing.status !== "DRAFT" && existing.status !== "SENT") {
       throw new BadRequestException({
-        message: "Only SENT quotations can be approved",
+        message: "Only DRAFT or SENT quotations can be approved",
         code: "INVALID_STATUS_FOR_APPROVE",
       });
     }

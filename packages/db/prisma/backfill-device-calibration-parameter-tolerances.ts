@@ -454,7 +454,7 @@ const ROWS: ToleranceRow[] = [
     ),
   ),
 
-  // LK Cold Chain, Vaccine Refrigerator.docx (shared with COALD_CHAIN)
+  // LK Cold Chain, Vaccine Refrigerator.docx (shared with COLD_CHAIN)
   ...envElec("KULKAS_VAKSIN", "KVAK", {
     temp: pm(25, 6, "25 ± 6 °C"),
     humidity: HUMIDITY_55_20,
@@ -470,7 +470,7 @@ const ROWS: ToleranceRow[] = [
     "KVAK_STORAGE_TEMP",
     range(2, 10, "Setting suhu 2 ˚C - 10 ˚C; Variasi suhu = 2°C ~ 10°C"),
   ),
-  ...envElec("COALD_CHAIN", "CCHAIN", {
+  ...envElec("COLD_CHAIN", "CCHAIN", {
     temp: pm(25, 6, "25 ± 6 °C"),
     humidity: HUMIDITY_55_20,
     voltage: VOLTAGE_220_10,
@@ -480,7 +480,7 @@ const ROWS: ToleranceRow[] = [
     applied: APPLIED_500,
   }),
   t(
-    "COALD_CHAIN",
+    "COLD_CHAIN",
     "STORAGE_TEMPERATURE_UNIFORMITY",
     "CCHAIN_STORAGE_TEMP",
     range(2, 10, "Setting suhu 2 ˚C - 10 ˚C; Variasi suhu = 2°C ~ 10°C"),

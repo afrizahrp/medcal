@@ -205,6 +205,17 @@ const ROWS: MenuSeedRow[] = [
     viewResource: "quotation",
     viewAction: "read",
   },
+  {
+    application: "MANAGEMENT",
+    code: "calibration-management.purchase-orders",
+    parentCode: "calibration-management",
+    label: "Purchase Order",
+    href: "/purchase-orders",
+    icon: "fileText",
+    order: 3,
+    viewResource: "purchaseOrder",
+    viewAction: "read",
+  },
 
   // ─────────────────────────────────────────────────────────────────────────
   // User Management (group) → order: 4

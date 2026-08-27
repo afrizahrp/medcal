@@ -109,7 +109,7 @@ const CATEGORIES: CategorySeedRow[] = [
  * - Breast Pumps (suction) → Suction & Fluid Management: source name tags suction/vacuum.
  * - Oven → Sterilization: medical oven in this capability list is sterilizer/drying, not cold chain.
  * - Paraffin Baths → Temperature Therapy: therapeutic heating, not storage.
- * - Coald Chain → Cold Chain & Storage: source spelling kept in `name`; code uses COALD_CHAIN.
+ * - Cold Chain → Cold Chain & Storage: code is COLD_CHAIN (not the source typo COALD_CHAIN).
  * - Electric Beds (kelistrikan) → Patient Care: electrical safety of a care bed, not monitoring.
  */
 const TYPES: TypeSeedRow[] = [
@@ -159,7 +159,7 @@ const TYPES: TypeSeedRow[] = [
   // Cold Chain & Storage
   { categoryCode: "COLD_CHAIN_STORAGE", code: "BLOOD_BANK_REFRIGERATORS", name: "Blood Bank Refrigerators" },
   { categoryCode: "COLD_CHAIN_STORAGE", code: "KULKAS_VAKSIN", name: "Kulkas Vaksin" },
-  { categoryCode: "COLD_CHAIN_STORAGE", code: "COALD_CHAIN", name: "Coald Chain" },
+  { categoryCode: "COLD_CHAIN_STORAGE", code: "COLD_CHAIN", name: "Cold Chain" },
   { categoryCode: "COLD_CHAIN_STORAGE", code: "MEDICAL_REFRIGERATOR", name: "Medical Refrigerator" },
   { categoryCode: "COLD_CHAIN_STORAGE", code: "MEDICAL_FREEZER", name: "Medical Freezer" },
 

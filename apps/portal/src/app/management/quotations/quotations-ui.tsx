@@ -11,13 +11,7 @@ import { PageHeader } from "../../../components/management/page-header";
 import { PaginationBar, Surface, selectClassName, formatRelativeTime } from "../leads/leads-ui";
 import { ConfirmDialog, DetailField } from "../calibration-requests/calibration-requests-ui";
 
-export type QuotationStatus =
-  | "DRAFT"
-  | "SENT"
-  | "APPROVED"
-  | "REJECTED"
-  | "EXPIRED"
-  | "CANCELLED";
+export type QuotationStatus = "DRAFT" | "SENT" | "APPROVED" | "REJECTED" | "EXPIRED" | "CANCELLED";
 
 export type QuotationSource = "PORTAL" | "PHONE" | "WHATSAPP" | "OTHER";
 
@@ -80,8 +74,19 @@ export interface QuotationItem {
   discountAmount: MoneyValue;
   lineTotal: MoneyValue;
   requestItem: QuotationItemRequestItem | null;
-  tariff: { id: string; code: string; name: string; unitPrice: MoneyValue; currency: string } | null;
-  device: { id: string; brand: string | null; model: string | null; serialNumber: string | null } | null;
+  tariff: {
+    id: string;
+    code: string;
+    name: string;
+    unitPrice: MoneyValue;
+    currency: string;
+  } | null;
+  device: {
+    id: string;
+    brand: string | null;
+    model: string | null;
+    serialNumber: string | null;
+  } | null;
 }
 
 export interface QuotationRow {
@@ -95,9 +100,9 @@ export interface QuotationRow {
   validUntil: string | null;
   subtotal: MoneyValue;
   headerDiscountAmount: MoneyValue;
-  taxCode: string | null;
-  taxRate: MoneyValue | null;
-  taxAmount: MoneyValue | null;
+  taxCode: string;
+  taxRate: MoneyValue;
+  taxAmount: MoneyValue;
   totalAmount: MoneyValue;
   currency: string;
   approvedAt: string | null;
@@ -289,7 +294,9 @@ export function QuotationTable({ quotations }: { quotations: QuotationRow[] }) {
                 <StatusBadge status={row.status} />
               </td>
               <td className="px-4 py-3 text-sm text-slate-500">{formatDate(row.validUntil)}</td>
-              <td className="px-4 py-3 text-sm text-slate-500">{formatRelativeTime(row.createdAt)}</td>
+              <td className="px-4 py-3 text-sm text-slate-500">
+                {formatRelativeTime(row.createdAt)}
+              </td>
               <td className="px-4 py-3">
                 <Link href={`/quotations/${row.id}`}>
                   <Button variant="ghost" size="sm">
@@ -305,11 +312,7 @@ export function QuotationTable({ quotations }: { quotations: QuotationRow[] }) {
   );
 }
 
-export function QuotationEmptyState({
-  onClearFilters,
-}: {
-  onClearFilters?: () => void;
-}) {
+export function QuotationEmptyState({ onClearFilters }: { onClearFilters?: () => void }) {
   return (
     <div className="py-10 text-center">
       <p className="text-sm text-slate-500">
@@ -352,7 +355,7 @@ export function QuotationTotals({
         <dd className="font-medium text-slate-900">{formatIdr(subtotal)}</dd>
       </div>
       <div className="flex items-center justify-between gap-4">
-        <dt className="text-slate-500">Header Discount</dt>
+        <dt className="text-slate-500">Discount</dt>
         <dd>
           {onHeaderDiscountChange ? (
             <Input
@@ -362,7 +365,7 @@ export function QuotationTotals({
               value={headerDiscountInput ?? ""}
               onChange={(e) => onHeaderDiscountChange(e.target.value)}
               className="h-8 w-32 text-right"
-              aria-label="Header discount"
+              aria-label="Discount"
             />
           ) : (
             <span className="font-medium text-slate-900">{formatIdr(headerDiscountAmount)}</span>
@@ -458,7 +461,12 @@ export function previewTotals(
   const headerDiscount = moneyNumber(headerDiscountAmount);
   const netAmount = subtotal - headerDiscount;
   if (!tax) {
-    return { subtotal, headerDiscountAmount: headerDiscount, taxAmount: null, totalAmount: netAmount };
+    return {
+      subtotal,
+      headerDiscountAmount: headerDiscount,
+      taxAmount: null,
+      totalAmount: netAmount,
+    };
   }
   const rate = moneyNumber(tax.taxRate);
   if (rate === 0) {
@@ -486,13 +494,10 @@ export function formatQuotationApiError(
     const quotationId =
       typeof err.data?.quotationId === "string" ? err.data.quotationId : undefined;
     const messages: Record<string, string> = {
-      DUPLICATE_QUOTATION_FOR_REQUEST:
-        "Quotation untuk requisition ini sudah ada.",
+      DUPLICATE_QUOTATION_FOR_REQUEST: "Quotation untuk requisition ini sudah ada.",
       CALIBRATION_REQUEST_NOT_FOUND: "Requisition tidak ditemukan.",
-      INVALID_STATUS_FOR_QUOTATION:
-        "Requisition belum dalam status yang bisa dibuatkan quotation.",
-      QUOTATION_SCOPE_MISMATCH:
-        "Item quotation harus mencakup seluruh item Requisition.",
+      INVALID_STATUS_FOR_QUOTATION: "Requisition belum dalam status yang bisa dibuatkan quotation.",
+      QUOTATION_SCOPE_MISMATCH: "Item quotation harus mencakup seluruh item Requisition.",
       DUPLICATE_REQUEST_ITEM: "Item requisition tidak boleh diduplikasi pada quotation.",
       TARIFF_NOT_FOUND: "Satu atau lebih tariff tidak ditemukan.",
       DEVICE_NOT_FOUND: "Satu atau lebih device tidak ditemukan untuk customer ini.",
@@ -503,7 +508,7 @@ export function formatQuotationApiError(
       HEADER_DISCOUNT_EXCEEDS_SUBTOTAL: "Header discount tidak boleh melebihi subtotal.",
       INVALID_STATUS_FOR_UPDATE: "Hanya quotation DRAFT yang dapat diedit.",
       INVALID_STATUS_FOR_SEND: "Hanya quotation DRAFT yang dapat dikirim.",
-      INVALID_STATUS_FOR_APPROVE: "Hanya quotation SENT yang dapat di-approve.",
+      INVALID_STATUS_FOR_APPROVE: "Hanya quotation DRAFT atau SENT yang dapat di-approve.",
       INVALID_STATUS_FOR_REJECT: "Hanya quotation SENT yang dapat di-reject.",
       ALREADY_CANCELLED: "Quotation sudah dibatalkan.",
       CANNOT_CANCEL_APPROVED: "Quotation yang sudah di-approve tidak dapat dibatalkan.",

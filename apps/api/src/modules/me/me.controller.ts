@@ -113,6 +113,11 @@ export class MeController {
       quotationUpdate: hasPermission(membership.role, "quotation", "update"),
       quotationCancel: hasPermission(membership.role, "quotation", "cancel"),
       quotationApprove: hasPermission(membership.role, "quotation", "approve"),
+      purchaseOrderRead: hasPermission(membership.role, "purchaseOrder", "read"),
+      purchaseOrderCreate: hasPermission(membership.role, "purchaseOrder", "create"),
+      purchaseOrderUpdate: hasPermission(membership.role, "purchaseOrder", "update"),
+      purchaseOrderCancel: hasPermission(membership.role, "purchaseOrder", "cancel"),
+      purchaseOrderApprove: hasPermission(membership.role, "purchaseOrder", "approve"),
       taxManage: hasPermission(membership.role, "tax", "manage"),
     };
 
