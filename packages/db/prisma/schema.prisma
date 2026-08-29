@@ -996,6 +996,11 @@ model DeviceCalibrationParameter {
   toleranceMin     Decimal?             @db.Decimal(18, 4)
   toleranceMax     Decimal?             @db.Decimal(18, 4)
   toleranceNote    String?
+  // Digits after the decimal point required for this parameter's measured
+  // calibration result. Only meaningful for valueType = NUMBER; stays NULL for
+  // RATIO/TEXT/BOOLEAN and for NUMBER rows not yet configured. A CHECK
+  // constraint bounds it to 0..10 (see migration).
+  decimalPlaces    Int?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 

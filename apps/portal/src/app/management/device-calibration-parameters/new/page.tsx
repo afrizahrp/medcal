@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Save } from "lucide-react";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
@@ -39,14 +39,19 @@ const emptyForm: DeviceCalibrationParameterFormValue = {
   toleranceMin: "",
   toleranceMax: "",
   toleranceNote: "",
+  decimalPlaces: "",
   description: "",
 };
 
 export default function NewDeviceCalibrationParameterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { capabilities } = useAuthz();
   const createMutation = useCreateDeviceCalibrationParameter();
-  const [form, setForm] = useState<DeviceCalibrationParameterFormValue>(emptyForm);
+  const [form, setForm] = useState<DeviceCalibrationParameterFormValue>(() => ({
+    ...emptyForm,
+    deviceTypeId: searchParams.get("deviceTypeId") ?? "",
+  }));
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -149,6 +154,7 @@ export default function NewDeviceCalibrationParameterPage() {
           <DeviceCalibrationParameterFormFields
             value={form}
             onChange={setField}
+            mode="create"
             deviceTypes={typesQuery.data?.data ?? []}
             deviceTypesLoading={typesQuery.isLoading}
             capabilities={capabilitiesQuery.data?.data ?? []}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { isForbidden } from "@medcal/shared";
@@ -13,47 +13,25 @@ import { AccessDenied } from "../../../components/access-denied";
 import {
   PageHeader,
   Surface,
-  DeviceCalibrationParameterFilters,
-  DeviceCalibrationParameterTable,
-  DeviceCalibrationParameterEmptyState,
   PaginationBar,
+  DeviceCalibrationParameterSearchBar,
+  DeviceTypeParameterTable,
+  DeviceCalibrationParameterEmptyState,
 } from "./device-calibration-parameters-ui";
-import { useDeviceCalibrationParameters } from "./use-device-calibration-parameters-query";
-import {
-  useDeviceCapabilities,
-  useDeviceCapabilityItems,
-} from "../device-capabilities/use-device-capabilities-query";
-import { useDeviceTypes } from "../device-types/use-device-types-query";
-import { useUoms } from "../uoms/use-uoms-query";
+import { useDeviceCalibrationParameterGroups } from "./use-device-calibration-parameters-query";
 
-const URL_KEYS = [
-  "search",
-  "deviceTypeId",
-  "capabilityId",
-  "capabilityItemId",
-  "uomId",
-  "sortBy",
-  "sortDir",
-  "page",
-  "pageSize",
-] as const;
+const URL_KEYS = ["search", "expanded", "page", "pageSize"] as const;
 
 export default function DeviceCalibrationParametersPageClient() {
   const { capabilities } = useAuthz();
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
-  const deviceTypeId = params.deviceTypeId ?? "";
-  const capabilityId = params.capabilityId ?? "";
-  const capabilityItemId = params.capabilityItemId ?? "";
-  const uomId = params.uomId ?? "";
-  const sortBy = params.sortBy ?? "createdAt";
-  const sortDir = (params.sortDir as "asc" | "desc" | undefined) ?? "desc";
+  const committedSearch = params.search ?? "";
   const page = Number(params.page) || 1;
   const pageSize = Number(params.pageSize) || 10;
-  const committedSearch = params.search ?? "";
 
   const [searchInput, setSearchInput] = useState(committedSearch);
-  const debouncedSearch = useDebouncedValue(searchInput, 500);
+  const debouncedSearch = useDebouncedValue(searchInput, 400);
 
   useEffect(() => {
     if (debouncedSearch !== committedSearch) {
@@ -62,61 +40,41 @@ export default function DeviceCalibrationParametersPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
 
-  const typesQuery = useDeviceTypes({
-    search: "",
-    categoryId: "",
-    isActive: "",
-    sortBy: "name",
-    sortDir: "asc",
-    page: 1,
-    pageSize: 100,
-  });
+  const query = useDeviceCalibrationParameterGroups({ search: committedSearch, page, pageSize });
 
-  const capabilitiesQuery = useDeviceCapabilities({
-    search: "",
-    sortBy: "name",
-    sortDir: "asc",
-    page: 1,
-    pageSize: 100,
-  });
+  const manuallyExpanded = useMemo(
+    () => new Set((params.expanded ?? "").split(",").filter(Boolean)),
+    [params.expanded],
+  );
 
-  const itemsQuery = useDeviceCapabilityItems(capabilityId || undefined);
+  const result = query.data;
+  const groups = result?.data ?? [];
+  const isSearching = committedSearch.trim().length > 0;
 
-  const uomsQuery = useUoms({
-    search: "",
-    category: "",
-    isActive: true,
-    sortBy: "name",
-    sortDir: "asc",
-    page: 1,
-    pageSize: 100,
-  });
+  // When searching, auto-expand every Device Type on the (already filtered) page
+  // so matches are visible without a manual click.
+  const expandedIds = useMemo(() => {
+    if (isSearching) return new Set(groups.map((g) => g.deviceType.id));
+    return manuallyExpanded;
+  }, [isSearching, groups, manuallyExpanded]);
 
-  const query = useDeviceCalibrationParameters({
-    search: committedSearch,
-    deviceTypeId,
-    capabilityId,
-    capabilityItemId,
-    uomId,
-    sortBy,
-    sortDir,
-    page,
-    pageSize,
-  });
+  function toggle(deviceTypeId: string) {
+    const next = new Set(manuallyExpanded);
+    if (next.has(deviceTypeId)) next.delete(deviceTypeId);
+    else next.add(deviceTypeId);
+    setParams({ expanded: next.size ? [...next].join(",") : undefined });
+  }
 
   if (!capabilities?.deviceCalibrationParameterRead) {
     return <AccessDenied />;
   }
 
-  const result = query.data;
   const loading = query.isLoading;
   const fetching = query.isFetching && !loading;
   const forbidden = isForbidden(query.error);
-  const error = query.isError && !forbidden ? "Gagal memuat daftar Calibration Parameter." : null;
+  const error =
+    query.isError && !forbidden ? "Gagal memuat daftar Calibration Parameter." : null;
   const totalPages = result ? Math.max(1, result.totalPages) : 1;
-  const hasFilters = Boolean(
-    committedSearch || deviceTypeId || capabilityId || capabilityItemId || uomId,
-  );
 
   if (forbidden) {
     return <AccessDenied />;
@@ -140,74 +98,50 @@ export default function DeviceCalibrationParametersPageClient() {
       </div>
 
       <Surface className={cn("mt-6 p-4 md:p-6", fetching && "opacity-70")}>
-        <DeviceCalibrationParameterFilters
-          searchInput={searchInput}
-          onSearchChange={setSearchInput}
-          deviceTypeId={deviceTypeId}
-          onDeviceTypeChange={(next) =>
-            setParams({ deviceTypeId: next || undefined, page: undefined })
-          }
-          deviceTypes={typesQuery.data?.data ?? []}
-          capabilityId={capabilityId}
-          onCapabilityChange={(next) =>
-            setParams({
-              capabilityId: next || undefined,
-              capabilityItemId: undefined,
-              page: undefined,
-            })
-          }
-          capabilities={capabilitiesQuery.data?.data ?? []}
-          capabilityItemId={capabilityItemId}
-          onCapabilityItemChange={(next) =>
-            setParams({ capabilityItemId: next || undefined, page: undefined })
-          }
-          capabilityItems={itemsQuery.data ?? []}
-          uomId={uomId}
-          onUomChange={(next) => setParams({ uomId: next || undefined, page: undefined })}
-          uoms={uomsQuery.data?.data ?? []}
-        />
+        <DeviceCalibrationParameterSearchBar value={searchInput} onChange={setSearchInput} />
+
+        {result ? (
+          <p className="mt-3 text-xs text-slate-500">
+            {result.totalParameters} parameter dalam {result.totalDeviceTypes} device type
+          </p>
+        ) : null}
 
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
         {loading ? (
           <p className="mt-6 text-sm text-slate-400">Memuat…</p>
-        ) : result && result.data.length === 0 ? (
+        ) : groups.length === 0 ? (
           <DeviceCalibrationParameterEmptyState
-            onClearFilters={
-              hasFilters
-                ? () => {
-                    setSearchInput("");
-                    setParams({
-                      search: undefined,
-                      deviceTypeId: undefined,
-                      capabilityId: undefined,
-                      capabilityItemId: undefined,
-                      uomId: undefined,
-                      page: undefined,
-                    });
-                  }
-                : undefined
-            }
+            hasSearch={isSearching}
+            onClearSearch={() => {
+              setSearchInput("");
+              setParams({ search: undefined, page: undefined });
+            }}
           />
-        ) : result ? (
+        ) : (
           <>
             <div className="mt-4">
-              <DeviceCalibrationParameterTable parameters={result.data} />
+              <DeviceTypeParameterTable
+                groups={groups}
+                expandedIds={expandedIds}
+                onToggle={toggle}
+                canCreate={Boolean(capabilities.deviceCalibrationParameterCreate)}
+              />
             </div>
             <PaginationBar
               className="mt-4"
               page={page}
               totalPages={totalPages}
-              total={result.total}
+              total={result?.total ?? 0}
               pageSize={pageSize}
-              itemLabel="parameter"
+              itemLabel="device type"
               onPageChange={(next) => setParams({ page: next <= 1 ? undefined : String(next) })}
               onPageSizeChange={(next) =>
                 setParams({ pageSize: next === 10 ? undefined : String(next), page: undefined })
               }
             />
           </>
-        ) : null}
+        )}
       </Surface>
     </div>
   );

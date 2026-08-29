@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import {
   deviceCalibrationParameterCreateSchema,
+  deviceCalibrationParameterGroupedQuerySchema,
   deviceCalibrationParameterListQuerySchema,
   deviceCalibrationParameterUpdateSchema,
 } from "@medcal/shared";
@@ -20,6 +21,7 @@ import { RequirePermission } from "../../common/decorators/require-permission.de
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   DeviceCalibrationParametersService,
+  type DeviceCalibrationParameterGroupedResult,
   type DeviceCalibrationParameterListResult,
   type DeviceCalibrationParameterWithRelations,
 } from "./device-calibration-parameters.service";
@@ -58,6 +60,20 @@ export class DeviceCalibrationParametersController {
       });
     }
     return this.service.findAll(parsed.data);
+  }
+
+  @Get("grouped")
+  @RequirePermission("deviceCalibrationParameter", "read")
+  async listGrouped(@Query() rawQuery: unknown): Promise<DeviceCalibrationParameterGroupedResult> {
+    const parsed = deviceCalibrationParameterGroupedQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid device calibration parameter grouped query",
+        code: "INVALID_DEVICE_CALIBRATION_PARAMETER_QUERY",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.findAllGroupedByDeviceType(parsed.data);
   }
 
   @Get(":id")

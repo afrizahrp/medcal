@@ -791,6 +791,22 @@ function refineToleranceBounds(
   }
 }
 
+/**
+ * Digits after the decimal point for a parameter's measured calibration result.
+ * Only meaningful for valueType = NUMBER; `""`/`null` coerce to `null`. Bounded 0..10
+ * (matches the DB CHECK constraint).
+ */
+const optionalDecimalPlaces = z.preprocess((value) => {
+  if (value === undefined) return undefined;
+  if (value === "" || value === null) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return null;
+    return Number(trimmed);
+  }
+  return value;
+}, z.number().int().min(0).max(10).nullable().optional());
+
 export const deviceCalibrationParameterCreateSchema = z
   .object({
     deviceTypeId: z.string().min(1),
@@ -802,6 +818,7 @@ export const deviceCalibrationParameterCreateSchema = z
     toleranceMin: optionalFiniteNumber,
     toleranceMax: optionalFiniteNumber,
     toleranceNote: z.string().max(500).nullable().optional(),
+    decimalPlaces: optionalDecimalPlaces,
   })
   .superRefine(refineToleranceBounds);
 
@@ -836,11 +853,29 @@ export const deviceCalibrationParameterUpdateSchema = z
     toleranceMin: optionalFiniteNumber,
     toleranceMax: optionalFiniteNumber,
     toleranceNote: z.string().max(500).nullable().optional(),
+    decimalPlaces: optionalDecimalPlaces,
   })
   .superRefine(refineToleranceBounds);
 
 export type DeviceCalibrationParameterUpdateInput = z.infer<
   typeof deviceCalibrationParameterUpdateSchema
+>;
+
+/**
+ * GET /device-calibration-parameters/grouped query params — parameters grouped by
+ * Device Type for the simplified browse UI. Reuses the standard MEDCAL list
+ * conventions (`search`, `page`, `pageSize`); pagination is applied at the
+ * Device-Type (parent) level so a Device Type and all its parameters stay on one
+ * page. `sortBy`/`sortDir` are not used here (fixed device-type-name order).
+ */
+export const deviceCalibrationParameterGroupedQuerySchema = z.object({
+  search: z.string().trim().min(1).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export type DeviceCalibrationParameterGroupedQuery = z.infer<
+  typeof deviceCalibrationParameterGroupedQuerySchema
 >;
 
 // =============================================================================

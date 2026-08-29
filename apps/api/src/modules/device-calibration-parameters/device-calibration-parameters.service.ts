@@ -58,6 +58,46 @@ export interface DeviceCalibrationParameterListResult {
   totalPages: number;
 }
 
+export interface DeviceCalibrationParameterDeviceTypeGroup {
+  deviceType: { id: string; code: string; name: string };
+  /** Device category name for the parent row's "Kategori" column (null if unset). */
+  categoryName: string | null;
+  count: number;
+  parameters: DeviceCalibrationParameterWithRelations[];
+}
+
+export interface DeviceCalibrationParameterGroupedResult {
+  data: DeviceCalibrationParameterDeviceTypeGroup[];
+  /** Standard MEDCAL pagination fields — paginated at the Device-Type level. */
+  page: number;
+  pageSize: number;
+  /** Total number of Device-Type groups (what the page count is derived from). */
+  total: number;
+  totalPages: number;
+  /** Totals across the whole (search-filtered) result, not just this page. */
+  totalParameters: number;
+  totalDeviceTypes: number;
+}
+
+function buildSearchWhere(search: string | undefined): Prisma.DeviceCalibrationParameterWhereInput {
+  if (!search) return {};
+  return {
+    OR: [
+      { code: { contains: search, mode: "insensitive" } },
+      { name: { contains: search, mode: "insensitive" } },
+      { deviceType: { name: { contains: search, mode: "insensitive" } } },
+      { deviceType: { code: { contains: search, mode: "insensitive" } } },
+      { capabilityItem: { name: { contains: search, mode: "insensitive" } } },
+      { capabilityItem: { code: { contains: search, mode: "insensitive" } } },
+      { capabilityItem: { capability: { name: { contains: search, mode: "insensitive" } } } },
+      { uom: { name: { contains: search, mode: "insensitive" } } },
+      { uom: { code: { contains: search, mode: "insensitive" } } },
+      { uom: { symbol: { contains: search, mode: "insensitive" } } },
+      { toleranceNote: { contains: search, mode: "insensitive" } },
+    ],
+  };
+}
+
 @Injectable()
 export class DeviceCalibrationParametersService {
   private async assertDeviceTypeExists(deviceTypeId: string): Promise<void> {
@@ -86,6 +126,18 @@ export class DeviceCalibrationParametersService {
       throw new BadRequestException({
         message: "UOM not found",
         code: "UOM_NOT_FOUND",
+      });
+    }
+  }
+
+  private assertDecimalPlacesValidForValueType(
+    decimalPlaces: number | null | undefined,
+    valueType: string,
+  ): void {
+    if (decimalPlaces != null && valueType !== "NUMBER") {
+      throw new BadRequestException({
+        message: "decimalPlaces only applies to NUMBER-type calibration parameters",
+        code: "INVALID_DECIMAL_PLACES_FOR_VALUE_TYPE",
       });
     }
   }
@@ -130,6 +182,8 @@ export class DeviceCalibrationParametersService {
     await this.assertCapabilityItemExists(input.capabilityItemId);
     await this.assertUomExists(input.uomId);
     this.assertToleranceBounds(input.toleranceMin, input.toleranceMax);
+    // valueType is not settable via the API and defaults to NUMBER at the DB level.
+    this.assertDecimalPlacesValidForValueType(input.decimalPlaces, "NUMBER");
     await this.assertUniqueCode(input.deviceTypeId, input.capabilityItemId, input.code);
 
     return prisma.deviceCalibrationParameter.create({
@@ -143,6 +197,7 @@ export class DeviceCalibrationParametersService {
         toleranceMin: input.toleranceMin ?? null,
         toleranceMax: input.toleranceMax ?? null,
         toleranceNote: input.toleranceNote ?? null,
+        decimalPlaces: input.decimalPlaces ?? null,
       },
       include: parameterInclude,
     });
@@ -159,27 +214,7 @@ export class DeviceCalibrationParametersService {
       ...(query.capabilityItemId ? { capabilityItemId: query.capabilityItemId } : {}),
       ...(query.capabilityId ? { capabilityItem: { capabilityId: query.capabilityId } } : {}),
       ...(query.uomId ? { uomId: query.uomId } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { code: { contains: query.search, mode: "insensitive" } },
-              { name: { contains: query.search, mode: "insensitive" } },
-              { deviceType: { name: { contains: query.search, mode: "insensitive" } } },
-              { deviceType: { code: { contains: query.search, mode: "insensitive" } } },
-              { capabilityItem: { name: { contains: query.search, mode: "insensitive" } } },
-              { capabilityItem: { code: { contains: query.search, mode: "insensitive" } } },
-              {
-                capabilityItem: {
-                  capability: { name: { contains: query.search, mode: "insensitive" } },
-                },
-              },
-              { uom: { name: { contains: query.search, mode: "insensitive" } } },
-              { uom: { code: { contains: query.search, mode: "insensitive" } } },
-              { uom: { symbol: { contains: query.search, mode: "insensitive" } } },
-              { toleranceNote: { contains: query.search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
+      ...buildSearchWhere(query.search),
     };
 
     const { field: sortField, dir: sortDir } = resolveSortOrder(
@@ -201,6 +236,64 @@ export class DeviceCalibrationParametersService {
     ]);
 
     return { data, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+  }
+
+  async findAllGroupedByDeviceType(
+    query: { search?: string; page?: number; pageSize?: number } = {},
+  ): Promise<DeviceCalibrationParameterGroupedResult> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
+
+    // Fetch every matching parameter (ordered) so grouping is correct, then
+    // paginate at the Device-Type level — a Device Type and all of its
+    // parameters always stay together on one page.
+    const rows = await prisma.deviceCalibrationParameter.findMany({
+      where: buildSearchWhere(query.search?.trim() || undefined),
+      include: parameterInclude,
+      orderBy: [{ deviceType: { name: "asc" } }, { name: "asc" }],
+    });
+
+    const groups = new Map<string, DeviceCalibrationParameterDeviceTypeGroup>();
+    for (const row of rows) {
+      const existing = groups.get(row.deviceType.id);
+      if (existing) {
+        existing.parameters.push(row);
+        existing.count += 1;
+      } else {
+        groups.set(row.deviceType.id, {
+          deviceType: row.deviceType,
+          categoryName: null,
+          count: 1,
+          parameters: [row],
+        });
+      }
+    }
+
+    const allGroups = [...groups.values()];
+    const total = allGroups.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const data = allGroups.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
+
+    if (data.length > 0) {
+      const types = await prisma.deviceType.findMany({
+        where: { id: { in: data.map((group) => group.deviceType.id) } },
+        select: { id: true, category: { select: { name: true } } },
+      });
+      const categoryByTypeId = new Map(types.map((type) => [type.id, type.category?.name ?? null]));
+      for (const group of data) {
+        group.categoryName = categoryByTypeId.get(group.deviceType.id) ?? null;
+      }
+    }
+
+    return {
+      data,
+      page,
+      pageSize,
+      total,
+      totalPages,
+      totalParameters: rows.length,
+      totalDeviceTypes: total,
+    };
   }
 
   async findOne(id: string): Promise<DeviceCalibrationParameterWithRelations> {
@@ -251,6 +344,10 @@ export class DeviceCalibrationParametersService {
           : Number(existing.toleranceMax);
     this.assertToleranceBounds(nextMin, nextMax);
 
+    if (input.decimalPlaces !== undefined) {
+      this.assertDecimalPlacesValidForValueType(input.decimalPlaces, existing.valueType);
+    }
+
     const uniqueChanged =
       nextDeviceTypeId !== existing.deviceTypeId ||
       nextCapabilityItemId !== existing.capabilityItemId ||
@@ -272,6 +369,7 @@ export class DeviceCalibrationParametersService {
         ...(input.toleranceMin !== undefined ? { toleranceMin: input.toleranceMin } : {}),
         ...(input.toleranceMax !== undefined ? { toleranceMax: input.toleranceMax } : {}),
         ...(input.toleranceNote !== undefined ? { toleranceNote: input.toleranceNote } : {}),
+        ...(input.decimalPlaces !== undefined ? { decimalPlaces: input.decimalPlaces } : {}),
       },
       include: parameterInclude,
     });

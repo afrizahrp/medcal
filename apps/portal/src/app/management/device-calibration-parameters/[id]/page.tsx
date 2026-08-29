@@ -45,6 +45,7 @@ const emptyForm: DeviceCalibrationParameterFormValue = {
   toleranceMin: "",
   toleranceMax: "",
   toleranceNote: "",
+  decimalPlaces: "",
   description: "",
 };
 
@@ -61,6 +62,7 @@ function formFromRow(row: DeviceCalibrationParameterRow): DeviceCalibrationParam
     toleranceMax:
       row.toleranceMax == null || row.toleranceMax === "" ? "" : String(Number(row.toleranceMax)),
     toleranceNote: row.toleranceNote ?? "",
+    decimalPlaces: row.decimalPlaces == null ? "" : String(row.decimalPlaces),
     description: row.description ?? "",
   };
 }
@@ -249,6 +251,8 @@ export default function DeviceCalibrationParameterDetailPage() {
             <DeviceCalibrationParameterFormFields
               value={form}
               onChange={setField}
+              mode="edit"
+              valueType={row.valueType}
               deviceTypes={typesQuery.data?.data ?? []}
               deviceTypesLoading={typesQuery.isLoading}
               capabilities={capabilitiesQuery.data?.data ?? []}
@@ -313,6 +317,16 @@ export default function DeviceCalibrationParameterDetailPage() {
 
               <DetailField label="Batas penerimaan">
                 <span className="font-medium">{formatCalibrationTolerance(row) ?? "—"}</span>
+              </DetailField>
+
+              <DetailField label="Decimal places">
+                <span className="font-medium">
+                  {row.valueType !== "NUMBER"
+                    ? "— (tidak berlaku)"
+                    : row.decimalPlaces == null
+                      ? "Belum diatur"
+                      : `${row.decimalPlaces} digit`}
+                </span>
               </DetailField>
 
               <DetailField label="Deskripsi">

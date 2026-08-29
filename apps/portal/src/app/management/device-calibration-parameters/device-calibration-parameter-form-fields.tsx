@@ -26,6 +26,7 @@ export interface DeviceCalibrationParameterFormValue {
   toleranceMin: string;
   toleranceMax: string;
   toleranceNote: string;
+  decimalPlaces: string;
   description: string;
 }
 
@@ -43,6 +44,14 @@ export interface DeviceCalibrationParameterFormFieldsProps {
   deviceTypesLoading?: boolean;
   uoms: UomRow[];
   uomsLoading?: boolean;
+  /**
+   * "create" (default) exposes the Device Type / Capability / Capability Item pickers.
+   * "edit" locks the structural hierarchy: it renders a read-only breadcrumb instead,
+   * so users can only edit the parameter's own attributes.
+   */
+  mode?: "create" | "edit";
+  /** Parameter value type — decimalPlaces is only shown for NUMBER. Defaults to NUMBER. */
+  valueType?: "NUMBER" | "RATIO" | "TEXT" | "BOOLEAN";
 }
 
 function ComboboxField({
@@ -147,6 +156,8 @@ export function DeviceCalibrationParameterFormFields({
   deviceTypesLoading,
   uoms,
   uomsLoading,
+  mode = "create",
+  valueType = "NUMBER",
 }: DeviceCalibrationParameterFormFieldsProps) {
   const [deviceTypeOpen, setDeviceTypeOpen] = useState(false);
   const [capabilityOpen, setCapabilityOpen] = useState(false);
@@ -157,83 +168,99 @@ export function DeviceCalibrationParameterFormFields({
   const selectedCapability = capabilities.find((c) => c.id === value.capabilityId);
   const selectedItem = capabilityItems.find((item) => item.id === value.capabilityItemId);
   const selectedUom = uoms.find((uom) => uom.id === value.uomId);
+  const showDecimalPlaces = valueType === "NUMBER";
 
   return (
     <div className="space-y-5">
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-slate-900">Informasi Calibration Parameter</h2>
 
-        <div className={gridClass}>
-          <ComboboxField
-            id="deviceTypeId"
-            label="Device Type"
-            required
-            open={deviceTypeOpen}
-            onOpenChange={setDeviceTypeOpen}
-            disabled={deviceTypesLoading}
-            selectedLabel={selectedDeviceType?.name}
-            placeholder="Pilih device type"
-            loadingLabel="Memuat tipe…"
-            searchPlaceholder="Cari device type…"
-            emptyLabel="Device Type tidak ditemukan."
-            items={deviceTypes.map((deviceType) => ({
-              id: deviceType.id,
-              label: deviceType.name,
-              searchValue: `${deviceType.name} ${deviceType.code}`,
-              hint: deviceType.code,
-            }))}
-            selectedId={value.deviceTypeId}
-            onSelect={(id) => onChange("deviceTypeId", id)}
-          />
-        </div>
+        {mode === "edit" ? (
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="text-xs uppercase tracking-wide text-slate-400">Konteks (tidak dapat diubah)</p>
+            <p className="mt-0.5 text-sm font-medium text-slate-700">
+              {selectedDeviceType?.name ?? "—"}
+              <span className="mx-1.5 text-slate-400">›</span>
+              {selectedCapability?.name ?? "—"}
+              <span className="mx-1.5 text-slate-400">›</span>
+              {selectedItem?.name ?? "—"}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className={gridClass}>
+              <ComboboxField
+                id="deviceTypeId"
+                label="Device Type"
+                required
+                open={deviceTypeOpen}
+                onOpenChange={setDeviceTypeOpen}
+                disabled={deviceTypesLoading}
+                selectedLabel={selectedDeviceType?.name}
+                placeholder="Pilih device type"
+                loadingLabel="Memuat tipe…"
+                searchPlaceholder="Cari device type…"
+                emptyLabel="Device Type tidak ditemukan."
+                items={deviceTypes.map((deviceType) => ({
+                  id: deviceType.id,
+                  label: deviceType.name,
+                  searchValue: `${deviceType.name} ${deviceType.code}`,
+                  hint: deviceType.code,
+                }))}
+                selectedId={value.deviceTypeId}
+                onSelect={(id) => onChange("deviceTypeId", id)}
+              />
+            </div>
 
-        <div className={gridClass}>
-          <ComboboxField
-            id="capabilityId"
-            label="Capability"
-            open={capabilityOpen}
-            onOpenChange={setCapabilityOpen}
-            disabled={capabilitiesLoading}
-            selectedLabel={selectedCapability?.name}
-            placeholder="Pilih capability"
-            loadingLabel="Memuat capability…"
-            searchPlaceholder="Cari capability…"
-            emptyLabel="Capability tidak ditemukan."
-            items={capabilities.map((capability) => ({
-              id: capability.id,
-              label: capability.name,
-              searchValue: `${capability.name} ${capability.code}`,
-              hint: capability.code,
-            }))}
-            selectedId={value.capabilityId}
-            onSelect={(id) => {
-              onChange("capabilityId", id);
-              onChange("capabilityItemId", "");
-            }}
-          />
+            <div className={gridClass}>
+              <ComboboxField
+                id="capabilityId"
+                label="Capability"
+                open={capabilityOpen}
+                onOpenChange={setCapabilityOpen}
+                disabled={capabilitiesLoading}
+                selectedLabel={selectedCapability?.name}
+                placeholder="Pilih capability"
+                loadingLabel="Memuat capability…"
+                searchPlaceholder="Cari capability…"
+                emptyLabel="Capability tidak ditemukan."
+                items={capabilities.map((capability) => ({
+                  id: capability.id,
+                  label: capability.name,
+                  searchValue: `${capability.name} ${capability.code}`,
+                  hint: capability.code,
+                }))}
+                selectedId={value.capabilityId}
+                onSelect={(id) => {
+                  onChange("capabilityId", id);
+                  onChange("capabilityItemId", "");
+                }}
+              />
 
-          <ComboboxField
-            id="capabilityItemId"
-            label="Capability Item"
-            required
-            open={itemOpen}
-            onOpenChange={setItemOpen}
-            disabled={!value.capabilityId || capabilityItemsLoading}
-            selectedLabel={selectedItem?.name}
-            placeholder={value.capabilityId ? "Pilih capability item" : "Pilih capability dulu"}
-            loadingLabel="Memuat item…"
-            searchPlaceholder="Cari capability item…"
-            emptyLabel="Capability Item tidak ditemukan."
-            items={capabilityItems.map((item) => ({
-              id: item.id,
-              label: item.name,
-              searchValue: `${item.name} ${item.code}`,
-              hint: item.code,
-            }))}
-            selectedId={value.capabilityItemId}
-            onSelect={(id) => onChange("capabilityItemId", id)}
-          />
-        </div>
+              <ComboboxField
+                id="capabilityItemId"
+                label="Capability Item"
+                required
+                open={itemOpen}
+                onOpenChange={setItemOpen}
+                disabled={!value.capabilityId || capabilityItemsLoading}
+                selectedLabel={selectedItem?.name}
+                placeholder={value.capabilityId ? "Pilih capability item" : "Pilih capability dulu"}
+                loadingLabel="Memuat item…"
+                searchPlaceholder="Cari capability item…"
+                emptyLabel="Capability Item tidak ditemukan."
+                items={capabilityItems.map((item) => ({
+                  id: item.id,
+                  label: item.name,
+                  searchValue: `${item.name} ${item.code}`,
+                  hint: item.code,
+                }))}
+                selectedId={value.capabilityItemId}
+                onSelect={(id) => onChange("capabilityItemId", id)}
+              />
+            </div>
+          </>
+        )}
 
         <div className={gridClass}>
           <div>
@@ -340,6 +367,30 @@ export function DeviceCalibrationParameterFormFields({
           />
         </div>
 
+        {showDecimalPlaces ? (
+          <div className={gridClass}>
+            <div>
+              <label htmlFor="decimalPlaces" className="block text-sm font-medium text-slate-700">
+                Decimal Places
+              </label>
+              <Input
+                id="decimalPlaces"
+                type="number"
+                min={0}
+                max={10}
+                step={1}
+                value={value.decimalPlaces}
+                onChange={(e) => onChange("decimalPlaces", e.target.value)}
+                className={fieldClass}
+                placeholder="mis. 5"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Jumlah digit di belakang koma untuk hasil pengukuran parameter ini (0–10).
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         <div>
           <label htmlFor="description" className="block text-sm font-medium text-slate-700">
             Deskripsi
@@ -369,6 +420,13 @@ export function validateCalibrationToleranceForm(
   if (min != null && max != null && min > max) {
     return "Toleransi min tidak boleh lebih besar dari max.";
   }
+  const dpRaw = form.decimalPlaces.trim();
+  if (dpRaw !== "") {
+    const dp = Number(dpRaw);
+    if (!Number.isInteger(dp) || dp < 0 || dp > 10) {
+      return "Decimal places harus bilangan bulat 0–10.";
+    }
+  }
   return null;
 }
 
@@ -379,6 +437,7 @@ export function buildDeviceCalibrationParameterCreatePayload(
   const note = form.toleranceNote.trim();
   const minRaw = form.toleranceMin.trim();
   const maxRaw = form.toleranceMax.trim();
+  const dpRaw = form.decimalPlaces.trim();
   return {
     deviceTypeId: form.deviceTypeId,
     capabilityItemId: form.capabilityItemId,
@@ -389,6 +448,7 @@ export function buildDeviceCalibrationParameterCreatePayload(
     ...(minRaw !== "" ? { toleranceMin: Number(minRaw) } : {}),
     ...(maxRaw !== "" ? { toleranceMax: Number(maxRaw) } : {}),
     ...(note ? { toleranceNote: note } : {}),
+    ...(dpRaw !== "" ? { decimalPlaces: Number(dpRaw) } : {}),
   };
 }
 
@@ -397,6 +457,7 @@ export function buildDeviceCalibrationParameterUpdatePayload(
 ) {
   const minRaw = form.toleranceMin.trim();
   const maxRaw = form.toleranceMax.trim();
+  const dpRaw = form.decimalPlaces.trim();
   return {
     deviceTypeId: form.deviceTypeId,
     capabilityItemId: form.capabilityItemId,
@@ -407,6 +468,7 @@ export function buildDeviceCalibrationParameterUpdatePayload(
     toleranceMin: minRaw === "" ? null : Number(minRaw),
     toleranceMax: maxRaw === "" ? null : Number(maxRaw),
     toleranceNote: form.toleranceNote.trim() ? form.toleranceNote.trim() : null,
+    decimalPlaces: dpRaw === "" ? null : Number(dpRaw),
   };
 }
 
@@ -430,6 +492,9 @@ export function formatDeviceCalibrationParameterApiError(error: unknown): string
     }
     if (code === "INVALID_CALIBRATION_TOLERANCE") {
       return "Rentang toleransi tidak valid. Min tidak boleh lebih besar dari max.";
+    }
+    if (code === "INVALID_DECIMAL_PLACES_FOR_VALUE_TYPE") {
+      return "Decimal places hanya berlaku untuk parameter bertipe NUMBER.";
     }
     if (
       code === "INVALID_DEVICE_CALIBRATION_PARAMETER" ||

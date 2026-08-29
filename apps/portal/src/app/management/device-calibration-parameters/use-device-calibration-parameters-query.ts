@@ -7,6 +7,7 @@ import type {
   DeviceCalibrationParameterUpdateInput,
 } from "@medcal/shared";
 import type {
+  DeviceCalibrationParameterGroupedResponse,
   DeviceCalibrationParameterListResponse,
   DeviceCalibrationParameterRow,
 } from "./device-calibration-parameters-ui";
@@ -57,6 +58,33 @@ export function useDeviceCalibrationParameters(params: DeviceCalibrationParamete
       apiFetch<DeviceCalibrationParameterListResponse>(
         `/device-calibration-parameters?${buildSearchParams(params).toString()}`,
       ),
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useDeviceCalibrationParameterGroups(params: {
+  search: string;
+  page: number;
+  pageSize: number;
+}) {
+  const trimmed = params.search.trim();
+  return useQuery({
+    queryKey: [
+      DEVICE_CALIBRATION_PARAMETERS_QUERY_KEY,
+      "grouped",
+      trimmed,
+      params.page,
+      params.pageSize,
+    ],
+    queryFn: () => {
+      const qs = new URLSearchParams();
+      if (trimmed) qs.set("search", trimmed);
+      qs.set("page", String(params.page));
+      qs.set("pageSize", String(params.pageSize));
+      return apiFetch<DeviceCalibrationParameterGroupedResponse>(
+        `/device-calibration-parameters/grouped?${qs.toString()}`,
+      );
+    },
     placeholderData: (previous) => previous,
   });
 }

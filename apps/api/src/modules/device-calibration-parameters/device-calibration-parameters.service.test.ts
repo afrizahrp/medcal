@@ -494,6 +494,162 @@ describe("DeviceCalibrationParametersService.findAll / findOne / update / remove
   });
 });
 
+describe("DeviceCalibrationParametersService — decimalPlaces", () => {
+  it("persists decimalPlaces on create and returns it from the API", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const parameter = await service.create({
+      deviceTypeId: deviceType.id,
+      capabilityItemId: item.id,
+      code: uniqueCode(),
+      name: "Mean",
+      uomId: uom.id,
+      decimalPlaces: 5,
+    });
+    createdParameterIds.push(parameter.id);
+    expect(parameter.decimalPlaces).toBe(5);
+
+    const found = await service.findOne(parameter.id);
+    expect(found.decimalPlaces).toBe(5);
+  });
+
+  it("defaults decimalPlaces to null when omitted and updates/clears it", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const parameter = await service.create({
+      deviceTypeId: deviceType.id,
+      capabilityItemId: item.id,
+      code: uniqueCode(),
+      name: "Systole",
+      uomId: uom.id,
+    });
+    createdParameterIds.push(parameter.id);
+    expect(parameter.decimalPlaces).toBeNull();
+
+    const set = await service.update(parameter.id, { decimalPlaces: 1 });
+    expect(set.decimalPlaces).toBe(1);
+
+    const cleared = await service.update(parameter.id, { decimalPlaces: null });
+    expect(cleared.decimalPlaces).toBeNull();
+  });
+
+  it("rejects decimalPlaces on a non-NUMBER parameter", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const parameter = await service.create({
+      deviceTypeId: deviceType.id,
+      capabilityItemId: item.id,
+      code: uniqueCode(),
+      name: "Ratio Param",
+      uomId: uom.id,
+    });
+    createdParameterIds.push(parameter.id);
+    await prisma.deviceCalibrationParameter.update({
+      where: { id: parameter.id },
+      data: { valueType: "RATIO" },
+    });
+
+    await expect(service.update(parameter.id, { decimalPlaces: 3 })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it("rejects decimalPlaces outside 0..10 at the schema layer", () => {
+    const base = {
+      deviceTypeId: "type-1",
+      capabilityItemId: "item-1",
+      code: "CODE",
+      name: "Named",
+      uomId: "uom-1",
+    };
+    expect(deviceCalibrationParameterCreateSchema.safeParse({ ...base, decimalPlaces: 11 }).success).toBe(
+      false,
+    );
+    expect(deviceCalibrationParameterCreateSchema.safeParse({ ...base, decimalPlaces: -1 }).success).toBe(
+      false,
+    );
+    expect(deviceCalibrationParameterCreateSchema.safeParse({ ...base, decimalPlaces: 2.5 }).success).toBe(
+      false,
+    );
+    expect(deviceCalibrationParameterCreateSchema.safeParse({ ...base, decimalPlaces: 5 }).success).toBe(
+      true,
+    );
+  });
+});
+
+describe("DeviceCalibrationParametersService.findAllGroupedByDeviceType", () => {
+  it("groups parameters under their device type and honours search", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const marker = uniqueCode();
+    const a = await service.create({
+      deviceTypeId: deviceType.id,
+      capabilityItemId: item.id,
+      code: uniqueCode(),
+      name: `Grouped ${marker} A`,
+      uomId: uom.id,
+      decimalPlaces: 2,
+    });
+    const b = await service.create({
+      deviceTypeId: deviceType.id,
+      capabilityItemId: item.id,
+      code: uniqueCode(),
+      name: `Grouped ${marker} B`,
+      uomId: uom.id,
+    });
+    createdParameterIds.push(a.id, b.id);
+
+    const grouped = await service.findAllGroupedByDeviceType({ search: marker });
+    const group = grouped.data.find((g) => g.deviceType.id === deviceType.id);
+    expect(group).toBeDefined();
+    expect(group?.count).toBe(2);
+    expect(group?.categoryName).toBe("Test Category");
+    expect(group?.parameters.map((p) => p.id).sort()).toEqual([a.id, b.id].sort());
+    expect(grouped.totalParameters).toBe(2);
+    expect(grouped.totalDeviceTypes).toBe(1);
+    expect(grouped.total).toBe(1);
+    expect(grouped.page).toBe(1);
+    expect(grouped.totalPages).toBe(1);
+  });
+
+  it("paginates at the Device-Type level, keeping each group's parameters together", async () => {
+    const marker = uniqueCode();
+    const uom = await createUom();
+    // 3 device types, each with 2 parameters, all matched by `marker`.
+    for (let t = 0; t < 3; t++) {
+      const deviceType = await createDeviceType();
+      const { item } = await createCapabilityItem();
+      for (let p = 0; p < 2; p++) {
+        const row = await service.create({
+          deviceTypeId: deviceType.id,
+          capabilityItemId: item.id,
+          code: uniqueCode(),
+          name: `Paged ${marker} ${t}-${p}`,
+          uomId: uom.id,
+        });
+        createdParameterIds.push(row.id);
+      }
+    }
+
+    const page1 = await service.findAllGroupedByDeviceType({ search: marker, page: 1, pageSize: 2 });
+    expect(page1.total).toBe(3);
+    expect(page1.totalPages).toBe(2);
+    expect(page1.data).toHaveLength(2);
+    expect(page1.totalParameters).toBe(6);
+    // no group is split — every group on the page has all its parameters
+    for (const group of page1.data) expect(group.parameters).toHaveLength(group.count);
+
+    const page2 = await service.findAllGroupedByDeviceType({ search: marker, page: 2, pageSize: 2 });
+    expect(page2.data).toHaveLength(1);
+    const idsPage1 = page1.data.map((g) => g.deviceType.id);
+    expect(idsPage1).not.toContain(page2.data[0].deviceType.id);
+  });
+});
+
 describe("DeviceCapabilitiesService.removeItem with calibration parameters", () => {
   it("rejects deleting a capability item that still has calibration parameters", async () => {
     const deviceType = await createDeviceType();
