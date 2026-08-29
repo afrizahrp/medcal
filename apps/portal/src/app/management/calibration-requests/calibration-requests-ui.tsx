@@ -11,13 +11,14 @@ import { CommandPopover } from "@/components/ui/command-popover";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../../../components/management/page-header";
 import { PaginationBar, Surface, selectClassName, formatRelativeTime } from "../leads/leads-ui";
+import {
+  STATUS_LABELS,
+  STATUS_OPTIONS,
+  type CalibrationRequestStatus,
+} from "./calibration-request-status";
 
-export type CalibrationRequestStatus =
-  | "DRAFT"
-  | "SUBMITTED"
-  | "IN_QUOTATION"
-  | "CANCELLED"
-  | "FULFILLED";
+export type { CalibrationRequestStatus };
+export { STATUS_LABELS, STATUS_OPTIONS };
 
 export type ServiceMode = "ON_SITE" | "SEND_TO_LAB";
 
@@ -66,22 +67,6 @@ export interface CalibrationRequestListResponse {
   total: number;
   totalPages: number;
 }
-
-export const STATUS_LABELS: Record<CalibrationRequestStatus, string> = {
-  DRAFT: "Draft",
-  SUBMITTED: "Submitted",
-  IN_QUOTATION: "In Quotation",
-  CANCELLED: "Cancelled",
-  FULFILLED: "Fulfilled",
-};
-
-export const STATUS_OPTIONS: CalibrationRequestStatus[] = [
-  "DRAFT",
-  "SUBMITTED",
-  "IN_QUOTATION",
-  "CANCELLED",
-  "FULFILLED",
-];
 
 export const SERVICE_MODE_LABELS: Record<ServiceMode, string> = {
   ON_SITE: "On Site",
