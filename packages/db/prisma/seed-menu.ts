@@ -162,23 +162,32 @@ const ROWS: MenuSeedRow[] = [
   },
   {
     application: "MANAGEMENT",
-    code: "device-management.equipment-types",
+    code: "device-management.equipment",
     parentCode: "device-management",
-    label: "Equipment Types",
+    label: "Equipment",
+    icon: "square-scissors",
+    order: 6,
+    isGroup: true,
+  },
+  {
+    application: "MANAGEMENT",
+    code: "device-management.equipment-types",
+    parentCode: "device-management.equipment",
+    label: "Types",
     href: "/equipment-types",
     icon: "wrench",
-    order: 6,
+    order: 0,
     viewResource: "equipmentType",
     viewAction: "read",
   },
   {
     application: "MANAGEMENT",
     code: "device-management.equipment-requirements",
-    parentCode: "device-management",
-    label: "Equipment Requirements",
+    parentCode: "device-management.equipment",
+    label: "Requirements",
     href: "/equipment-requirements",
     icon: "clipboardList",
-    order: 7,
+    order: 1,
     viewResource: "equipmentRequirement",
     viewAction: "read",
   },
@@ -383,7 +392,9 @@ async function seedMenu() {
       if (row.parentCode && !idByCode.has(`${row.application}:${row.parentCode}`)) {
         continue;
       }
-      const parentId = row.parentCode ? idByCode.get(`${row.application}:${row.parentCode}`) ?? null : null;
+      const parentId = row.parentCode
+        ? (idByCode.get(`${row.application}:${row.parentCode}`) ?? null)
+        : null;
       const menu = await prisma.menu.upsert({
         where: { application_code: { application: row.application, code: row.code } },
         create: {

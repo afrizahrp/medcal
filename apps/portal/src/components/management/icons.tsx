@@ -9,6 +9,7 @@ import {
   Gauge,
   MessageSquareQuote,
   SlidersHorizontal,
+  SquareScissors,
   Tags,
   Wrench,
 } from "lucide-react";
@@ -295,6 +296,8 @@ export function NavIcon({
       return <MessageSquareQuote {...props} />;
     case "wrench":
       return <Wrench {...props} />;
+    case "square-scissors":
+      return <SquareScissors {...props} />;
     default:
       return null;
   }

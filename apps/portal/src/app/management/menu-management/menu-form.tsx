@@ -45,6 +45,7 @@ const ICONS = [
   "clipboardList",
   "messageSquareQuote",
   "wrench",
+  "square-scissors",
 ] as const;
 
 const selectClassName =

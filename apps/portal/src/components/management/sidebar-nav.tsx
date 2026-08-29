@@ -36,14 +36,14 @@ function NavLeaf({
   item,
   pathname,
   collapsed,
-  nested,
+  depth = 0,
   onNavigate,
   touch,
 }: {
   item: NavItem;
   pathname: string;
   collapsed: boolean;
-  nested?: boolean;
+  depth?: number;
   onNavigate?: () => void;
   touch?: boolean;
 }) {
@@ -57,7 +57,7 @@ function NavLeaf({
     </>
   );
 
-  const wrapClass = nested && !collapsed ? "pl-5" : "";
+  const wrapClass = depth > 0 && !collapsed ? "pl-5" : "";
 
   if (item.disabled) {
     return (
@@ -88,12 +88,14 @@ function NavGroup({
   item,
   pathname,
   collapsed,
+  depth = 0,
   onNavigate,
   touch,
 }: {
   item: NavItem;
   pathname: string;
   collapsed: boolean;
+  depth?: number;
   onNavigate?: () => void;
   touch?: boolean;
 }) {
@@ -106,9 +108,10 @@ function NavGroup({
   }, [groupActive]);
 
   const showChildren = !collapsed && open;
+  const wrapClass = depth > 0 && !collapsed ? "pl-5" : "";
 
   return (
-    <div>
+    <div className={wrapClass}>
       <button
         type="button"
         className={itemTone({ groupActive, collapsed, touch })}
@@ -125,20 +128,55 @@ function NavGroup({
       </button>
       {showChildren && (
         <div className="mt-0.5 flex flex-col gap-0.5 border-l border-slate-200 ml-4">
-          {children.map((child) => (
-            <NavLeaf
-              key={child.id ?? child.href}
-              item={child}
-              pathname={pathname}
-              collapsed={false}
-              nested
-              onNavigate={onNavigate}
-              touch={touch}
-            />
-          ))}
+          {children.map((child) =>
+            renderNavNode(child, {
+              pathname,
+              collapsed: false,
+              depth: depth + 1,
+              onNavigate,
+              touch,
+            }),
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Generic recursive node renderer: an item with children is a group
+ * (expand/collapse), otherwise a navigable leaf. Not specific to any menu.
+ */
+function renderNavNode(
+  item: NavItem,
+  opts: {
+    pathname: string;
+    collapsed: boolean;
+    depth: number;
+    onNavigate?: () => void;
+    touch?: boolean;
+  },
+) {
+  return item.children?.length ? (
+    <NavGroup
+      key={item.id ?? item.label}
+      item={item}
+      pathname={opts.pathname}
+      collapsed={opts.collapsed}
+      depth={opts.depth}
+      onNavigate={opts.onNavigate}
+      touch={opts.touch}
+    />
+  ) : (
+    <NavLeaf
+      key={item.id ?? item.href}
+      item={item}
+      pathname={opts.pathname}
+      collapsed={opts.collapsed}
+      depth={opts.depth}
+      onNavigate={opts.onNavigate}
+      touch={opts.touch}
+    />
   );
 }
 
@@ -158,25 +196,7 @@ export function SidebarNav({
   return (
     <nav className="flex flex-col gap-0.5 px-2 py-2" aria-label="Management">
       {items.map((item) =>
-        item.children?.length ? (
-          <NavGroup
-            key={item.id ?? item.label}
-            item={item}
-            pathname={pathname}
-            collapsed={collapsed}
-            onNavigate={onNavigate}
-            touch={touch}
-          />
-        ) : (
-          <NavLeaf
-            key={item.id ?? item.href}
-            item={item}
-            pathname={pathname}
-            collapsed={collapsed}
-            onNavigate={onNavigate}
-            touch={touch}
-          />
-        ),
+        renderNavNode(item, { pathname, collapsed, depth: 0, onNavigate, touch }),
       )}
     </nav>
   );

@@ -22,7 +22,8 @@ export type ManagementNavIcon =
   | "gauge"
   | "clipboardList"
   | "messageSquareQuote"
-  | "wrench";
+  | "wrench"
+  | "square-scissors";
 
 export interface NavItem {
   label: string;
@@ -43,6 +44,13 @@ export function isNavItemActive(pathname: string, item: NavItem): boolean {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
+/** A group is active when ANY descendant leaf matches the pathname (recursive). */
 export function isNavGroupActive(pathname: string, item: NavItem): boolean {
-  return Boolean(item.children?.some((child) => isNavItemActive(pathname, child)));
+  return Boolean(
+    item.children?.some((child) =>
+      child.children?.length
+        ? isNavGroupActive(pathname, child)
+        : isNavItemActive(pathname, child),
+    ),
+  );
 }
