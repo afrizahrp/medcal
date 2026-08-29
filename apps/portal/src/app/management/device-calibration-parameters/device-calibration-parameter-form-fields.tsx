@@ -9,7 +9,10 @@ import { CommandPopover } from "@/components/ui/command-popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { selectClassName } from "./device-calibration-parameters-ui";
-import type { DeviceCapabilityItemRow, DeviceCapabilityRow } from "../device-capabilities/device-capabilities-ui";
+import type {
+  DeviceCapabilityItemRow,
+  DeviceCapabilityRow,
+} from "../device-capabilities/device-capabilities-ui";
 import type { DeviceTypeRow } from "../device-types/device-types-ui";
 import type { UomRow } from "../uoms/uoms-ui";
 
@@ -126,10 +129,7 @@ function ComboboxField({
               }}
             >
               <Check
-                className={cn(
-                  "mr-2 h-4 w-4",
-                  selectedId === item.id ? "opacity-100" : "opacity-0",
-                )}
+                className={cn("mr-2 h-4 w-4", selectedId === item.id ? "opacity-100" : "opacity-0")}
               />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{item.label}</p>
@@ -177,7 +177,9 @@ export function DeviceCalibrationParameterFormFields({
 
         {mode === "edit" ? (
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="text-xs uppercase tracking-wide text-slate-400">Konteks (tidak dapat diubah)</p>
+            <p className="text-xs uppercase tracking-wide text-slate-400">
+              Konteks (tidak dapat diubah)
+            </p>
             <p className="mt-0.5 text-sm font-medium text-slate-700">
               {selectedDeviceType?.name ?? "—"}
               <span className="mx-1.5 text-slate-400">›</span>
@@ -303,9 +305,7 @@ export function DeviceCalibrationParameterFormFields({
           open={uomOpen}
           onOpenChange={setUomOpen}
           disabled={uomsLoading}
-          selectedLabel={
-            selectedUom ? `${selectedUom.symbol} — ${selectedUom.name}` : undefined
-          }
+          selectedLabel={selectedUom ? `${selectedUom.symbol} — ${selectedUom.name}` : undefined}
           placeholder="Pilih UOM"
           loadingLabel="Memuat UOM…"
           searchPlaceholder="Cari UOM…"
@@ -382,7 +382,7 @@ export function DeviceCalibrationParameterFormFields({
                 value={value.decimalPlaces}
                 onChange={(e) => onChange("decimalPlaces", e.target.value)}
                 className={fieldClass}
-                placeholder="mis. 5"
+                placeholder="0–10"
               />
               <p className="mt-1 text-xs text-slate-500">
                 Jumlah digit di belakang koma untuk hasil pengukuran parameter ini (0–10).

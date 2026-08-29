@@ -72,8 +72,7 @@ export default function DeviceCalibrationParametersPageClient() {
   const loading = query.isLoading;
   const fetching = query.isFetching && !loading;
   const forbidden = isForbidden(query.error);
-  const error =
-    query.isError && !forbidden ? "Gagal memuat daftar Calibration Parameter." : null;
+  const error = query.isError && !forbidden ? "Gagal memuat daftar Calibration Parameter." : null;
   const totalPages = result ? Math.max(1, result.totalPages) : 1;
 
   if (forbidden) {
@@ -102,7 +101,7 @@ export default function DeviceCalibrationParametersPageClient() {
 
         {result ? (
           <p className="mt-3 text-xs text-slate-500">
-            {result.totalParameters} parameter dalam {result.totalDeviceTypes} device type
+            {result.totalDeviceTypes} Device type dengan {result.totalParameters} parameter
           </p>
         ) : null}
 

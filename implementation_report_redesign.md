@@ -10,12 +10,12 @@
 | Area | Result |
 |---|---|
 | Schema | `DeviceCalibrationParameter.decimalPlaces Int?` added + `CHECK (0..10)` |
-| Migration | `20260829010628_add_decimalplaces_to_device_calibration_parameter` applied to **local dev DB** — 489/489 rows preserved; 486 NUMBER rows backfilled `decimalPlaces = 2`; 3 non-NUMBER rows left `NULL` |
+| Migration | 2 migrations applied to **local dev DB** (`20260829010628_add_decimalplaces_...` then `20260829020000_set_decimalplaces_uniform_default_zero`) — 489/489 rows preserved; 486 NUMBER rows backfilled to a uniform **`decimalPlaces = 0`**; 3 non-NUMBER rows left `NULL` |
 | API | `decimalPlaces` wired through create/update + new paginated `GET /device-calibration-parameters/grouped` (Device-Type-grouped browse, standard MEDCAL list response) |
 | Validation | Zod `int 0..10 nullable`; service guard rejects `decimalPlaces` on non-NUMBER (`INVALID_DECIMAL_PLACES_FOR_VALUE_TYPE`); DB CHECK |
 | UI | List → search + expandable/collapsible table grouped by Device Type (Capability/Item/UOM filters removed); create form keeps `capabilityItemId` linkage (device-type-scoped); **edit form hierarchy is read-only breadcrumb** per §6.3; Decimal Places field + detail row added |
 | Tests | 21/21 module unit tests pass (6 new, incl. Device-Type-level pagination); shared 21/21; portal + api builds pass |
-| Deferred | Accurate per-parameter `decimalPlaces` values (beyond the uniform `2`) — **NOT done, follow-up task** (§11) |
+| Deferred | Accurate per-parameter `decimalPlaces` values (beyond the uniform `0`) — **NOT done, follow-up task** (§11) |
 
 Sections 1–7 below describe the audit and the design; sections 8–9 record what was actually changed and tested.
 
@@ -121,7 +121,7 @@ Live query against `pkmdb` (`localhost:5432`) on 2026-08-29:
 
 (The brief expected "one known `RATIO` row — `VENT_IE_RATIO`"; there are actually **2** RATIO rows and **1** BOOLEAN row now. Seed comments reference `VENT_IE_RATIO` and a magnification-ratio parameter.)
 
-**Proposed handling:** `decimalPlaces` is **nullable** and only meaningful for `valueType = NUMBER`. Migration backfills `decimalPlaces = 2` **only for `NUMBER` rows**; `RATIO` / `TEXT` / `BOOLEAN` rows keep `decimalPlaces = NULL`. Validation (see §6) rejects a non-null `decimalPlaces` on a non-`NUMBER` parameter and rejects create/update that sets `valueType` away from `NUMBER` while leaving `decimalPlaces` populated. The edit UI hides/disables the Decimal Places field unless `valueType === "NUMBER"`.
+**Proposed handling:** `decimalPlaces` is **nullable** and only meaningful for `valueType = NUMBER`. Migration backfills a uniform `decimalPlaces` **only for `NUMBER` rows** (initially `2`, then revised to `0` in follow-up migration `20260829020000` at the product owner's request); `RATIO` / `TEXT` / `BOOLEAN` rows keep `decimalPlaces = NULL`. Validation (see §6) rejects a non-null `decimalPlaces` on a non-`NUMBER` parameter and rejects create/update that sets `valueType` away from `NUMBER` while leaving `decimalPlaces` populated. The edit UI hides/disables the Decimal Places field unless `valueType === "NUMBER"`.
 
 ### Check B — column precision conflict (`toleranceMin` / `toleranceMax` are `Decimal(18,4)`)
 
@@ -139,23 +139,35 @@ Live query: of **410 rows** with a non-null tolerance bound, the **maximum numbe
 
 The product owner confirmed on 2026-08-29 that `.env` `DATABASE_URL` → `postgresql://…@localhost:5432/pkmdb?schema=public` **is the local native development PostgreSQL database**. Production migrations are applied separately during deployment via the production Docker Compose workflow and `prisma migrate deploy` — `prisma migrate dev` is **not** run against production.
 
-The migration was applied to this local dev DB only (see §3a / §8).
+The migrations were applied to this local dev DB only (see §3a / §8).
 
-### 3a. Migration performed
+### 3a. Migrations performed
 
 ```
 $ prisma migrate dev  (DATABASE_URL = localhost:5432/pkmdb)
 Applying migration `20260829010628_add_decimalplaces_to_device_calibration_parameter`
+Applying migration `20260829020000_set_decimalplaces_uniform_default_zero`
 The following migration(s) have been applied.
 Your database is now in sync with your schema.
 $ prisma generate  → Prisma Client regenerated (v6.19.3)
+```
+
+Two migrations were applied (the first seeded `2` as the uniform default; the
+product owner then asked for `0`, so a follow-up migration
+`20260829020000_set_decimalplaces_uniform_default_zero` revised it):
+
+```sql
+-- 20260829020000_set_decimalplaces_uniform_default_zero
+UPDATE "DeviceCalibrationParameter"
+  SET "decimalPlaces" = 0
+  WHERE "valueType" = 'NUMBER' AND "decimalPlaces" = 2;
 ```
 
 Post-migration verification query against `pkmdb`:
 
 | valueType | decimalPlaces | rows |
 |---|---|---:|
-| NUMBER | 2 | 486 |
+| NUMBER | 0 | 486 |
 | RATIO | NULL | 2 |
 | BOOLEAN | NULL | 1 |
 | **Total** | | **489** (unchanged from pre-migration) |
@@ -179,13 +191,13 @@ model DeviceCalibrationParameter {
 ```
 
 Rationale for `Int?` (nullable, no DB default):
-- Nullable cleanly represents "not applicable" (non-NUMBER) and "not yet configured".
-- No DB-level `DEFAULT` so that a missing value is visibly `NULL` rather than a silent `2`, making the deferred accurate-backfill task discoverable.
+- Nullable cleanly represents "not applicable" (non-NUMBER). Existing NUMBER rows are backfilled to a uniform `0` by migration (accurate values are the deferred follow-up).
+- No DB-level `DEFAULT` clause — the backfill value is set explicitly by migration, so it can be revised by a follow-up migration (as it was: `2` → `0`).
 - `Int` (not `SmallInt`) matches the project's existing convention of plain scalar types; a CHECK constraint (`decimalPlaces BETWEEN 0 AND 10`) is added in the migration to bound it.
 
-### Proposed migration SQL
+### Migration SQL (as applied)
 
-`packages/db/prisma/migrations/<timestamp>_add_decimalplaces_to_device_calibration_parameter/migration.sql`:
+`packages/db/prisma/migrations/20260829010628_add_decimalplaces_to_device_calibration_parameter/migration.sql`:
 
 ```sql
 -- AlterTable
@@ -196,15 +208,25 @@ ALTER TABLE "DeviceCalibrationParameter"
   ADD CONSTRAINT "DeviceCalibrationParameter_decimalPlaces_range"
   CHECK ("decimalPlaces" IS NULL OR ("decimalPlaces" >= 0 AND "decimalPlaces" <= 10));
 
--- Backfill ONE SAFE UNIFORM DEFAULT for existing NUMBER rows only (see report §2A, §7).
--- Accurate per-parameter values (Bed Side Monitor = 5, Tensimeter = 1, ...) are a
--- SEPARATE deferred task and are intentionally NOT populated here.
+-- Backfill ONE SAFE UNIFORM DEFAULT for existing NUMBER rows only.
 UPDATE "DeviceCalibrationParameter"
   SET "decimalPlaces" = 2
   WHERE "valueType" = 'NUMBER' AND "decimalPlaces" IS NULL;
 ```
 
-**Preservation:** pure `ADD COLUMN` + `UPDATE`. No row is deleted, no existing column altered, no parameter definition changed. 486 NUMBER rows → `decimalPlaces = 2`; 3 non-NUMBER rows → `NULL`.
+`packages/db/prisma/migrations/20260829020000_set_decimalplaces_uniform_default_zero/migration.sql` (follow-up, per product-owner request):
+
+```sql
+-- Revise the uniform decimalPlaces backfill from 2 to 0 for all NUMBER rows.
+-- Accurate per-parameter values remain a separate follow-up task.
+UPDATE "DeviceCalibrationParameter"
+  SET "decimalPlaces" = 0
+  WHERE "valueType" = 'NUMBER' AND "decimalPlaces" = 2;
+```
+
+**Preservation:** only `ADD COLUMN` + `UPDATE`s. No row deleted, no existing column altered, no parameter definition changed. Final state: 486 NUMBER rows → `decimalPlaces = 0`; 3 non-NUMBER rows → `NULL`.
+
+**Note on the two migrations:** migration `20260829010628` had already been applied to the local dev DB before the `0` decision, so rather than editing an applied migration (checksum drift) a small follow-up migration was added. Both run in order on production's first `prisma migrate deploy` — net result is `0`, no intermediate state is user-visible. A future consolidation could fold them if desired before production, but it isn't required.
 
 ---
 
@@ -280,7 +302,7 @@ Editable in edit mode (the parameter's own attributes only): **Code, Name, UOM, 
 
 **Implementation approach:** the shared `DeviceCalibrationParameterFormFields` gains a `mode: "create" | "edit"` prop. In `edit` mode it renders the Device Type / Capability / Capability Item section as the read-only breadcrumb instead of the three comboboxes; `deviceTypeId` / `capabilityId` / `capabilityItemId` remain in form state (update payload and unique triplet unchanged) but are not user-editable. `create` mode keeps the device-type-scoped pickers from §6.2.
 
-The edit form gains a **`Decimal Places [ 5 ]`** number input (min 0, max 10), shown only when `valueType === "NUMBER"`, with helper text: *"Jumlah digit di belakang koma untuk hasil pengukuran parameter ini."*
+The edit form gains a **`Decimal Places`** number input (min 0, max 10), shown only when `valueType === "NUMBER"`, with helper text *"Jumlah digit di belakang koma untuk hasil pengukuran parameter ini (0–10)."* and a value-neutral placeholder `0–10` (changed from `mis. 5` after review, so the empty-state hint doesn't imply a specific number while every backfilled row reads `0`).
 
 ### 6.4 Search — verified against current live `name` values
 
@@ -325,7 +347,8 @@ The redesigned page reuses `PaginationBar` (from `leads-ui`) unchanged — same 
 
 ```
 packages/db/prisma/schema.prisma                                                    +5   decimalPlaces Int? + comment
-packages/db/prisma/migrations/20260829010628_add_decimalplaces_to_device_calibration_parameter/migration.sql   NEW  ADD COLUMN + CHECK + backfill
+packages/db/prisma/migrations/20260829010628_add_decimalplaces_to_device_calibration_parameter/migration.sql   NEW  ADD COLUMN + CHECK + backfill (uniform 2)
+packages/db/prisma/migrations/20260829020000_set_decimalplaces_uniform_default_zero/migration.sql              NEW  revise uniform backfill 2 -> 0 for NUMBER rows
 packages/shared/src/schemas/index.ts                                                +35  optionalDecimalPlaces preprocessor; decimalPlaces on create+update schemas; deviceCalibrationParameterGroupedQuerySchema (search + page + pageSize)
 apps/api/.../device-calibration-parameters.service.ts                               ~+135/-58  buildSearchWhere() helper; assertDecimalPlacesValidForValueType(); decimalPlaces in create/update; findAllGroupedByDeviceType() — group, then paginate groups; per-group categoryName lookup; grouped result types w/ page/pageSize/total/totalPages
 apps/api/.../device-calibration-parameters.controller.ts                            +16  GET /grouped (declared before GET /:id)
@@ -361,7 +384,8 @@ The legacy `GET /device-calibration-parameters` paginated list endpoint and its 
 | Check | Result |
 |---|---|
 | `prisma migrate dev` on local `pkmdb` | ✅ applied; DB in sync |
-| Row preservation | ✅ 489 before → 489 after; 486 NUMBER → `dp=2`, 3 non-NUMBER → `NULL` |
+| Row preservation | ✅ 489 before → 489 after; after both migrations 486 NUMBER → `dp=0`, 3 non-NUMBER → `NULL` |
+| Follow-up migration `20260829020000` | ✅ applied to local `pkmdb`; `groupBy` confirms 486 NUMBER rows now `decimalPlaces = 0` |
 | `pnpm --filter @medcal/shared typecheck` | ✅ pass |
 | `pnpm --filter @medcal/api typecheck` | ✅ pass |
 | `pnpm --filter @medcal/portal typecheck` | ✅ pass |
@@ -383,7 +407,7 @@ The legacy `GET /device-calibration-parameters` paginated list endpoint and its 
 ## 10. Assumptions
 
 1. `localhost:5432/pkmdb` in `.env` is the local native dev DB — **confirmed by product owner** 2026-08-29.
-2. Uniform default `decimalPlaces = 2` for existing NUMBER rows is acceptable as a structural placeholder (explicitly per brief Phase 2).
+2. A uniform default for existing NUMBER rows is acceptable as a structural placeholder (brief Phase 2). Value applied: **`0`** (initially `2`, revised to `0` at the product owner's request via a follow-up migration).
 3. `0..10` is a sufficient range for `decimalPlaces` (business examples cite 1 and 5); enforced by Zod + DB CHECK.
 4. A dedicated `GET /device-calibration-parameters/grouped` endpoint returns the standard MEDCAL list response, **paginated at the Device-Type level** so groups stay coherent. The service loads all matching parameters per request to build correct groups before slicing — acceptable at 489 rows; if the parameter count grows very large this is the place to optimise (e.g. a two-query approach: page the device-type ids, then fetch only those groups' parameters).
 5. Device Type / Capability / Capability Item are read-only (breadcrumb) in the *edit* form — **confirmed** by product owner 2026-08-29; no re-parenting workflow at this stage (§6.3).
@@ -393,7 +417,7 @@ The legacy `GET /device-calibration-parameters` paginated list endpoint and its 
 
 ## 11. Remaining concerns before moving to Tariff / Equipment
 
-1. **Accurate per-parameter `decimalPlaces` values are NOT done.** This task delivers only the *structure* (column, migration, validation, UI to view/edit). Populating real values (Bed Side Monitor = 5, Tensimeter = 1, …) by re-verifying against the ~50 LK source documents is a **separate, larger follow-up** — comparable to the tolerance-backfill effort — and is **explicitly deferred**. Do not treat `decimalPlaces = 2` everywhere as "correct data."
+1. **Accurate per-parameter `decimalPlaces` values are NOT done.** This task delivers only the *structure* (column, migration, validation, UI to view/edit). Populating real values (Bed Side Monitor = 5, Tensimeter = 1, …) by re-verifying against the ~50 LK source documents is a **separate, larger follow-up** — comparable to the tolerance-backfill effort — and is **explicitly deferred**. Do not treat the uniform `decimalPlaces = 0` on every NUMBER row as "correct data."
 2. **Tolerance column precision (§2B)** — left at `Decimal(18,4)`. If the accurate-values backfill surfaces any parameter whose tolerance *bounds* need 5+ dp, a follow-up migration to widen `toleranceMin/Max` is required. Flagged, not silently resolved.
 3. **`valueType` is not settable via the API** (only via seed). If NUMBER↔RATIO reclassification becomes a real need, the create/update path must be extended — out of scope here but worth noting since `decimalPlaces` validity depends on `valueType`.
 4. **Edit-form re-parenting workflow** (§6.3) — *resolved*: intentionally not built now. Device Type / Capability / Capability Item are read-only in edit. Revisit only if real usage surfaces a re-parenting need.
@@ -403,9 +427,9 @@ The legacy `GET /device-calibration-parameters` paginated list endpoint and its 
 
 ## 12. Deliverable checklist (per brief §DELIVERABLE)
 
-1. **Audit** — §1, §2 (A: valueType 486/2/1/0; B: no current tolerance-precision conflict, columns left at `Decimal(18,4)`, conflict path flagged).
+1. **Audit** — §1, §2 (A: valueType 486 NUMBER / 2 RATIO / 1 BOOLEAN / 0 TEXT; B: no current tolerance-precision conflict, columns left at `Decimal(18,4)`, conflict path flagged).
 2. **Data model changes** — §4: one nullable `decimalPlaces Int?` + `CHECK (0..10)`; nothing else; not on `DeviceType`.
-3. **Migration** — §3a: `20260829010628_...` applied to **local dev DB `pkmdb`** (product-owner-confirmed); default `2` applied to the 486 existing NUMBER rows, `NULL` for the 3 non-NUMBER rows; 489/489 rows preserved.
+3. **Migration** — §3a: `20260829010628_add_decimalplaces_...` + follow-up `20260829020000_set_decimalplaces_uniform_default_zero`, both applied to **local dev DB `pkmdb`** (product-owner-confirmed). Uniform default **`0`** on the 486 existing NUMBER rows (first migration set `2`, follow-up revised to `0`), `NULL` for the 3 non-NUMBER rows; 489/489 rows preserved.
 4. **API/service changes** — §5, §8: `decimalPlaces` through create/update; `assertDecimalPlacesValidForValueType`; new `GET /device-calibration-parameters/grouped`.
 5. **UI/UX changes** —
    - **Create form: `DeviceCapabilityItem` linkage PRESERVED** — the Capability + Capability Item pickers still exist and `capabilityItemId` is still required & POSTed; only presentation simplified (device-type prefilled from the expanded Device Type row via `?deviceTypeId=`). Not simplified away.
@@ -416,11 +440,11 @@ The legacy `GET /device-calibration-parameters` paginated list endpoint and its 
 7. **Files changed** — §8.
 8. **Tests/checks** — §9 (21/21 module, 21/21 shared, builds pass; 8 unrelated pre-existing api failures noted).
 9. **Assumptions** — §10.
-10. **Remaining concern / deferred confirmation** — §11. **Confirmed: accurate per-parameter `decimalPlaces` values (beyond the uniform `2`) are a follow-up task and were NOT done here.**
+10. **Remaining concern / deferred confirmation** — §11. **Confirmed: accurate per-parameter `decimalPlaces` values (beyond the uniform `0`) are a follow-up task and were NOT done here.**
 
 ## 13. Done / not done
 
-**Done:** structure (field + CHECK), migration on local dev DB with safe uniform default, API + paginated grouped endpoint (per-group `categoryName`, standard MEDCAL list response), Zod + service + DB validation, list page rebuilt as an Expandable / Collapsible Table Grouped by Device Type with the existing `PaginationBar` at the Device-Type level, create form (linkage preserved) + edit form (hierarchy read-only breadcrumb) + Decimal Places field, unit tests, typecheck + build.
+**Done:** structure (field + CHECK), 2 migrations on local dev DB (uniform default backfilled, then revised `2` → `0`), API + paginated grouped endpoint (per-group `categoryName`, standard MEDCAL list response), Zod + service + DB validation, list page rebuilt as an Expandable / Collapsible Table Grouped by Device Type with the existing `PaginationBar` at the Device-Type level, create form (linkage preserved) + edit form (hierarchy read-only breadcrumb) + Decimal Places field, unit tests, typecheck + build.
 
 **Not done (by design / deferred):**
 - Accurate per-parameter decimal values from the 50 LK worksheets — separate follow-up.
