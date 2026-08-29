@@ -67,6 +67,10 @@ const ac = createAccessControl({
   equipmentRequirement: ["read", "create", "update", "delete"],
   // Physical reference equipment units (Phase 2A) — company-scoped master.
   equipment: ["read", "create", "update", "delete"],
+  // Equipment calibration evidence records (Phase 2B). Scoped through Equipment.
+  // Certificate-file access reuses this resource via the EQUIPMENT_CALIBRATION
+  // FileOwnerPolicy — there is no separate file:* grant.
+  equipmentCalibrationRecord: ["read", "create", "update", "delete"],
   device: ["read", "create", "update", "delete"],
   chat: ["read", "reply", "close"],
   users: ["read", "manage"],

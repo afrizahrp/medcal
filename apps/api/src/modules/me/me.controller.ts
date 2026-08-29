@@ -112,6 +112,26 @@ export class MeController {
       equipmentCreate: hasPermission(membership.role, "equipment", "create"),
       equipmentUpdate: hasPermission(membership.role, "equipment", "update"),
       equipmentDelete: hasPermission(membership.role, "equipment", "delete"),
+      equipmentCalibrationRecordRead: hasPermission(
+        membership.role,
+        "equipmentCalibrationRecord",
+        "read",
+      ),
+      equipmentCalibrationRecordCreate: hasPermission(
+        membership.role,
+        "equipmentCalibrationRecord",
+        "create",
+      ),
+      equipmentCalibrationRecordUpdate: hasPermission(
+        membership.role,
+        "equipmentCalibrationRecord",
+        "update",
+      ),
+      equipmentCalibrationRecordDelete: hasPermission(
+        membership.role,
+        "equipmentCalibrationRecord",
+        "delete",
+      ),
       deviceRead: hasPermission(membership.role, "device", "read"),
       deviceCreate: hasPermission(membership.role, "device", "create"),
       deviceUpdate: hasPermission(membership.role, "device", "update"),

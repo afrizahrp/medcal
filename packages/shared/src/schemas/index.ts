@@ -1001,6 +1001,64 @@ export const equipmentUpdateSchema = z.object({
 export type EquipmentUpdateInput = z.infer<typeof equipmentUpdateSchema>;
 
 // =============================================================================
+// EquipmentCalibrationRecord (Phase 2B — calibration evidence per Equipment unit)
+// =============================================================================
+
+export const EQUIPMENT_CALIBRATION_RECORD_STATUSES = ["DRAFT", "CONFIRMED"] as const;
+
+const optionalCalibrationText = z.string().trim().max(500).optional();
+const optionalCalibrationTextNullable = z.string().trim().max(500).nullable().optional();
+
+/** POST /equipment/:equipmentId/calibration-records body */
+export const equipmentCalibrationRecordCreateSchema = z
+  .object({
+    calibrationDate: z.coerce.date(),
+    validFrom: z.coerce.date().nullable().optional(),
+    validUntil: z.coerce.date(),
+    certificateNumber: z.string().trim().max(120).optional(),
+    provider: z.string().trim().max(200).optional(),
+    // Lab outcome. Free text on purpose — a controlled vocabulary is an open
+    // business decision (see implementation_report_equipment_phase2b.md).
+    result: z.string().trim().max(120).optional(),
+    remarks: optionalCalibrationText,
+    // MEDCAL's acceptance decision — distinct from `result`, never auto-derived.
+    acceptedForUse: z.boolean().optional(),
+    acceptanceNotes: optionalCalibrationText,
+  })
+  .superRefine((data, ctx) => {
+    const from = data.validFrom ?? data.calibrationDate;
+    if (from > data.validUntil) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "validFrom (or calibrationDate) must be on or before validUntil",
+        path: ["validUntil"],
+      });
+    }
+  });
+
+export type EquipmentCalibrationRecordCreateInput = z.infer<
+  typeof equipmentCalibrationRecordCreateSchema
+>;
+
+/** PATCH /equipment-calibration-records/:id body. `status` DRAFT→CONFIRMED only. */
+export const equipmentCalibrationRecordUpdateSchema = z.object({
+  calibrationDate: z.coerce.date().optional(),
+  validFrom: z.coerce.date().nullable().optional(),
+  validUntil: z.coerce.date().optional(),
+  certificateNumber: z.string().trim().max(120).nullable().optional(),
+  provider: z.string().trim().max(200).nullable().optional(),
+  result: z.string().trim().max(120).nullable().optional(),
+  remarks: optionalCalibrationTextNullable,
+  acceptedForUse: z.boolean().optional(),
+  acceptanceNotes: optionalCalibrationTextNullable,
+  status: z.enum(EQUIPMENT_CALIBRATION_RECORD_STATUSES).optional(),
+});
+
+export type EquipmentCalibrationRecordUpdateInput = z.infer<
+  typeof equipmentCalibrationRecordUpdateSchema
+>;
+
+// =============================================================================
 // Device (physical asset, company-scoped)
 // =============================================================================
 

@@ -327,6 +327,7 @@ model Company {
   customers               Customer[]
   devices                 Device[]
   equipment               Equipment[]
+  equipmentCalibrationRecords EquipmentCalibrationRecord[]
   calibrationRequests     CalibrationRequest[]
   serviceTariffs          ServiceTariff[]
   taxes                   Tax[]
@@ -388,6 +389,8 @@ model User {
   rolePermissionsCreated RolePermission[]      @relation("RolePermissionCreatedBy")
   rolePermissionsUpdated RolePermission[]      @relation("RolePermissionUpdatedBy")
   uploadedFiles          FileObject[]          @relation("FileUploadedBy")
+  equipmentCalibrationsCreated  EquipmentCalibrationRecord[] @relation("EquipmentCalibrationCreatedBy")
+  equipmentCalibrationsAccepted EquipmentCalibrationRecord[] @relation("EquipmentCalibrationAcceptedBy")
 }
 
 // =============================================================================
@@ -982,10 +985,61 @@ model Equipment {
   company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   equipmentType EquipmentType @relation(fields: [equipmentTypeId], references: [id])
 
+  calibrationRecords EquipmentCalibrationRecord[]
+
   @@unique([companyId, code])
   @@index([companyId, isActive])
   @@index([companyId, serialNumber])
   @@index([equipmentTypeId])
+}
+
+// Phase 2B lifecycle status. DRAFT = evidence being entered, freely editable /
+// deletable. CONFIRMED = historical evidence, locked against normal editing and
+// deletion; attached FileObjects become immutable via the EQUIPMENT_CALIBRATION
+// FileOwnerPolicy. Corrections after CONFIRMED = a new record, never an edit.
+enum EquipmentCalibrationRecordStatus {
+  DRAFT
+  CONFIRMED
+}
+
+// One historical calibration event of a physical Equipment unit. Append-only:
+// current calibration validity is DERIVED from these records for a reference
+// date (validityservice) — there is deliberately NO Equipment.calibrationDueDate
+// / Equipment.calibrationStatus source-of-truth field. `result` is the lab's
+// outcome (free text — controlled vocabulary is an OPEN business decision, see
+// implementation_report_equipment_phase2b.md); `acceptedForUse` is MEDCAL's
+// separate acceptance decision and is NOT auto-derived from `result`. Supporting
+// certificate PDFs attach through the generic FilesModule
+// (FileObject.ownerType = EQUIPMENT_CALIBRATION, ownerId = this record's id) —
+// no typed relation because FileObject.ownerId is polymorphic.
+model EquipmentCalibrationRecord {
+  id                String                          @id @default(cuid())
+  companyId         String
+  equipmentId       String
+  calibrationDate   DateTime                        @db.Date
+  validFrom         DateTime?                       @db.Date
+  validUntil        DateTime                        @db.Date
+  certificateNumber String?
+  provider          String?
+  result            String?
+  remarks           String?
+  acceptedForUse    Boolean                         @default(false)
+  acceptedByUserId  String?
+  acceptedAt        DateTime?
+  acceptanceNotes   String?
+  status            EquipmentCalibrationRecordStatus @default(DRAFT)
+  createdByUserId   String?
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  equipment  Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  acceptedBy User?     @relation("EquipmentCalibrationAcceptedBy", fields: [acceptedByUserId], references: [id])
+  createdBy  User?     @relation("EquipmentCalibrationCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([equipmentId, calibrationDate])
+  @@index([equipmentId, validUntil])
+  @@index([companyId, status])
 }
 
 // "Required Equipment" — declares that calibrating a given DeviceType normally

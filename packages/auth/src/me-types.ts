@@ -50,6 +50,10 @@ export type MeCapabilities = {
   equipmentCreate: boolean;
   equipmentUpdate: boolean;
   equipmentDelete: boolean;
+  equipmentCalibrationRecordRead: boolean;
+  equipmentCalibrationRecordCreate: boolean;
+  equipmentCalibrationRecordUpdate: boolean;
+  equipmentCalibrationRecordDelete: boolean;
   deviceRead: boolean;
   deviceCreate: boolean;
   deviceUpdate: boolean;

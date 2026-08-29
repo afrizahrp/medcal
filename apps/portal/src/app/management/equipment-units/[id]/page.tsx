@@ -29,6 +29,7 @@ import {
   useEquipmentUnit,
   useUpdateEquipmentUnit,
 } from "../use-equipment-units-query";
+import { EquipmentCalibrationRecordsPanel } from "../equipment-calibration-records-panel";
 
 const emptyForm: EquipmentUnitFormValue = {
   equipmentTypeId: "",
@@ -285,6 +286,18 @@ export default function EquipmentUnitDetailPage() {
           </>
         )}
       </Surface>
+
+      {!editing ? (
+        <EquipmentCalibrationRecordsPanel
+          equipmentId={row.id}
+          canRead={Boolean(capabilities.equipmentCalibrationRecordRead)}
+          canManage={Boolean(
+            capabilities.equipmentCalibrationRecordCreate &&
+              capabilities.equipmentCalibrationRecordUpdate &&
+              capabilities.equipmentCalibrationRecordDelete,
+          )}
+        />
+      ) : null}
     </div>
   );
 }
