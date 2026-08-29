@@ -1,4 +1,4 @@
-import { Module, type OnModuleInit } from "@nestjs/common";
+import { Inject, Module, type OnModuleInit } from "@nestjs/common";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import { FilesModule } from "../files/files.module";
 import { FileOwnerPolicyRegistry } from "../files/owner-policy";
@@ -26,7 +26,10 @@ import { equipmentCalibrationFileOwnerPolicy } from "./equipment-calibration-fil
   exports: [EquipmentCalibrationRecordsService],
 })
 export class EquipmentCalibrationRecordsModule implements OnModuleInit {
-  constructor(private readonly fileOwnerPolicies: FileOwnerPolicyRegistry) {}
+  constructor(
+    @Inject(FileOwnerPolicyRegistry)
+    private readonly fileOwnerPolicies: FileOwnerPolicyRegistry,
+  ) {}
 
   onModuleInit(): void {
     this.fileOwnerPolicies.register(equipmentCalibrationFileOwnerPolicy);
