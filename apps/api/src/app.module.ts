@@ -25,6 +25,7 @@ import { DeviceCapabilitiesModule } from "./modules/device-capabilities/device-c
 import { DeviceCalibrationParametersModule } from "./modules/device-calibration-parameters/device-calibration-parameters.module";
 import { DevicesModule } from "./modules/devices/devices.module";
 import { EquipmentModule } from "./modules/equipment/equipment.module";
+import { FilesModule } from "./modules/files/files.module";
 import { TaxesModule } from "./modules/taxes/taxes.module";
 
 @Module({
@@ -45,6 +46,7 @@ import { TaxesModule } from "./modules/taxes/taxes.module";
     DeviceCalibrationParametersModule,
     DevicesModule,
     EquipmentModule,
+    FilesModule,
     TaxesModule,
     WhitelistModule,
     MeModule,

@@ -61,6 +61,14 @@ server {
     ssl_certificate     /etc/letsencrypt/live/api.kalibrasimedika.co.id/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/api.kalibrasimedika.co.id/privkey.pem;
 
+    # Generic file infrastructure (Phase 1): certificate/evidence PDF uploads
+    # go to POST /files on apps/api. Nginx's default client_max_body_size is
+    # 1 MB — too small for a scanned certificate. This must be >= the app's
+    # own MAX_UPLOAD_BYTES (20 MiB, apps/api/src/modules/files/files.constants.ts).
+    # It does NOT expose the storage directory: there is no static/file
+    # location here, every byte still flows through the authenticated app.
+    client_max_body_size 25m;
+
     # apps/api serves both REST and the Chat WebSocket gateway from the same
     # origin (locked topology) — Upgrade/Connection headers are required for
     # the WS path to work through the proxy, not just REST.

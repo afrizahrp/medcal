@@ -56,6 +56,17 @@ services:
       # Linux Docker has no automatic host.docker.internal like Docker Desktop does;
       # host-gateway makes it resolve to the VPS host, where native Postgres listens.
       - "host.docker.internal:host-gateway"
+    volumes:
+      # Generic file infrastructure (Phase 1). Stored file binaries
+      # (certificate/evidence PDFs) MUST live on a bind-mounted host directory,
+      # OUTSIDE the container's ephemeral filesystem, so `docker compose up
+      # --build` never destroys them. FILES_ROOT (in .env.production) points the
+      # app at the container-side path below. Host path is configurable via
+      # MEDCAL_FILES_DIR (Compose variable substitution, --env-file
+      # .env.production); default matches docs/Deployment/file-storage-and-backup.md.
+      # This directory + the Postgres dump are ONE evidence set — back them up
+      # together (see that doc).
+      - "${MEDCAL_FILES_DIR:-/srv/medcal/files}:/data/files"
     networks:
       - medcal_net
     healthcheck:

@@ -263,6 +263,9 @@ enum FileOwnerType {
   REQUEST_ATTACHMENT
   INVOICE
   CREDIT_NOTE
+  // Reference-equipment calibration certificate/evidence. ownerId =
+  // EquipmentCalibrationRecord.id (that model is Phase 2B — not built yet).
+  EQUIPMENT_CALIBRATION
   OTHER
 }
 
@@ -384,6 +387,7 @@ model User {
   sentEmails             Email[]               @relation("EmailSender")
   rolePermissionsCreated RolePermission[]      @relation("RolePermissionCreatedBy")
   rolePermissionsUpdated RolePermission[]      @relation("RolePermissionUpdatedBy")
+  uploadedFiles          FileObject[]          @relation("FileUploadedBy")
 }
 
 // =============================================================================
@@ -1700,14 +1704,23 @@ model FileObject {
   mimeType     String?
   sizeBytes    Int?
   originalName String?
-  createdAt    DateTime      @default(now())
+  // sha256 hex digest of the stored binary — integrity, restore verification,
+  // dedupe check. Nullable only to stay additive over the pre-existing (unused)
+  // schema; the FilesModule always sets it on upload.
+  checksum         String?
+  // Who provided this evidence. Nullable for system-generated files.
+  uploadedByUserId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer        Customer?           @relation(fields: [customerId], references: [id])
+  uploadedByUser  User?               @relation("FileUploadedBy", fields: [uploadedByUserId], references: [id])
   jobEvidences    JobEvidence[]
   signatures      CustomerSignature[]
   certificatePdfs Certificate[]       @relation("CertificatePdf")
 
+  @@unique([storageKey])
   @@index([companyId, ownerType, ownerId])
-  @@index([storageKey])
+  @@index([uploadedByUserId])
 }

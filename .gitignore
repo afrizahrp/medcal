@@ -8,6 +8,9 @@ out/
 .turbo/
 coverage/
 
+# Local file-store root (FILES_ROOT) — stored file binaries, never committed
+.data/
+
 # Environment / secrets
 .env
 .env.local
