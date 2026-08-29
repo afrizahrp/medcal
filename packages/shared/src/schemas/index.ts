@@ -879,6 +879,82 @@ export type DeviceCalibrationParameterGroupedQuery = z.infer<
 >;
 
 // =============================================================================
+// EquipmentType + DeviceTypeEquipmentRequirement Master Data
+// (Phase 1 — "Required Equipment". No physical Equipment instance layer.)
+// =============================================================================
+
+/** POST /equipment-types body */
+export const equipmentTypeCreateSchema = z.object({
+  code: z.string().min(1).max(64).toUpperCase(),
+  name: z.string().min(1).max(150),
+  description: optionalDescription,
+  category: z.string().trim().max(100).optional(),
+});
+
+export type EquipmentTypeCreateInput = z.infer<typeof equipmentTypeCreateSchema>;
+
+/** GET /equipment-types query params */
+export const equipmentTypeListQuerySchema = baseListQuerySchema.extend({
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type EquipmentTypeListQuery = z.infer<typeof equipmentTypeListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /equipment-types — see resolveSortOrder. */
+export const EQUIPMENT_TYPE_SORTABLE_FIELDS = ["createdAt", "code", "name"] as const;
+
+/** PATCH /equipment-types/:id body */
+export const equipmentTypeUpdateSchema = z.object({
+  code: z.string().min(1).max(64).toUpperCase().optional(),
+  name: z.string().min(1).max(150).optional(),
+  description: z.string().max(500).nullable().optional(),
+  category: z.string().trim().max(100).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type EquipmentTypeUpdateInput = z.infer<typeof equipmentTypeUpdateSchema>;
+
+/** POST /device-type-equipment-requirements body */
+export const deviceTypeEquipmentRequirementCreateSchema = z.object({
+  deviceTypeId: z.string().min(1),
+  equipmentTypeId: z.string().min(1),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export type DeviceTypeEquipmentRequirementCreateInput = z.infer<
+  typeof deviceTypeEquipmentRequirementCreateSchema
+>;
+
+/** PATCH /device-type-equipment-requirements/:id body — notes only. */
+export const deviceTypeEquipmentRequirementUpdateSchema = z.object({
+  notes: z.string().trim().max(500).nullable().optional(),
+});
+
+export type DeviceTypeEquipmentRequirementUpdateInput = z.infer<
+  typeof deviceTypeEquipmentRequirementUpdateSchema
+>;
+
+/**
+ * GET /device-type-equipment-requirements/grouped query params — requirements
+ * grouped by Device Type for the expandable browse UI. Same MEDCAL conventions
+ * as the calibration-parameter grouped endpoint: pagination is applied at the
+ * Device-Type (parent) level so a Device Type and all its requirements stay on
+ * one page.
+ */
+export const deviceTypeEquipmentRequirementGroupedQuerySchema = z.object({
+  search: z.string().trim().min(1).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export type DeviceTypeEquipmentRequirementGroupedQuery = z.infer<
+  typeof deviceTypeEquipmentRequirementGroupedQuerySchema
+>;
+
+// =============================================================================
 // Device (physical asset, company-scoped)
 // =============================================================================
 

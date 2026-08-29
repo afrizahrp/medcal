@@ -60,6 +60,11 @@ const ac = createAccessControl({
   deviceCapability: ["read", "create", "update", "delete"],
   deviceCapabilityItem: ["read", "create", "update", "delete"],
   deviceCalibrationParameter: ["read", "create", "update", "delete"],
+  // Equipment Type master + Device Type → Required Equipment (Phase 1).
+  // equipmentType = calibration tool/equipment catalog (type, not physical unit).
+  // equipmentRequirement = "this DeviceType normally requires this EquipmentType".
+  equipmentType: ["read", "create", "update", "delete"],
+  equipmentRequirement: ["read", "create", "update", "delete"],
   device: ["read", "create", "update", "delete"],
   chat: ["read", "reply", "close"],
   users: ["read", "manage"],

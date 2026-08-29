@@ -160,6 +160,28 @@ const ROWS: MenuSeedRow[] = [
     viewResource: "device",
     viewAction: "read",
   },
+  {
+    application: "MANAGEMENT",
+    code: "device-management.equipment-types",
+    parentCode: "device-management",
+    label: "Equipment Types",
+    href: "/equipment-types",
+    icon: "wrench",
+    order: 6,
+    viewResource: "equipmentType",
+    viewAction: "read",
+  },
+  {
+    application: "MANAGEMENT",
+    code: "device-management.equipment-requirements",
+    parentCode: "device-management",
+    label: "Equipment Requirements",
+    href: "/equipment-requirements",
+    icon: "clipboardList",
+    order: 7,
+    viewResource: "equipmentRequirement",
+    viewAction: "read",
+  },
 
   // ─────────────────────────────────────────────────────────────────────────
   // Calibration Management (group) → order: 3

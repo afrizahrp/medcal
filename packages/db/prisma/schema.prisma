@@ -920,9 +920,57 @@ model DeviceType {
   devices                  Device[]
   calibrationParameters    DeviceCalibrationParameter[]
   calibrationRequestItems  CalibrationRequestItem[]
+  equipmentRequirements    DeviceTypeEquipmentRequirement[]
 
   @@index([categoryId])
   @@index([isActive])
+}
+
+// Calibration equipment / tools master — global (no companyId), same convention
+// as Uom / DeviceCapability / DeviceCategory. This is the TYPE/CATEGORY of
+// reference equipment (e.g. "Electrical Safety Analyzer"), NOT a physical
+// instance — it deliberately has no serialNumber / assetTag / calibrationDueDate
+// / status-of-a-unit / location / ownership fields. Those belong to the future
+// physical Equipment instance layer (Phase 2 — see
+// docs/claude/plans/device-management/equipment/implementation_report_equipment_audit.md).
+// `category` is a free-text grouping hint (open business question in the audit —
+// kept a nullable string rather than an enum until a controlled vocabulary is
+// confirmed).
+model EquipmentType {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  category    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deviceRequirements DeviceTypeEquipmentRequirement[]
+
+  @@index([isActive])
+}
+
+// "Required Equipment" — declares that calibrating a given DeviceType normally
+// requires a given EquipmentType. Master configuration only: it is NOT an
+// assignment, NOT a per-job snapshot, and carries no quantity / mandatory-flag /
+// priority / lifecycle (all deferred — see the audit's open questions). The
+// required set for a CalibrationJob is derived at read time from
+// job.device.deviceTypeId, never copied onto WorkOrder / CalibrationJob.
+model DeviceTypeEquipmentRequirement {
+  id              String   @id @default(cuid())
+  deviceTypeId    String
+  equipmentTypeId String
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  deviceType    DeviceType    @relation(fields: [deviceTypeId], references: [id])
+  equipmentType EquipmentType @relation(fields: [equipmentTypeId], references: [id])
+
+  @@unique([deviceTypeId, equipmentTypeId])
+  @@index([deviceTypeId])
+  @@index([equipmentTypeId])
 }
 
 // Product/model master under a DeviceType — manufacturer is a plain string
