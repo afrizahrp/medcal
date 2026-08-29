@@ -58,7 +58,7 @@ export type PurchaseOrderPdfSource = {
     lineTotal: Prisma.Decimal | string | number;
     quotationItem: {
       requestItem: {
-        deviceId: string;
+        deviceId: string | null;
         deviceType: { name: string };
       } | null;
     } | null;

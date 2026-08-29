@@ -98,3 +98,15 @@ export function normalizePhone(phone: string): string {
 export function normalizeOrganizationName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
+
+/**
+ * Deterministic matching key for DeviceType names and DeviceTypeAlias values
+ * (Excel import, Phase 2). Minimal by design — trim, lowercase, collapse
+ * internal whitespace. Does NOT strip punctuation or other meaningful
+ * characters. The original text is always preserved separately for display;
+ * this is only the comparison key ("  Tensimeter " / "TENSIMETER" / "tensimeter"
+ * all normalize to "tensimeter").
+ */
+export function normalizeDeviceTerm(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}

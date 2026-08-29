@@ -22,6 +22,10 @@ export type MeCapabilities = {
   deviceTypeCreate: boolean;
   deviceTypeUpdate: boolean;
   deviceTypeDelete: boolean;
+  deviceTypeAliasRead: boolean;
+  deviceTypeAliasCreate: boolean;
+  deviceTypeAliasUpdate: boolean;
+  deviceTypeAliasDelete: boolean;
   deviceModelRead: boolean;
   deviceModelCreate: boolean;
   deviceModelUpdate: boolean;

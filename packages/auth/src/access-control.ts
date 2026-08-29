@@ -56,6 +56,11 @@ const ac = createAccessControl({
   uom: ["read", "create", "update"],
   deviceCategory: ["read", "create", "update", "delete"],
   deviceType: ["read", "create", "update", "delete"],
+  // Customer-terminology synonyms for a DeviceType (Phase 2 — Excel Import).
+  // Global master data; managed by administrative/management users only.
+  // Requisition users USE aliases indirectly (server-side import matching)
+  // and need no deviceTypeAlias grant for that.
+  deviceTypeAlias: ["read", "create", "update", "delete"],
   deviceModel: ["read", "create", "update", "delete"],
   deviceCapability: ["read", "create", "update", "delete"],
   deviceCapabilityItem: ["read", "create", "update", "delete"],

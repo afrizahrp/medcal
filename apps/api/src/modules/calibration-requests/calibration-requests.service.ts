@@ -109,7 +109,10 @@ export class CalibrationRequestsService {
           companyId,
           requestId: calibrationRequest.id,
           deviceTypeId: item.deviceTypeId,
-          deviceId: item.deviceId,
+          customerDeviceName: item.customerDeviceName || null,
+          model: item.model || null,
+          deviceId: item.deviceId || null,
+          qty: item.qty ?? 1,
           notes: item.notes,
         })),
       });
@@ -242,7 +245,10 @@ export class CalibrationRequestsService {
             companyId,
             requestId: id,
             deviceTypeId: item.deviceTypeId,
-            deviceId: item.deviceId,
+            customerDeviceName: item.customerDeviceName || null,
+            model: item.model || null,
+            deviceId: item.deviceId || null,
+            qty: item.qty ?? 1,
             notes: item.notes,
           })),
         });

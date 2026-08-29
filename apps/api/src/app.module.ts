@@ -20,6 +20,7 @@ import { WorkOrdersModule } from "./modules/work-orders/work-orders.module";
 import { UomsModule } from "./modules/uoms/uoms.module";
 import { DeviceCategoriesModule } from "./modules/device-categories/device-categories.module";
 import { DeviceTypesModule } from "./modules/device-types/device-types.module";
+import { DeviceTypeAliasesModule } from "./modules/device-type-aliases/device-type-aliases.module";
 import { DeviceModelsModule } from "./modules/device-models/device-models.module";
 import { DeviceCapabilitiesModule } from "./modules/device-capabilities/device-capabilities.module";
 import { DeviceCalibrationParametersModule } from "./modules/device-calibration-parameters/device-calibration-parameters.module";
@@ -42,6 +43,7 @@ import { TaxesModule } from "./modules/taxes/taxes.module";
     UomsModule,
     DeviceCategoriesModule,
     DeviceTypesModule,
+    DeviceTypeAliasesModule,
     DeviceModelsModule,
     DeviceCapabilitiesModule,
     DeviceCalibrationParametersModule,

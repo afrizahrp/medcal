@@ -118,7 +118,7 @@ describe("calibrationRequestCreateSchema items", () => {
     ).toBe(false);
   });
 
-  it("treats deviceId as a required string, not a Device lookup key", () => {
+  it("treats deviceId as a free-text string, not a Device lookup key", () => {
     const parsed = calibrationRequestCreateSchema.safeParse({
       customerId: "cust-1",
       serviceMode: "ON_SITE",
@@ -128,6 +128,63 @@ describe("calibrationRequestCreateSchema items", () => {
     if (parsed.success) {
       expect(parsed.data.items[0]?.deviceId).toBe("BPM-001");
     }
+  });
+
+  it("accepts an item with no deviceId (customer did not provide one)", () => {
+    const parsed = calibrationRequestCreateSchema.safeParse({
+      customerId: "cust-1",
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId: "type-1", customerDeviceName: "Tensimeter Digital" }],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.items[0]?.deviceId).toBeUndefined();
+      expect(parsed.data.items[0]?.customerDeviceName).toBe("Tensimeter Digital");
+    }
+  });
+
+  it("accepts customerDeviceName and model", () => {
+    const parsed = calibrationRequestCreateSchema.safeParse({
+      customerId: "cust-1",
+      serviceMode: "ON_SITE",
+      items: [
+        {
+          deviceTypeId: "type-1",
+          customerDeviceName: "Tensimeter",
+          model: "AB-123",
+          deviceId: "",
+        },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.items[0]?.model).toBe("AB-123");
+      expect(parsed.data.items[0]?.deviceId).toBe("");
+    }
+  });
+
+  it("accepts an optional positive-integer qty and rejects non-positive / non-integer", () => {
+    expect(
+      calibrationRequestCreateSchema.safeParse({
+        customerId: "c",
+        serviceMode: "ON_SITE",
+        items: [{ deviceTypeId: "t", qty: 7 }],
+      }).success,
+    ).toBe(true);
+    expect(
+      calibrationRequestCreateSchema.safeParse({
+        customerId: "c",
+        serviceMode: "ON_SITE",
+        items: [{ deviceTypeId: "t", qty: 0 }],
+      }).success,
+    ).toBe(false);
+    expect(
+      calibrationRequestCreateSchema.safeParse({
+        customerId: "c",
+        serviceMode: "ON_SITE",
+        items: [{ deviceTypeId: "t", qty: 1.5 }],
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -220,6 +277,71 @@ describe("CalibrationRequestsService.create", () => {
         expect.objectContaining({ code: "DEVICE_TYPE_NOT_FOUND" }),
       );
     }
+  });
+
+  it("persists a null deviceId plus customerDeviceName and model", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+
+    const result = await service.create(realCompanyId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [
+        { deviceTypeId, customerDeviceName: "Tensimeter Digital", model: "AB-123" },
+      ],
+    });
+    createdCalibrationRequestIds.push(result.id);
+
+    expect(result.items[0]?.deviceId).toBeNull();
+    expect(result.items[0]?.customerDeviceName).toBe("Tensimeter Digital");
+    expect(result.items[0]?.model).toBe("AB-123");
+  });
+
+  it("defaults item qty to 1 and persists an explicit aggregate qty", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+
+    const result = await service.create(realCompanyId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [
+        { deviceTypeId, deviceId: "A-1" }, // no qty → default
+        { deviceTypeId, customerDeviceName: "Bedside monitor", qty: 3 },
+      ],
+    });
+    createdCalibrationRequestIds.push(result.id);
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items.find((i) => i.deviceId === "A-1")?.qty).toBe(1);
+    expect(result.items.find((i) => i.customerDeviceName === "Bedside monitor")?.qty).toBe(3);
+  });
+
+  it("stores an empty-string deviceId as null (no placeholder)", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+
+    const result = await service.create(realCompanyId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, deviceId: "", customerDeviceName: "Tensimeter" }],
+    });
+    createdCalibrationRequestIds.push(result.id);
+
+    expect(result.items[0]?.deviceId).toBeNull();
+  });
+
+  it("still accepts a customer-provided free-text deviceId", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+
+    const result = await service.create(realCompanyId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, deviceId: "BSM-001" }],
+    });
+    createdCalibrationRequestIds.push(result.id);
+
+    expect(result.items[0]?.deviceId).toBe("BSM-001");
   });
 
   it("does not look up Device master by deviceId", async () => {
@@ -351,6 +473,29 @@ describe("CalibrationRequestsService.update", () => {
     expect(updated.items).toHaveLength(2);
     expect(updated.items.find((i) => i.deviceId === "BPM-001")?.notes).toBe("Updated");
     expect(updated.items.find((i) => i.deviceId === "PM-002")?.notes).toBe("New item");
+  });
+
+  it("replaces items with customerDeviceName/model and a cleared deviceId", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+
+    const created = await service.create(realCompanyId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, deviceId: "BPM-001" }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+
+    const updated = await service.update(realCompanyId, created.id, {
+      items: [
+        { deviceTypeId, customerDeviceName: "Blood Pressure Monitor", model: "BSM-501" },
+      ],
+    });
+
+    expect(updated.items).toHaveLength(1);
+    expect(updated.items[0]?.deviceId).toBeNull();
+    expect(updated.items[0]?.customerDeviceName).toBe("Blood Pressure Monitor");
+    expect(updated.items[0]?.model).toBe("BSM-501");
   });
 
   it("rejects update when status is not DRAFT", async () => {
@@ -486,11 +631,9 @@ describe("CalibrationRequestsService numbering", () => {
 
 describe("CalibrationRequestsService transaction rollback", () => {
   it("rolls back fully if item creation fails (invalid deviceTypeId)", async () => {
+    // Scope the count to this test's own fresh customer so requests created by
+    // parallel test files for the shared "PKM" company cannot perturb it.
     const customer = await createTestCustomer(realCompanyId);
-
-    const countBefore = await prisma.calibrationRequest.count({
-      where: { companyId: realCompanyId },
-    });
 
     await expect(
       service.create(realCompanyId, {
@@ -500,9 +643,9 @@ describe("CalibrationRequestsService transaction rollback", () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
-    const countAfter = await prisma.calibrationRequest.count({
-      where: { companyId: realCompanyId },
+    const countForCustomer = await prisma.calibrationRequest.count({
+      where: { companyId: realCompanyId, customerId: customer.id },
     });
-    expect(countAfter).toBe(countBefore);
+    expect(countForCustomer).toBe(0);
   });
 });

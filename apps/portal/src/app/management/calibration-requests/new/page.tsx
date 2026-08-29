@@ -5,15 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale";
-import { CalendarIcon, Check, ChevronsUpDown, Plus, Save, Trash2 } from "lucide-react";
+import { CalendarIcon, Plus, Save, Trash2 } from "lucide-react";
 import { ApiError } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
-import { CommandGroup, CommandItem } from "@/components/ui/command";
-import { CommandPopover } from "@/components/ui/command-popover";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
@@ -25,6 +23,7 @@ import {
   selectClassName,
   SERVICE_MODE_OPTIONS,
   SERVICE_MODE_LABELS,
+  CustomerCommandSelect,
   DeviceTypeItemSelect,
   type ServiceMode,
 } from "../calibration-requests-ui";
@@ -34,11 +33,19 @@ import { useDeviceTypes } from "../../device-types/use-device-types-query";
 
 interface ItemInput {
   deviceTypeId: string;
+  customerDeviceName: string;
+  model: string;
   deviceId: string;
   notes: string;
 }
 
-const emptyItem = (): ItemInput => ({ deviceTypeId: "", deviceId: "", notes: "" });
+const emptyItem = (): ItemInput => ({
+  deviceTypeId: "",
+  customerDeviceName: "",
+  model: "",
+  deviceId: "",
+  notes: "",
+});
 
 export default function NewCalibrationRequestPage() {
   const router = useRouter();
@@ -46,7 +53,6 @@ export default function NewCalibrationRequestPage() {
   const createMutation = useCreateCalibrationRequest();
 
   const [customerId, setCustomerId] = useState("");
-  const [customerOpen, setCustomerOpen] = useState(false);
   const [serviceMode, setServiceMode] = useState<ServiceMode>("ON_SITE");
   const [desiredDate, setDesiredDate] = useState<Date | undefined>(undefined);
   const [dateOpen, setDateOpen] = useState(false);
@@ -74,7 +80,6 @@ export default function NewCalibrationRequestPage() {
 
   const customers = customersQuery.data?.data ?? [];
   const deviceTypes = typesQuery.data?.data ?? [];
-  const selectedCustomer = customers.find((c) => c.id === customerId);
 
   function addItem() {
     setItems((prev) => [...prev, emptyItem()]);
@@ -98,17 +103,20 @@ export default function NewCalibrationRequestPage() {
     }
 
     const filledItems = items.filter(
-      (item) => item.deviceTypeId.trim() || item.deviceId.trim() || item.notes.trim(),
+      (item) =>
+        item.deviceTypeId.trim() ||
+        item.customerDeviceName.trim() ||
+        item.model.trim() ||
+        item.deviceId.trim() ||
+        item.notes.trim(),
     );
-    const validItems = filledItems.filter(
-      (item) => item.deviceTypeId.trim() && item.deviceId.trim(),
-    );
+    const validItems = filledItems.filter((item) => item.deviceTypeId.trim());
     if (validItems.length === 0) {
       setError("Minimal 1 device harus ditambahkan.");
       return;
     }
     if (validItems.length !== filledItems.length) {
-      setError("Setiap device wajib memiliki Device Type dan Device ID.");
+      setError("Setiap device wajib memiliki Device Type.");
       return;
     }
 
@@ -120,7 +128,9 @@ export default function NewCalibrationRequestPage() {
         notes: notes.trim() || undefined,
         items: validItems.map((item) => ({
           deviceTypeId: item.deviceTypeId.trim(),
-          deviceId: item.deviceId.trim(),
+          customerDeviceName: item.customerDeviceName.trim() || undefined,
+          model: item.model.trim() || undefined,
+          deviceId: item.deviceId.trim() || undefined,
           notes: item.notes.trim() || undefined,
         })),
       });
@@ -171,56 +181,15 @@ export default function NewCalibrationRequestPage() {
                   <label className="mb-1.5 block text-sm font-medium text-slate-700">
                     Customer <span className="text-red-500">*</span>
                   </label>
-                  <CommandPopover
-                    open={customerOpen}
-                    onOpenChange={setCustomerOpen}
-                    searchPlaceholder="Cari customer…"
-                    emptyLabel={customersQuery.isLoading ? "Memuat…" : "Customer tidak ditemukan."}
-                    contentClassName="w-[400px] p-0"
-                    trigger={
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={customerOpen}
-                        className="w-full justify-between font-normal"
-                      >
-                        {selectedCustomer ? (
-                          <span className="truncate">
-                            {selectedCustomer.name}{" "}
-                            <span className="text-slate-400">({selectedCustomer.number})</span>
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">Pilih customer…</span>
-                        )}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    }
-                  >
-                    <CommandGroup>
-                      {customers.map((customer) => (
-                        <CommandItem
-                          key={customer.id}
-                          value={`${customer.name} ${customer.number}`}
-                          onSelect={() => {
-                            setCustomerId(customer.id);
-                            setCustomerOpen(false);
-                            setItems([emptyItem()]);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              customerId === customer.id ? "opacity-100" : "opacity-0",
-                            )}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium">{customer.name}</p>
-                            <p className="truncate text-xs text-slate-500">{customer.number}</p>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandPopover>
+                  <CustomerCommandSelect
+                    value={customerId}
+                    customers={customers}
+                    loading={customersQuery.isLoading}
+                    onChange={(id) => {
+                      setCustomerId(id);
+                      setItems([emptyItem()]);
+                    }}
+                  />
                 </div>
 
                 <div className="min-w-0">
@@ -299,7 +268,7 @@ export default function NewCalibrationRequestPage() {
                   <h2 className="text-base font-semibold text-slate-900">Devices</h2>
                   <p className="mt-0.5 text-sm text-slate-500">
                     {customerId
-                      ? "Pilih device type dan masukkan Device ID milik customer."
+                      ? "Pilih device type. Nama alat customer, model, dan Device ID bersifat opsional."
                       : "Select a customer first to add devices."}
                   </p>
                 </div>
@@ -342,13 +311,38 @@ export default function NewCalibrationRequestPage() {
                           <div className="grid gap-3 md:grid-cols-2">
                             <div>
                               <label className="mb-1 block text-xs font-medium text-slate-600">
-                                Device ID <span className="text-red-500">*</span>
+                                Nama Alat Customer
+                              </label>
+                              <Input
+                                value={item.customerDeviceName}
+                                onChange={(e) =>
+                                  updateItem(index, "customerDeviceName", e.target.value)
+                                }
+                                placeholder="e.g. Tensimeter Digital"
+                                maxLength={200}
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-slate-600">
+                                Model
+                              </label>
+                              <Input
+                                value={item.model}
+                                onChange={(e) => updateItem(index, "model", e.target.value)}
+                                placeholder="e.g. AB-123"
+                                maxLength={120}
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-slate-600">
+                                Device ID{" "}
+                                <span className="font-normal text-slate-400">(opsional)</span>
                               </label>
                               <Input
                                 value={item.deviceId}
                                 onChange={(e) => updateItem(index, "deviceId", e.target.value)}
-                                placeholder="Enter device ID"
-                                required={index === 0}
+                                placeholder="Kosongkan jika customer tidak memberikan"
+                                maxLength={120}
                               />
                             </div>
                             <div>

@@ -39,14 +39,30 @@ import { useDeviceTypes } from "../../../device-types/use-device-types-query";
 
 interface ItemInput {
   deviceTypeId: string;
+  customerDeviceName: string;
+  model: string;
   deviceId: string;
+  /** Aggregate quantity for the line. Carried through edits unchanged. */
+  qty: number;
   notes: string;
 }
+
+const emptyItemInput = (): ItemInput => ({
+  deviceTypeId: "",
+  customerDeviceName: "",
+  model: "",
+  deviceId: "",
+  qty: 1,
+  notes: "",
+});
 
 function itemsFromRequest(request: CalibrationRequestRow): ItemInput[] {
   return request.items.map((item) => ({
     deviceTypeId: item.deviceTypeId,
-    deviceId: item.deviceId,
+    customerDeviceName: item.customerDeviceName ?? "",
+    model: item.model ?? "",
+    deviceId: item.deviceId ?? "",
+    qty: item.qty ?? 1,
     notes: item.notes ?? "",
   }));
 }
@@ -180,7 +196,7 @@ export default function EditCalibrationRequestPage() {
   }
 
   function addItem() {
-    setItems((prev) => [...prev, { deviceTypeId: "", deviceId: "", notes: "" }]);
+    setItems((prev) => [...prev, emptyItemInput()]);
   }
 
   function removeItem(index: number) {
@@ -203,17 +219,20 @@ export default function EditCalibrationRequestPage() {
     }
 
     const filledItems = items.filter(
-      (item) => item.deviceTypeId.trim() || item.deviceId.trim() || item.notes.trim(),
+      (item) =>
+        item.deviceTypeId.trim() ||
+        item.customerDeviceName.trim() ||
+        item.model.trim() ||
+        item.deviceId.trim() ||
+        item.notes.trim(),
     );
-    const validItems = filledItems.filter(
-      (item) => item.deviceTypeId.trim() && item.deviceId.trim(),
-    );
+    const validItems = filledItems.filter((item) => item.deviceTypeId.trim());
     if (validItems.length === 0) {
       setError("Minimal 1 device harus ditambahkan.");
       return;
     }
     if (validItems.length !== filledItems.length) {
-      setError("Setiap device wajib memiliki Device Type dan Device ID.");
+      setError("Setiap device wajib memiliki Device Type.");
       return;
     }
 
@@ -227,7 +246,10 @@ export default function EditCalibrationRequestPage() {
           notes: notes.trim() || null,
           items: validItems.map((item) => ({
             deviceTypeId: item.deviceTypeId.trim(),
-            deviceId: item.deviceId.trim(),
+            customerDeviceName: item.customerDeviceName.trim() || undefined,
+            model: item.model.trim() || undefined,
+            deviceId: item.deviceId.trim() || undefined,
+            qty: item.qty > 0 ? item.qty : 1,
             notes: item.notes.trim() || undefined,
           })),
         },
@@ -315,7 +337,7 @@ export default function EditCalibrationRequestPage() {
                             setCustomerId(customer.id);
                             setCustomerOpen(false);
                             if (changed) {
-                              setItems([{ deviceTypeId: "", deviceId: "", notes: "" }]);
+                              setItems([emptyItemInput()]);
                             }
                           }}
                         >
@@ -411,7 +433,7 @@ export default function EditCalibrationRequestPage() {
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">Devices</h2>
                   <p className="mt-0.5 text-sm text-slate-500">
-                    Pilih device type dan masukkan Device ID milik customer.
+                    Pilih device type. Nama alat customer, model, dan Device ID bersifat opsional.
                   </p>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={addItem}>
@@ -442,13 +464,38 @@ export default function EditCalibrationRequestPage() {
                         <div className="grid gap-3 md:grid-cols-2">
                           <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">
-                              Device ID <span className="text-red-500">*</span>
+                              Nama Alat Customer
+                            </label>
+                            <Input
+                              value={item.customerDeviceName}
+                              onChange={(e) =>
+                                updateItem(index, "customerDeviceName", e.target.value)
+                              }
+                              placeholder="e.g. Tensimeter Digital"
+                              maxLength={200}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Model
+                            </label>
+                            <Input
+                              value={item.model}
+                              onChange={(e) => updateItem(index, "model", e.target.value)}
+                              placeholder="e.g. AB-123"
+                              maxLength={120}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              Device ID{" "}
+                              <span className="font-normal text-slate-400">(opsional)</span>
                             </label>
                             <Input
                               value={item.deviceId}
                               onChange={(e) => updateItem(index, "deviceId", e.target.value)}
-                              placeholder="Enter device ID"
-                              required={index === 0}
+                              placeholder="Kosongkan jika customer tidak memberikan"
+                              maxLength={120}
                             />
                           </div>
                           <div>

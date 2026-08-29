@@ -1,9 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@medcal/shared";
+import { ApiError, apiFetch } from "@medcal/shared";
 import type {
   CalibrationRequestCreateInput,
+  CalibrationRequestImportConfirmInput,
+  CalibrationRequestImportPreviewResponse,
   CalibrationRequestListQuery,
   CalibrationRequestUpdateInput,
 } from "@medcal/shared";
@@ -105,6 +107,50 @@ export function useSubmitCalibrationRequest() {
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: [CALIBRATION_REQUESTS_QUERY_KEY] });
       queryClient.invalidateQueries({ queryKey: [CALIBRATION_REQUESTS_QUERY_KEY, id] });
+    },
+  });
+}
+
+/**
+ * Excel import — Preview. Raw fetch (multipart/form-data): the browser sets the
+ * boundary; apiFetch would force Content-Type: application/json and break it.
+ * Side-effect free on the server — no cache invalidation.
+ */
+export function useImportPreview() {
+  return useMutation({
+    mutationFn: async (file: File): Promise<CalibrationRequestImportPreviewResponse> => {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/calibration-requests/import/preview`,
+        { method: "POST", credentials: "include", body: form },
+      );
+      if (!res.ok) {
+        let data: ({ code?: string; message?: string } & Record<string, unknown>) | undefined;
+        try {
+          data = (await res.json()) as typeof data;
+        } catch {
+          data = undefined;
+        }
+        throw new ApiError(res.status, data?.message ?? res.statusText, data);
+      }
+      return (await res.json()) as CalibrationRequestImportPreviewResponse;
+    },
+  });
+}
+
+/** Excel import — Confirm. Transactional server-side; creates the requisition. */
+export function useImportConfirm() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CalibrationRequestImportConfirmInput) =>
+      apiFetch<CalibrationRequestRow>("/calibration-requests/import/confirm", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [CALIBRATION_REQUESTS_QUERY_KEY] });
+      queryClient.setQueryData([CALIBRATION_REQUESTS_QUERY_KEY, data.id], data);
     },
   });
 }

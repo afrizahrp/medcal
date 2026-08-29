@@ -296,7 +296,23 @@ const calibrationRequestStatusValues = [
 /** Nested item input for CalibrationRequestItem */
 const calibrationRequestItemInputSchema = z.object({
   deviceTypeId: z.string().min(1),
-  deviceId: z.string().min(1),
+  /** Customer's original terminology for the equipment. Optional. */
+  customerDeviceName: z.string().trim().max(200).optional(),
+  /** Customer-provided equipment model, if available. Optional. */
+  model: z.string().trim().max(120).optional(),
+  /**
+   * Customer-provided device/inventory identifier. Free text, intentionally
+   * optional — a missing customer Device ID is a valid business state and must
+   * be stored as NULL, never a placeholder. NOT the CalibrationJob Device.id.
+   */
+  deviceId: z.string().trim().max(120).optional(),
+  /**
+   * Aggregate quantity for this line — how many units of the device.
+   * Positive integer; defaults to 1 server-side. Manual "+ Requisition" entry
+   * omits it (one row per device). Excel import passes the spreadsheet Qty
+   * here and the row is persisted as a single item — never split into N rows.
+   */
+  qty: z.number().int().positive().optional(),
   notes: z.string().max(1000).optional(),
 });
 
@@ -1112,3 +1128,131 @@ export const deviceUpdateSchema = z.object({
 });
 
 export type DeviceUpdateInput = z.infer<typeof deviceUpdateSchema>;
+
+// =============================================================================
+// DeviceTypeAlias Master Data (Phase 2 — Excel Import + Alias)
+// =============================================================================
+
+/** POST /device-type-aliases body */
+export const deviceTypeAliasCreateSchema = z.object({
+  deviceTypeId: z.string().min(1),
+  alias: z.string().trim().min(1).max(150),
+  isActive: z.boolean().optional(),
+});
+
+export type DeviceTypeAliasCreateInput = z.infer<typeof deviceTypeAliasCreateSchema>;
+
+/** GET /device-type-aliases query params */
+export const deviceTypeAliasListQuerySchema = baseListQuerySchema.extend({
+  deviceTypeId: z.string().min(1).optional(),
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type DeviceTypeAliasListQuery = z.infer<typeof deviceTypeAliasListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /device-type-aliases — see resolveSortOrder. */
+export const DEVICE_TYPE_ALIAS_SORTABLE_FIELDS = ["createdAt", "alias"] as const;
+
+/** PATCH /device-type-aliases/:id body */
+export const deviceTypeAliasUpdateSchema = z.object({
+  deviceTypeId: z.string().min(1).optional(),
+  alias: z.string().trim().min(1).max(150).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type DeviceTypeAliasUpdateInput = z.infer<typeof deviceTypeAliasUpdateSchema>;
+
+// =============================================================================
+// CalibrationRequest — Excel Import (Phase 2)
+// =============================================================================
+
+/**
+ * Match method surfaced in the Preview DTO only. NOT persisted (D6/D32).
+ * EXACT_NAME  — normalized customer term equals a DeviceType.name
+ * ALIAS       — normalized customer term equals an active DeviceTypeAlias
+ * FUZZY       — no exact hit; suggestions offered, user must confirm (D10/D34)
+ * UNMATCHED   — no hit and no suggestion; user must map
+ * USER        — deviceTypeId assigned by the user in the preview UI
+ */
+export const calibrationRequestImportMatchMethodValues = [
+  "EXACT_NAME",
+  "ALIAS",
+  "FUZZY",
+  "UNMATCHED",
+  "USER",
+] as const;
+export type CalibrationRequestImportMatchMethod =
+  (typeof calibrationRequestImportMatchMethodValues)[number];
+
+export interface CalibrationRequestImportSuggestion {
+  deviceTypeId: string;
+  deviceTypeName: string;
+  deviceTypeCode: string;
+  /** Why it was suggested — e.g. "alias: Tensimeter Digital" or "name similarity". */
+  via: string;
+}
+
+export interface CalibrationRequestImportPreviewRow {
+  /** 1-based row number in the source sheet (header = row 1, first data row = 2). */
+  rowNumber: number;
+  customerDeviceName: string;
+  model: string | null;
+  deviceId: string | null;
+  qty: number | null;
+  match: {
+    deviceTypeId: string | null;
+    deviceTypeName: string | null;
+    deviceTypeCode: string | null;
+    method: CalibrationRequestImportMatchMethod | null;
+  };
+  suggestions: CalibrationRequestImportSuggestion[];
+  /** Non-blocking advisories for this row (informational). */
+  warnings: string[];
+  /** Blocking — Confirm is refused until every row is error-free. */
+  errors: string[];
+}
+
+export interface CalibrationRequestImportPreviewResponse {
+  rows: CalibrationRequestImportPreviewRow[];
+  summary: {
+    /** Number of spreadsheet rows = number of CalibrationRequestItems Confirm creates (1:1). */
+    sourceRows: number;
+    /** Sum of qty across error-free rows — total physical units requested. */
+    totalUnits: number;
+    matched: number;
+    unmatched: number;
+    rowsWithWarnings: number;
+    rowsWithErrors: number;
+  };
+}
+
+/** One fully-resolved row the client sends back to Confirm. */
+export const calibrationRequestImportConfirmRowSchema = z.object({
+  customerDeviceName: z.string().trim().min(1).max(200),
+  model: z.string().trim().max(120).optional(),
+  deviceId: z.string().trim().max(120).optional(),
+  qty: z.number().int().positive(),
+  deviceTypeId: z.string().min(1),
+});
+
+export type CalibrationRequestImportConfirmRow = z.infer<
+  typeof calibrationRequestImportConfirmRowSchema
+>;
+
+/** POST /calibration-requests/import/confirm body */
+export const calibrationRequestImportConfirmSchema = z.object({
+  customerId: z.string().min(1),
+  leadId: z.string().min(1).optional(),
+  serviceMode: z.enum(serviceModeValues),
+  expectedDate: z.coerce.date().optional(),
+  notes: z.string().max(2000).optional(),
+  /** One row = one CalibrationRequestItem; each row's qty is stored as-is. */
+  rows: z.array(calibrationRequestImportConfirmRowSchema).min(1),
+});
+
+export type CalibrationRequestImportConfirmInput = z.infer<
+  typeof calibrationRequestImportConfirmSchema
+>;

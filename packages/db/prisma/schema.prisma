@@ -929,8 +929,33 @@ model DeviceType {
   calibrationParameters    DeviceCalibrationParameter[]
   calibrationRequestItems  CalibrationRequestItem[]
   equipmentRequirements    DeviceTypeEquipmentRequirement[]
+  aliases                  DeviceTypeAlias[]
 
   @@index([categoryId])
+  @@index([isActive])
+}
+
+// Customer-terminology synonyms for a DeviceType — global master (no companyId,
+// mirroring DeviceType). Purpose: deterministic mapping of customer wording
+// ("Tensimeter", "Blood Pressure Monitor") to the official MEDCAL DeviceType
+// ("Sphygmomanometer") during Excel import matching. `alias` keeps the original
+// text for display; `normalizedAlias` is the lowercased / trimmed /
+// whitespace-collapsed matching key. The @@unique on normalizedAlias guarantees
+// one alias resolves to AT MOST one DeviceType — ambiguity is impossible by
+// construction, never resolved arbitrarily.
+model DeviceTypeAlias {
+  id              String   @id @default(cuid())
+  deviceTypeId    String
+  alias           String
+  normalizedAlias String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  deviceType DeviceType @relation(fields: [deviceTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([normalizedAlias])
+  @@index([deviceTypeId])
   @@index([isActive])
 }
 
@@ -1221,8 +1246,25 @@ model CalibrationRequestItem {
   companyId    String
   requestId    String
   deviceTypeId String
-  /// Customer-provided physical device identifier (free-text). Not a FK to Device.
-  deviceId     String
+  /// Customer's original terminology / name for the equipment, preserved verbatim
+  /// (e.g. "Tensimeter Digital" while the mapped DeviceType is "Sphygmomanometer").
+  /// Nullable: not always captured for manual / legacy rows.
+  customerDeviceName String?
+  /// Customer-provided equipment model designation, if available (free-text).
+  /// Not a relation to any Model master.
+  model        String?
+  /// Customer-provided physical device identifier (free-text). Not a FK to Device,
+  /// and intentionally NULLABLE — a missing customer Device ID is a valid business
+  /// state. Never store a fake placeholder ("000" / "-" / "N/A"). This is NOT the
+  /// future CalibrationJob Device.id (that physical identity is assigned later,
+  /// on site, by the technician).
+  deviceId     String?
+  /// Aggregate quantity for this line — how many physical units of this
+  /// device the customer is requesting. Excel import keeps one row per
+  /// spreadsheet line and stores its Qty here (it is NOT split into N rows).
+  /// Manual "+ Requisition" entry creates one row per device, so qty stays 1.
+  /// A CHECK constraint enforces qty >= 1 (see migration).
+  qty          Int      @default(1)
   notes        String?
   createdAt    DateTime @default(now())
 

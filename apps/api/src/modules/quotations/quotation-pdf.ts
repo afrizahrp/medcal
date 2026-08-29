@@ -53,7 +53,7 @@ export type QuotationPdfSource = {
     discountAmount: Prisma.Decimal | string | number;
     lineTotal: Prisma.Decimal | string | number;
     requestItem: {
-      deviceId: string;
+      deviceId: string | null;
       deviceType: { name: string };
     } | null;
   }>;

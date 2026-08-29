@@ -415,7 +415,7 @@ export type QuotationFormItem = {
 export function itemsFromRequest(
   items: Array<{
     id: string;
-    deviceId: string;
+    deviceId: string | null;
     deviceType: { name: string };
   }>,
 ): QuotationFormItem[] {
@@ -426,7 +426,7 @@ export function itemsFromRequest(
     unitPrice: "",
     discountAmount: "0",
     deviceLabel: item.deviceType.name,
-    deviceIdLabel: item.deviceId,
+    deviceIdLabel: item.deviceId ?? "—",
   }));
 }
 

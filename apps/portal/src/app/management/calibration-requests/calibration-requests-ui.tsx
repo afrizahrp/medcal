@@ -32,7 +32,17 @@ export interface CalibrationRequestDeviceType {
 export interface CalibrationRequestItem {
   id: string;
   deviceTypeId: string;
-  deviceId: string;
+  /** Customer's original terminology for the equipment. */
+  customerDeviceName: string | null;
+  /** Customer-provided equipment model. */
+  model: string | null;
+  /**
+   * Customer-provided device/inventory identifier. Free text, may be null when
+   * the customer did not provide one. NOT the CalibrationJob Device.id.
+   */
+  deviceId: string | null;
+  /** Aggregate quantity of units for this line (>= 1). */
+  qty: number;
   notes: string | null;
   deviceType: CalibrationRequestDeviceType;
 }
@@ -283,6 +293,88 @@ export function ConfirmDialog({
   );
 }
 
+export type CustomerOption = {
+  id: string;
+  name: string;
+  number: string;
+};
+
+/**
+ * Customer master-data picker — the Command + Popover pattern shared by
+ * "+ Requisition" and "Import Excel". Fed by the existing `useCustomers` hook
+ * (status: "ACTIVE"); never fetches on its own.
+ */
+export function CustomerCommandSelect({
+  value,
+  onChange,
+  customers,
+  loading,
+  disabled,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  customers: CustomerOption[];
+  loading?: boolean;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = customers.find((customer) => customer.id === value);
+
+  return (
+    <CommandPopover
+      open={open}
+      onOpenChange={setOpen}
+      searchPlaceholder="Cari customer…"
+      emptyLabel={loading ? "Memuat…" : "Customer tidak ditemukan."}
+      contentClassName="w-[400px] p-0"
+      trigger={
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          aria-label="Customer"
+          disabled={disabled || loading}
+          className="w-full justify-between font-normal"
+        >
+          {selected ? (
+            <span className="truncate">
+              {selected.name} <span className="text-slate-400">({selected.number})</span>
+            </span>
+          ) : (
+            <span className="text-slate-400">{loading ? "Memuat…" : "Pilih customer…"}</span>
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      }
+    >
+      <CommandGroup>
+        {customers.map((customer) => (
+          <CommandItem
+            key={customer.id}
+            value={`${customer.name} ${customer.number}`}
+            onSelect={() => {
+              onChange(customer.id);
+              setOpen(false);
+            }}
+          >
+            <Check
+              className={cn(
+                "mr-2 h-4 w-4",
+                value === customer.id ? "opacity-100" : "opacity-0",
+              )}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{customer.name}</p>
+              <p className="truncate text-xs text-slate-500">{customer.number}</p>
+            </div>
+          </CommandItem>
+        ))}
+      </CommandGroup>
+    </CommandPopover>
+  );
+}
+
 export type DeviceTypeOption = {
   id: string;
   name: string;
@@ -296,12 +388,21 @@ export function DeviceTypeItemSelect({
   deviceTypes,
   loading,
   disabled,
+  placeholder = "Select Device Type",
+  ariaLabel = "Device Type",
+  allowClear = false,
+  clearLabel = "Semua Device Type",
 }: {
   value: string;
   onChange: (id: string) => void;
   deviceTypes: DeviceTypeOption[];
   loading?: boolean;
   disabled?: boolean;
+  placeholder?: string;
+  ariaLabel?: string;
+  /** Adds a "clear" row that resets the value to "" (for list filters). */
+  allowClear?: boolean;
+  clearLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const selected = deviceTypes.find((type) => type.id === value);
@@ -333,21 +434,33 @@ export function DeviceTypeItemSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          aria-label="Device Type"
+          aria-label={ariaLabel}
           disabled={disabled || loading}
           className="w-full justify-between font-normal"
         >
           {selected ? (
             <span className="truncate">{selected.name}</span>
           ) : (
-            <span className="text-slate-400">
-              {loading ? "Memuat tipe…" : "Select Device Type"}
-            </span>
+            <span className="text-slate-400">{loading ? "Memuat tipe…" : placeholder}</span>
           )}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       }
     >
+      {allowClear ? (
+        <CommandGroup>
+          <CommandItem
+            value={clearLabel}
+            onSelect={() => {
+              onChange("");
+              setOpen(false);
+            }}
+          >
+            <Check className={cn("mr-2 h-4 w-4", value === "" ? "opacity-100" : "opacity-0")} />
+            <span className="truncate text-slate-500">{clearLabel}</span>
+          </CommandItem>
+        </CommandGroup>
+      ) : null}
       {Array.from(groups.entries()).map(([heading, types]) => (
         <CommandGroup key={heading} heading={heading}>
           {types.map((type) => (

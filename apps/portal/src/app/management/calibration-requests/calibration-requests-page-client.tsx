@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { FileSpreadsheet, Plus } from "lucide-react";
 import { isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
 import { cn } from "@/lib/utils";
@@ -70,19 +71,40 @@ export default function CalibrationRequestsPageClient() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
           title="Requisitions"
-          crumbs={[
-            { href: "/", label: "Dashboard" },
-            { label: "Requisitions" },
-          ]}
+          crumbs={[{ href: "/", label: "Dashboard" }, { label: "Requisitions" }]}
         />
 
         {capabilities.calibrationRequestCreate ? (
-          <Button asChild className="shrink-0">
-            <Link href="/calibration-requests/new">
-              <Plus className="h-4 w-4" />
-              New Requisition
-            </Link>
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button asChild variant="outline">
+                    <Link href="/calibration-requests/import">
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Import Excel
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[240px]">
+                  <p className="font-semibold text-slate-900">Format Excel</p>
+                  <p className="mt-1 text-slate-600">Nama Alat · Model · Qty · Device ID</p>
+                  <ul className="mt-1.5 space-y-0.5 text-slate-600">
+                    <li>• Nama Alat: wajib</li>
+                    <li>• Model: opsional</li>
+                    <li>• Qty: wajib</li>
+                    <li>• Device ID: opsional</li>
+                  </ul>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <Button asChild>
+              <Link href="/calibration-requests/new">
+                <Plus className="h-4 w-4" />
+                Requisition
+              </Link>
+            </Button>
+          </div>
         ) : null}
       </div>
 

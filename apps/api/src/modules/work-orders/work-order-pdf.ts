@@ -81,7 +81,7 @@ export type WorkOrderPdfSource = {
     purchaseOrderItem: {
       quotationItem: {
         requestItem: {
-          deviceId: string;
+          deviceId: string | null;
           deviceType: { name: string };
         } | null;
       };

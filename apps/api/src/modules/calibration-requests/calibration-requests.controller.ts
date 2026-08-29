@@ -8,16 +8,26 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import {
   calibrationRequestCreateSchema,
+  calibrationRequestImportConfirmSchema,
   calibrationRequestListQuerySchema,
   calibrationRequestUpdateSchema,
+  type CalibrationRequestImportPreviewResponse,
 } from "@medcal/shared";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
+import type { UploadedFile as UploadedFileShape } from "../files/files.constants";
+import {
+  CalibrationRequestImportService,
+  MAX_IMPORT_BYTES,
+} from "./calibration-request-import.service";
 import {
   CalibrationRequestsService,
   type CalibrationRequestListResult,
@@ -30,7 +40,43 @@ export class CalibrationRequestsController {
   constructor(
     @Inject(CalibrationRequestsService)
     private readonly service: CalibrationRequestsService,
+    @Inject(CalibrationRequestImportService)
+    private readonly importService: CalibrationRequestImportService,
   ) {}
+
+  /**
+   * Excel import — Preview. Side-effect free: parses, validates, matches
+   * DeviceTypes, and reports the qty-explosion plan. Writes nothing.
+   */
+  @Post("import/preview")
+  @RequirePermission("calibrationRequest", "create")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: MAX_IMPORT_BYTES, files: 1 } }))
+  async importPreview(
+    @UploadedFile() file: UploadedFileShape | undefined,
+  ): Promise<CalibrationRequestImportPreviewResponse> {
+    return this.importService.preview(file);
+  }
+
+  /**
+   * Excel import — Confirm. Transactional: reuses CalibrationRequestsService.create
+   * with the exploded, user-resolved items.
+   */
+  @Post("import/confirm")
+  @RequirePermission("calibrationRequest", "create")
+  async importConfirm(
+    @CompanyId() companyId: string,
+    @Body() rawBody: unknown,
+  ): Promise<CalibrationRequestWithItems> {
+    const parsed = calibrationRequestImportConfirmSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid import confirmation payload",
+        code: "INVALID_CALIBRATION_REQUEST_IMPORT",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.importService.confirm(companyId, parsed.data);
+  }
 
   @Post()
   @RequirePermission("calibrationRequest", "create")

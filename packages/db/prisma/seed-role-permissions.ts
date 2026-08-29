@@ -78,6 +78,11 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "ADMIN", resource: "deviceType", action: "create" },
   { role: "ADMIN", resource: "deviceType", action: "update" },
   { role: "ADMIN", resource: "deviceType", action: "delete" },
+  // DeviceTypeAlias Master Data (2026-08-29, Phase 2 — Excel Import + Alias)
+  { role: "ADMIN", resource: "deviceTypeAlias", action: "read" },
+  { role: "ADMIN", resource: "deviceTypeAlias", action: "create" },
+  { role: "ADMIN", resource: "deviceTypeAlias", action: "update" },
+  { role: "ADMIN", resource: "deviceTypeAlias", action: "delete" },
   { role: "ADMIN", resource: "deviceModel", action: "read" },
   { role: "ADMIN", resource: "deviceModel", action: "create" },
   { role: "ADMIN", resource: "deviceModel", action: "update" },

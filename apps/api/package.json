@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/main.ts",
     "bootstrap:superadmin": "tsx --env-file=../../.env src/bootstrap-superadmin.ts",
+    "template:requisition": "tsx src/generate-requisition-template.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
@@ -24,6 +25,7 @@
     "@nestjs/websockets": "^11.0.12",
     "@thallesp/nestjs-better-auth": "^2.7.0",
     "better-auth": "^1.6.27",
+    "exceljs": "^4.4.0",
     "imap": "^0.8.19",
     "mailparser": "^3.7.2",
     "pdfkit": "^0.20.1",

@@ -1195,9 +1195,6 @@ describe("QuotationsService numbering", () => {
 describe("QuotationsService transaction rollback", () => {
   it("rolls back fully if item creation fails (scope mismatch)", async () => {
     const { request } = await createSubmittedRequest(realCompanyId, 2);
-    const countBefore = await prisma.quotation.count({
-      where: { companyId: realCompanyId },
-    });
 
     await expect(
       createQuoted(realCompanyId, {
@@ -1212,10 +1209,11 @@ describe("QuotationsService transaction rollback", () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
+    // Scoped to this request so parallel writers on "PKM" can't perturb it.
     const countAfter = await prisma.quotation.count({
-      where: { companyId: realCompanyId },
+      where: { requestId: request.id },
     });
-    expect(countAfter).toBe(countBefore);
+    expect(countAfter).toBe(0);
 
     const cr = await prisma.calibrationRequest.findFirstOrThrow({
       where: { id: request.id },
