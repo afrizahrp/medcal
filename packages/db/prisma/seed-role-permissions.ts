@@ -105,6 +105,11 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "ADMIN", resource: "equipmentRequirement", action: "create" },
   { role: "ADMIN", resource: "equipmentRequirement", action: "update" },
   { role: "ADMIN", resource: "equipmentRequirement", action: "delete" },
+  // Physical reference equipment units (2026-08-29, Phase 2A)
+  { role: "ADMIN", resource: "equipment", action: "read" },
+  { role: "ADMIN", resource: "equipment", action: "create" },
+  { role: "ADMIN", resource: "equipment", action: "update" },
+  { role: "ADMIN", resource: "equipment", action: "delete" },
   // Device physical asset (2026-08-26)
   { role: "ADMIN", resource: "device", action: "read" },
   { role: "ADMIN", resource: "device", action: "create" },

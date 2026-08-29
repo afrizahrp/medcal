@@ -46,6 +46,10 @@ export type MeCapabilities = {
   equipmentRequirementCreate: boolean;
   equipmentRequirementUpdate: boolean;
   equipmentRequirementDelete: boolean;
+  equipmentRead: boolean;
+  equipmentCreate: boolean;
+  equipmentUpdate: boolean;
+  equipmentDelete: boolean;
   deviceRead: boolean;
   deviceCreate: boolean;
   deviceUpdate: boolean;

@@ -955,6 +955,52 @@ export type DeviceTypeEquipmentRequirementGroupedQuery = z.infer<
 >;
 
 // =============================================================================
+// Equipment — physical reference-equipment unit (Phase 2A, company-scoped)
+// =============================================================================
+
+const optionalEquipmentText = z.string().trim().max(150).optional();
+
+/** POST /equipment body */
+export const equipmentCreateSchema = z.object({
+  equipmentTypeId: z.string().min(1),
+  code: z.string().trim().min(1).max(64),
+  brand: optionalEquipmentText,
+  model: optionalEquipmentText,
+  serialNumber: z.string().trim().max(100).optional(),
+  notes: z.string().trim().max(500).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type EquipmentCreateInput = z.infer<typeof equipmentCreateSchema>;
+
+/** GET /equipment query params */
+export const equipmentListQuerySchema = baseListQuerySchema.extend({
+  equipmentTypeId: z.string().min(1).optional(),
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type EquipmentListQuery = z.infer<typeof equipmentListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /equipment — see resolveSortOrder. */
+export const EQUIPMENT_SORTABLE_FIELDS = ["createdAt", "code"] as const;
+
+/** PATCH /equipment/:id body */
+export const equipmentUpdateSchema = z.object({
+  equipmentTypeId: z.string().min(1).optional(),
+  code: z.string().trim().min(1).max(64).optional(),
+  brand: z.string().trim().max(150).nullable().optional(),
+  model: z.string().trim().max(150).nullable().optional(),
+  serialNumber: z.string().trim().max(100).nullable().optional(),
+  notes: z.string().trim().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type EquipmentUpdateInput = z.infer<typeof equipmentUpdateSchema>;
+
+// =============================================================================
 // Device (physical asset, company-scoped)
 // =============================================================================
 

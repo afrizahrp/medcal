@@ -65,6 +65,8 @@ const ac = createAccessControl({
   // equipmentRequirement = "this DeviceType normally requires this EquipmentType".
   equipmentType: ["read", "create", "update", "delete"],
   equipmentRequirement: ["read", "create", "update", "delete"],
+  // Physical reference equipment units (Phase 2A) — company-scoped master.
+  equipment: ["read", "create", "update", "delete"],
   device: ["read", "create", "update", "delete"],
   chat: ["read", "reply", "close"],
   users: ["read", "manage"],

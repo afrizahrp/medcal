@@ -323,6 +323,7 @@ model Company {
   leads                   Lead[]
   customers               Customer[]
   devices                 Device[]
+  equipment               Equipment[]
   calibrationRequests     CalibrationRequest[]
   serviceTariffs          ServiceTariff[]
   taxes                   Tax[]
@@ -947,8 +948,40 @@ model EquipmentType {
   updatedAt   DateTime @updatedAt
 
   deviceRequirements DeviceTypeEquipmentRequirement[]
+  equipment          Equipment[]
 
   @@index([isActive])
+}
+
+// Physical reference equipment — an INDIVIDUAL PKM-owned unit of an
+// EquipmentType (e.g. "ESA-001", a Fluke ESA620 SN 12345). Company-scoped
+// (companyId required), same convention as Device. `code` is the internal asset
+// identity, unique per company. serialNumber is nullable and NOT unique (matches
+// Device.serialNumber). Phase 2A is the master only: it deliberately carries NO
+// calibration-validity / calibration-record / certificate / ownership / location
+// / maintenance / inventory fields — current validity will be DERIVED from a
+// future EquipmentCalibrationRecord[] (Phase 2B). See
+// docs/claude/plans/device-management/equipment/implementation_report_equipment_phase2a_audit.md.
+model Equipment {
+  id              String   @id @default(cuid())
+  companyId       String
+  equipmentTypeId String
+  code            String
+  brand           String?
+  model           String?
+  serialNumber    String?
+  isActive        Boolean  @default(true)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  equipmentType EquipmentType @relation(fields: [equipmentTypeId], references: [id])
+
+  @@unique([companyId, code])
+  @@index([companyId, isActive])
+  @@index([companyId, serialNumber])
+  @@index([equipmentTypeId])
 }
 
 // "Required Equipment" — declares that calibrating a given DeviceType normally

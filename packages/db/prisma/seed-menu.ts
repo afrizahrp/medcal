@@ -191,6 +191,17 @@ const ROWS: MenuSeedRow[] = [
     viewResource: "equipmentRequirement",
     viewAction: "read",
   },
+  {
+    application: "MANAGEMENT",
+    code: "device-management.equipment-units",
+    parentCode: "device-management.equipment",
+    label: "Units",
+    href: "/equipment-units",
+    icon: "boxes",
+    order: 2,
+    viewResource: "equipment",
+    viewAction: "read",
+  },
 
   // ─────────────────────────────────────────────────────────────────────────
   // Calibration Management (group) → order: 3
