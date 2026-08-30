@@ -22,16 +22,24 @@
  *   - Canonical DeviceType resolved by EXACT normalized name against the live
  *     master. No fuzzy match. No DeviceType is created or renamed.
  *     Unmatched canonical → UNMATCHED CANONICAL DEVICETYPE, alias not seeded.
- *   - DeviceTypeAlias.@@unique([normalizedAlias]) is global → one normalized
- *     alias maps to exactly one DeviceType:
+ *   - DeviceTypeAlias.@@unique([normalizedAlias]) is global → the DATABASE
+ *     physically stores one row per normalized alias. The seed does NOT use
+ *     this as a business filter:
+ *       · two candidate rows share a normalized alias AND the same DeviceType
+ *         → truly identical → one record inserted (DUPLICATE CANDIDATE
+ *         collapsed), so no duplicate DB row.
+ *       · two candidate rows share a normalized alias but point to DIFFERENT
+ *         DeviceTypes → MULTI-MAPPING. This is NOT blocked. Every mapping is
+ *         processed; the seed attempts each in Excel (source) order. Because
+ *         of @@unique the first one persists and the rest are skipped by the
+ *         DB constraint — the seed never picks a "winner" by quality status
+ *         and never discards a mapping from its plan. All mappings are shown
+ *         in the report; the persisted count reflects DB reality.
  *       · same normalized alias already in DB for the SAME DeviceType
  *         → ALREADY EXISTS (skip, idempotent).
- *       · same normalized alias already in DB for a DIFFERENT DeviceType,
- *         OR two candidate rows share a normalized alias but point to
- *         different DeviceTypes → COLLISION. Not inserted, not overwritten,
- *         not reassigned, not deleted — reported for manual resolution.
- *       · two candidate rows share a normalized alias AND the same DeviceType
- *         → one record inserted (DUPLICATE CANDIDATE collapsed).
+ *       · same normalized alias already in DB for a DIFFERENT DeviceType
+ *         → left exactly as-is (never overwritten / reassigned / deleted),
+ *         reported under ALREADY MAPPED ELSEWHERE.
  *   - An alias whose normalized form equals a DIFFERENT DeviceType's exact
  *     name is still seeded (per the new broad-coverage policy) but flagged
  *     SHADOWS_DEVICETYPE_NAME (the Excel import resolver matches EXACT_NAME
@@ -323,41 +331,68 @@ async function run() {
     byNorm.set(c.norm, list);
   }
 
-  const willSeed: Array<{ alias: string; dtName: string; norm: string; status: Status; divergentDash: boolean; shadows?: string }> = [];
+  const willSeed: Array<{
+    alias: string;
+    dtName: string;
+    norm: string;
+    status: Status;
+    divergentDash: boolean;
+    shadows?: string;
+    multiMapping: boolean;
+  }> = [];
   const alreadyExists: Array<{ alias: string; dtName: string; norm: string }> = [];
   const duplicateCollapsed: Array<{ alias: string; dtName: string; norm: string }> = [];
-  const collisions: Array<{ norm: string; detail: string }> = [];
+  /** Diagnostic only — multi-mapping is NOT a blocker; one row persists per @@unique. */
+  const multiMapping: Array<{
+    norm: string;
+    targets: Array<{ dtName: string; alias: string; status: Status; persists: boolean }>;
+  }> = [];
+  /** Normalized alias already present in DB for a different DeviceType — left untouched. */
+  const alreadyMappedElsewhere: Array<{ norm: string; detail: string }> = [];
 
   for (const [norm, list] of byNorm) {
+    // Representative = FIRST candidate in Excel (source) order. Quality status
+    // (APPROVED / REVIEW / REVIEW ⚠️) is never used to pick a winner.
+    const chosen = list[0]!;
     const distinctDt = [...new Set(list.map((c) => c.dtId))];
+    const isMultiMapping = distinctDt.length > 1;
 
-    if (distinctDt.length > 1) {
-      const parts = distinctDt.map((id) => {
-        const c = list.find((x) => x.dtId === id)!;
-        return `"${c.dtName}" (row alias "${c.alias}", ${STATUS_LABEL[c.status]})`;
-      });
-      collisions.push({ norm, detail: `candidate rows disagree on target: ${parts.join("  vs  ")}` });
-      continue;
+    // Collapse only rows that are TRULY identical (same normalized alias AND
+    // same DeviceType) so the DB never gets a duplicate row.
+    for (const c of list) {
+      if (c === chosen) continue;
+      if (c.dtId === chosen.dtId) {
+        duplicateCollapsed.push({ alias: c.alias, dtName: c.dtName, norm });
+      }
     }
 
-    const target = list[0]!;
+    if (isMultiMapping) {
+      multiMapping.push({
+        norm,
+        targets: distinctDt.map((id) => {
+          const c = list.find((x) => x.dtId === id)!;
+          return {
+            dtName: c.dtName,
+            alias: c.alias,
+            status: c.status,
+            persists: c.dtId === chosen.dtId,
+          };
+        }),
+      });
+    }
+
     const pre = existingByNorm.get(norm);
     if (pre) {
-      if (pre.deviceTypeId === target.dtId) {
+      if (pre.deviceTypeId === chosen.dtId) {
         alreadyExists.push({ alias: pre.alias, dtName: pre.deviceTypeName, norm });
       } else {
-        collisions.push({
+        alreadyMappedElsewhere.push({
           norm,
-          detail: `already in DB -> "${pre.deviceTypeName}" (alias "${pre.alias}"); Excel wants -> "${target.dtName}"`,
+          detail: `already in DB -> "${pre.deviceTypeName}" (alias "${pre.alias}"); Excel also maps -> "${chosen.dtName}" (kept as-is, not reassigned)`,
         });
       }
       continue;
     }
-
-    // choose the representative row: prefer APPROVED, then REVIEW, then REVIEW_WARN, then DASH
-    const rank: Record<Status, number> = { APPROVED: 0, REVIEW: 1, REVIEW_WARN: 2, DASH: 3 };
-    const chosen = [...list].sort((a, b) => rank[a.status] - rank[b.status])[0]!;
-    for (const c of list) if (c !== chosen) duplicateCollapsed.push({ alias: c.alias, dtName: c.dtName, norm });
 
     const shadowDt = dtByNorm.get(norm);
     willSeed.push({
@@ -367,10 +402,13 @@ async function run() {
       status: chosen.status,
       divergentDash: chosen.fromDivergentDash,
       shadows: shadowDt && shadowDt.id !== chosen.dtId ? shadowDt.name : undefined,
+      multiMapping: isMultiMapping,
     });
   }
 
   willSeed.sort((a, b) => a.dtName.localeCompare(b.dtName) || a.alias.localeCompare(b.alias));
+
+  const multiMappingRowsDropped = multiMapping.reduce((n, m) => n + m.targets.length - 1, 0);
 
   // ---------- report ----------
   const line = (s = "") => console.log(s);
@@ -381,6 +419,7 @@ async function run() {
   line(`\n--- WILL SEED (${willSeed.length}) ---`);
   for (const x of willSeed) {
     const tags = [STATUS_LABEL[x.status]];
+    if (x.multiMapping) tags.push("MULTI_MAPPING");
     if (x.divergentDash) tags.push("DASH_DIVERGENT");
     if (x.shadows) tags.push(`SHADOWS_DEVICETYPE_NAME("${x.shadows}")`);
     line(`  ${x.alias}  ->  ${x.dtName}   [${tags.join(", ")}]`);
@@ -395,8 +434,34 @@ async function run() {
   line(`\n--- CANONICAL / REDUNDANT (alias == canonical DeviceType name) (${canonicalRedundant.length}) ---`);
   for (const x of canonicalRedundant) line(`  ${x.alias}  ->  ${x.canonical}   [${STATUS_LABEL[x.status]}]`);
 
-  line(`\n--- COLLISION / BLOCKED (not inserted, not reassigned) (${collisions.length}) ---`);
-  for (const x of collisions) line(`  [${x.norm}]  ${x.detail}`);
+  line(
+    `\n--- COLLISION / MULTI-MAPPING (will insert) (${multiMapping.length} normalized ${
+      multiMapping.length === 1 ? "alias" : "aliases"
+    }) ---`,
+  );
+  line(
+    `  Not a blocker. Every mapping is processed in Excel order; @@unique([normalizedAlias])`,
+  );
+  line(
+    `  keeps the first as the persisted row. ${multiMappingRowsDropped} extra mapping ${
+      multiMappingRowsDropped === 1 ? "row is" : "rows are"
+    } not persisted by the DB constraint.`,
+  );
+  for (const x of multiMapping) {
+    line(`  [${x.norm}]`);
+    for (const t of x.targets) {
+      line(
+        `      -> ${t.dtName}   (row alias "${t.alias}", ${STATUS_LABEL[t.status]})   ${
+          t.persists ? "<< persisted" : "(dropped by @@unique)"
+        }`,
+      );
+    }
+  }
+
+  if (alreadyMappedElsewhere.length) {
+    line(`\n--- ALREADY MAPPED ELSEWHERE (kept as-is, not reassigned) (${alreadyMappedElsewhere.length}) ---`);
+    for (const x of alreadyMappedElsewhere) line(`  [${x.norm}]  ${x.detail}`);
+  }
 
   line(`\n--- UNMATCHED CANONICAL DEVICETYPE (${unmatched.length}) ---`);
   for (const x of unmatched)
@@ -416,8 +481,10 @@ async function run() {
   line(`  canonical / redundant (skipped) .... ${canonicalRedundant.length}`);
   line(`  duplicate candidates (collapsed) ... ${duplicateCollapsed.length}`);
   line(`  aliases already existing ........... ${alreadyExists.length}`);
-  line(`  aliases to insert ................. ${willSeed.length}`);
-  line(`  collisions ........................ ${collisions.length}`);
+  line(`  already mapped elsewhere (kept) .... ${alreadyMappedElsewhere.length}`);
+  line(`  multi-mapping normalized aliases ... ${multiMapping.length}`);
+  line(`  multi-mapping rows not persisted ... ${multiMappingRowsDropped}  (blocked by @@unique, not by the seed)`);
+  line(`  aliases to insert ................. ${willSeed.length}  (rows that will actually persist)`);
   line(`  unmatched canonical DeviceTypes .... ${unmatched.length}`);
 
   if (!COMMIT) {
@@ -426,19 +493,26 @@ async function run() {
     return;
   }
 
-  line(`\nCOMMIT — inserting ${willSeed.length} aliases ...`);
+  line(`\nCOMMIT — processing ${candidates.length} candidate mappings (Excel order) ...`);
   let inserted = 0;
-  for (const x of willSeed) {
-    const clash = await prisma.deviceTypeAlias.findUnique({ where: { normalizedAlias: x.norm } });
-    if (clash) continue;
-    const dt = dtByNorm.get(normalizeDeviceTerm(x.dtName))!;
+  let skippedExisting = 0;
+  // Attempt every candidate mapping in source order. @@unique([normalizedAlias])
+  // is what keeps one row per normalized alias — the seed does not pre-decide a
+  // winner for multi-mapping aliases.
+  for (const c of candidates) {
+    const clash = await prisma.deviceTypeAlias.findUnique({ where: { normalizedAlias: c.norm } });
+    if (clash) {
+      skippedExisting++;
+      continue;
+    }
     await prisma.deviceTypeAlias.create({
-      data: { deviceTypeId: dt.id, alias: x.alias, normalizedAlias: x.norm },
+      data: { deviceTypeId: c.dtId, alias: c.alias, normalizedAlias: c.norm },
     });
     inserted++;
   }
   const total = await prisma.deviceTypeAlias.count();
-  line(`  inserted: ${inserted}`);
+  line(`  inserted: ${inserted}   (expected ${willSeed.length})`);
+  line(`  skipped, normalized alias already present: ${skippedExisting}`);
   line(`  DeviceTypeAlias total now: ${total}\n`);
   await prisma.$disconnect();
 }
