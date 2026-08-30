@@ -330,6 +330,7 @@ model Company {
   equipmentCalibrationRecords EquipmentCalibrationRecord[]
   calibrationRequests     CalibrationRequest[]
   serviceTariffs          ServiceTariff[]
+  priceListItems          PriceListItem[]
   taxes                   Tax[]
   quotations              Quotation[]
   purchaseOrders          PurchaseOrder[]
@@ -930,6 +931,7 @@ model DeviceType {
   calibrationRequestItems  CalibrationRequestItem[]
   equipmentRequirements    DeviceTypeEquipmentRequirement[]
   aliases                  DeviceTypeAlias[]
+  priceListItems           PriceListItem[]
 
   @@index([categoryId])
   @@index([isActive])
@@ -1298,6 +1300,39 @@ model ServiceTariff {
   @@unique([companyId, code])
 }
 
+/// Commercial price master — the DEFAULT tariff applied to a QuotationItem when a
+/// Quotation is generated from a CalibrationRequest. Keyed by canonical
+/// DeviceType (never customerDeviceName / DeviceTypeAlias / Device.id) and
+/// company-scoped (same convention as ServiceTariff / Tax).
+///
+/// Append-only effective dating: a price change is a NEW row with a later
+/// `effectiveFrom`, never an in-place edit of an active row. Lookup during
+/// quotation generation selects the active row whose [effectiveFrom, effectiveUntil]
+/// window contains the quotation date; that price is then SNAPSHOTTED into
+/// QuotationItem.unitPrice and the Price List is never consulted again for that
+/// quotation. Overlapping active windows for the same (companyId, deviceTypeId)
+/// are rejected at the service layer.
+model PriceListItem {
+  id             String    @id @default(cuid())
+  companyId      String
+  deviceTypeId   String
+  unitPrice      Decimal   @db.Decimal(18, 2)
+  currency       String    @default("IDR")
+  effectiveFrom  DateTime  @db.Date
+  effectiveUntil DateTime? @db.Date
+  isActive       Boolean   @default(true)
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  deviceType DeviceType @relation(fields: [deviceTypeId], references: [id])
+
+  @@unique([companyId, deviceTypeId, effectiveFrom])
+  @@index([companyId, deviceTypeId, effectiveFrom])
+  @@index([companyId, isActive])
+}
+
 model Quotation {
   id                 String          @id @default(cuid())
   companyId          String
@@ -1345,6 +1380,10 @@ model QuotationItem {
   unitPrice      Decimal  @db.Decimal(18, 2)
   discountAmount Decimal  @default(0) @db.Decimal(18, 2)
   lineTotal      Decimal  @db.Decimal(18, 2)
+  /// True when quotation generation found no applicable PriceListItem for this
+  /// line's DeviceType. unitPrice is stored as 0 and the Quotation cannot be
+  /// sent/approved until a real price is entered (see QuotationsService.send).
+  pricePending   Boolean  @default(false)
   createdAt     DateTime @default(now())
 
   quotation          Quotation            @relation(fields: [quotationId], references: [id], onDelete: Cascade)

@@ -12,6 +12,7 @@ import {
   type QuotationUpdateInput,
 } from "@medcal/shared";
 import { resolveSortOrder } from "../../common/sort-query";
+import { resolveActivePriceListItem } from "../price-list-items/price-list-items.service";
 import { renderQuotationPdf, type QuotationPdfResult } from "./quotation-pdf";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -50,7 +51,10 @@ export interface QuotationListResult {
   totalPages: number;
 }
 
-type ItemInput = QuotationCreateInput["items"][number];
+/** Full per-line shape accepted on PATCH (manual edit of a DRAFT quotation). */
+type ItemInput = NonNullable<QuotationUpdateInput["items"]>[number];
+/** Minimal per-line shape accepted on POST (description / discount tweak only). */
+type CreateItemInput = NonNullable<QuotationCreateInput["items"]>[number];
 
 function toDecimal(value: number | string | Prisma.Decimal): Prisma.Decimal {
   return value instanceof Prisma.Decimal ? value : new Prisma.Decimal(value);
@@ -191,7 +195,7 @@ async function assertDevicesBelongToCustomer(
 async function assertFullScopeItems(
   tx: Prisma.TransactionClient,
   requestId: string,
-  items: ItemInput[],
+  items: Array<{ requestItemId: string }>,
 ): Promise<void> {
   const requestItems = await tx.calibrationRequestItem.findMany({
     where: { requestId },
@@ -217,11 +221,7 @@ async function assertFullScopeItems(
   }
 }
 
-function buildItemRows(
-  companyId: string,
-  quotationId: string,
-  items: ItemInput[],
-): Array<{
+interface QuotationItemRow {
   companyId: string;
   quotationId: string;
   requestItemId: string;
@@ -232,7 +232,19 @@ function buildItemRows(
   unitPrice: Prisma.Decimal;
   discountAmount: Prisma.Decimal;
   lineTotal: Prisma.Decimal;
-}> {
+  pricePending: boolean;
+}
+
+/**
+ * PATCH path — the caller supplies the full commercial line (manual override of
+ * a DRAFT quotation). A line is still flagged `pricePending` if its manually
+ * entered unit price is not positive.
+ */
+function buildItemRows(
+  companyId: string,
+  quotationId: string,
+  items: ItemInput[],
+): QuotationItemRow[] {
   return items.map((item) => {
     const qty = toDecimal(item.qty ?? DEFAULT_QTY);
     const unitPrice = toDecimal(item.unitPrice);
@@ -248,8 +260,80 @@ function buildItemRows(
       unitPrice,
       discountAmount: line.discountAmount,
       lineTotal: line.lineTotal,
+      pricePending: unitPrice.lessThanOrEqualTo(0),
     };
   });
+}
+
+/**
+ * BR-11: a quotation with any line whose Price List tariff was not configured at
+ * generation time (unitPrice 0, `pricePending`) must not advance to SENT or
+ * APPROVED. The user must enter a real unit price via PATCH first.
+ */
+async function assertNoPendingPrices(quotationId: string): Promise<void> {
+  const pending = await prisma.quotationItem.count({
+    where: { quotationId, pricePending: true },
+  });
+  if (pending > 0) {
+    throw new BadRequestException({
+      message:
+        "Quotation has line(s) with no configured price. Enter a unit price for every line before sending.",
+      code: "QUOTATION_PRICE_NOT_CONFIGURED",
+      pendingCount: pending,
+    });
+  }
+}
+
+type RequestForGeneration = Prisma.CalibrationRequestGetPayload<{
+  include: { items: { include: { deviceType: { select: { name: true } } } } };
+}>;
+
+/**
+ * POST path — the server GENERATES one quotation line per CalibrationRequestItem.
+ * `qty` is copied verbatim from the requisition (BR-03); `unitPrice` is resolved
+ * from the Price List as of `issuedAt` and SNAPSHOTTED (BR-07/BR-10). When no
+ * active tariff exists the line is created with unitPrice 0 and
+ * `pricePending = true` (BR-11) — such a quotation cannot be sent/approved.
+ */
+async function buildGeneratedRows(
+  tx: Prisma.TransactionClient,
+  companyId: string,
+  quotationId: string,
+  request: RequestForGeneration,
+  overrides: Map<string, CreateItemInput>,
+  issuedAt: Date,
+): Promise<QuotationItemRow[]> {
+  const rows: QuotationItemRow[] = [];
+  for (const requestItem of request.items) {
+    const override = overrides.get(requestItem.id);
+    const resolved = await resolveActivePriceListItem(
+      tx,
+      companyId,
+      requestItem.deviceTypeId,
+      issuedAt,
+    );
+    const pricePending = resolved === null;
+    const qty = toDecimal(requestItem.qty ?? DEFAULT_QTY);
+    const unitPrice = resolved ? toDecimal(resolved.unitPrice) : new Prisma.Decimal(0);
+    // A pending (zero) price cannot carry a discount — force it to 0 so
+    // computeItemLine's "discount exceeds gross" guard is not tripped.
+    const discountInput = pricePending ? new Prisma.Decimal(0) : toDecimal(override?.discountAmount ?? 0);
+    const line = computeItemLine(qty, unitPrice, discountInput);
+    rows.push({
+      companyId,
+      quotationId,
+      requestItemId: requestItem.id,
+      deviceId: null,
+      tariffId: null,
+      description: override?.description ?? requestItem.deviceType.name,
+      qty,
+      unitPrice,
+      discountAmount: line.discountAmount,
+      lineTotal: line.lineTotal,
+      pricePending,
+    });
+  }
+  return rows;
 }
 
 @Injectable()
@@ -258,7 +342,7 @@ export class QuotationsService {
     return prisma.$transaction(async (tx) => {
       const request = await tx.calibrationRequest.findFirst({
         where: { id: input.requestId, companyId },
-        include: { items: true },
+        include: { items: { include: { deviceType: { select: { name: true } } } } },
       });
       if (!request) {
         throw new BadRequestException({
@@ -290,18 +374,14 @@ export class QuotationsService {
         });
       }
 
-      await assertFullScopeItems(tx, request.id, input.items);
-      await assertTariffsExist(
-        tx,
-        companyId,
-        input.items.flatMap((item) => (item.tariffId ? [item.tariffId] : [])),
-      );
-      await assertDevicesBelongToCustomer(
-        tx,
-        companyId,
-        request.customerId,
-        input.items.flatMap((item) => (item.deviceId ? [item.deviceId] : [])),
-      );
+      // Requisition is the sole source of quotation scope (BR-01). When the
+      // caller passes an explicit `items` array it may only tweak
+      // description / line discount, and it must still cover the full scope.
+      const overrides = new Map<string, CreateItemInput>();
+      if (input.items) {
+        await assertFullScopeItems(tx, request.id, input.items);
+        for (const item of input.items) overrides.set(item.requestItemId, item);
+      }
 
       const documentTax = await resolveDocumentTax(tx, companyId, input.taxCode);
       const issuedAt = new Date();
@@ -312,7 +392,14 @@ export class QuotationsService {
         tx,
       });
 
-      const draftRows = buildItemRows(companyId, "pending", input.items);
+      const draftRows = await buildGeneratedRows(
+        tx,
+        companyId,
+        "pending",
+        request,
+        overrides,
+        issuedAt,
+      );
       const totals = computeHeaderTotals(
         draftRows.map((row) => row.lineTotal),
         toDecimal(input.headerDiscountAmount ?? 0),
@@ -524,6 +611,8 @@ export class QuotationsService {
       });
     }
 
+    await assertNoPendingPrices(id);
+
     return prisma.quotation.update({
       where: { id },
       data: { status: "SENT" },
@@ -548,6 +637,8 @@ export class QuotationsService {
         code: "INVALID_STATUS_FOR_APPROVE",
       });
     }
+
+    await assertNoPendingPrices(id);
 
     const now = new Date();
     return prisma.quotation.update({

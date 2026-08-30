@@ -383,14 +383,33 @@ const quotationItemInputSchema = z.object({
   discountAmount: quotationDecimalSchema.nonnegative().optional(),
 });
 
-/** POST /quotations body — customerId is derived from the CalibrationRequest. */
+/**
+ * Per-line input accepted at CREATE time only. The server is the sole authority
+ * for `qty` (copied from CalibrationRequestItem.qty) and `unitPrice` (resolved
+ * from the Price List) — the client may only tweak the description and an
+ * optional line discount. Manual unit-price edits happen afterwards on the
+ * DRAFT quotation via PATCH.
+ */
+const quotationCreateItemSchema = z.object({
+  requestItemId: z.string().min(1),
+  description: z.string().min(1).max(500).optional(),
+  discountAmount: quotationDecimalSchema.nonnegative().optional(),
+});
+
+/**
+ * POST /quotations body — customerId is derived from the CalibrationRequest.
+ * `items` is optional: when omitted the server generates one line per
+ * CalibrationRequestItem with default description + zero discount. When
+ * provided it must still cover the full requisition scope (see
+ * assertFullScopeItems).
+ */
 export const quotationCreateSchema = z.object({
   requestId: z.string().min(1),
   source: z.enum(quotationSourceValues).optional(),
   validUntil: z.coerce.date().optional(),
   taxCode: z.string().min(1).max(50),
   headerDiscountAmount: quotationDecimalSchema.nonnegative().optional(),
-  items: z.array(quotationItemInputSchema).min(1),
+  items: z.array(quotationCreateItemSchema).min(1).optional(),
 });
 
 export type QuotationCreateInput = z.infer<typeof quotationCreateSchema>;
@@ -618,6 +637,63 @@ export const taxUpdateSchema = z.object({
 });
 
 export type TaxUpdateInput = z.infer<typeof taxUpdateSchema>;
+
+// =============================================================================
+// Price List / Tariff Master Data (company-scoped, DeviceType-keyed)
+// =============================================================================
+
+/** Money as a plain non-negative number on the wire; persisted as Decimal(18,2). */
+const priceDecimalSchema = z.coerce.number().finite();
+
+/** POST /price-list-items body. */
+export const priceListItemCreateSchema = z.object({
+  deviceTypeId: z.string().min(1),
+  unitPrice: priceDecimalSchema.positive(),
+  currency: z.string().min(1).max(8).optional(),
+  effectiveFrom: z.coerce.date(),
+  effectiveUntil: z.coerce.date().nullable().optional(),
+  notes: z.string().max(1000).nullable().optional(),
+});
+
+export type PriceListItemCreateInput = z.infer<typeof priceListItemCreateSchema>;
+
+/** GET /price-list-items query params */
+export const priceListItemListQuerySchema = baseListQuerySchema.extend({
+  deviceTypeId: z.string().optional(),
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type PriceListItemListQuery = z.infer<typeof priceListItemListQuerySchema>;
+
+/** GET /price-list-items/resolve query params — the applicable tariff on a date. */
+export const priceListItemResolveQuerySchema = z.object({
+  deviceTypeId: z.string().min(1),
+  date: z.coerce.date().optional(),
+});
+
+export type PriceListItemResolveQuery = z.infer<typeof priceListItemResolveQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /price-list-items — see resolveSortOrder. */
+export const PRICE_LIST_ITEM_SORTABLE_FIELDS = [
+  "createdAt",
+  "effectiveFrom",
+  "unitPrice",
+] as const;
+
+/** PATCH /price-list-items/:id body. */
+export const priceListItemUpdateSchema = z.object({
+  unitPrice: priceDecimalSchema.positive().optional(),
+  currency: z.string().min(1).max(8).optional(),
+  effectiveFrom: z.coerce.date().optional(),
+  effectiveUntil: z.coerce.date().nullable().optional(),
+  notes: z.string().max(1000).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type PriceListItemUpdateInput = z.infer<typeof priceListItemUpdateSchema>;
 
 // =============================================================================
 // DeviceCategory & DeviceType Master Data

@@ -109,6 +109,10 @@ const FIXTURE: GrantRow[] = [
   { role: "CUSTOMER_SERVICE", resource: "quotation", action: "update" },
   { role: "CUSTOMER_SERVICE", resource: "quotation", action: "cancel" },
   { role: "CUSTOMER_SERVICE", resource: "deviceType", action: "read" },
+  { role: "ADMIN", resource: "priceListItem", action: "read" },
+  { role: "ADMIN", resource: "priceListItem", action: "create" },
+  { role: "ADMIN", resource: "priceListItem", action: "update" },
+  { role: "ADMIN", resource: "priceListItem", action: "delete" },
 ];
 
 let backup: GrantRow[] = [];
@@ -433,5 +437,25 @@ describe("hasPermission — CUSTOMER_SERVICE (customer-facing pre-sales, 2026-08
     expect(hasPermission("CUSTOMER_SERVICE", "email", "read")).toBe(false);
     expect(hasPermission("CUSTOMER_SERVICE", "email", "send")).toBe(false);
     expect(hasPermission("CUSTOMER_SERVICE", "contactMessage", "read")).toBe(false);
+  });
+});
+
+describe("hasPermission — priceListItem master data (Price List Phase 1, 2026-08-30)", () => {
+  it("grants ADMIN read/create/update/delete", () => {
+    expect(hasPermission("ADMIN", "priceListItem", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "priceListItem", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "priceListItem", "update")).toBe(true);
+    expect(hasPermission("ADMIN", "priceListItem", "delete")).toBe(true);
+  });
+
+  it("denies roles without a priceListItem grant", () => {
+    expect(hasPermission("SUPERVISOR", "priceListItem", "read")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "priceListItem", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "priceListItem", "create")).toBe(false);
+    expect(hasPermission("CUSTOMER", "priceListItem", "read")).toBe(false);
+  });
+
+  it("grants SUPERADMIN everything via bypass", () => {
+    expect(hasPermission("SUPERADMIN", "priceListItem", "delete")).toBe(true);
   });
 });

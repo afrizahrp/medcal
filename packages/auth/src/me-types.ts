@@ -82,6 +82,10 @@ export type MeCapabilities = {
   workOrderCancel: boolean;
   workOrderAssign: boolean;
   taxManage: boolean;
+  priceListItemRead: boolean;
+  priceListItemCreate: boolean;
+  priceListItemUpdate: boolean;
+  priceListItemDelete: boolean;
 };
 
 export type MeUser = {

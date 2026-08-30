@@ -616,6 +616,74 @@ describe("DeviceCalibrationParametersService.findAllGroupedByDeviceType", () => 
     expect(grouped.totalPages).toBe(1);
   });
 
+  it("groups a device type's parameters by Capability, then sorts by name within each Capability", async () => {
+    const deviceType = await createDeviceType();
+    const uom = await createUom();
+    const marker = uniqueCode();
+
+    // Two capabilities whose case-insensitive name order is: "alpha env" < "zeta safety"
+    const envCap = await capabilitiesService.create({ code: uniqueCode(), name: `alpha env ${marker}` });
+    const safetyCap = await capabilitiesService.create({
+      code: uniqueCode(),
+      name: `Zeta safety ${marker}`,
+    });
+    createdCapabilityIds.push(envCap.id, safetyCap.id);
+    const envItem = await capabilitiesService.createItem(envCap.id, {
+      code: uniqueCode(),
+      name: "Env Item",
+    });
+    const safetyItem = await capabilitiesService.createItem(safetyCap.id, {
+      code: uniqueCode(),
+      name: "Safety Item",
+    });
+    createdItemIds.push(envItem.id, safetyItem.id);
+
+    // Insert interleaved and in non-alphabetical order to prove sorting, not insertion order.
+    const specs = [
+      { item: safetyItem.id, name: `${marker} Resistansi Isolasi` },
+      { item: envItem.id, name: `${marker} Kelembaban` },
+      { item: safetyItem.id, name: `${marker} Arus Bocor Peralatan` },
+      { item: envItem.id, name: `${marker} Suhu` },
+      { item: safetyItem.id, name: `${marker} arus bocor bagian` },
+    ];
+    for (const spec of specs) {
+      const row = await service.create({
+        deviceTypeId: deviceType.id,
+        capabilityItemId: spec.item,
+        code: uniqueCode(),
+        name: spec.name,
+        uomId: uom.id,
+      });
+      createdParameterIds.push(row.id);
+    }
+
+    const grouped = await service.findAllGroupedByDeviceType({ search: marker });
+    const group = grouped.data.find((g) => g.deviceType.id === deviceType.id);
+    expect(group).toBeDefined();
+    const params = group!.parameters;
+
+    // 1 + 2: same-capability parameters are contiguous (not scattered).
+    const capNames = params.map((p) => p.capabilityItem.capability.name);
+    const firstSafety = capNames.indexOf(safetyCap.name);
+    const lastSafety = capNames.lastIndexOf(safetyCap.name);
+    expect(lastSafety - firstSafety).toBe(2); // 3 safety params, all adjacent
+
+    // 3: Capability order is deterministic ascending by name; within each,
+    // parameters sorted ascending (case-insensitive).
+    expect(params.map((p) => p.name)).toEqual([
+      `${marker} Kelembaban`,
+      `${marker} Suhu`,
+      `${marker} arus bocor bagian`,
+      `${marker} Arus Bocor Peralatan`,
+      `${marker} Resistansi Isolasi`,
+    ]);
+
+    // 4: sorting did not mutate any display text.
+    expect(params.find((p) => p.name.endsWith("arus bocor bagian"))?.name).toBe(
+      `${marker} arus bocor bagian`,
+    );
+  });
+
   it("paginates at the Device-Type level, keeping each group's parameters together", async () => {
     const marker = uniqueCode();
     const uom = await createUom();

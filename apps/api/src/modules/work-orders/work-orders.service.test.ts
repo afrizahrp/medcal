@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { prisma } from "@medcal/db";
+import { Prisma, prisma } from "@medcal/db";
 import { isValidDocumentNumber } from "@medcal/db";
 import {
   workOrderAssignSchema,
@@ -88,7 +88,7 @@ async function createTestCustomer(companyId: string, name?: string) {
 }
 
 async function getTestDeviceTypeId(): Promise<string> {
-  if (testDeviceTypeId) return testDeviceTypeId;
+  // Fresh DeviceType per call — each quotation seeds its own Price List row.
   const category = await prisma.deviceCategory.create({
     data: {
       code: `C${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`,
@@ -162,6 +162,7 @@ async function createSubmittedRequest(
   serviceMode: "ON_SITE" | "SEND_TO_LAB" = "ON_SITE",
 ): Promise<{
   customerId: string;
+  deviceTypeId: string;
   request: Awaited<ReturnType<CalibrationRequestsService["submit"]>>;
 }> {
   const customer = await createTestCustomer(companyId);
@@ -176,19 +177,7 @@ async function createSubmittedRequest(
   });
   createdCalibrationRequestIds.push(created.id);
   const request = await requestsService.submit(companyId, created.id);
-  return { customerId: customer.id, request };
-}
-
-function quotationItemsFor(
-  request: Awaited<ReturnType<CalibrationRequestsService["submit"]>>,
-  unitPrice = 100_000,
-) {
-  return request.items.map((item) => ({
-    requestItemId: item.id,
-    description: `Kalibrasi ${item.deviceId}`,
-    qty: 1,
-    unitPrice,
-  }));
+  return { customerId: customer.id, deviceTypeId, request };
 }
 
 async function createQuotation(
@@ -200,15 +189,22 @@ async function createQuotation(
   },
 ) {
   await ensureNonPpnTax(companyId);
-  const { customerId, request } = await createSubmittedRequest(
+  const { customerId, deviceTypeId, request } = await createSubmittedRequest(
     companyId,
     options?.itemCount ?? 1,
     options?.serviceMode ?? "ON_SITE",
   );
+  await prisma.priceListItem.create({
+    data: {
+      companyId,
+      deviceTypeId,
+      unitPrice: new Prisma.Decimal(options?.unitPrice ?? 100_000),
+      effectiveFrom: new Date("2020-01-01T00:00:00.000Z"),
+    },
+  });
   const quotation = await quotationsService.create(companyId, {
     requestId: request.id,
     taxCode: "T0",
-    items: quotationItemsFor(request, options?.unitPrice ?? 100_000),
   });
   createdQuotationIds.push(quotation.id);
   return { customerId, request, quotation };
@@ -280,6 +276,7 @@ afterAll(async () => {
   await cleanupQuotations(createdQuotationIds);
   await cleanupCalibrationRequests(createdCalibrationRequestIds);
   if (createdDeviceTypeIds.length > 0) {
+    await prisma.priceListItem.deleteMany({ where: { deviceTypeId: { in: createdDeviceTypeIds } } });
     await prisma.deviceType.deleteMany({ where: { id: { in: createdDeviceTypeIds } } });
   }
   if (createdDeviceCategoryIds.length > 0) {

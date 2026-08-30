@@ -105,6 +105,8 @@ const ac = createAccessControl({
   payment: ["read", "create", "update", "reconcile"],
   // System Settings
   tax: ["manage"],
+  // Commercial price master (DeviceType-keyed tariff, feeds Quotation generation)
+  priceListItem: ["read", "create", "update", "delete"],
 } as const);
 
 /**

@@ -160,6 +160,10 @@ export class MeController {
       workOrderCancel: hasPermission(membership.role, "workOrder", "cancel"),
       workOrderAssign: hasPermission(membership.role, "workOrder", "assign"),
       taxManage: hasPermission(membership.role, "tax", "manage"),
+      priceListItemRead: hasPermission(membership.role, "priceListItem", "read"),
+      priceListItemCreate: hasPermission(membership.role, "priceListItem", "create"),
+      priceListItemUpdate: hasPermission(membership.role, "priceListItem", "update"),
+      priceListItemDelete: hasPermission(membership.role, "priceListItem", "delete"),
     };
 
     return {

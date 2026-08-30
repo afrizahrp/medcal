@@ -79,6 +79,29 @@ export interface DeviceCalibrationParameterGroupedResult {
   totalDeviceTypes: number;
 }
 
+/**
+ * Presentation ordering for the grouped view: parameters are grouped by their
+ * Capability, then sorted by Parameter name within each Capability. Capability
+ * has no dedicated ordering field on its master model, so a deterministic,
+ * case-insensitive ascending order by Capability name is used as the fallback.
+ * Comparison is case-insensitive; original display text is never modified.
+ */
+function compareGroupedParameters(
+  a: DeviceCalibrationParameterWithRelations,
+  b: DeviceCalibrationParameterWithRelations,
+): number {
+  const byCapability = a.capabilityItem.capability.name.localeCompare(
+    b.capabilityItem.capability.name,
+    undefined,
+    { sensitivity: "base" },
+  );
+  if (byCapability !== 0) return byCapability;
+  const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  if (byName !== 0) return byName;
+  // Stable tiebreaker so equal names keep a deterministic order.
+  return a.id.localeCompare(b.id);
+}
+
 function buildSearchWhere(search: string | undefined): Prisma.DeviceCalibrationParameterWhereInput {
   if (!search) return {};
   return {
@@ -267,6 +290,12 @@ export class DeviceCalibrationParametersService {
           parameters: [row],
         });
       }
+    }
+
+    // Group by Capability, then sort by Parameter name within each Capability.
+    // Ordering is a presentation concern only — no data is mutated.
+    for (const group of groups.values()) {
+      group.parameters.sort(compareGroupedParameters);
     }
 
     const allGroups = [...groups.values()];

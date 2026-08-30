@@ -416,13 +416,16 @@ export function itemsFromRequest(
   items: Array<{
     id: string;
     deviceId: string | null;
+    qty?: number | string | null;
     deviceType: { name: string };
   }>,
 ): QuotationFormItem[] {
   return items.map((item) => ({
     requestItemId: item.id,
     description: item.deviceType.name,
-    qty: "1",
+    // Carry the requisition's commercial quantity verbatim — never default to 1
+    // when a real value is available (Price List Phase 1, BR-03 / QTY BUG fix).
+    qty: item.qty != null ? String(item.qty) : "1",
     unitPrice: "",
     discountAmount: "0",
     deviceLabel: item.deviceType.name,

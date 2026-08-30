@@ -18,9 +18,7 @@ import {
   formSurfaceClass,
   formatQuotationApiError,
   itemsFromRequest,
-  isPositiveIntegerQty,
   moneyNumber,
-  previewTotals,
 } from "../quotations-ui";
 import { useCreateQuotation, useQuotations } from "../use-quotations-query";
 import { useTaxes } from "../use-taxes-query";
@@ -170,37 +168,8 @@ function NewQuotationPageInner() {
       return;
     }
 
-    for (const item of form.items) {
-      if (!item.description.trim()) {
-        setError("Setiap item wajib memiliki deskripsi.");
-        return;
-      }
-      if (!isPositiveIntegerQty(item.qty)) {
-        setError("Qty setiap item harus bilangan bulat lebih dari 0.");
-        return;
-      }
-      if (item.unitPrice.trim() === "" || moneyNumber(item.unitPrice) < 0) {
-        setError("Setiap item wajib memiliki unit price yang valid.");
-        return;
-      }
-      const gross = moneyNumber(item.qty || "1") * moneyNumber(item.unitPrice);
-      if (moneyNumber(item.discountAmount) < 0) {
-        setError("Diskon item tidak boleh negatif.");
-        return;
-      }
-      if (moneyNumber(item.discountAmount) > gross) {
-        setError("Diskon item tidak boleh melebihi jumlah bruto item.");
-        return;
-      }
-    }
-
-    const preview = previewTotals(form.items, null, form.headerDiscountAmount);
     if (moneyNumber(form.headerDiscountAmount) < 0) {
       setError("Discount tidak boleh negatif.");
-      return;
-    }
-    if (moneyNumber(form.headerDiscountAmount) > preview.subtotal) {
-      setError("Discount tidak boleh melebihi subtotal.");
       return;
     }
 
@@ -210,19 +179,15 @@ function NewQuotationPageInner() {
     }
 
     try {
+      // Generate-then-edit: the server derives qty (from the requisition) and
+      // unit price (from the Price List). Item-level prices are adjusted
+      // afterwards on the DRAFT quotation.
       const result = await createMutation.mutateAsync({
         requestId: request!.id,
         source: form.source,
         validUntil: form.validUntil,
         taxCode: form.taxCode,
         headerDiscountAmount: moneyNumber(form.headerDiscountAmount),
-        items: form.items.map((item) => ({
-          requestItemId: item.requestItemId,
-          description: item.description.trim(),
-          qty: moneyNumber(item.qty),
-          unitPrice: moneyNumber(item.unitPrice),
-          discountAmount: moneyNumber(item.discountAmount),
-        })),
       });
       router.push(`/quotations/${result.id}?created=1`);
     } catch (err) {
@@ -292,6 +257,7 @@ function NewQuotationPageInner() {
             onDateOpenChange={setDateOpen}
             taxes={taxesQuery.data?.data ?? []}
             taxesLoading={taxesQuery.isLoading}
+            readOnlyItems
           />
 
           <div className={formActionsClass}>

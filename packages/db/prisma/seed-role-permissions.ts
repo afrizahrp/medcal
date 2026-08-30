@@ -65,6 +65,11 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "ADMIN", resource: "workOrder", action: "assign" },
   // System Settings (2026-08-26)
   { role: "ADMIN", resource: "tax", action: "manage" },
+  // Price List / Tariff Master Data (2026-08-30 — Price List Phase 1)
+  { role: "ADMIN", resource: "priceListItem", action: "read" },
+  { role: "ADMIN", resource: "priceListItem", action: "create" },
+  { role: "ADMIN", resource: "priceListItem", action: "update" },
+  { role: "ADMIN", resource: "priceListItem", action: "delete" },
   // UOM Master Data (2026-08-26)
   { role: "ADMIN", resource: "uom", action: "read" },
   { role: "ADMIN", resource: "uom", action: "create" },
