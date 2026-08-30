@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import {
   deviceTypeAliasCreateSchema,
+  deviceTypeAliasGroupedQuerySchema,
   deviceTypeAliasListQuerySchema,
   deviceTypeAliasUpdateSchema,
 } from "@medcal/shared";
@@ -20,6 +21,7 @@ import { RequirePermission } from "../../common/decorators/require-permission.de
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   DeviceTypeAliasesService,
+  type DeviceTypeAliasGroupedResult,
   type DeviceTypeAliasListResult,
   type DeviceTypeAliasWithType,
 } from "./device-type-aliases.service";
@@ -58,6 +60,20 @@ export class DeviceTypeAliasesController {
       });
     }
     return this.service.findAll(parsed.data);
+  }
+
+  @Get("grouped")
+  @RequirePermission("deviceTypeAlias", "read")
+  async listGrouped(@Query() rawQuery: unknown): Promise<DeviceTypeAliasGroupedResult> {
+    const parsed = deviceTypeAliasGroupedQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid device type alias grouped query",
+        code: "INVALID_DEVICE_TYPE_ALIAS_QUERY",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.findAllGroupedByDeviceType(parsed.data);
   }
 
   @Get(":id")

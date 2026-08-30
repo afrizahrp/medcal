@@ -28,6 +28,24 @@ export interface DeviceTypeAliasListResponse {
   totalPages: number;
 }
 
+/** GET /device-type-aliases/grouped — aliases grouped by Device Type. */
+export interface DeviceTypeAliasGroupRow {
+  deviceType: { id: string; code: string; name: string };
+  categoryName: string | null;
+  count: number;
+  aliases: DeviceTypeAliasRow[];
+}
+
+export interface DeviceTypeAliasGroupedResponse {
+  data: DeviceTypeAliasGroupRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  totalAliases: number;
+  totalDeviceTypes: number;
+}
+
 export interface DeviceTypeAliasesQueryParams {
   search: string;
   deviceTypeId: string;
@@ -66,6 +84,27 @@ export function useDeviceTypeAliases(params: DeviceTypeAliasesQueryParams) {
       apiFetch<DeviceTypeAliasListResponse>(
         `/device-type-aliases?${buildSearchParams(params).toString()}`,
       ),
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useDeviceTypeAliasGroups(params: {
+  search: string;
+  page: number;
+  pageSize: number;
+}) {
+  const trimmed = params.search.trim();
+  return useQuery({
+    queryKey: [DEVICE_TYPE_ALIASES_QUERY_KEY, "grouped", trimmed, params.page, params.pageSize],
+    queryFn: () => {
+      const qs = new URLSearchParams();
+      if (trimmed) qs.set("search", trimmed);
+      qs.set("page", String(params.page));
+      qs.set("pageSize", String(params.pageSize));
+      return apiFetch<DeviceTypeAliasGroupedResponse>(
+        `/device-type-aliases/grouped?${qs.toString()}`,
+      );
+    },
     placeholderData: (previous) => previous,
   });
 }

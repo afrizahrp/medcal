@@ -1229,6 +1229,15 @@ export const deviceTypeAliasListQuerySchema = baseListQuerySchema.extend({
 
 export type DeviceTypeAliasListQuery = z.infer<typeof deviceTypeAliasListQuerySchema>;
 
+/** GET /device-type-aliases/grouped query params — collapsible view grouped by Device Type. */
+export const deviceTypeAliasGroupedQuerySchema = z.object({
+  search: z.string().trim().min(1).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export type DeviceTypeAliasGroupedQuery = z.infer<typeof deviceTypeAliasGroupedQuerySchema>;
+
 /** Whitelisted `sortBy` values for GET /device-type-aliases — see resolveSortOrder. */
 export const DEVICE_TYPE_ALIAS_SORTABLE_FIELDS = ["createdAt", "alias"] as const;
 

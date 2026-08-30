@@ -9,6 +9,7 @@ import {
   DEVICE_TYPE_ALIAS_SORTABLE_FIELDS,
   normalizeDeviceTerm,
   type DeviceTypeAliasCreateInput,
+  type DeviceTypeAliasGroupedQuery,
   type DeviceTypeAliasListQuery,
   type DeviceTypeAliasUpdateInput,
 } from "@medcal/shared";
@@ -28,6 +29,27 @@ export interface DeviceTypeAliasListResult {
   pageSize: number;
   total: number;
   totalPages: number;
+}
+
+export interface DeviceTypeAliasDeviceTypeGroup {
+  deviceType: { id: string; code: string; name: string };
+  /** Device category name for the parent row's "Kategori" column (null if unset). */
+  categoryName: string | null;
+  count: number;
+  aliases: DeviceTypeAliasWithType[];
+}
+
+export interface DeviceTypeAliasGroupedResult {
+  data: DeviceTypeAliasDeviceTypeGroup[];
+  /** Standard MEDCAL pagination fields — paginated at the Device-Type level. */
+  page: number;
+  pageSize: number;
+  /** Total number of Device-Type groups (what the page count is derived from). */
+  total: number;
+  totalPages: number;
+  /** Totals across the whole (search-filtered) result, not just this page. */
+  totalAliases: number;
+  totalDeviceTypes: number;
 }
 
 @Injectable()
@@ -120,6 +142,77 @@ export class DeviceTypeAliasesService {
     ]);
 
     return { data, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+  }
+
+  /**
+   * Collapsible browse view: aliases grouped under their Device Type, paginated
+   * at the Device-Type level so a Device Type and all of its aliases always stay
+   * together on one page. Mirrors DeviceCalibrationParametersService
+   * .findAllGroupedByDeviceType. Only Device Types that have at least one alias
+   * appear. Ordering is a presentation concern only — no data is mutated.
+   */
+  async findAllGroupedByDeviceType(
+    query: DeviceTypeAliasGroupedQuery = {},
+  ): Promise<DeviceTypeAliasGroupedResult> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
+    const search = query.search?.trim() || undefined;
+
+    const rows = await prisma.deviceTypeAlias.findMany({
+      where: search
+        ? {
+            OR: [
+              { alias: { contains: search, mode: "insensitive" } },
+              { deviceType: { name: { contains: search, mode: "insensitive" } } },
+              { deviceType: { code: { contains: search, mode: "insensitive" } } },
+            ],
+          }
+        : {},
+      include: { deviceType: { select: deviceTypeSelect } },
+      orderBy: [{ deviceType: { name: "asc" } }, { alias: "asc" }],
+    });
+
+    const groups = new Map<string, DeviceTypeAliasDeviceTypeGroup>();
+    for (const row of rows) {
+      const existing = groups.get(row.deviceType.id);
+      if (existing) {
+        existing.aliases.push(row);
+        existing.count += 1;
+      } else {
+        groups.set(row.deviceType.id, {
+          deviceType: row.deviceType,
+          categoryName: null,
+          count: 1,
+          aliases: [row],
+        });
+      }
+    }
+
+    const allGroups = [...groups.values()];
+    const total = allGroups.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const data = allGroups.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
+
+    if (data.length > 0) {
+      const types = await prisma.deviceType.findMany({
+        where: { id: { in: data.map((group) => group.deviceType.id) } },
+        select: { id: true, category: { select: { name: true } } },
+      });
+      const categoryByTypeId = new Map(types.map((type) => [type.id, type.category?.name ?? null]));
+      for (const group of data) {
+        group.categoryName = categoryByTypeId.get(group.deviceType.id) ?? null;
+      }
+    }
+
+    return {
+      data,
+      page,
+      pageSize,
+      total,
+      totalPages,
+      totalAliases: rows.length,
+      totalDeviceTypes: total,
+    };
   }
 
   async findOne(id: string): Promise<DeviceTypeAliasWithType> {

@@ -117,4 +117,23 @@ describe("DeviceTypeAliasesService", () => {
   it("throws NotFound for an unknown id", async () => {
     await expect(service.findOne("nope")).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it("groups aliases under their device type and honours search", async () => {
+    const deviceTypeId = await makeDeviceType(`Grouped ${TAG} Type ${randomUUID().slice(0, 4)}`);
+    const marker = `grp${randomUUID().slice(0, 6)}`;
+    const a = await service.create({ deviceTypeId, alias: `${marker} Alpha ${TAG}` });
+    const b = await service.create({ deviceTypeId, alias: `${marker} Bravo ${TAG}` });
+    createdAliasIds.push(a.id, b.id);
+
+    const grouped = await service.findAllGroupedByDeviceType({ search: marker });
+    const group = grouped.data.find((g) => g.deviceType.id === deviceTypeId);
+    expect(group).toBeDefined();
+    expect(group?.count).toBe(2);
+    expect(group?.aliases.map((x) => x.id).sort()).toEqual([a.id, b.id].sort());
+    expect(grouped.totalAliases).toBe(2);
+    expect(grouped.totalDeviceTypes).toBe(1);
+    expect(grouped.total).toBe(1);
+    expect(grouped.page).toBe(1);
+    expect(grouped.totalPages).toBe(1);
+  });
 });
