@@ -388,10 +388,10 @@ export function DeviceTypeItemSelect({
   deviceTypes,
   loading,
   disabled,
-  placeholder = "Select Device Type",
-  ariaLabel = "Device Type",
+  placeholder = "Select Device Name",
+  ariaLabel = "Device Name",
   allowClear = false,
-  clearLabel = "Semua Device Type",
+  clearLabel = "Semua Device Name",
 }: {
   value: string;
   onChange: (id: string) => void;
@@ -419,14 +419,14 @@ export function DeviceTypeItemSelect({
 
   const emptyLabel =
     !loading && deviceTypes.length === 0
-      ? "No device types available"
-      : "Device Type tidak ditemukan.";
+      ? "No device names available"
+      : "Device Name tidak ditemukan.";
 
   return (
     <CommandPopover
       open={open}
       onOpenChange={setOpen}
-      searchPlaceholder="Cari device type…"
+      searchPlaceholder="Cari device name…"
       emptyLabel={loading ? "Memuat…" : emptyLabel}
       trigger={
         <Button

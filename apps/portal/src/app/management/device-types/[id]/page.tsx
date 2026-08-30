@@ -100,13 +100,13 @@ export default function DeviceTypeDetailPage() {
     return (
       <div className={deviceTypeFormPageClass}>
         <PageHeader
-          title="Device Type tidak ditemukan"
+          title="Device Name tidak ditemukan"
           crumbs={[
             { href: "/", label: "Dashboard" },
-            { href: "/device-types", label: "Device Type" },
+            { href: "/device-types", label: "Device Name" },
           ]}
         />
-        <p className="mt-5 text-sm text-slate-600">Device Type tidak ditemukan.</p>
+        <p className="mt-5 text-sm text-slate-600">Device Name tidak ditemukan.</p>
       </div>
     );
   }
@@ -114,7 +114,7 @@ export default function DeviceTypeDetailPage() {
   if (!row) {
     return (
       <div className={deviceTypeFormPageClass}>
-        <p className="text-sm text-red-600">Gagal memuat Device Type.</p>
+        <p className="text-sm text-red-600">Gagal memuat Device Name.</p>
       </div>
     );
   }
@@ -136,11 +136,11 @@ export default function DeviceTypeDetailPage() {
     setSuccess(null);
 
     if (!form.code.trim()) {
-      setError("Kode Device Type wajib diisi.");
+      setError("Kode Device Name wajib diisi.");
       return;
     }
     if (!form.name.trim()) {
-      setError("Nama Device Type wajib diisi.");
+      setError("Nama Device Name wajib diisi.");
       return;
     }
     if (!form.categoryId) {
@@ -163,7 +163,7 @@ export default function DeviceTypeDetailPage() {
 
   async function remove() {
     if (!capabilities?.deviceTypeDelete) return;
-    if (!confirm(`Yakin ingin menghapus Device Type "${row!.name}"?`)) return;
+    if (!confirm(`Yakin ingin menghapus Device Name "${row!.name}"?`)) return;
     setError(null);
     setSuccess(null);
     try {
@@ -180,7 +180,7 @@ export default function DeviceTypeDetailPage() {
         title={row.name}
         crumbs={[
           { href: "/", label: "Dashboard" },
-          { href: "/device-types", label: "Device Type" },
+          { href: "/device-types", label: "Device Name" },
           { label: row.code },
         ]}
       />
@@ -213,6 +213,7 @@ export default function DeviceTypeDetailPage() {
               onChange={setField}
               categories={categoriesQuery.data?.data ?? []}
               categoriesLoading={categoriesQuery.isLoading}
+              mode="edit"
             />
 
             <div className={deviceTypeFormActionsClass}>

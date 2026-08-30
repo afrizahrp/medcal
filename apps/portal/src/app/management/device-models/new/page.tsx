@@ -62,7 +62,7 @@ export default function NewDeviceModelPage() {
     setSuccess(null);
 
     if (!form.deviceTypeId) {
-      setError("Device Type wajib dipilih.");
+      setError("Device Name wajib dipilih.");
       return;
     }
     if (!form.manufacturer.trim()) {

@@ -101,7 +101,7 @@ export default function DeviceCalibrationParametersPageClient() {
 
         {result ? (
           <p className="mt-3 text-xs text-slate-500">
-            {result.totalDeviceTypes} Device type dengan {result.totalParameters} parameter
+            {result.totalDeviceTypes} Device Name dengan {result.totalParameters} parameter
           </p>
         ) : null}
 
@@ -133,7 +133,7 @@ export default function DeviceCalibrationParametersPageClient() {
               totalPages={totalPages}
               total={result?.total ?? 0}
               pageSize={pageSize}
-              itemLabel="device type"
+              itemLabel="device name"
               onPageChange={(next) => setParams({ page: next <= 1 ? undefined : String(next) })}
               onPageSizeChange={(next) =>
                 setParams({ pageSize: next === 10 ? undefined : String(next), page: undefined })

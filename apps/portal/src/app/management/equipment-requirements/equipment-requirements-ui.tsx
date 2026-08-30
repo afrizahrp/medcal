@@ -65,9 +65,9 @@ export function EquipmentRequirementSearchBar({
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Cari device type atau equipment type…"
+        placeholder="Cari device name atau equipment type…"
         className="pl-9"
-        aria-label="Cari device type atau equipment type"
+        aria-label="Cari device name atau equipment type"
       />
     </div>
   );
@@ -230,7 +230,7 @@ export function DeviceTypeRequirementTable({
       <table className="w-full min-w-[720px] border-collapse">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-100 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-2.5">Device Type</th>
+            <th className="px-4 py-2.5">Device Name</th>
             <th className="px-4 py-2.5">Kategori</th>
             <th className="px-4 py-2.5">Jumlah</th>
           </tr>
@@ -286,7 +286,7 @@ export function EquipmentRequirementEmptyState({
     <div className="py-10 text-center">
       <p className="text-sm text-slate-500">
         {hasSearch
-          ? "Tidak ada device type atau equipment type yang cocok dengan pencarian."
+          ? "Tidak ada device name atau equipment type yang cocok dengan pencarian."
           : "Belum ada kebutuhan equipment. Tambahkan lewat tombol di atas."}
       </p>
       {hasSearch && onClearSearch ? (
@@ -302,9 +302,9 @@ export function formatEquipmentRequirementApiError(error: unknown): string {
   if (error instanceof ApiError) {
     const code = error.data?.code;
     if (code === "DUPLICATE_EQUIPMENT_REQUIREMENT") {
-      return "Equipment Type ini sudah menjadi kebutuhan untuk Device Type tersebut.";
+      return "Equipment Type ini sudah menjadi kebutuhan untuk Device Name tersebut.";
     }
-    if (code === "DEVICE_TYPE_NOT_FOUND") return "Device Type tidak ditemukan.";
+    if (code === "DEVICE_TYPE_NOT_FOUND") return "Device Name tidak ditemukan.";
     if (code === "EQUIPMENT_TYPE_NOT_FOUND") return "Equipment Type tidak ditemukan.";
     if (code === "EQUIPMENT_REQUIREMENT_NOT_FOUND") return "Kebutuhan equipment tidak ditemukan.";
     if (typeof error.data?.message === "string") return error.data.message;

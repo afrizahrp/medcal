@@ -184,19 +184,19 @@ export default function EquipmentRequirementsPageClient() {
       {showAddPanel && canManage ? (
         <Surface className="mt-4 p-4 md:p-5">
           <h2 className="text-sm font-semibold text-slate-900">
-            Tambah kebutuhan equipment untuk Device Type
+            Tambah kebutuhan equipment untuk Device Name
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Pilih Device Type dan Equipment Type yang normalnya diperlukan untuk kalibrasinya.
+            Pilih Device Name dan Equipment Type yang normalnya diperlukan untuk kalibrasinya.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <select
               value={newDeviceTypeId}
               onChange={(e) => setNewDeviceTypeId(e.target.value)}
               className={`${selectClassName} min-w-[220px]`}
-              aria-label="Device Type"
+              aria-label="Device Name"
             >
-              <option value="">Pilih device type…</option>
+              <option value="">Pilih device name…</option>
               {(deviceTypesQuery.data?.data ?? []).map((dt) => (
                 <option key={dt.id} value={dt.id}>
                   {dt.name} ({dt.code})
@@ -239,7 +239,7 @@ export default function EquipmentRequirementsPageClient() {
 
         {result ? (
           <p className="mt-3 text-xs text-slate-500">
-            {result.totalDeviceTypes} device type dengan {result.totalRequirements} kebutuhan equipment
+            {result.totalDeviceTypes} device name dengan {result.totalRequirements} kebutuhan equipment
           </p>
         ) : null}
 
@@ -276,7 +276,7 @@ export default function EquipmentRequirementsPageClient() {
               totalPages={totalPages}
               total={result?.total ?? 0}
               pageSize={pageSize}
-              itemLabel="device type"
+              itemLabel="device name"
               onPageChange={(next) => setParams({ page: next <= 1 ? undefined : String(next) })}
               onPageSizeChange={(next) =>
                 setParams({ pageSize: next === 10 ? undefined : String(next), page: undefined })

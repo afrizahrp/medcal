@@ -202,7 +202,7 @@ export default function EquipmentTypeDetailPage() {
 
         {editing ? (
           <form onSubmit={save} className="mt-3">
-            <EquipmentTypeFormFields value={form} onChange={setField} />
+            <EquipmentTypeFormFields value={form} onChange={setField} mode="edit" />
 
             <div className={equipmentTypeFormActionsClass}>
               <Button

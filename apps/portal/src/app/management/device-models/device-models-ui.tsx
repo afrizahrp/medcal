@@ -62,7 +62,7 @@ export function DeviceModelFilters({
         <Input
           value={searchInput}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Cari manufacturer, model, atau tipe…"
+          placeholder="Cari manufacturer, model, atau device name…"
           className="pl-9"
           aria-label="Cari Device Model"
         />
@@ -71,9 +71,9 @@ export function DeviceModelFilters({
         value={deviceTypeId}
         onChange={(e) => onDeviceTypeChange(e.target.value)}
         className={cn(selectClassName, "w-full sm:w-56")}
-        aria-label="Filter device type"
+        aria-label="Filter device name"
       >
-        <option value="">Semua tipe</option>
+        <option value="">Semua device name</option>
         {deviceTypes.map((t) => (
           <option key={t.id} value={t.id}>
             {t.name}
@@ -90,7 +90,7 @@ export function DeviceModelTable({ models }: { models: DeviceModelRow[] }) {
       <table className="w-full min-w-[720px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-3">Device Type</th>
+            <th className="px-4 py-3">Device Name</th>
             <th className="px-4 py-3">Manufacturer</th>
             <th className="px-4 py-3">Model</th>
             <th className="px-4 py-3">Deskripsi</th>

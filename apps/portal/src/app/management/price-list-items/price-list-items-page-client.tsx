@@ -40,10 +40,10 @@ function formatError(err: unknown): string {
   if (err instanceof ApiError) {
     const code = err.data?.code;
     if (code === "PRICE_LIST_OVERLAP")
-      return "Sudah ada tarif aktif yang periodenya bertumpang tindih untuk device type ini.";
+      return "Sudah ada tarif aktif yang periodenya bertumpang tindih untuk device name ini.";
     if (code === "DUPLICATE_PRICE_LIST_ITEM")
-      return "Sudah ada tarif dengan tanggal berlaku yang sama untuk device type ini.";
-    if (code === "DEVICE_TYPE_NOT_FOUND") return "Device Type tidak ditemukan.";
+      return "Sudah ada tarif dengan tanggal berlaku yang sama untuk device name ini.";
+    if (code === "DEVICE_TYPE_NOT_FOUND") return "Device Name tidak ditemukan.";
     if (code === "INVALID_PRICE") return "Harga harus lebih besar dari 0.";
     if (code === "INVALID_EFFECTIVE_RANGE")
       return "Tanggal berakhir tidak boleh sebelum tanggal berlaku.";
@@ -208,7 +208,7 @@ export default function PriceListItemsPageClient() {
       </div>
 
       <p className="mt-2 max-w-2xl text-sm text-slate-500">
-        Tarif default per Device Type. Saat quotation dibuat dari Requisition, sistem mengambil tarif
+        Tarif default per Device Name. Saat quotation dibuat dari Requisition, sistem mengambil tarif
         yang aktif pada tanggal quotation dan menyimpannya sebagai <em>snapshot</em> di quotation.
         Perubahan tarif di sini tidak mengubah quotation yang sudah dibuat.
       </p>
@@ -220,13 +220,13 @@ export default function PriceListItemsPageClient() {
           <h2 className="text-sm font-semibold text-slate-900">Tambah tarif baru</h2>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Device Type</label>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Device Name</label>
               <DeviceTypeItemSelect
                 value={draft.deviceTypeId}
                 onChange={(id) => setDraft((d) => ({ ...d, deviceTypeId: id }))}
                 deviceTypes={deviceTypes}
                 loading={typesQuery.isLoading}
-                placeholder="Pilih Device Type…"
+                placeholder="Pilih Device Name…"
               />
             </div>
             <div>
@@ -294,7 +294,7 @@ export default function PriceListItemsPageClient() {
           <Input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Cari device type…"
+            placeholder="Cari device name…"
             className="sm:max-w-xs"
             aria-label="Cari tarif"
           />
@@ -304,8 +304,8 @@ export default function PriceListItemsPageClient() {
               onChange={(id) => setParams({ deviceTypeId: id || undefined, page: undefined })}
               deviceTypes={deviceTypes}
               loading={typesQuery.isLoading}
-              ariaLabel="Filter device type"
-              placeholder="Semua Device Type"
+              ariaLabel="Filter device name"
+              placeholder="Semua Device Name"
               allowClear
             />
           </div>
@@ -333,7 +333,7 @@ export default function PriceListItemsPageClient() {
               <table className="w-full min-w-[820px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                    <th className="px-4 py-3">Device Type</th>
+                    <th className="px-4 py-3">Device Name</th>
                     <th className="px-4 py-3 text-right">Unit Price</th>
                     <th className="px-4 py-3">Berlaku</th>
                     <th className="px-4 py-3">Status</th>

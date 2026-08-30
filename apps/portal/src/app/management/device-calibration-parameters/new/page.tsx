@@ -99,7 +99,7 @@ export default function NewDeviceCalibrationParameterPage() {
     setSuccess(null);
 
     if (!form.deviceTypeId) {
-      setError("Device Type wajib dipilih.");
+      setError("Device Name wajib dipilih.");
       return;
     }
     if (!form.capabilityItemId) {

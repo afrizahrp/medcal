@@ -19,9 +19,18 @@ export interface DeviceCategoryFormFieldsProps {
     field: K,
     value: DeviceCategoryFormValue[K],
   ) => void;
+  /**
+   * "create" (default) allows editing Kode. "edit" locks Kode: it is a business
+   * identifier fixed at creation and cannot be changed via the portal afterwards.
+   */
+  mode?: "create" | "edit";
 }
 
-export function DeviceCategoryFormFields({ value, onChange }: DeviceCategoryFormFieldsProps) {
+export function DeviceCategoryFormFields({
+  value,
+  onChange,
+  mode = "create",
+}: DeviceCategoryFormFieldsProps) {
   return (
     <div className="space-y-5">
       <section className="space-y-3">
@@ -40,8 +49,13 @@ export function DeviceCategoryFormFields({ value, onChange }: DeviceCategoryForm
               placeholder="PATIENT_MONITORING"
               maxLength={64}
               required
+              disabled={mode === "edit"}
             />
-            <p className="mt-1 text-xs text-slate-500">Kode unik (huruf besar)</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {mode === "edit"
+                ? "Kode tidak dapat diubah setelah dibuat"
+                : "Kode unik (huruf besar)"}
+            </p>
           </div>
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-slate-700">
@@ -104,7 +118,7 @@ export function formatDeviceCategoryApiError(error: unknown): string {
       return "Device Category tidak ditemukan.";
     }
     if (code === "DEVICE_CATEGORY_HAS_TYPES") {
-      return "Kategori masih memiliki Device Type — hapus atau pindahkan type terlebih dahulu.";
+      return "Kategori masih memiliki Device Name — hapus atau pindahkan terlebih dahulu.";
     }
     if (code === "INVALID_DEVICE_CATEGORY" || code === "INVALID_DEVICE_CATEGORY_UPDATE") {
       return "Data Device Category tidak valid. Periksa kembali isian form.";

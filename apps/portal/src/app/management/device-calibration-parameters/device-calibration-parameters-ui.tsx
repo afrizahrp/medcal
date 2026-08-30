@@ -147,9 +147,9 @@ export function DeviceCalibrationParameterSearchBar({
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Cari device type atau parameter…"
+        placeholder="Cari device name atau parameter…"
         className="pl-9"
-        aria-label="Cari device type atau calibration parameter"
+        aria-label="Cari device name atau calibration parameter"
       />
     </div>
   );
@@ -231,7 +231,7 @@ export function DeviceTypeParameterTable({
       <table className="w-full min-w-[820px] border-collapse">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-100 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-2.5">Device Type</th>
+            <th className="px-4 py-2.5">Device Name</th>
             <th className="px-4 py-2.5">Kategori</th>
             <th className="px-4 py-2.5" colSpan={4}>
               Jumlah
@@ -283,7 +283,7 @@ export function DeviceCalibrationParameterEmptyState({
     <div className="py-10 text-center">
       <p className="text-sm text-slate-500">
         {hasSearch
-          ? "Tidak ada device type atau parameter yang cocok dengan pencarian."
+          ? "Tidak ada device name atau parameter yang cocok dengan pencarian."
           : "Belum ada Calibration Parameter."}
       </p>
       {hasSearch && onClearSearch ? (

@@ -61,11 +61,11 @@ export default function NewDeviceTypePage() {
     setSuccess(null);
 
     if (!form.code.trim()) {
-      setError("Kode Device Type wajib diisi.");
+      setError("Kode Device Name wajib diisi.");
       return;
     }
     if (!form.name.trim()) {
-      setError("Nama Device Type wajib diisi.");
+      setError("Nama Device Name wajib diisi.");
       return;
     }
     if (!form.categoryId) {
@@ -75,7 +75,7 @@ export default function NewDeviceTypePage() {
 
     try {
       const row = await createMutation.mutateAsync(buildDeviceTypeCreatePayload(form));
-      setSuccess(`Device Type ${row.code} berhasil dibuat.`);
+      setSuccess(`Device Name ${row.code} berhasil dibuat.`);
       router.push(`/device-types/${row.id}`);
     } catch (err) {
       setError(formatDeviceTypeApiError(err));
@@ -85,10 +85,10 @@ export default function NewDeviceTypePage() {
   return (
     <div className={deviceTypeFormPageClass}>
       <PageHeader
-        title="New Device Type"
+        title="New Device Name"
         crumbs={[
           { href: "/", label: "Dashboard" },
-          { href: "/device-types", label: "Device Type" },
+          { href: "/device-types", label: "Device Name" },
           { label: "New" },
         ]}
       />

@@ -193,16 +193,16 @@ export function DeviceCalibrationParameterFormFields({
             <div className={gridClass}>
               <ComboboxField
                 id="deviceTypeId"
-                label="Device Type"
+                label="Device Name"
                 required
                 open={deviceTypeOpen}
                 onOpenChange={setDeviceTypeOpen}
                 disabled={deviceTypesLoading}
                 selectedLabel={selectedDeviceType?.name}
-                placeholder="Pilih device type"
-                loadingLabel="Memuat tipe…"
-                searchPlaceholder="Cari device type…"
-                emptyLabel="Device Type tidak ditemukan."
+                placeholder="Pilih device name"
+                loadingLabel="Memuat…"
+                searchPlaceholder="Cari device name…"
+                emptyLabel="Device Name tidak ditemukan."
                 items={deviceTypes.map((deviceType) => ({
                   id: deviceType.id,
                   label: deviceType.name,
@@ -277,9 +277,12 @@ export function DeviceCalibrationParameterFormFields({
               placeholder="REFERENCE_VALUE"
               maxLength={64}
               required
+              disabled={mode === "edit"}
             />
             <p className="mt-1 text-xs text-slate-500">
-              Unik dalam satu Device Type + Capability Item (huruf besar)
+              {mode === "edit"
+                ? "Kode tidak dapat diubah setelah dibuat"
+                : "Unik dalam satu Device Name + Capability Item (huruf besar)"}
             </p>
           </div>
           <div>
@@ -476,13 +479,13 @@ export function formatDeviceCalibrationParameterApiError(error: unknown): string
   if (error instanceof ApiError) {
     const code = error.data?.code;
     if (code === "DUPLICATE_DEVICE_CALIBRATION_PARAMETER_CODE") {
-      return "Calibration Parameter dengan kode ini sudah ada pada Device Type dan Capability Item yang sama.";
+      return "Calibration Parameter dengan kode ini sudah ada pada Device Name dan Capability Item yang sama.";
     }
     if (code === "DEVICE_CALIBRATION_PARAMETER_NOT_FOUND") {
       return "Calibration Parameter tidak ditemukan.";
     }
     if (code === "DEVICE_TYPE_NOT_FOUND") {
-      return "Device Type yang dipilih tidak ditemukan.";
+      return "Device Name yang dipilih tidak ditemukan.";
     }
     if (code === "DEVICE_CAPABILITY_ITEM_NOT_FOUND") {
       return "Capability Item yang dipilih tidak ditemukan.";

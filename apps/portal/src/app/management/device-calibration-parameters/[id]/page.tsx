@@ -180,7 +180,7 @@ export default function DeviceCalibrationParameterDetailPage() {
     setSuccess(null);
 
     if (!form.deviceTypeId) {
-      setError("Device Type wajib dipilih.");
+      setError("Device Name wajib dipilih.");
       return;
     }
     if (!form.capabilityItemId) {
@@ -283,7 +283,7 @@ export default function DeviceCalibrationParameterDetailPage() {
         ) : (
           <>
             <dl className="space-y-3 text-sm">
-              <DetailField label="Device Type">
+              <DetailField label="Device Name">
                 <span className="font-medium">{row.deviceType.name}</span>
               </DetailField>
 

@@ -168,7 +168,7 @@ export default function ImportCalibrationRequestPageClient() {
         if (code === "CUSTOMER_NOT_FOUND") {
           setError("Customer tidak ditemukan.");
         } else if (code === "DEVICE_TYPE_NOT_FOUND") {
-          setError("Satu atau lebih Device Type tidak ditemukan.");
+          setError("Satu atau lebih Device Name tidak ditemukan.");
         } else {
           setError(err.data?.message ?? err.message);
         }
@@ -314,7 +314,7 @@ export default function ImportCalibrationRequestPageClient() {
                       <th className="px-3 py-2">Model</th>
                       <th className="px-3 py-2">Qty</th>
                       <th className="px-3 py-2">Device ID</th>
-                      <th className="px-3 py-2">Device Type</th>
+                      <th className="px-3 py-2">Device Name</th>
                       <th className="px-3 py-2">Match</th>
                     </tr>
                   </thead>

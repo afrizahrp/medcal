@@ -71,7 +71,7 @@ export default function DeviceTypesPageClient() {
   const loading = query.isLoading;
   const fetching = query.isFetching && !loading;
   const forbidden = isForbidden(query.error);
-  const error = query.isError && !forbidden ? "Gagal memuat daftar Device Type." : null;
+  const error = query.isError && !forbidden ? "Gagal memuat daftar Device Name." : null;
   const totalPages = result ? Math.max(1, result.totalPages) : 1;
 
   if (forbidden) {
@@ -82,15 +82,15 @@ export default function DeviceTypesPageClient() {
     <div className="w-full px-4 py-6 md:px-6 md:py-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
-          title="Device Type"
-          crumbs={[{ href: "/", label: "Dashboard" }, { label: "Device Type" }]}
+          title="Device Name"
+          crumbs={[{ href: "/", label: "Dashboard" }, { label: "Device Name" }]}
         />
 
         {capabilities.deviceTypeCreate ? (
           <Button asChild className="shrink-0">
             <Link href="/device-types/new">
               <Plus className="h-4 w-4" />
-              Device Type
+              Device Name
             </Link>
           </Button>
         ) : null}

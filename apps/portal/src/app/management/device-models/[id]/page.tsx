@@ -136,7 +136,7 @@ export default function DeviceModelDetailPage() {
     setSuccess(null);
 
     if (!form.deviceTypeId) {
-      setError("Device Type wajib dipilih.");
+      setError("Device Name wajib dipilih.");
       return;
     }
     if (!form.manufacturer.trim()) {
@@ -218,7 +218,7 @@ export default function DeviceModelDetailPage() {
         ) : (
           <>
             <dl className="space-y-3 text-sm">
-              <DetailField label="Device Type">
+              <DetailField label="Device Name">
                 <span className="font-medium">{row.deviceType.name}</span>
               </DetailField>
 

@@ -26,6 +26,11 @@ export interface DeviceTypeFormFieldsProps {
   onChange: <K extends keyof DeviceTypeFormValue>(field: K, value: DeviceTypeFormValue[K]) => void;
   categories: DeviceCategoryRow[];
   categoriesLoading?: boolean;
+  /**
+   * "create" (default) allows editing Kode. "edit" locks Kode: it is a business
+   * identifier fixed at creation and cannot be changed via the portal afterwards.
+   */
+  mode?: "create" | "edit";
 }
 
 export function DeviceTypeFormFields({
@@ -33,6 +38,7 @@ export function DeviceTypeFormFields({
   onChange,
   categories,
   categoriesLoading,
+  mode = "create",
 }: DeviceTypeFormFieldsProps) {
   const [categoryOpen, setCategoryOpen] = useState(false);
   const selectedCategory = categories.find((c) => c.id === value.categoryId);
@@ -40,7 +46,7 @@ export function DeviceTypeFormFields({
   return (
     <div className="space-y-5">
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-900">Informasi Device Type</h2>
+        <h2 className="text-sm font-semibold text-slate-900">Informasi Device Name</h2>
 
         <div className={gridClass}>
           <div>
@@ -114,8 +120,13 @@ export function DeviceTypeFormFields({
               placeholder="BLOOD_PRESSURE_MONITOR"
               maxLength={64}
               required
+              disabled={mode === "edit"}
             />
-            <p className="mt-1 text-xs text-slate-500">Kode unik (huruf besar)</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {mode === "edit"
+                ? "Kode tidak dapat diubah setelah dibuat"
+                : "Kode unik (huruf besar)"}
+            </p>
           </div>
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-slate-700">
@@ -174,25 +185,25 @@ export function formatDeviceTypeApiError(error: unknown): string {
   if (error instanceof ApiError) {
     const code = error.data?.code;
     if (code === "DUPLICATE_DEVICE_TYPE_CODE") {
-      return "Device Type dengan kode ini sudah ada.";
+      return "Device Name dengan kode ini sudah ada.";
     }
     if (code === "DEVICE_TYPE_NOT_FOUND") {
-      return "Device Type tidak ditemukan.";
+      return "Device Name tidak ditemukan.";
     }
     if (code === "DEVICE_CATEGORY_NOT_FOUND") {
       return "Kategori yang dipilih tidak ditemukan.";
     }
     if (code === "INVALID_DEVICE_TYPE" || code === "INVALID_DEVICE_TYPE_UPDATE") {
-      return "Data Device Type tidak valid. Periksa kembali isian form.";
+      return "Data Device Name tidak valid. Periksa kembali isian form.";
     }
     if (code === "DEVICE_TYPE_HAS_MODELS") {
-      return "Device Type tidak dapat dihapus karena masih memiliki Device Model.";
+      return "Device Name tidak dapat dihapus karena masih memiliki Device Model.";
     }
     if (code === "DEVICE_TYPE_HAS_CALIBRATION_REQUESTS") {
-      return "Device Type tidak dapat dihapus karena masih dipakai Requisition.";
+      return "Device Name tidak dapat dihapus karena masih dipakai Requisition.";
     }
     if (typeof error.data?.message === "string") return error.data.message;
     return error.message;
   }
-  return "Gagal menyimpan Device Type. Silakan coba lagi.";
+  return "Gagal menyimpan Device Name. Silakan coba lagi.";
 }

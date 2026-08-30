@@ -200,7 +200,7 @@ export default function DeviceCategoryDetailPage() {
 
         {editing ? (
           <form onSubmit={save} className="mt-3">
-            <DeviceCategoryFormFields value={form} onChange={setField} />
+            <DeviceCategoryFormFields value={form} onChange={setField} mode="edit" />
 
             <div className={deviceCategoryFormActionsClass}>
               <Button

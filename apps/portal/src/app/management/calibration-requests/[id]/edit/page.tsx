@@ -232,7 +232,7 @@ export default function EditCalibrationRequestPage() {
       return;
     }
     if (validItems.length !== filledItems.length) {
-      setError("Setiap device wajib memiliki Device Type.");
+      setError("Setiap device wajib memiliki Device Name.");
       return;
     }
 
@@ -261,7 +261,7 @@ export default function EditCalibrationRequestPage() {
         if (code === "CUSTOMER_NOT_FOUND") {
           setError("Customer tidak ditemukan.");
         } else if (code === "DEVICE_TYPE_NOT_FOUND") {
-          setError("Satu atau lebih device type tidak ditemukan.");
+          setError("Satu atau lebih device name tidak ditemukan.");
         } else if (code === "INVALID_STATUS_FOR_UPDATE") {
           setError("Requisition tidak dapat diedit dalam status saat ini.");
         } else {
@@ -433,7 +433,7 @@ export default function EditCalibrationRequestPage() {
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">Devices</h2>
                   <p className="mt-0.5 text-sm text-slate-500">
-                    Pilih device type. Nama alat customer, model, dan Device ID bersifat opsional.
+                    Pilih device name. Nama alat customer, model, dan Device ID bersifat opsional.
                   </p>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={addItem}>
@@ -452,7 +452,7 @@ export default function EditCalibrationRequestPage() {
                       <div className="min-w-0 flex-1 space-y-3">
                         <div>
                           <label className="mb-1 block text-xs font-medium text-slate-600">
-                            Device Type <span className="text-red-500">*</span>
+                            Device Name <span className="text-red-500">*</span>
                           </label>
                           <DeviceTypeItemSelect
                             value={item.deviceTypeId}

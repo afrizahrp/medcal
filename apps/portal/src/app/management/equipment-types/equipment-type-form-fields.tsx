@@ -20,9 +20,18 @@ export interface EquipmentTypeFormFieldsProps {
     field: K,
     value: EquipmentTypeFormValue[K],
   ) => void;
+  /**
+   * "create" (default) allows editing Kode. "edit" locks Kode: it is a business
+   * identifier fixed at creation and cannot be changed via the portal afterwards.
+   */
+  mode?: "create" | "edit";
 }
 
-export function EquipmentTypeFormFields({ value, onChange }: EquipmentTypeFormFieldsProps) {
+export function EquipmentTypeFormFields({
+  value,
+  onChange,
+  mode = "create",
+}: EquipmentTypeFormFieldsProps) {
   return (
     <div className="space-y-5">
       <section className="space-y-3">
@@ -45,8 +54,13 @@ export function EquipmentTypeFormFields({ value, onChange }: EquipmentTypeFormFi
               placeholder="ELECTRICAL_SAFETY_ANALYZER"
               maxLength={64}
               required
+              disabled={mode === "edit"}
             />
-            <p className="mt-1 text-xs text-slate-500">Kode unik (huruf besar)</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {mode === "edit"
+                ? "Kode tidak dapat diubah setelah dibuat"
+                : "Kode unik (huruf besar)"}
+            </p>
           </div>
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-slate-700">
@@ -127,7 +141,7 @@ export function formatEquipmentTypeApiError(error: unknown): string {
       return "Equipment Type tidak ditemukan.";
     }
     if (code === "EQUIPMENT_TYPE_HAS_REQUIREMENTS") {
-      return "Equipment Type masih dipakai sebagai kebutuhan pada Device Type — hapus kebutuhannya dahulu.";
+      return "Equipment Type masih dipakai sebagai kebutuhan pada Device Name — hapus kebutuhannya dahulu.";
     }
     if (code === "INVALID_EQUIPMENT_TYPE" || code === "INVALID_EQUIPMENT_TYPE_UPDATE") {
       return "Data Equipment Type tidak valid. Periksa kembali isian form.";

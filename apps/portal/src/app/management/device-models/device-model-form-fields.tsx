@@ -48,13 +48,13 @@ export function DeviceModelFormFields({
         <div className={gridClass}>
           <div>
             <label htmlFor="deviceTypeId" className="block text-sm font-medium text-slate-700">
-              Device Type <span className="text-red-500">*</span>
+              Device Name <span className="text-red-500">*</span>
             </label>
             <CommandPopover
               open={deviceTypeOpen}
               onOpenChange={setDeviceTypeOpen}
-              searchPlaceholder="Cari device type…"
-              emptyLabel={deviceTypesLoading ? "Memuat…" : "Device Type tidak ditemukan."}
+              searchPlaceholder="Cari device name…"
+              emptyLabel={deviceTypesLoading ? "Memuat…" : "Device Name tidak ditemukan."}
               trigger={
                 <Button
                   id="deviceTypeId"
@@ -62,7 +62,7 @@ export function DeviceModelFormFields({
                   variant="outline"
                   role="combobox"
                   aria-expanded={deviceTypeOpen}
-                  aria-label="Pilih device type"
+                  aria-label="Pilih device name"
                   disabled={deviceTypesLoading}
                   className={cn(fieldClass, "justify-between font-normal")}
                 >
@@ -70,7 +70,7 @@ export function DeviceModelFormFields({
                     <span className="truncate">{selectedDeviceType.name}</span>
                   ) : (
                     <span className="text-slate-400">
-                      {deviceTypesLoading ? "Memuat tipe…" : "Pilih device type"}
+                      {deviceTypesLoading ? "Memuat…" : "Pilih device name"}
                     </span>
                   )}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -181,7 +181,7 @@ export function formatDeviceModelApiError(error: unknown): string {
       return "Device Model tidak ditemukan.";
     }
     if (code === "DEVICE_TYPE_NOT_FOUND") {
-      return "Device Type yang dipilih tidak ditemukan.";
+      return "Device Name yang dipilih tidak ditemukan.";
     }
     if (code === "INVALID_DEVICE_MODEL" || code === "INVALID_DEVICE_MODEL_UPDATE") {
       return "Data Device Model tidak valid. Periksa kembali isian form.";

@@ -35,7 +35,7 @@ function formatAliasError(err: unknown): string {
   if (err instanceof ApiError) {
     const code = err.data?.code;
     if (code === "DUPLICATE_ALIAS") return err.data?.message ?? "Alias sudah digunakan.";
-    if (code === "DEVICE_TYPE_NOT_FOUND") return "Device Type tidak ditemukan.";
+    if (code === "DEVICE_TYPE_NOT_FOUND") return "Device Name tidak ditemukan.";
     if (code === "INVALID_ALIAS") return "Alias tidak valid.";
     return err.data?.message ?? err.message;
   }
@@ -202,8 +202,8 @@ export default function DeviceTypeAliasesPageClient() {
     <div className="w-full px-4 py-6 md:px-6 md:py-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
-          title="Device Type Aliases"
-          crumbs={[{ href: "/", label: "Dashboard" }, { label: "Type Aliases" }]}
+          title="Device Name Aliases"
+          crumbs={[{ href: "/", label: "Dashboard" }, { label: "Name Aliases" }]}
         />
         {canManage ? (
           <Button type="button" className="shrink-0" onClick={() => setShowAdd((v) => !v)}>
@@ -215,7 +215,7 @@ export default function DeviceTypeAliasesPageClient() {
 
       <p className="mt-2 max-w-2xl text-sm text-slate-500">
         Alias adalah istilah pelanggan (mis. &quot;Tensimeter&quot;) yang dipetakan ke satu Device
-        Type resmi (mis. &quot;Sphygmomanometer&quot;). Digunakan untuk pencocokan otomatis saat
+        Name resmi (mis. &quot;Sphygmomanometer&quot;). Digunakan untuk pencocokan otomatis saat
         import Excel Requisition.
       </p>
 
@@ -231,7 +231,7 @@ export default function DeviceTypeAliasesPageClient() {
                 onChange={setNewDeviceTypeId}
                 deviceTypes={deviceTypes}
                 loading={typesQuery.isLoading}
-                placeholder="Pilih Device Type…"
+                placeholder="Pilih Device Name…"
               />
             </div>
             <Input
@@ -257,7 +257,7 @@ export default function DeviceTypeAliasesPageClient() {
 
         {result ? (
           <p className="mt-3 text-xs text-slate-500">
-            {result.totalDeviceTypes} Device type dengan {result.totalAliases} alias
+            {result.totalDeviceTypes} Device Name dengan {result.totalAliases} alias
           </p>
         ) : null}
 
@@ -289,7 +289,7 @@ export default function DeviceTypeAliasesPageClient() {
               totalPages={totalPages}
               total={result?.total ?? 0}
               pageSize={pageSize}
-              itemLabel="device type"
+              itemLabel="device name"
               onPageChange={(next) => setParams({ page: next <= 1 ? undefined : String(next) })}
               onPageSizeChange={(next) =>
                 setParams({ pageSize: next === 10 ? undefined : String(next), page: undefined })

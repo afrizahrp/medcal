@@ -81,7 +81,7 @@ export function DeviceTypeFilters({
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Cari kode atau nama…"
           className="pl-9"
-          aria-label="Cari Device Type"
+          aria-label="Cari Device Name"
         />
       </div>
       <select
@@ -155,7 +155,7 @@ export function DeviceTypeTable({ types }: { types: DeviceTypeRow[] }) {
 export function DeviceTypeEmptyState({ onClearFilters }: { onClearFilters?: () => void }) {
   return (
     <div className="py-10 text-center">
-      <p className="text-sm text-slate-500">Belum ada Device Type yang cocok dengan filter.</p>
+      <p className="text-sm text-slate-500">Belum ada Device Name yang cocok dengan filter.</p>
       {onClearFilters ? (
         <Button type="button" variant="outline" className="mt-3" onClick={onClearFilters}>
           Reset filter
