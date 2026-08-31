@@ -6,7 +6,9 @@ import { equipmentCreateSchema, equipmentUpdateSchema } from "@medcal/shared";
 import { EquipmentService } from "./equipment.service";
 
 const service = new EquipmentService();
-const realCompanyId = "PKM";
+// A disposable company created in beforeAll — tests must never touch a real
+// tenant's counter (see the Device Management test-pollution audit).
+let realCompanyId: string;
 
 function uniqueTypeCode() {
   return `EQ${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -22,6 +24,12 @@ const createdEquipmentTypeIds: string[] = [];
 const createdCompanyIds: string[] = [];
 
 beforeAll(async () => {
+  realCompanyId = companyId();
+  await prisma.company.create({
+    data: { id: realCompanyId, name: "Eq Primary Test Co", status: "ACTIVE" },
+  });
+  createdCompanyIds.push(realCompanyId);
+
   const [etA, etB] = await Promise.all([
     prisma.equipmentType.create({
       data: { code: uniqueTypeCode(), name: "Eq Electrical Safety Analyzer" },

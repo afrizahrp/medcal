@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@medcal/db";
 import { deviceCreateSchema, deviceUpdateSchema } from "@medcal/shared";
 import { DevicesService } from "./devices.service";
 
 const service = new DevicesService();
-const realCompanyId = "PKM";
+// A disposable company created in beforeAll — tests must never touch a real
+// tenant's DVC- counter (see the Device Management test-pollution audit).
+let realCompanyId: string;
 const createdDeviceIds: string[] = [];
 const createdCustomerIds: string[] = [];
 const createdCompanyIds: string[] = [];
@@ -17,6 +19,18 @@ const createdCalibrationRequestIds: string[] = [];
 function uniqueCode() {
   return `D${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
 }
+
+function newCompanyId() {
+  return `C${randomUUID().replace(/[^A-Z0-9]/gi, "").slice(0, 2).toUpperCase()}`;
+}
+
+beforeAll(async () => {
+  realCompanyId = newCompanyId();
+  await prisma.company.create({
+    data: { id: realCompanyId, name: "Devices Primary Test Co", status: "ACTIVE" },
+  });
+  createdCompanyIds.push(realCompanyId);
+});
 
 async function createCategory() {
   const category = await prisma.deviceCategory.create({
