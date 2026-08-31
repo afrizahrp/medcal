@@ -60,10 +60,6 @@ export default function NewDeviceTypePage() {
     setError(null);
     setSuccess(null);
 
-    if (!form.code.trim()) {
-      setError("Kode Device Name wajib diisi.");
-      return;
-    }
     if (!form.name.trim()) {
       setError("Nama Device Name wajib diisi.");
       return;

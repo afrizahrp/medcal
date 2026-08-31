@@ -97,15 +97,3 @@ export function useUpdateEquipmentUnit() {
     },
   });
 }
-
-export function useDeleteEquipmentUnit() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<EquipmentUnitRow>(`/equipment/${id}`, { method: "DELETE" }),
-    onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: [EQUIPMENT_UNITS_QUERY_KEY] });
-      queryClient.removeQueries({ queryKey: [EQUIPMENT_UNITS_QUERY_KEY, id] });
-    },
-  });
-}

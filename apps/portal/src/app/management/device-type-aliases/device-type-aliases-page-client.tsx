@@ -23,7 +23,6 @@ import { DeviceTypeItemSelect } from "../calibration-requests/calibration-reques
 import { useDeviceTypes } from "../device-types/use-device-types-query";
 import {
   useCreateDeviceTypeAlias,
-  useDeleteDeviceTypeAlias,
   useDeviceTypeAliasGroups,
   useUpdateDeviceTypeAlias,
   type DeviceTypeAliasRow,
@@ -60,7 +59,6 @@ export default function DeviceTypeAliasesPageClient() {
   const [editAlias, setEditAlias] = useState("");
   const [editDeviceTypeId, setEditDeviceTypeId] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -109,7 +107,6 @@ export default function DeviceTypeAliasesPageClient() {
 
   const createMutation = useCreateDeviceTypeAlias();
   const updateMutation = useUpdateDeviceTypeAlias();
-  const deleteMutation = useDeleteDeviceTypeAlias();
 
   if (!capabilities?.deviceTypeAliasRead) {
     return <AccessDenied />;
@@ -167,18 +164,6 @@ export default function DeviceTypeAliasesPageClient() {
     }
   }
 
-  async function remove(id: string) {
-    setError(null);
-    setPendingDeleteId(id);
-    try {
-      await deleteMutation.mutateAsync(id);
-    } catch (err) {
-      setError(formatAliasError(err));
-    } finally {
-      setPendingDeleteId(null);
-    }
-  }
-
   const childHandlers: DeviceTypeAliasChildHandlers = {
     canManage,
     deviceTypes,
@@ -188,14 +173,12 @@ export default function DeviceTypeAliasesPageClient() {
     editDeviceTypeId,
     savingEdit: updateMutation.isPending,
     togglingId,
-    pendingDeleteId,
     onEditAliasChange: setEditAlias,
     onEditDeviceTypeChange: setEditDeviceTypeId,
     onStartEdit: startEdit,
     onCancelEdit: () => setEditingId(null),
     onSaveEdit: saveEdit,
     onToggleActive: toggleActive,
-    onDelete: remove,
   };
 
   return (

@@ -81,15 +81,3 @@ export function useUpdateEquipmentType() {
     },
   });
 }
-
-export function useDeleteEquipmentType() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<EquipmentTypeRow>(`/equipment-types/${id}`, { method: "DELETE" }),
-    onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: [EQUIPMENT_TYPES_QUERY_KEY] });
-      queryClient.removeQueries({ queryKey: [EQUIPMENT_TYPES_QUERY_KEY, id] });
-    },
-  });
-}

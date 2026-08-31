@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
@@ -15,17 +15,15 @@ import {
 } from "../device-model-form-fields";
 import {
   type DeviceModelRow,
+  DeviceModelStatusBadge,
   PageHeader,
   Surface,
   deviceModelFormActionsClass,
   deviceModelFormPageClass,
   deviceModelFormSurfaceClass,
+  selectClassName,
 } from "../device-models-ui";
-import {
-  useDeleteDeviceModel,
-  useDeviceModel,
-  useUpdateDeviceModel,
-} from "../use-device-models-query";
+import { useDeviceModel, useUpdateDeviceModel } from "../use-device-models-query";
 import { useDeviceTypes } from "../../device-types/use-device-types-query";
 
 const emptyForm: DeviceModelFormValue = {
@@ -55,11 +53,9 @@ function DetailField({ label, children }: { label: string; children: ReactNode }
 
 export default function DeviceModelDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const { capabilities } = useAuthz();
   const modelQuery = useDeviceModel(params.id);
   const updateMutation = useUpdateDeviceModel();
-  const deleteMutation = useDeleteDeviceModel();
   const typesQuery = useDeviceTypes({
     search: "",
     categoryId: "",
@@ -73,12 +69,14 @@ export default function DeviceModelDetailPage() {
   const row = modelQuery.data;
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<DeviceModelFormValue>(emptyForm);
+  const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (!row) return;
     setForm(formFromRow(row));
+    setIsActive(row.isActive);
   }, [row]);
 
   if (!capabilities?.deviceModelRead) {
@@ -126,6 +124,7 @@ export default function DeviceModelDetailPage() {
 
   function resetForm() {
     setForm(formFromRow(row!));
+    setIsActive(row!.isActive);
     setError(null);
   }
 
@@ -151,24 +150,11 @@ export default function DeviceModelDetailPage() {
     try {
       await updateMutation.mutateAsync({
         id: row!.id,
-        input: buildDeviceModelUpdatePayload(form),
+        input: buildDeviceModelUpdatePayload({ ...form, isActive }),
       });
       setSuccess("Perubahan tersimpan.");
       setEditing(false);
       await modelQuery.refetch();
-    } catch (err) {
-      setError(formatDeviceModelApiError(err));
-    }
-  }
-
-  async function remove() {
-    if (!capabilities?.deviceModelDelete) return;
-    if (!confirm(`Yakin ingin menghapus Device Model "${row!.manufacturer} ${row!.model}"?`)) return;
-    setError(null);
-    setSuccess(null);
-    try {
-      await deleteMutation.mutateAsync(row!.id);
-      router.push("/device-models");
     } catch (err) {
       setError(formatDeviceModelApiError(err));
     }
@@ -189,8 +175,25 @@ export default function DeviceModelDetailPage() {
       {success ? <p className="mt-3 text-sm text-emerald-700">{success}</p> : null}
 
       <Surface className={deviceModelFormSurfaceClass}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-600">{row.deviceType.name}</p>
+          {editing ? (
+            <select
+              value={isActive ? "true" : "false"}
+              onChange={(e) => setIsActive(e.target.value === "true")}
+              className={`${selectClassName} min-w-[140px]`}
+              aria-label="Status"
+            >
+              <option value="true">Aktif</option>
+              <option value="false">Nonaktif</option>
+            </select>
+          ) : (
+            <DeviceModelStatusBadge isActive={row.isActive} />
+          )}
+        </div>
+
         {editing ? (
-          <form onSubmit={save}>
+          <form onSubmit={save} className="mt-3">
             <DeviceModelFormFields
               value={form}
               onChange={setField}
@@ -217,7 +220,7 @@ export default function DeviceModelDetailPage() {
           </form>
         ) : (
           <>
-            <dl className="space-y-3 text-sm">
+            <dl className="mt-3 space-y-3 text-sm">
               <DetailField label="Device Name">
                 <span className="font-medium">{row.deviceType.name}</span>
               </DetailField>
@@ -241,16 +244,6 @@ export default function DeviceModelDetailPage() {
             </dl>
 
             <div className="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
-              {capabilities.deviceModelDelete ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={remove}
-                  disabled={deleteMutation.isPending}
-                >
-                  {deleteMutation.isPending ? "Menghapus…" : "Hapus"}
-                </Button>
-              ) : null}
               {capabilities.deviceModelUpdate ? (
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   Edit

@@ -4,12 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { prisma } from "@medcal/db";
+import { MasterCodeService, prisma } from "@medcal/db";
 import type { DeviceCapability, DeviceCapabilityItem, Prisma } from "@medcal/db";
 import {
   DEVICE_CAPABILITY_SORTABLE_FIELDS,
   type DeviceCapabilityCreateInput,
   type DeviceCapabilityItemCreateInput,
+  type DeviceCapabilityItemListQuery,
   type DeviceCapabilityItemUpdateInput,
   type DeviceCapabilityListQuery,
   type DeviceCapabilityUpdateInput,
@@ -18,7 +19,7 @@ import { resolveSortOrder } from "../../common/sort-query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
-const itemOrderBy = { code: "asc" as const };
+const itemOrderBy = { name: "asc" as const };
 
 export type DeviceCapabilityListRow = DeviceCapability & {
   itemCount: number;
@@ -40,53 +41,39 @@ export interface DeviceCapabilityListResult {
 
 @Injectable()
 export class DeviceCapabilitiesService {
-  private async assertUniqueCapabilityCode(code: string, excludeId?: string): Promise<void> {
-    const duplicate = await prisma.deviceCapability.findFirst({
-      where: {
-        code,
-        ...(excludeId ? { NOT: { id: excludeId } } : {}),
-      },
-    });
-    if (duplicate) {
-      throw new ConflictException({
-        message: "A device capability with this code already exists",
-        code: "DUPLICATE_DEVICE_CAPABILITY_CODE",
-        existingId: duplicate.id,
-      });
-    }
-  }
-
-  private async assertUniqueItemCode(
+  private async assertUniqueItemName(
     capabilityId: string,
-    code: string,
+    name: string,
     excludeId?: string,
   ): Promise<void> {
     const duplicate = await prisma.deviceCapabilityItem.findFirst({
       where: {
         capabilityId,
-        code,
+        name: { equals: name, mode: "insensitive" },
         ...(excludeId ? { NOT: { id: excludeId } } : {}),
       },
     });
     if (duplicate) {
       throw new ConflictException({
-        message: "A capability item with this code already exists for this capability",
-        code: "DUPLICATE_DEVICE_CAPABILITY_ITEM_CODE",
+        message: "A capability item with this name already exists for this capability",
+        code: "DUPLICATE_DEVICE_CAPABILITY_ITEM_NAME",
         existingId: duplicate.id,
       });
     }
   }
 
   async create(input: DeviceCapabilityCreateInput): Promise<DeviceCapabilityWithItems> {
-    await this.assertUniqueCapabilityCode(input.code);
-
-    return prisma.deviceCapability.create({
-      data: {
-        code: input.code,
-        name: input.name,
-        description: input.description,
-      },
-      include: { items: { orderBy: itemOrderBy } },
+    // `code` is a system-issued, immutable business identifier (DVCAP-001).
+    return prisma.$transaction(async (tx) => {
+      const code = await MasterCodeService.allocate({ entity: "DEVICE_CAPABILITY", tx });
+      return tx.deviceCapability.create({
+        data: {
+          code,
+          name: input.name,
+          description: input.description,
+        },
+        include: { items: { orderBy: itemOrderBy } },
+      });
     });
   }
 
@@ -95,6 +82,7 @@ export class DeviceCapabilitiesService {
     const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
 
     const where: Prisma.DeviceCapabilityWhereInput = {
+      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...(query.search
         ? {
             OR: [
@@ -146,18 +134,15 @@ export class DeviceCapabilitiesService {
   }
 
   async update(id: string, input: DeviceCapabilityUpdateInput): Promise<DeviceCapabilityWithItems> {
-    const existing = await this.findOne(id);
+    await this.findOne(id);
 
-    if (input.code !== undefined && input.code !== existing.code) {
-      await this.assertUniqueCapabilityCode(input.code, id);
-    }
-
+    // `code` is immutable and system-issued — not accepted by the update schema.
     return prisma.deviceCapability.update({
       where: { id },
       data: {
-        ...(input.code !== undefined ? { code: input.code } : {}),
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
       },
       include: { items: { orderBy: itemOrderBy } },
     });
@@ -176,10 +161,16 @@ export class DeviceCapabilitiesService {
     return existing;
   }
 
-  async findItems(capabilityId: string): Promise<DeviceCapabilityItemRow[]> {
+  async findItems(
+    capabilityId: string,
+    query: DeviceCapabilityItemListQuery = {},
+  ): Promise<DeviceCapabilityItemRow[]> {
     await this.findOne(capabilityId);
     return prisma.deviceCapabilityItem.findMany({
-      where: { capabilityId },
+      where: {
+        capabilityId,
+        ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
+      },
       orderBy: itemOrderBy,
     });
   }
@@ -189,12 +180,11 @@ export class DeviceCapabilitiesService {
     input: DeviceCapabilityItemCreateInput,
   ): Promise<DeviceCapabilityItemRow> {
     await this.findOne(capabilityId);
-    await this.assertUniqueItemCode(capabilityId, input.code);
+    await this.assertUniqueItemName(capabilityId, input.name);
 
     return prisma.deviceCapabilityItem.create({
       data: {
         capabilityId,
-        code: input.code,
         name: input.name,
         description: input.description,
       },
@@ -208,16 +198,16 @@ export class DeviceCapabilitiesService {
   ): Promise<DeviceCapabilityItemRow> {
     const existing = await this.findItem(capabilityId, itemId);
 
-    if (input.code !== undefined && input.code !== existing.code) {
-      await this.assertUniqueItemCode(capabilityId, input.code, itemId);
+    if (input.name !== undefined && input.name !== existing.name) {
+      await this.assertUniqueItemName(capabilityId, input.name, itemId);
     }
 
     return prisma.deviceCapabilityItem.update({
       where: { id: itemId },
       data: {
-        ...(input.code !== undefined ? { code: input.code } : {}),
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
       },
     });
   }

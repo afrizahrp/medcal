@@ -84,8 +84,7 @@ export default function NewDevicePage() {
 
     try {
       const row = await createMutation.mutateAsync(buildDeviceCreatePayload(form));
-      const label = [row.brand, row.model, row.serialNumber].filter(Boolean).join(" ") || row.id;
-      setSuccess(`Device ${label} berhasil dibuat.`);
+      setSuccess(`Device ${row.code} berhasil dibuat.`);
       router.push(`/devices/${row.id}`);
     } catch (err) {
       setError(formatDeviceApiError(err));

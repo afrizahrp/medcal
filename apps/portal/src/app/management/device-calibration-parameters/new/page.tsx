@@ -66,6 +66,7 @@ export default function NewDeviceCalibrationParameterPage() {
   });
   const capabilitiesQuery = useDeviceCapabilities({
     search: "",
+    isActive: true,
     sortBy: "name",
     sortDir: "asc",
     page: 1,
@@ -104,10 +105,6 @@ export default function NewDeviceCalibrationParameterPage() {
     }
     if (!form.capabilityItemId) {
       setError("Capability Item wajib dipilih.");
-      return;
-    }
-    if (!form.code.trim()) {
-      setError("Kode wajib diisi.");
       return;
     }
     if (!form.name.trim()) {

@@ -361,6 +361,20 @@ model DocumentNumberSequence {
   @@index([companyId, documentType])
 }
 
+// Monotonic counters for auto-generated master business codes (Device
+// Management Master Identity & Coding Standard). One row per scope:
+// `"<ENTITY>#<companyId>"` for company-scoped entities (Device, Equipment),
+// `"<ENTITY>"` for global ones. Allocated atomically by MasterCodeService via
+// INSERT ... ON CONFLICT DO UPDATE ... RETURNING — never MAX(code)+1. Numbers
+// are never reused; gaps (from rollback) are acceptable.
+model MasterCodeSequence {
+  id           String   @id @default(cuid())
+  scope        String   @unique
+  lastSequence Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 model User {
   id            String     @id @default(cuid())
   email         String     @unique @db.VarChar(50)
@@ -1101,6 +1115,7 @@ model DeviceModel {
   manufacturer String
   model        String
   description  String?
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -1108,6 +1123,7 @@ model DeviceModel {
 
   @@unique([deviceTypeId, manufacturer, model])
   @@index([deviceTypeId])
+  @@index([isActive])
 }
 
 // Device function/capability master — global (no companyId), same convention
@@ -1121,26 +1137,33 @@ model DeviceCapability {
   code        String   @unique
   name        String
   description String?
+  isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   items DeviceCapabilityItem[]
+
+  @@index([isActive])
 }
 
+// Internal taxonomy leaf: groups DeviceCalibrationParameters under a
+// DeviceCapability (e.g. NIBP -> Systolic / Diastolic / MAP). No business
+// identity — identified by `id` and `name` only; deliberately has no `code`.
 model DeviceCapabilityItem {
   id           String   @id @default(cuid())
   capabilityId String
-  code         String
   name         String
   description  String?
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   capability            DeviceCapability             @relation(fields: [capabilityId], references: [id])
   calibrationParameters DeviceCalibrationParameter[]
 
-  @@unique([capabilityId, code])
+  @@unique([capabilityId, name])
   @@index([capabilityId])
+  @@index([isActive])
 }
 
 // Master definition of a calibration measurement parameter for a DeviceType,
@@ -1168,6 +1191,7 @@ model DeviceCalibrationParameter {
   // safe default of 0 (accurate per-parameter values are a separate follow-up).
   // A CHECK constraint bounds it to 0..10 (see migrations).
   decimalPlaces    Int?
+  isActive         Boolean              @default(true)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 
@@ -1179,11 +1203,15 @@ model DeviceCalibrationParameter {
   @@index([deviceTypeId])
   @@index([capabilityItemId])
   @@index([uomId])
+  @@index([isActive])
 }
 
 model Device {
   id           String       @id @default(cuid())
   companyId    String
+  // Auto-generated, immutable business code (DVC-000001), unique per company.
+  // Issued by MasterCodeService on create; never user-supplied or editable.
+  code         String
   customerId   String
   deviceTypeId String
   brand        String?
@@ -1204,6 +1232,7 @@ model Device {
   calibrationJobs    CalibrationJob[]
   certificates       Certificate[]
 
+  @@unique([companyId, code])
   @@index([companyId, customerId])
   @@index([companyId, serialNumber])
   @@index([deviceTypeId])

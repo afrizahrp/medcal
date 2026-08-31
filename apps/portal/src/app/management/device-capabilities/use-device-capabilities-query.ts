@@ -19,6 +19,7 @@ export const DEVICE_CAPABILITY_ITEMS_QUERY_KEY = "device-capability-items" as co
 
 export interface DeviceCapabilitiesQueryParams {
   search: string;
+  isActive: boolean | "";
   sortBy: string;
   sortDir: "asc" | "desc";
   page: number;
@@ -28,6 +29,7 @@ export interface DeviceCapabilitiesQueryParams {
 function buildSearchParams(params: DeviceCapabilitiesQueryParams): URLSearchParams {
   const qs = new URLSearchParams();
   if (params.search.trim()) qs.set("search", params.search.trim());
+  if (params.isActive !== "") qs.set("isActive", String(params.isActive));
   qs.set("sortBy", params.sortBy);
   qs.set("sortDir", params.sortDir);
   qs.set("page", String(params.page));
@@ -48,6 +50,7 @@ export function useDeviceCapabilities(params: DeviceCapabilitiesQueryParams) {
     queryKey: [
       DEVICE_CAPABILITIES_QUERY_KEY,
       params.search,
+      params.isActive,
       params.sortBy,
       params.sortDir,
       params.page,
@@ -94,19 +97,6 @@ export function useUpdateDeviceCapability() {
       }),
     onSuccess: (_data, variables) => {
       invalidateCapabilityQueries(queryClient, variables.id);
-    },
-  });
-}
-
-export function useDeleteDeviceCapability() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<DeviceCapabilityRow>(`/device-capabilities/${id}`, { method: "DELETE" }),
-    onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: [DEVICE_CAPABILITIES_QUERY_KEY] });
-      queryClient.removeQueries({ queryKey: [DEVICE_CAPABILITIES_QUERY_KEY, id] });
-      queryClient.removeQueries({ queryKey: [DEVICE_CAPABILITY_ITEMS_QUERY_KEY, id] });
     },
   });
 }
@@ -158,20 +148,6 @@ export function useUpdateDeviceCapabilityItem() {
           method: "PATCH",
           body: JSON.stringify(input),
         },
-      ),
-    onSuccess: (_data, variables) => {
-      invalidateCapabilityQueries(queryClient, variables.capabilityId);
-    },
-  });
-}
-
-export function useDeleteDeviceCapabilityItem() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ capabilityId, itemId }: { capabilityId: string; itemId: string }) =>
-      apiFetch<DeviceCapabilityItemRow>(
-        `/device-capabilities/${capabilityId}/items/${itemId}`,
-        { method: "DELETE" },
       ),
     onSuccess: (_data, variables) => {
       invalidateCapabilityQueries(queryClient, variables.capabilityId);

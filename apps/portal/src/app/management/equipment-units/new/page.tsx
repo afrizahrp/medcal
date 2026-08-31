@@ -27,7 +27,6 @@ import {
 
 const emptyForm: EquipmentUnitFormValue = {
   equipmentTypeId: "",
-  code: "",
   brand: "",
   model: "",
   serialNumber: "",
@@ -72,10 +71,6 @@ export default function NewEquipmentUnitPage() {
 
     if (!form.equipmentTypeId) {
       setError("Equipment Type wajib dipilih.");
-      return;
-    }
-    if (!form.code.trim()) {
-      setError("Kode Equipment Unit wajib diisi.");
       return;
     }
 

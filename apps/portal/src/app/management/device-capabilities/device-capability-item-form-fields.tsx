@@ -7,7 +7,6 @@ const fieldClass = "mt-1 w-full";
 const gridClass = "grid gap-4 sm:grid-cols-2";
 
 export interface DeviceCapabilityItemFormValue {
-  code: string;
   name: string;
   description: string;
 }
@@ -38,24 +37,6 @@ export function DeviceCapabilityItemFormFields({
       <div className={gridClass}>
         <div>
           <label
-            htmlFor={`${idPrefix}-code`}
-            className="block text-sm font-medium text-slate-700"
-          >
-            Kode <span className="text-red-500">*</span>
-          </label>
-          <Input
-            id={`${idPrefix}-code`}
-            value={value.code}
-            onChange={(e) => onChange("code", e.target.value.toUpperCase())}
-            className={fieldClass}
-            placeholder="SYSTOLIC"
-            maxLength={64}
-            required
-          />
-          <p className="mt-1 text-xs text-slate-500">Unik dalam capability ini</p>
-        </div>
-        <div>
-          <label
             htmlFor={`${idPrefix}-name`}
             className="block text-sm font-medium text-slate-700"
           >
@@ -70,6 +51,7 @@ export function DeviceCapabilityItemFormFields({
             maxLength={150}
             required
           />
+          <p className="mt-1 text-xs text-slate-500">Unik dalam capability ini</p>
         </div>
       </div>
 
@@ -95,16 +77,17 @@ export function DeviceCapabilityItemFormFields({
 export function buildDeviceCapabilityItemCreatePayload(form: DeviceCapabilityItemFormValue) {
   const description = form.description.trim();
   return {
-    code: form.code.trim(),
     name: form.name.trim(),
     ...(description ? { description } : {}),
   };
 }
 
-export function buildDeviceCapabilityItemUpdatePayload(form: DeviceCapabilityItemFormValue) {
+export function buildDeviceCapabilityItemUpdatePayload(
+  form: DeviceCapabilityItemFormValue & { isActive?: boolean },
+) {
   return {
-    code: form.code.trim(),
     name: form.name.trim(),
     description: form.description.trim() ? form.description.trim() : null,
+    ...(form.isActive !== undefined ? { isActive: form.isActive } : {}),
   };
 }

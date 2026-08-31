@@ -84,15 +84,3 @@ export function useUpdateDeviceType() {
     },
   });
 }
-
-export function useDeleteDeviceType() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<DeviceTypeRow>(`/device-types/${id}`, { method: "DELETE" }),
-    onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: [DEVICE_TYPES_QUERY_KEY] });
-      queryClient.removeQueries({ queryKey: [DEVICE_TYPES_QUERY_KEY, id] });
-    },
-  });
-}

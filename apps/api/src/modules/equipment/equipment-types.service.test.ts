@@ -1,14 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@medcal/db";
+import { equipmentTypeCreateSchema, equipmentTypeUpdateSchema } from "@medcal/shared";
 import { EquipmentTypesService } from "./equipment-types.service";
 
 const service = new EquipmentTypesService();
 const createdEquipmentTypeIds: string[] = [];
 const createdDeviceCategoryIds: string[] = [];
 
-function uniqueCode() {
+function uniqueSlug() {
   return `EQT${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
 }
 
@@ -20,52 +21,55 @@ afterAll(async () => {
     await prisma.equipmentType.deleteMany({ where: { id: { in: createdEquipmentTypeIds } } });
   }
   if (createdDeviceCategoryIds.length > 0) {
-    await prisma.deviceType.deleteMany({
-      where: { categoryId: { in: createdDeviceCategoryIds } },
-    });
+    await prisma.deviceType.deleteMany({ where: { categoryId: { in: createdDeviceCategoryIds } } });
     await prisma.deviceCategory.deleteMany({ where: { id: { in: createdDeviceCategoryIds } } });
   }
 });
 
+describe("equipmentTypeCreateSchema / equipmentTypeUpdateSchema", () => {
+  it("does not accept a code on create", () => {
+    const parsed = equipmentTypeCreateSchema.parse({ name: "X", code: "HACK" });
+    expect("code" in parsed).toBe(false);
+  });
+  it("strips a code on update", () => {
+    const parsed = equipmentTypeUpdateSchema.parse({ name: "X", code: "HACK" });
+    expect("code" in parsed).toBe(false);
+  });
+});
+
 describe("EquipmentTypesService.create", () => {
-  it("creates an equipment type with optional category", async () => {
-    const code = uniqueCode();
+  it("creates an equipment type with a system-issued EQTP- code", async () => {
     const created = await service.create({
-      code,
       name: "Electrical Safety Analyzer",
       description: "Electrical safety tests",
       category: "Analyzer",
     });
     createdEquipmentTypeIds.push(created.id);
 
-    expect(created.code).toBe(code);
+    expect(created.code).toMatch(/^EQTP-\d{3,}$/);
     expect(created.name).toBe("Electrical Safety Analyzer");
     expect(created.category).toBe("Analyzer");
     expect(created.isActive).toBe(true);
   });
 
-  it("rejects duplicate code", async () => {
-    const code = uniqueCode();
-    const first = await service.create({ code, name: "First" });
-    createdEquipmentTypeIds.push(first.id);
-
-    await expect(service.create({ code, name: "Second" })).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+  it("allocates strictly increasing codes", async () => {
+    const a = await service.create({ name: "First" });
+    const b = await service.create({ name: "Second" });
+    createdEquipmentTypeIds.push(a.id, b.id);
+    expect(Number(b.code.slice(5))).toBeGreaterThan(Number(a.code.slice(5)));
   });
 });
 
 describe("EquipmentTypesService.findAll / findOne / update / remove", () => {
   it("lists, reads, updates, and deletes an equipment type", async () => {
-    const code = uniqueCode();
-    const created = await service.create({ code, name: "Thermohygrometer" });
+    const created = await service.create({ name: `Thermohygrometer ${uniqueSlug()}` });
     createdEquipmentTypeIds.push(created.id);
 
-    const listed = await service.findAll({ search: code, page: 1, pageSize: 10 });
+    const listed = await service.findAll({ search: created.code, page: 1, pageSize: 10 });
     expect(listed.data.some((row) => row.id === created.id)).toBe(true);
 
     const found = await service.findOne(created.id);
-    expect(found.code).toBe(code);
+    expect(found.code).toBe(created.code);
 
     const updated = await service.update(created.id, {
       name: "Thermo-Hygrometer",
@@ -75,6 +79,7 @@ describe("EquipmentTypesService.findAll / findOne / update / remove", () => {
     expect(updated.name).toBe("Thermo-Hygrometer");
     expect(updated.category).toBe("Environment");
     expect(updated.isActive).toBe(false);
+    expect(updated.code).toBe(created.code);
 
     const removed = await service.remove(created.id);
     expect(removed.id).toBe(created.id);
@@ -93,15 +98,15 @@ describe("EquipmentTypesService.findAll / findOne / update / remove", () => {
   });
 
   it("rejects delete when the equipment type is still required by a device type", async () => {
-    const equipmentType = await service.create({ code: uniqueCode(), name: "Still Required" });
+    const equipmentType = await service.create({ name: `Still Required ${uniqueSlug()}` });
     createdEquipmentTypeIds.push(equipmentType.id);
 
     const category = await prisma.deviceCategory.create({
-      data: { code: uniqueCode(), name: "Eq Test Category" },
+      data: { code: `DVCAT-TEST-${uniqueSlug()}`, name: "Eq Test Category" },
     });
     createdDeviceCategoryIds.push(category.id);
     const deviceType = await prisma.deviceType.create({
-      data: { categoryId: category.id, code: uniqueCode(), name: "Eq Test Device Type" },
+      data: { categoryId: category.id, code: `DVTP-TEST-${uniqueSlug()}`, name: "Eq Test Device Type" },
     });
     const requirement = await prisma.deviceTypeEquipmentRequirement.create({
       data: { deviceTypeId: deviceType.id, equipmentTypeId: equipmentType.id },

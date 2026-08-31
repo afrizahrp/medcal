@@ -44,22 +44,19 @@ export function EquipmentTypeFormFields({
         <div className={gridClass}>
           <div>
             <label htmlFor="code" className="block text-sm font-medium text-slate-700">
-              Kode <span className="text-red-500">*</span>
+              Kode
             </label>
             <Input
               id="code"
-              value={value.code}
-              onChange={(e) => onChange("code", e.target.value.toUpperCase())}
+              value={mode === "edit" ? value.code : "Otomatis"}
+              readOnly
+              disabled
               className={fieldClass}
-              placeholder="ELECTRICAL_SAFETY_ANALYZER"
-              maxLength={64}
-              required
-              disabled={mode === "edit"}
             />
             <p className="mt-1 text-xs text-slate-500">
               {mode === "edit"
-                ? "Kode tidak dapat diubah setelah dibuat"
-                : "Kode unik (huruf besar)"}
+                ? "Kode otomatis — tidak dapat diubah."
+                : "Kode dibuat otomatis oleh sistem saat disimpan."}
             </p>
           </div>
           <div>
@@ -114,7 +111,6 @@ export function buildEquipmentTypeCreatePayload(form: EquipmentTypeFormValue) {
   const description = form.description.trim();
   const category = form.category.trim();
   return {
-    code: form.code.trim(),
     name: form.name.trim(),
     ...(description ? { description } : {}),
     ...(category ? { category } : {}),
@@ -123,7 +119,6 @@ export function buildEquipmentTypeCreatePayload(form: EquipmentTypeFormValue) {
 
 export function buildEquipmentTypeUpdatePayload(form: EquipmentTypeFormValue & { isActive?: boolean }) {
   return {
-    code: form.code.trim(),
     name: form.name.trim(),
     description: form.description.trim() ? form.description.trim() : null,
     category: form.category.trim() ? form.category.trim() : null,

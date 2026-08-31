@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
@@ -23,7 +23,7 @@ import {
   deviceTypeFormSurfaceClass,
   selectClassName,
 } from "../device-types-ui";
-import { useDeleteDeviceType, useDeviceType, useUpdateDeviceType } from "../use-device-types-query";
+import { useDeviceType, useUpdateDeviceType } from "../use-device-types-query";
 import { useDeviceCategories } from "../../device-categories/use-device-categories-query";
 
 const emptyForm: DeviceTypeFormValue = {
@@ -53,11 +53,9 @@ function DetailField({ label, children }: { label: string; children: ReactNode }
 
 export default function DeviceTypeDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const { capabilities } = useAuthz();
   const typeQuery = useDeviceType(params.id);
   const updateMutation = useUpdateDeviceType();
-  const deleteMutation = useDeleteDeviceType();
   const categoriesQuery = useDeviceCategories({
     search: "",
     isActive: "",
@@ -135,10 +133,6 @@ export default function DeviceTypeDetailPage() {
     setError(null);
     setSuccess(null);
 
-    if (!form.code.trim()) {
-      setError("Kode Device Name wajib diisi.");
-      return;
-    }
     if (!form.name.trim()) {
       setError("Nama Device Name wajib diisi.");
       return;
@@ -156,19 +150,6 @@ export default function DeviceTypeDetailPage() {
       setSuccess("Perubahan tersimpan.");
       setEditing(false);
       await typeQuery.refetch();
-    } catch (err) {
-      setError(formatDeviceTypeApiError(err));
-    }
-  }
-
-  async function remove() {
-    if (!capabilities?.deviceTypeDelete) return;
-    if (!confirm(`Yakin ingin menghapus Device Name "${row!.name}"?`)) return;
-    setError(null);
-    setSuccess(null);
-    try {
-      await deleteMutation.mutateAsync(row!.id);
-      router.push("/device-types");
     } catch (err) {
       setError(formatDeviceTypeApiError(err));
     }
@@ -263,16 +244,6 @@ export default function DeviceTypeDetailPage() {
             </dl>
 
             <div className="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
-              {capabilities.deviceTypeDelete ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={remove}
-                  disabled={deleteMutation.isPending}
-                >
-                  {deleteMutation.isPending ? "Menghapus…" : "Hapus"}
-                </Button>
-              ) : null}
               {capabilities.deviceTypeUpdate ? (
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   Edit

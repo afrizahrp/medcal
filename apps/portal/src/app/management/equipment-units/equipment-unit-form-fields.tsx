@@ -15,7 +15,6 @@ export interface EquipmentTypeOption {
 
 export interface EquipmentUnitFormValue {
   equipmentTypeId: string;
-  code: string;
   brand: string;
   model: string;
   serialNumber: string;
@@ -31,6 +30,13 @@ export interface EquipmentUnitFormFieldsProps {
   equipmentTypeOptions: EquipmentTypeOption[];
   /** When true the Equipment Type select is locked (edit mode keeps it changeable by default). */
   lockEquipmentType?: boolean;
+  /**
+   * "create" (default) does not show a code field — the code is issued by the
+   * system on save. "edit" shows the existing `currentCode` as read-only.
+   */
+  mode?: "create" | "edit";
+  /** Existing system-issued asset code, shown read-only in edit mode. */
+  currentCode?: string;
 }
 
 export function EquipmentUnitFormFields({
@@ -38,6 +44,8 @@ export function EquipmentUnitFormFields({
   onChange,
   equipmentTypeOptions,
   lockEquipmentType,
+  mode = "create",
+  currentCode,
 }: EquipmentUnitFormFieldsProps) {
   return (
     <div className="space-y-5">
@@ -71,18 +79,20 @@ export function EquipmentUnitFormFields({
           </div>
           <div>
             <label htmlFor="code" className="block text-sm font-medium text-slate-700">
-              Kode <span className="text-red-500">*</span>
+              Kode
             </label>
             <Input
               id="code"
-              value={value.code}
-              onChange={(e) => onChange("code", e.target.value)}
+              value={mode === "edit" ? (currentCode ?? "") : "Otomatis"}
+              readOnly
+              disabled
               className={fieldClass}
-              placeholder="ESA-001"
-              maxLength={64}
-              required
             />
-            <p className="mt-1 text-xs text-slate-500">Kode aset internal, unik dalam perusahaan.</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {mode === "edit"
+                ? "Kode aset otomatis — tidak dapat diubah."
+                : "Kode aset dibuat otomatis oleh sistem saat disimpan."}
+            </p>
           </div>
         </div>
 
@@ -153,7 +163,6 @@ export function buildEquipmentUnitCreatePayload(form: EquipmentUnitFormValue) {
   const notes = form.notes.trim();
   return {
     equipmentTypeId: form.equipmentTypeId,
-    code: form.code.trim(),
     ...(brand ? { brand } : {}),
     ...(model ? { model } : {}),
     ...(serialNumber ? { serialNumber } : {}),
@@ -166,7 +175,6 @@ export function buildEquipmentUnitUpdatePayload(
 ) {
   return {
     equipmentTypeId: form.equipmentTypeId,
-    code: form.code.trim(),
     brand: form.brand.trim() ? form.brand.trim() : null,
     model: form.model.trim() ? form.model.trim() : null,
     serialNumber: form.serialNumber.trim() ? form.serialNumber.trim() : null,
@@ -178,9 +186,6 @@ export function buildEquipmentUnitUpdatePayload(
 export function formatEquipmentUnitApiError(error: unknown): string {
   if (error instanceof ApiError) {
     const code = error.data?.code;
-    if (code === "DUPLICATE_EQUIPMENT_CODE") {
-      return "Equipment Unit dengan kode ini sudah ada di perusahaan Anda.";
-    }
     if (code === "EQUIPMENT_NOT_FOUND") {
       return "Equipment Unit tidak ditemukan.";
     }

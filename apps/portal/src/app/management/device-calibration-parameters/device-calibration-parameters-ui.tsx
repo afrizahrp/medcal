@@ -23,7 +23,6 @@ export interface DeviceCalibrationParameterCapabilityRef {
 
 export interface DeviceCalibrationParameterItemRef {
   id: string;
-  code: string;
   name: string;
   capabilityId: string;
   capability: DeviceCalibrationParameterCapabilityRef;
@@ -49,6 +48,7 @@ export interface DeviceCalibrationParameterRow {
   toleranceMax: string | number | null;
   toleranceNote: string | null;
   decimalPlaces: number | null;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
   deviceType: DeviceCalibrationParameterTypeRef;
@@ -126,6 +126,22 @@ export const deviceCalibrationParameterFormActionsClass =
 
 export { PageHeader, Surface, selectClassName, PaginationBar };
 
+export function DeviceCalibrationParameterStatusBadge({ isActive }: { isActive: boolean }) {
+  return (
+    <Badge
+      variant={isActive ? "default" : "secondary"}
+      className={cn(
+        "font-medium",
+        isActive
+          ? "border-transparent bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+          : "text-slate-600",
+      )}
+    >
+      {isActive ? "Aktif" : "Nonaktif"}
+    </Badge>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Simplified browse UI — Device Type is the primary navigation axis.
 // An expandable / collapsible TABLE grouped by Device Type: one screen, a
@@ -137,25 +153,52 @@ export { PageHeader, Surface, selectClassName, PaginationBar };
 export function DeviceCalibrationParameterSearchBar({
   value,
   onChange,
+  isActive,
+  onIsActiveChange,
 }: {
   value: string;
   onChange: (value: string) => void;
+  isActive: boolean | "";
+  onIsActiveChange: (value: boolean | "") => void;
 }) {
   return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Cari device name atau parameter…"
-        className="pl-9"
-        aria-label="Cari device name atau calibration parameter"
-      />
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="relative flex-1">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Cari device name atau parameter…"
+          className="pl-9"
+          aria-label="Cari device name atau calibration parameter"
+        />
+      </div>
+      <select
+        value={isActive === "" ? "" : isActive ? "true" : "false"}
+        onChange={(e) => {
+          const next = e.target.value;
+          onIsActiveChange(next === "" ? "" : next === "true");
+        }}
+        className={cn(selectClassName, "w-full sm:w-44")}
+        aria-label="Filter status"
+      >
+        <option value="">Semua status</option>
+        <option value="true">Aktif</option>
+        <option value="false">Nonaktif</option>
+      </select>
     </div>
   );
 }
 
-const CHILD_HEADER = ["Capability", "Parameter", "UOM", "Decimal", "Tolerance", ""] as const;
+const CHILD_HEADER = [
+  "Capability",
+  "Parameter",
+  "UOM",
+  "Decimal",
+  "Tolerance",
+  "Status",
+  "",
+] as const;
 
 function ChildRows({
   group,
@@ -189,6 +232,9 @@ function ChildRows({
           <td className="px-4 py-2 text-slate-600">
             {formatCalibrationTolerance(row) ?? <span className="text-slate-400">—</span>}
           </td>
+          <td className="px-4 py-2">
+            <DeviceCalibrationParameterStatusBadge isActive={row.isActive} />
+          </td>
           <td className="px-4 py-2 text-right">
             <Link href={`/device-calibration-parameters/${row.id}`}>
               <Button variant="ghost" size="sm">
@@ -200,7 +246,7 @@ function ChildRows({
       ))}
       {canCreate ? (
         <tr className="border-b border-slate-100 last:border-0">
-          <td colSpan={6} className="px-4 py-1.5 pl-10">
+          <td colSpan={7} className="px-4 py-1.5 pl-10">
             <Link
               href={`/device-calibration-parameters/new?deviceTypeId=${group.deviceType.id}`}
               className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
@@ -233,7 +279,7 @@ export function DeviceTypeParameterTable({
           <tr className="border-b border-slate-200 bg-slate-100 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
             <th className="px-4 py-2.5">Device Name</th>
             <th className="px-4 py-2.5">Kategori</th>
-            <th className="px-4 py-2.5" colSpan={4}>
+            <th className="px-4 py-2.5" colSpan={5}>
               Jumlah
             </th>
           </tr>
@@ -259,7 +305,7 @@ export function DeviceTypeParameterTable({
                   <td className="px-4 py-3 text-sm text-slate-500">
                     {group.categoryName ?? "—"}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-500" colSpan={4}>
+                  <td className="px-4 py-3 text-sm text-slate-500" colSpan={5}>
                     {group.count} parameter
                   </td>
                 </tr>

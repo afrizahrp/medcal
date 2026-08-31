@@ -1,10 +1,9 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { prisma } from "@medcal/db";
+import { MasterCodeService, prisma } from "@medcal/db";
 import type { Prisma } from "@medcal/db";
 import {
   DEVICE_TYPE_SORTABLE_FIELDS,
@@ -45,25 +44,18 @@ export class DeviceTypesService {
   async create(input: DeviceTypeCreateInput): Promise<DeviceTypeWithCategory> {
     await this.assertCategoryExists(input.categoryId);
 
-    const existing = await prisma.deviceType.findUnique({
-      where: { code: input.code },
-    });
-    if (existing) {
-      throw new ConflictException({
-        message: "A device type with this code already exists",
-        code: "DUPLICATE_DEVICE_TYPE_CODE",
-        existingId: existing.id,
+    // `code` is a system-issued, immutable business identifier (DVTP-001).
+    return prisma.$transaction(async (tx) => {
+      const code = await MasterCodeService.allocate({ entity: "DEVICE_TYPE", tx });
+      return tx.deviceType.create({
+        data: {
+          categoryId: input.categoryId,
+          code,
+          name: input.name,
+          description: input.description,
+        },
+        include: { category: { select: categorySelect } },
       });
-    }
-
-    return prisma.deviceType.create({
-      data: {
-        categoryId: input.categoryId,
-        code: input.code,
-        name: input.name,
-        description: input.description,
-      },
-      include: { category: { select: categorySelect } },
     });
   }
 
@@ -126,22 +118,11 @@ export class DeviceTypesService {
       await this.assertCategoryExists(input.categoryId);
     }
 
-    if (input.code !== undefined && input.code !== existing.code) {
-      const duplicate = await prisma.deviceType.findUnique({ where: { code: input.code } });
-      if (duplicate) {
-        throw new ConflictException({
-          message: "A device type with this code already exists",
-          code: "DUPLICATE_DEVICE_TYPE_CODE",
-          existingId: duplicate.id,
-        });
-      }
-    }
-
+    // `code` is immutable and system-issued — not accepted by the update schema.
     return prisma.deviceType.update({
       where: { id },
       data: {
         ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
-        ...(input.code !== undefined ? { code: input.code } : {}),
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),

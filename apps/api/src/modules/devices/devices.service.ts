@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { prisma } from "@medcal/db";
+import { MasterCodeService, prisma } from "@medcal/db";
 import type { Prisma } from "@medcal/db";
 import {
   DEVICE_SORTABLE_FIELDS,
@@ -68,19 +68,25 @@ export class DevicesService {
     await this.assertDeviceTypeExists(input.deviceTypeId);
     await this.assertCustomerInCompany(companyId, input.customerId);
 
-    return prisma.device.create({
-      data: {
-        companyId,
-        customerId: input.customerId,
-        deviceTypeId: input.deviceTypeId,
-        brand: emptyToNull(input.brand) ?? undefined,
-        model: emptyToNull(input.model) ?? undefined,
-        serialNumber: emptyToNull(input.serialNumber) ?? undefined,
-        category: emptyToNull(input.category) ?? undefined,
-        locationText: emptyToNull(input.locationText) ?? undefined,
-        ...(input.status ? { status: input.status } : {}),
-      },
-      include: deviceInclude,
+    // `code` is a system-issued, immutable business identifier (DVC-000001),
+    // allocated in the same transaction as the insert so both commit together.
+    return prisma.$transaction(async (tx) => {
+      const code = await MasterCodeService.allocate({ entity: "DEVICE", companyId, tx });
+      return tx.device.create({
+        data: {
+          companyId,
+          code,
+          customerId: input.customerId,
+          deviceTypeId: input.deviceTypeId,
+          brand: emptyToNull(input.brand) ?? undefined,
+          model: emptyToNull(input.model) ?? undefined,
+          serialNumber: emptyToNull(input.serialNumber) ?? undefined,
+          category: emptyToNull(input.category) ?? undefined,
+          locationText: emptyToNull(input.locationText) ?? undefined,
+          ...(input.status ? { status: input.status } : {}),
+        },
+        include: deviceInclude,
+      });
     });
   }
 
@@ -96,6 +102,7 @@ export class DevicesService {
       ...(query.search
         ? {
             OR: [
+              { code: { contains: query.search, mode: "insensitive" } },
               { brand: { contains: query.search, mode: "insensitive" } },
               { model: { contains: query.search, mode: "insensitive" } },
               { serialNumber: { contains: query.search, mode: "insensitive" } },
@@ -156,6 +163,8 @@ export class DevicesService {
       await this.assertCustomerInCompany(companyId, input.customerId);
     }
 
+    // `code` is immutable and system-issued — deviceUpdateSchema does not accept
+    // it and it is never written here.
     return prisma.device.update({
       where: { id: existing.id },
       data: {

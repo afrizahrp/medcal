@@ -110,22 +110,19 @@ export function DeviceTypeFormFields({
         <div className={gridClass}>
           <div>
             <label htmlFor="code" className="block text-sm font-medium text-slate-700">
-              Kode <span className="text-red-500">*</span>
+              Kode
             </label>
             <Input
               id="code"
-              value={value.code}
-              onChange={(e) => onChange("code", e.target.value.toUpperCase())}
+              value={mode === "edit" ? value.code : "Otomatis"}
+              readOnly
+              disabled
               className={fieldClass}
-              placeholder="BLOOD_PRESSURE_MONITOR"
-              maxLength={64}
-              required
-              disabled={mode === "edit"}
             />
             <p className="mt-1 text-xs text-slate-500">
               {mode === "edit"
-                ? "Kode tidak dapat diubah setelah dibuat"
-                : "Kode unik (huruf besar)"}
+                ? "Kode otomatis — tidak dapat diubah."
+                : "Kode dibuat otomatis oleh sistem saat disimpan."}
             </p>
           </div>
           <div>
@@ -165,7 +162,6 @@ export function buildDeviceTypeCreatePayload(form: DeviceTypeFormValue) {
   const description = form.description.trim();
   return {
     categoryId: form.categoryId,
-    code: form.code.trim(),
     name: form.name.trim(),
     ...(description ? { description } : {}),
   };
@@ -174,7 +170,6 @@ export function buildDeviceTypeCreatePayload(form: DeviceTypeFormValue) {
 export function buildDeviceTypeUpdatePayload(form: DeviceTypeFormValue & { isActive?: boolean }) {
   return {
     categoryId: form.categoryId,
-    code: form.code.trim(),
     name: form.name.trim(),
     description: form.description.trim() ? form.description.trim() : null,
     ...(form.isActive !== undefined ? { isActive: form.isActive } : {}),

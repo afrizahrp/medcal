@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { prisma } from "@medcal/db";
+import { MasterCodeService, prisma } from "@medcal/db";
 import type { Prisma } from "@medcal/db";
 import {
   DEVICE_CALIBRATION_PARAMETER_SORTABLE_FIELDS,
@@ -20,7 +20,6 @@ const deviceTypeSelect = { id: true, code: true, name: true } as const;
 
 const capabilityItemInclude = {
   id: true,
-  code: true,
   name: true,
   capabilityId: true,
   capability: { select: { id: true, code: true, name: true } },
@@ -40,7 +39,6 @@ export type DeviceCalibrationParameterWithRelations = Prisma.DeviceCalibrationPa
     capabilityItem: {
       select: {
         id: true;
-        code: true;
         name: true;
         capabilityId: true;
         capability: { select: { id: true; code: true; name: true } };
@@ -111,8 +109,8 @@ function buildSearchWhere(search: string | undefined): Prisma.DeviceCalibrationP
       { deviceType: { name: { contains: search, mode: "insensitive" } } },
       { deviceType: { code: { contains: search, mode: "insensitive" } } },
       { capabilityItem: { name: { contains: search, mode: "insensitive" } } },
-      { capabilityItem: { code: { contains: search, mode: "insensitive" } } },
       { capabilityItem: { capability: { name: { contains: search, mode: "insensitive" } } } },
+      { capabilityItem: { capability: { code: { contains: search, mode: "insensitive" } } } },
       { uom: { name: { contains: search, mode: "insensitive" } } },
       { uom: { code: { contains: search, mode: "insensitive" } } },
       { uom: { symbol: { contains: search, mode: "insensitive" } } },
@@ -174,25 +172,30 @@ export class DeviceCalibrationParametersService {
     }
   }
 
-  private async assertUniqueCode(
+  /**
+   * `code` is now system-issued and globally unique, so the composite
+   * (deviceTypeId, capabilityItemId, code) constraint can never collide. The
+   * meaningful "no duplicate parameter" rule is preserved here on `name`.
+   */
+  private async assertUniqueName(
     deviceTypeId: string,
     capabilityItemId: string,
-    code: string,
+    name: string,
     excludeId?: string,
   ): Promise<void> {
     const duplicate = await prisma.deviceCalibrationParameter.findFirst({
       where: {
         deviceTypeId,
         capabilityItemId,
-        code,
+        name: { equals: name, mode: "insensitive" },
         ...(excludeId ? { NOT: { id: excludeId } } : {}),
       },
     });
     if (duplicate) {
       throw new ConflictException({
         message:
-          "A calibration parameter with this code already exists for this device type and capability item",
-        code: "DUPLICATE_DEVICE_CALIBRATION_PARAMETER_CODE",
+          "A calibration parameter with this name already exists for this device type and capability item",
+        code: "DUPLICATE_DEVICE_CALIBRATION_PARAMETER_NAME",
         existingId: duplicate.id,
       });
     }
@@ -207,22 +210,29 @@ export class DeviceCalibrationParametersService {
     this.assertToleranceBounds(input.toleranceMin, input.toleranceMax);
     // valueType is not settable via the API and defaults to NUMBER at the DB level.
     this.assertDecimalPlacesValidForValueType(input.decimalPlaces, "NUMBER");
-    await this.assertUniqueCode(input.deviceTypeId, input.capabilityItemId, input.code);
+    await this.assertUniqueName(input.deviceTypeId, input.capabilityItemId, input.name);
 
-    return prisma.deviceCalibrationParameter.create({
-      data: {
-        deviceTypeId: input.deviceTypeId,
-        capabilityItemId: input.capabilityItemId,
-        code: input.code,
-        name: input.name,
-        description: input.description,
-        uomId: input.uomId,
-        toleranceMin: input.toleranceMin ?? null,
-        toleranceMax: input.toleranceMax ?? null,
-        toleranceNote: input.toleranceNote ?? null,
-        decimalPlaces: input.decimalPlaces ?? null,
-      },
-      include: parameterInclude,
+    // `code` is a system-issued, immutable business identifier (DCP-0001).
+    return prisma.$transaction(async (tx) => {
+      const code = await MasterCodeService.allocate({
+        entity: "DEVICE_CALIBRATION_PARAMETER",
+        tx,
+      });
+      return tx.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId: input.deviceTypeId,
+          capabilityItemId: input.capabilityItemId,
+          code,
+          name: input.name,
+          description: input.description,
+          uomId: input.uomId,
+          toleranceMin: input.toleranceMin ?? null,
+          toleranceMax: input.toleranceMax ?? null,
+          toleranceNote: input.toleranceNote ?? null,
+          decimalPlaces: input.decimalPlaces ?? null,
+        },
+        include: parameterInclude,
+      });
     });
   }
 
@@ -237,6 +247,7 @@ export class DeviceCalibrationParametersService {
       ...(query.capabilityItemId ? { capabilityItemId: query.capabilityItemId } : {}),
       ...(query.capabilityId ? { capabilityItem: { capabilityId: query.capabilityId } } : {}),
       ...(query.uomId ? { uomId: query.uomId } : {}),
+      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...buildSearchWhere(query.search),
     };
 
@@ -262,7 +273,7 @@ export class DeviceCalibrationParametersService {
   }
 
   async findAllGroupedByDeviceType(
-    query: { search?: string; page?: number; pageSize?: number } = {},
+    query: { search?: string; page?: number; pageSize?: number; isActive?: boolean } = {},
   ): Promise<DeviceCalibrationParameterGroupedResult> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
@@ -271,7 +282,10 @@ export class DeviceCalibrationParametersService {
     // paginate at the Device-Type level — a Device Type and all of its
     // parameters always stay together on one page.
     const rows = await prisma.deviceCalibrationParameter.findMany({
-      where: buildSearchWhere(query.search?.trim() || undefined),
+      where: {
+        ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
+        ...buildSearchWhere(query.search?.trim() || undefined),
+      },
       include: parameterInclude,
       orderBy: [{ deviceType: { name: "asc" } }, { name: "asc" }],
     });
@@ -347,7 +361,7 @@ export class DeviceCalibrationParametersService {
 
     const nextDeviceTypeId = input.deviceTypeId ?? existing.deviceTypeId;
     const nextCapabilityItemId = input.capabilityItemId ?? existing.capabilityItemId;
-    const nextCode = input.code ?? existing.code;
+    const nextName = input.name ?? existing.name;
 
     if (input.deviceTypeId !== undefined && input.deviceTypeId !== existing.deviceTypeId) {
       await this.assertDeviceTypeExists(input.deviceTypeId);
@@ -380,18 +394,18 @@ export class DeviceCalibrationParametersService {
     const uniqueChanged =
       nextDeviceTypeId !== existing.deviceTypeId ||
       nextCapabilityItemId !== existing.capabilityItemId ||
-      nextCode !== existing.code;
+      nextName.toLowerCase() !== existing.name.toLowerCase();
 
     if (uniqueChanged) {
-      await this.assertUniqueCode(nextDeviceTypeId, nextCapabilityItemId, nextCode, id);
+      await this.assertUniqueName(nextDeviceTypeId, nextCapabilityItemId, nextName, id);
     }
 
+    // `code` is immutable and system-issued — not accepted by the update schema.
     return prisma.deviceCalibrationParameter.update({
       where: { id },
       data: {
         ...(input.deviceTypeId !== undefined ? { deviceTypeId: input.deviceTypeId } : {}),
         ...(input.capabilityItemId !== undefined ? { capabilityItemId: input.capabilityItemId } : {}),
-        ...(input.code !== undefined ? { code: input.code } : {}),
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.uomId !== undefined ? { uomId: input.uomId } : {}),
@@ -399,6 +413,7 @@ export class DeviceCalibrationParametersService {
         ...(input.toleranceMax !== undefined ? { toleranceMax: input.toleranceMax } : {}),
         ...(input.toleranceNote !== undefined ? { toleranceNote: input.toleranceNote } : {}),
         ...(input.decimalPlaces !== undefined ? { decimalPlaces: input.decimalPlaces } : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
       },
       include: parameterInclude,
     });

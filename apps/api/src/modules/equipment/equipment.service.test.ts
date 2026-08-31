@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import { NotFoundException } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@medcal/db";
+import { equipmentCreateSchema, equipmentUpdateSchema } from "@medcal/shared";
 import { EquipmentService } from "./equipment.service";
 
 const service = new EquipmentService();
 const realCompanyId = "PKM";
 
-function uniqueCode() {
+function uniqueTypeCode() {
   return `EQ${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
 }
 function companyId() {
@@ -22,8 +23,12 @@ const createdCompanyIds: string[] = [];
 
 beforeAll(async () => {
   const [etA, etB] = await Promise.all([
-    prisma.equipmentType.create({ data: { code: uniqueCode(), name: "Eq Electrical Safety Analyzer" } }),
-    prisma.equipmentType.create({ data: { code: uniqueCode(), name: "Eq Vital Signs Simulator" } }),
+    prisma.equipmentType.create({
+      data: { code: uniqueTypeCode(), name: "Eq Electrical Safety Analyzer" },
+    }),
+    prisma.equipmentType.create({
+      data: { code: uniqueTypeCode(), name: "Eq Vital Signs Simulator" },
+    }),
   ]);
   equipmentTypeAId = etA.id;
   equipmentTypeBId = etB.id;
@@ -41,16 +46,29 @@ afterAll(async () => {
     await prisma.equipmentType.deleteMany({ where: { id: { in: createdEquipmentTypeIds } } });
   }
   for (const id of createdCompanyIds) {
+    await prisma.masterCodeSequence
+      .deleteMany({ where: { scope: `EQUIPMENT#${id}` } })
+      .catch(() => undefined);
     await prisma.company.delete({ where: { id } }).catch(() => undefined);
   }
 });
 
+describe("equipmentCreateSchema / equipmentUpdateSchema", () => {
+  it("does not accept a code on create — it is system-issued", () => {
+    const parsed = equipmentCreateSchema.parse({ equipmentTypeId: "et-1", code: "HACK-001" });
+    expect("code" in parsed).toBe(false);
+  });
+
+  it("strips a code on update — code is immutable", () => {
+    const parsed = equipmentUpdateSchema.parse({ brand: "x", code: "HACK-001" });
+    expect("code" in parsed).toBe(false);
+  });
+});
+
 describe("EquipmentService.create", () => {
-  it("creates a physical equipment unit linked to an EquipmentType, serialNumber nullable", async () => {
-    const code = uniqueCode();
+  it("creates a unit with a system-issued EQU- code; serialNumber nullable", async () => {
     const created = await service.create(realCompanyId, {
       equipmentTypeId: equipmentTypeAId,
-      code,
       brand: "Fluke",
       model: "ESA620",
       // no serialNumber
@@ -59,7 +77,7 @@ describe("EquipmentService.create", () => {
     createdEquipmentIds.push(created.id);
 
     expect(created.companyId).toBe(realCompanyId);
-    expect(created.code).toBe(code);
+    expect(created.code).toMatch(/^EQU-\d{6}$/);
     expect(created.equipmentType.id).toBe(equipmentTypeAId);
     expect(created.serialNumber).toBeNull();
     expect(created.isActive).toBe(true);
@@ -67,43 +85,38 @@ describe("EquipmentService.create", () => {
 
   it("rejects an unknown equipmentTypeId", async () => {
     await expect(
-      service.create(realCompanyId, { equipmentTypeId: "missing", code: uniqueCode() }),
+      service.create(realCompanyId, { equipmentTypeId: "missing" }),
     ).rejects.toBeInstanceOf(Error);
   });
 
-  it("rejects a duplicate code within the same company", async () => {
-    const code = uniqueCode();
-    const first = await service.create(realCompanyId, { equipmentTypeId: equipmentTypeAId, code });
-    createdEquipmentIds.push(first.id);
-
-    await expect(
-      service.create(realCompanyId, { equipmentTypeId: equipmentTypeBId, code }),
-    ).rejects.toBeInstanceOf(ConflictException);
-  });
-
-  it("allows the same code in a different company (company-scoped uniqueness)", async () => {
+  it("allocates sequential codes within a company and independent sequences per company", async () => {
     const otherCompanyId = companyId();
     await prisma.company.create({
       data: { id: otherCompanyId, name: "Eq Other Co", status: "ACTIVE" },
     });
     createdCompanyIds.push(otherCompanyId);
+    // Guard against a stale counter row from a prior crashed run (random 2-char ids collide).
+    await prisma.masterCodeSequence.deleteMany({ where: { scope: `EQUIPMENT#${otherCompanyId}` } });
 
-    const code = uniqueCode();
-    const a = await service.create(realCompanyId, { equipmentTypeId: equipmentTypeAId, code });
-    const b = await service.create(otherCompanyId, { equipmentTypeId: equipmentTypeAId, code });
-    createdEquipmentIds.push(a.id, b.id);
+    const a1 = await service.create(realCompanyId, { equipmentTypeId: equipmentTypeAId });
+    const a2 = await service.create(realCompanyId, { equipmentTypeId: equipmentTypeBId });
+    const b1 = await service.create(otherCompanyId, { equipmentTypeId: equipmentTypeAId });
+    createdEquipmentIds.push(a1.id, a2.id, b1.id);
 
-    expect(a.code).toBe(b.code);
-    expect(a.companyId).not.toBe(b.companyId);
+    // Same company → strictly increasing (exact +1 is not guaranteed when other
+    // test files share the realCompanyId counter under parallel execution).
+    expect(a2.code).toMatch(/^EQU-\d{6}$/);
+    expect(Number(a2.code.slice(4))).toBeGreaterThan(Number(a1.code.slice(4)));
+    // Fresh company → its own independent sequence.
+    expect(b1.code).toBe("EQU-000001");
+    expect(a1.companyId).not.toBe(b1.companyId);
   });
 });
 
 describe("EquipmentService.findAll / findOne / update / remove", () => {
   it("lists (company-scoped), searches, reads, updates, deactivates, deletes", async () => {
-    const code = uniqueCode();
     const created = await service.create(realCompanyId, {
       equipmentTypeId: equipmentTypeBId,
-      code,
       serialNumber: "SN-XYZ-1",
     });
     createdEquipmentIds.push(created.id);
@@ -115,8 +128,15 @@ describe("EquipmentService.findAll / findOne / update / remove", () => {
     });
     expect(bySerial.data.some((r) => r.id === created.id)).toBe(true);
 
+    const byCode = await service.findAll(realCompanyId, {
+      search: created.code,
+      page: 1,
+      pageSize: 10,
+    });
+    expect(byCode.data.some((r) => r.id === created.id)).toBe(true);
+
     const found = await service.findOne(realCompanyId, created.id);
-    expect(found.code).toBe(code);
+    expect(found.code).toBe(created.code);
 
     const updated = await service.update(realCompanyId, created.id, {
       brand: "TFA",
@@ -124,6 +144,7 @@ describe("EquipmentService.findAll / findOne / update / remove", () => {
     });
     expect(updated.brand).toBe("TFA");
     expect(updated.isActive).toBe(false);
+    expect(updated.code).toBe(created.code);
 
     const removed = await service.remove(realCompanyId, created.id);
     expect(removed.id).toBe(created.id);
@@ -142,7 +163,6 @@ describe("EquipmentService.findAll / findOne / update / remove", () => {
 
     const foreign = await service.create(otherCompanyId, {
       equipmentTypeId: equipmentTypeAId,
-      code: uniqueCode(),
     });
     createdEquipmentIds.push(foreign.id);
 

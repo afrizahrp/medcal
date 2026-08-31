@@ -53,10 +53,6 @@ export default function NewDeviceCapabilityPage() {
     setError(null);
     setSuccess(null);
 
-    if (!form.code.trim()) {
-      setError("Kode capability wajib diisi.");
-      return;
-    }
     if (!form.name.trim()) {
       setError("Nama capability wajib diisi.");
       return;

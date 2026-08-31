@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
@@ -22,7 +22,7 @@ import {
   deviceFormPageClass,
   deviceFormSurfaceClass,
 } from "../devices-ui";
-import { useDeleteDevice, useDevice, useUpdateDevice } from "../use-devices-query";
+import { useDevice, useUpdateDevice } from "../use-devices-query";
 import { useDeviceTypes } from "../../device-types/use-device-types-query";
 import { useCustomers } from "../../customers/use-customers-query";
 
@@ -63,11 +63,9 @@ function DetailField({ label, children }: { label: string; children: ReactNode }
 
 export default function DeviceDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const { capabilities } = useAuthz();
   const deviceQuery = useDevice(params.id);
   const updateMutation = useUpdateDevice();
-  const deleteMutation = useDeleteDevice();
   const typesQuery = useDeviceTypes({
     search: "",
     categoryId: "",
@@ -173,19 +171,6 @@ export default function DeviceDetailPage() {
     }
   }
 
-  async function remove() {
-    if (!capabilities?.deviceDelete) return;
-    if (!confirm(`Yakin ingin menghapus Device "${deviceTitle(row!)}"?`)) return;
-    setError(null);
-    setSuccess(null);
-    try {
-      await deleteMutation.mutateAsync(row!.id);
-      router.push("/devices");
-    } catch (err) {
-      setError(formatDeviceApiError(err));
-    }
-  }
-
   return (
     <div className={deviceFormPageClass}>
       <PageHeader
@@ -193,7 +178,7 @@ export default function DeviceDetailPage() {
         crumbs={[
           { href: "/", label: "Dashboard" },
           { href: "/devices", label: "Device" },
-          { label: deviceTitle(row) },
+          { label: row.code },
         ]}
       />
 
@@ -201,6 +186,13 @@ export default function DeviceDetailPage() {
       {success ? <p className="mt-3 text-sm text-emerald-700">{success}</p> : null}
 
       <Surface className={deviceFormSurfaceClass}>
+        <div className="mb-3 border-b border-slate-100 pb-3">
+          <p className="text-xs uppercase tracking-wide text-slate-400">Kode</p>
+          <p className="mt-0.5 font-mono text-sm font-medium text-slate-900">{row.code}</p>
+          <p className="mt-0.5 text-xs text-slate-400">
+            Kode otomatis dari sistem — tidak dapat diubah.
+          </p>
+        </div>
         {editing ? (
           <form onSubmit={save}>
             <DeviceFormFields
@@ -266,16 +258,6 @@ export default function DeviceDetailPage() {
             </dl>
 
             <div className="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
-              {capabilities.deviceDelete ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={remove}
-                  disabled={deleteMutation.isPending}
-                >
-                  {deleteMutation.isPending ? "Menghapus…" : "Hapus"}
-                </Button>
-              ) : null}
               {capabilities.deviceUpdate ? (
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   Edit

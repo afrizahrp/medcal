@@ -20,13 +20,15 @@ import {
 } from "./device-calibration-parameters-ui";
 import { useDeviceCalibrationParameterGroups } from "./use-device-calibration-parameters-query";
 
-const URL_KEYS = ["search", "expanded", "page", "pageSize"] as const;
+const URL_KEYS = ["search", "isActive", "expanded", "page", "pageSize"] as const;
 
 export default function DeviceCalibrationParametersPageClient() {
   const { capabilities } = useAuthz();
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
   const committedSearch = params.search ?? "";
+  const isActive: boolean | "" =
+    params.isActive === "true" ? true : params.isActive === "false" ? false : "";
   const page = Number(params.page) || 1;
   const pageSize = Number(params.pageSize) || 10;
 
@@ -40,7 +42,12 @@ export default function DeviceCalibrationParametersPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
 
-  const query = useDeviceCalibrationParameterGroups({ search: committedSearch, page, pageSize });
+  const query = useDeviceCalibrationParameterGroups({
+    search: committedSearch,
+    isActive,
+    page,
+    pageSize,
+  });
 
   const manuallyExpanded = useMemo(
     () => new Set((params.expanded ?? "").split(",").filter(Boolean)),
@@ -97,7 +104,14 @@ export default function DeviceCalibrationParametersPageClient() {
       </div>
 
       <Surface className={cn("mt-6 p-4 md:p-6", fetching && "opacity-70")}>
-        <DeviceCalibrationParameterSearchBar value={searchInput} onChange={setSearchInput} />
+        <DeviceCalibrationParameterSearchBar
+          value={searchInput}
+          onChange={setSearchInput}
+          isActive={isActive}
+          onIsActiveChange={(next) =>
+            setParams({ isActive: next === "" ? undefined : String(next), page: undefined })
+          }
+        />
 
         {result ? (
           <p className="mt-3 text-xs text-slate-500">
@@ -111,10 +125,10 @@ export default function DeviceCalibrationParametersPageClient() {
           <p className="mt-6 text-sm text-slate-400">Memuat…</p>
         ) : groups.length === 0 ? (
           <DeviceCalibrationParameterEmptyState
-            hasSearch={isSearching}
+            hasSearch={isSearching || isActive !== ""}
             onClearSearch={() => {
               setSearchInput("");
-              setParams({ search: undefined, page: undefined });
+              setParams({ search: undefined, isActive: undefined, page: undefined });
             }}
           />
         ) : (

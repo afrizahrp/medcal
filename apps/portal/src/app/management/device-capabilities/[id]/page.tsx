@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Plus, Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
@@ -22,16 +22,16 @@ import {
 import {
   type DeviceCapabilityItemRow,
   type DeviceCapabilityRow,
+  DeviceCapabilityStatusBadge,
   PageHeader,
   Surface,
   deviceCapabilityFormActionsClass,
   deviceCapabilityFormPageClass,
   deviceCapabilityFormSurfaceClass,
+  selectClassName,
 } from "../device-capabilities-ui";
 import {
   useCreateDeviceCapabilityItem,
-  useDeleteDeviceCapability,
-  useDeleteDeviceCapabilityItem,
   useDeviceCapability,
   useUpdateDeviceCapability,
   useUpdateDeviceCapabilityItem,
@@ -44,7 +44,6 @@ const emptyForm: DeviceCapabilityFormValue = {
 };
 
 const emptyItemForm: DeviceCapabilityItemFormValue = {
-  code: "",
   name: "",
   description: "",
 };
@@ -59,7 +58,6 @@ function formFromRow(row: DeviceCapabilityRow): DeviceCapabilityFormValue {
 
 function itemFormFromRow(row: DeviceCapabilityItemRow): DeviceCapabilityItemFormValue {
   return {
-    code: row.code,
     name: row.name,
     description: row.description ?? "",
   };
@@ -76,28 +74,28 @@ function DetailField({ label, children }: { label: string; children: ReactNode }
 
 export default function DeviceCapabilityDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const { capabilities } = useAuthz();
   const capabilityQuery = useDeviceCapability(params.id);
   const updateMutation = useUpdateDeviceCapability();
-  const deleteMutation = useDeleteDeviceCapability();
   const createItemMutation = useCreateDeviceCapabilityItem();
   const updateItemMutation = useUpdateDeviceCapabilityItem();
-  const deleteItemMutation = useDeleteDeviceCapabilityItem();
 
   const row = capabilityQuery.data;
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<DeviceCapabilityFormValue>(emptyForm);
+  const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [addingItem, setAddingItem] = useState(false);
   const [itemForm, setItemForm] = useState<DeviceCapabilityItemFormValue>(emptyItemForm);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editItemForm, setEditItemForm] = useState<DeviceCapabilityItemFormValue>(emptyItemForm);
+  const [togglingItemId, setTogglingItemId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!row) return;
     setForm(formFromRow(row));
+    setIsActive(row.isActive);
   }, [row]);
 
   if (!capabilities?.deviceCapabilityRead) {
@@ -164,6 +162,7 @@ export default function DeviceCapabilityDetailPage() {
 
   function resetForm() {
     setForm(formFromRow(row!));
+    setIsActive(row!.isActive);
     setError(null);
   }
 
@@ -173,10 +172,6 @@ export default function DeviceCapabilityDetailPage() {
     setError(null);
     setSuccess(null);
 
-    if (!form.code.trim()) {
-      setError("Kode capability wajib diisi.");
-      return;
-    }
     if (!form.name.trim()) {
       setError("Nama capability wajib diisi.");
       return;
@@ -185,24 +180,11 @@ export default function DeviceCapabilityDetailPage() {
     try {
       await updateMutation.mutateAsync({
         id: row!.id,
-        input: buildDeviceCapabilityUpdatePayload(form),
+        input: buildDeviceCapabilityUpdatePayload({ ...form, isActive }),
       });
       setSuccess("Perubahan tersimpan.");
       setEditing(false);
       await capabilityQuery.refetch();
-    } catch (err) {
-      setError(formatDeviceCapabilityApiError(err));
-    }
-  }
-
-  async function remove() {
-    if (!capabilities?.deviceCapabilityDelete) return;
-    if (!confirm(`Yakin ingin menghapus capability "${row!.name}"?`)) return;
-    setError(null);
-    setSuccess(null);
-    try {
-      await deleteMutation.mutateAsync(row!.id);
-      router.push("/device-capabilities");
     } catch (err) {
       setError(formatDeviceCapabilityApiError(err));
     }
@@ -214,10 +196,6 @@ export default function DeviceCapabilityDetailPage() {
     setError(null);
     setSuccess(null);
 
-    if (!itemForm.code.trim()) {
-      setError("Kode item wajib diisi.");
-      return;
-    }
     if (!itemForm.name.trim()) {
       setError("Nama item wajib diisi.");
       return;
@@ -243,10 +221,6 @@ export default function DeviceCapabilityDetailPage() {
     setError(null);
     setSuccess(null);
 
-    if (!editItemForm.code.trim()) {
-      setError("Kode item wajib diisi.");
-      return;
-    }
     if (!editItemForm.name.trim()) {
       setError("Nama item wajib diisi.");
       return;
@@ -266,18 +240,22 @@ export default function DeviceCapabilityDetailPage() {
     }
   }
 
-  async function removeItem(item: DeviceCapabilityItemRow) {
-    if (!capabilities?.deviceCapabilityItemDelete) return;
-    if (!confirm(`Yakin ingin menghapus item "${item.name}"?`)) return;
+  async function toggleItemActive(item: DeviceCapabilityItemRow) {
+    if (!capabilities?.deviceCapabilityItemUpdate) return;
     setError(null);
     setSuccess(null);
+    setTogglingItemId(item.id);
     try {
-      await deleteItemMutation.mutateAsync({ capabilityId: row!.id, itemId: item.id });
-      setSuccess("Item berhasil dihapus.");
-      if (editingItemId === item.id) setEditingItemId(null);
+      await updateItemMutation.mutateAsync({
+        capabilityId: row!.id,
+        itemId: item.id,
+        input: { isActive: !item.isActive },
+      });
       await capabilityQuery.refetch();
     } catch (err) {
       setError(formatDeviceCapabilityApiError(err));
+    } finally {
+      setTogglingItemId(null);
     }
   }
 
@@ -296,11 +274,26 @@ export default function DeviceCapabilityDetailPage() {
       {success ? <p className="mt-3 text-sm text-emerald-700">{success}</p> : null}
 
       <Surface className={deviceCapabilityFormSurfaceClass}>
-        <p className="font-mono text-sm text-slate-600">{row.code}</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="font-mono text-sm text-slate-600">{row.code}</p>
+          {editing ? (
+            <select
+              value={isActive ? "true" : "false"}
+              onChange={(e) => setIsActive(e.target.value === "true")}
+              className={`${selectClassName} min-w-[140px]`}
+              aria-label="Status"
+            >
+              <option value="true">Aktif</option>
+              <option value="false">Nonaktif</option>
+            </select>
+          ) : (
+            <DeviceCapabilityStatusBadge isActive={row.isActive} />
+          )}
+        </div>
 
         {editing ? (
           <form onSubmit={save} className="mt-3">
-            <DeviceCapabilityFormFields value={form} onChange={setField} />
+            <DeviceCapabilityFormFields value={form} onChange={setField} mode="edit" />
 
             <div className={deviceCapabilityFormActionsClass}>
               <Button
@@ -340,16 +333,6 @@ export default function DeviceCapabilityDetailPage() {
             </dl>
 
             <div className="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
-              {capabilities.deviceCapabilityDelete ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={remove}
-                  disabled={deleteMutation.isPending}
-                >
-                  {deleteMutation.isPending ? "Menghapus…" : "Hapus"}
-                </Button>
-              ) : null}
               {capabilities.deviceCapabilityUpdate ? (
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   Edit
@@ -415,9 +398,9 @@ export default function DeviceCapabilityDetailPage() {
             <table className="w-full min-w-[560px]">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3">Kode</th>
                   <th className="px-4 py-3">Nama</th>
                   <th className="px-4 py-3">Deskripsi</th>
+                  <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -450,7 +433,6 @@ export default function DeviceCapabilityDetailPage() {
                       </td>
                     ) : (
                       <>
-                        <td className="px-4 py-3 font-mono text-xs text-slate-600">{item.code}</td>
                         <td className="px-4 py-3 font-medium text-slate-900">{item.name}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">
                           {item.description ? (
@@ -460,32 +442,35 @@ export default function DeviceCapabilityDetailPage() {
                           )}
                         </td>
                         <td className="px-4 py-3">
+                          <DeviceCapabilityStatusBadge isActive={item.isActive} />
+                        </td>
+                        <td className="px-4 py-3">
                           <div className="flex justify-end gap-1">
                             {capabilities.deviceCapabilityItemUpdate ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingItemId(item.id);
-                                  setAddingItem(false);
-                                  setEditItemForm(itemFormFromRow(item));
-                                  setError(null);
-                                }}
-                              >
-                                Edit
-                              </Button>
-                            ) : null}
-                            {capabilities.deviceCapabilityItemDelete ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeItem(item)}
-                                disabled={deleteItemMutation.isPending}
-                              >
-                                Hapus
-                              </Button>
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => toggleItemActive(item)}
+                                  disabled={togglingItemId === item.id}
+                                >
+                                  {item.isActive ? "Nonaktifkan" : "Aktifkan"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingItemId(item.id);
+                                    setAddingItem(false);
+                                    setEditItemForm(itemFormFromRow(item));
+                                    setError(null);
+                                  }}
+                                >
+                                  Edit
+                                </Button>
+                              </>
                             ) : null}
                           </div>
                         </td>

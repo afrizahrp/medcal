@@ -14,6 +14,7 @@ import {
 import {
   deviceCapabilityCreateSchema,
   deviceCapabilityItemCreateSchema,
+  deviceCapabilityItemListQuerySchema,
   deviceCapabilityItemUpdateSchema,
   deviceCapabilityListQuerySchema,
   deviceCapabilityUpdateSchema,
@@ -65,8 +66,19 @@ export class DeviceCapabilitiesController {
 
   @Get(":id/items")
   @RequirePermission("deviceCapabilityItem", "read")
-  async listItems(@Param("id") id: string): Promise<DeviceCapabilityItemRow[]> {
-    return this.service.findItems(id);
+  async listItems(
+    @Param("id") id: string,
+    @Query() rawQuery: unknown,
+  ): Promise<DeviceCapabilityItemRow[]> {
+    const parsed = deviceCapabilityItemListQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid device capability item list query",
+        code: "INVALID_DEVICE_CAPABILITY_ITEM_QUERY",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.findItems(id, parsed.data);
   }
 
   @Post(":id/items")

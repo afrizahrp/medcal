@@ -22,6 +22,7 @@ export interface DeviceModelRow {
   manufacturer: string;
   model: string;
   description: string | null;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
   deviceType: DeviceModelTypeRef;
@@ -42,18 +43,38 @@ export const deviceModelFormActionsClass =
 
 export { PageHeader, Surface, selectClassName };
 
+export function DeviceModelStatusBadge({ isActive }: { isActive: boolean }) {
+  return (
+    <Badge
+      variant={isActive ? "default" : "secondary"}
+      className={cn(
+        "font-medium",
+        isActive
+          ? "border-transparent bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+          : "text-slate-600",
+      )}
+    >
+      {isActive ? "Aktif" : "Nonaktif"}
+    </Badge>
+  );
+}
+
 export function DeviceModelFilters({
   searchInput,
   onSearchChange,
   deviceTypeId,
   onDeviceTypeChange,
   deviceTypes,
+  isActive,
+  onIsActiveChange,
 }: {
   searchInput: string;
   onSearchChange: (value: string) => void;
   deviceTypeId: string;
   onDeviceTypeChange: (value: string) => void;
   deviceTypes: DeviceTypeRow[];
+  isActive: boolean | "";
+  onIsActiveChange: (value: boolean | "") => void;
 }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -80,6 +101,19 @@ export function DeviceModelFilters({
           </option>
         ))}
       </select>
+      <select
+        value={isActive === "" ? "" : isActive ? "true" : "false"}
+        onChange={(e) => {
+          const next = e.target.value;
+          onIsActiveChange(next === "" ? "" : next === "true");
+        }}
+        className={cn(selectClassName, "w-full sm:w-44")}
+        aria-label="Filter status"
+      >
+        <option value="">Semua status</option>
+        <option value="true">Aktif</option>
+        <option value="false">Nonaktif</option>
+      </select>
     </div>
   );
 }
@@ -94,6 +128,7 @@ export function DeviceModelTable({ models }: { models: DeviceModelRow[] }) {
             <th className="px-4 py-3">Manufacturer</th>
             <th className="px-4 py-3">Model</th>
             <th className="px-4 py-3">Deskripsi</th>
+            <th className="px-4 py-3">Status</th>
             <th className="px-4 py-3"></th>
           </tr>
         </thead>
@@ -115,6 +150,9 @@ export function DeviceModelTable({ models }: { models: DeviceModelRow[] }) {
                 ) : (
                   <span className="text-slate-400">—</span>
                 )}
+              </td>
+              <td className="px-4 py-3">
+                <DeviceModelStatusBadge isActive={row.isActive} />
               </td>
               <td className="px-4 py-3">
                 <Link href={`/device-models/${row.id}`}>

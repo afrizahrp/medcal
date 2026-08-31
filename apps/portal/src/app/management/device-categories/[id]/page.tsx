@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
@@ -23,11 +23,7 @@ import {
   deviceCategoryFormSurfaceClass,
   selectClassName,
 } from "../device-categories-ui";
-import {
-  useDeleteDeviceCategory,
-  useDeviceCategory,
-  useUpdateDeviceCategory,
-} from "../use-device-categories-query";
+import { useDeviceCategory, useUpdateDeviceCategory } from "../use-device-categories-query";
 
 const emptyForm: DeviceCategoryFormValue = {
   code: "",
@@ -54,11 +50,9 @@ function DetailField({ label, children }: { label: string; children: ReactNode }
 
 export default function DeviceCategoryDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const { capabilities } = useAuthz();
   const categoryQuery = useDeviceCategory(params.id);
   const updateMutation = useUpdateDeviceCategory();
-  const deleteMutation = useDeleteDeviceCategory();
 
   const row = categoryQuery.data;
   const [editing, setEditing] = useState(false);
@@ -131,10 +125,6 @@ export default function DeviceCategoryDetailPage() {
     setError(null);
     setSuccess(null);
 
-    if (!form.code.trim()) {
-      setError("Kode kategori wajib diisi.");
-      return;
-    }
     if (!form.name.trim()) {
       setError("Nama kategori wajib diisi.");
       return;
@@ -148,19 +138,6 @@ export default function DeviceCategoryDetailPage() {
       setSuccess("Perubahan tersimpan.");
       setEditing(false);
       await categoryQuery.refetch();
-    } catch (err) {
-      setError(formatDeviceCategoryApiError(err));
-    }
-  }
-
-  async function remove() {
-    if (!capabilities?.deviceCategoryDelete) return;
-    if (!confirm(`Yakin ingin menghapus kategori "${row!.name}"?`)) return;
-    setError(null);
-    setSuccess(null);
-    try {
-      await deleteMutation.mutateAsync(row!.id);
-      router.push("/device-categories");
     } catch (err) {
       setError(formatDeviceCategoryApiError(err));
     }
@@ -240,16 +217,6 @@ export default function DeviceCategoryDetailPage() {
             </dl>
 
             <div className="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
-              {capabilities.deviceCategoryDelete ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={remove}
-                  disabled={deleteMutation.isPending}
-                >
-                  {deleteMutation.isPending ? "Menghapus…" : "Hapus"}
-                </Button>
-              ) : null}
               {capabilities.deviceCategoryUpdate ? (
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   Edit

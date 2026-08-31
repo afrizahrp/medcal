@@ -136,14 +136,3 @@ export function useUpdateDeviceTypeAlias() {
     },
   });
 }
-
-export function useDeleteDeviceTypeAlias() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<DeviceTypeAliasRow>(`/device-type-aliases/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [DEVICE_TYPE_ALIASES_QUERY_KEY] });
-    },
-  });
-}

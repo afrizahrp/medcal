@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@medcal/db";
+import { deviceCategoryCreateSchema, deviceCategoryUpdateSchema } from "@medcal/shared";
 import { DeviceCategoriesService } from "./device-categories.service";
 
 const service = new DeviceCategoriesService();
 const createdIds: string[] = [];
 
-function uniqueCode() {
+function uniqueSlug() {
   return `T${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
 }
 
@@ -18,46 +19,54 @@ afterAll(async () => {
   }
 });
 
+describe("deviceCategoryCreateSchema / deviceCategoryUpdateSchema", () => {
+  it("does not accept a code on create — it is system-issued", () => {
+    const parsed = deviceCategoryCreateSchema.parse({ name: "X", code: "HACK-001" });
+    expect("code" in parsed).toBe(false);
+  });
+  it("strips a code on update — code is immutable", () => {
+    const parsed = deviceCategoryUpdateSchema.parse({ name: "X", code: "HACK-001" });
+    expect("code" in parsed).toBe(false);
+  });
+});
+
 describe("DeviceCategoriesService.create", () => {
-  it("creates a device category with required fields", async () => {
-    const code = uniqueCode();
+  it("creates a device category with a system-issued DVCAT- code", async () => {
     const category = await service.create({
-      code,
       name: "Test Patient Monitoring",
       description: "Vital-sign monitors",
     });
     createdIds.push(category.id);
 
-    expect(category.code).toBe(code);
+    expect(category.code).toMatch(/^DVCAT-\d{3,}$/);
     expect(category.name).toBe("Test Patient Monitoring");
     expect(category.description).toBe("Vital-sign monitors");
     expect(category.isActive).toBe(true);
   });
 
-  it("rejects duplicate code", async () => {
-    const code = uniqueCode();
-    const first = await service.create({ code, name: "First" });
-    createdIds.push(first.id);
-
-    await expect(service.create({ code, name: "Second" })).rejects.toBeInstanceOf(ConflictException);
+  it("allocates strictly increasing codes", async () => {
+    const a = await service.create({ name: "First" });
+    const b = await service.create({ name: "Second" });
+    createdIds.push(a.id, b.id);
+    expect(Number(b.code.slice(6))).toBeGreaterThan(Number(a.code.slice(6)));
   });
 });
 
 describe("DeviceCategoriesService.findAll / findOne / update / remove", () => {
   it("lists, reads, updates, and deletes a device category", async () => {
-    const code = uniqueCode();
-    const created = await service.create({ code, name: "Respiratory" });
+    const created = await service.create({ name: `Respiratory ${uniqueSlug()}` });
     createdIds.push(created.id);
 
-    const listed = await service.findAll({ search: code, page: 1, pageSize: 10 });
+    const listed = await service.findAll({ search: created.code, page: 1, pageSize: 10 });
     expect(listed.data.some((row) => row.id === created.id)).toBe(true);
 
     const found = await service.findOne(created.id);
-    expect(found.code).toBe(code);
+    expect(found.code).toBe(created.code);
 
     const updated = await service.update(created.id, { name: "Respiratory & Oxygen", isActive: false });
     expect(updated.name).toBe("Respiratory & Oxygen");
     expect(updated.isActive).toBe(false);
+    expect(updated.code).toBe(created.code);
 
     const removed = await service.remove(created.id);
     expect(removed.id).toBe(created.id);
@@ -75,23 +84,13 @@ describe("DeviceCategoriesService.findAll / findOne / update / remove", () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it("rejects updating code onto an existing one", async () => {
-    const first = await service.create({ code: uniqueCode(), name: "First" });
-    const second = await service.create({ code: uniqueCode(), name: "Second" });
-    createdIds.push(first.id, second.id);
-
-    await expect(service.update(second.id, { code: first.code })).rejects.toBeInstanceOf(
-      ConflictException,
-    );
-  });
-
   it("rejects delete when the category still has device types", async () => {
-    const category = await service.create({ code: uniqueCode(), name: "With Types" });
+    const category = await service.create({ name: "With Types" });
     createdIds.push(category.id);
     const type = await prisma.deviceType.create({
       data: {
         categoryId: category.id,
-        code: uniqueCode(),
+        code: `DVTP-TEST-${uniqueSlug()}`,
         name: "Child Type",
       },
     });

@@ -20,6 +20,7 @@ export interface DeviceCalibrationParametersQueryParams {
   capabilityId: string;
   capabilityItemId: string;
   uomId: string;
+  isActive: boolean | "";
   sortBy: string;
   sortDir: "asc" | "desc";
   page: number;
@@ -33,6 +34,7 @@ function buildSearchParams(params: DeviceCalibrationParametersQueryParams): URLS
   if (params.capabilityId) qs.set("capabilityId", params.capabilityId);
   if (params.capabilityItemId) qs.set("capabilityItemId", params.capabilityItemId);
   if (params.uomId) qs.set("uomId", params.uomId);
+  if (params.isActive !== "") qs.set("isActive", String(params.isActive));
   qs.set("sortBy", params.sortBy);
   qs.set("sortDir", params.sortDir);
   qs.set("page", String(params.page));
@@ -49,6 +51,7 @@ export function useDeviceCalibrationParameters(params: DeviceCalibrationParamete
       params.capabilityId,
       params.capabilityItemId,
       params.uomId,
+      params.isActive,
       params.sortBy,
       params.sortDir,
       params.page,
@@ -64,6 +67,7 @@ export function useDeviceCalibrationParameters(params: DeviceCalibrationParamete
 
 export function useDeviceCalibrationParameterGroups(params: {
   search: string;
+  isActive: boolean | "";
   page: number;
   pageSize: number;
 }) {
@@ -73,12 +77,14 @@ export function useDeviceCalibrationParameterGroups(params: {
       DEVICE_CALIBRATION_PARAMETERS_QUERY_KEY,
       "grouped",
       trimmed,
+      params.isActive,
       params.page,
       params.pageSize,
     ],
     queryFn: () => {
       const qs = new URLSearchParams();
       if (trimmed) qs.set("search", trimmed);
+      if (params.isActive !== "") qs.set("isActive", String(params.isActive));
       qs.set("page", String(params.page));
       qs.set("pageSize", String(params.pageSize));
       return apiFetch<DeviceCalibrationParameterGroupedResponse>(
@@ -125,20 +131,6 @@ export function useUpdateDeviceCalibrationParameter() {
       queryClient.invalidateQueries({
         queryKey: [DEVICE_CALIBRATION_PARAMETERS_QUERY_KEY, variables.id],
       });
-    },
-  });
-}
-
-export function useDeleteDeviceCalibrationParameter() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<DeviceCalibrationParameterRow>(`/device-calibration-parameters/${id}`, {
-        method: "DELETE",
-      }),
-    onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: [DEVICE_CALIBRATION_PARAMETERS_QUERY_KEY] });
-      queryClient.removeQueries({ queryKey: [DEVICE_CALIBRATION_PARAMETERS_QUERY_KEY, id] });
     },
   });
 }

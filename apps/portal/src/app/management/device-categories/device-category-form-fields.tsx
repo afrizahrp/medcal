@@ -20,8 +20,8 @@ export interface DeviceCategoryFormFieldsProps {
     value: DeviceCategoryFormValue[K],
   ) => void;
   /**
-   * "create" (default) allows editing Kode. "edit" locks Kode: it is a business
-   * identifier fixed at creation and cannot be changed via the portal afterwards.
+   * "create" (default): the code is issued by the system on save, shown as a
+   * read-only placeholder. "edit": the existing code is shown read-only.
    */
   mode?: "create" | "edit";
 }
@@ -39,22 +39,19 @@ export function DeviceCategoryFormFields({
         <div className={gridClass}>
           <div>
             <label htmlFor="code" className="block text-sm font-medium text-slate-700">
-              Kode <span className="text-red-500">*</span>
+              Kode
             </label>
             <Input
               id="code"
-              value={value.code}
-              onChange={(e) => onChange("code", e.target.value.toUpperCase())}
+              value={mode === "edit" ? value.code : "Otomatis"}
+              readOnly
+              disabled
               className={fieldClass}
-              placeholder="PATIENT_MONITORING"
-              maxLength={64}
-              required
-              disabled={mode === "edit"}
             />
             <p className="mt-1 text-xs text-slate-500">
               {mode === "edit"
-                ? "Kode tidak dapat diubah setelah dibuat"
-                : "Kode unik (huruf besar)"}
+                ? "Kode otomatis — tidak dapat diubah."
+                : "Kode dibuat otomatis oleh sistem saat disimpan."}
             </p>
           </div>
           <div>
@@ -93,7 +90,6 @@ export function DeviceCategoryFormFields({
 export function buildDeviceCategoryCreatePayload(form: DeviceCategoryFormValue) {
   const description = form.description.trim();
   return {
-    code: form.code.trim(),
     name: form.name.trim(),
     ...(description ? { description } : {}),
   };
@@ -101,7 +97,6 @@ export function buildDeviceCategoryCreatePayload(form: DeviceCategoryFormValue) 
 
 export function buildDeviceCategoryUpdatePayload(form: DeviceCategoryFormValue & { isActive?: boolean }) {
   return {
-    code: form.code.trim(),
     name: form.name.trim(),
     description: form.description.trim() ? form.description.trim() : null,
     ...(form.isActive !== undefined ? { isActive: form.isActive } : {}),

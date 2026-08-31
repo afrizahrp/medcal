@@ -2,17 +2,19 @@
 
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { PageHeader } from "../../../components/management/page-header";
 import { PaginationBar, Surface, selectClassName } from "../leads/leads-ui";
 
 export interface DeviceCapabilityItemRow {
   id: string;
   capabilityId: string;
-  code: string;
   name: string;
   description: string | null;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,6 +24,7 @@ export interface DeviceCapabilityRow {
   code: string;
   name: string;
   description: string | null;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
   itemCount?: number;
@@ -43,12 +46,32 @@ export const deviceCapabilityFormActionsClass =
 
 export { PageHeader, Surface, selectClassName };
 
+export function DeviceCapabilityStatusBadge({ isActive }: { isActive: boolean }) {
+  return (
+    <Badge
+      variant={isActive ? "default" : "secondary"}
+      className={cn(
+        "font-medium",
+        isActive
+          ? "border-transparent bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+          : "text-slate-600",
+      )}
+    >
+      {isActive ? "Aktif" : "Nonaktif"}
+    </Badge>
+  );
+}
+
 export function DeviceCapabilityFilters({
   searchInput,
   onSearchChange,
+  isActive,
+  onIsActiveChange,
 }: {
   searchInput: string;
   onSearchChange: (value: string) => void;
+  isActive: boolean | "";
+  onIsActiveChange: (value: boolean | "") => void;
 }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -62,6 +85,19 @@ export function DeviceCapabilityFilters({
           aria-label="Cari Device Capability"
         />
       </div>
+      <select
+        value={isActive === "" ? "" : isActive ? "true" : "false"}
+        onChange={(e) => {
+          const next = e.target.value;
+          onIsActiveChange(next === "" ? "" : next === "true");
+        }}
+        className={cn(selectClassName, "w-full sm:w-44")}
+        aria-label="Filter status"
+      >
+        <option value="">Semua status</option>
+        <option value="true">Aktif</option>
+        <option value="false">Nonaktif</option>
+      </select>
     </div>
   );
 }
@@ -76,6 +112,7 @@ export function DeviceCapabilityTable({ capabilities }: { capabilities: DeviceCa
             <th className="px-4 py-3">Capability</th>
             <th className="px-4 py-3 text-right">Items</th>
             <th className="px-4 py-3">Deskripsi</th>
+            <th className="px-4 py-3">Status</th>
             <th className="px-4 py-3"></th>
           </tr>
         </thead>
@@ -93,6 +130,9 @@ export function DeviceCapabilityTable({ capabilities }: { capabilities: DeviceCa
                 ) : (
                   <span className="text-slate-400">—</span>
                 )}
+              </td>
+              <td className="px-4 py-3">
+                <DeviceCapabilityStatusBadge isActive={row.isActive} />
               </td>
               <td className="px-4 py-3">
                 <Link href={`/device-capabilities/${row.id}`}>

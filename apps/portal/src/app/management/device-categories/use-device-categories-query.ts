@@ -83,15 +83,3 @@ export function useUpdateDeviceCategory() {
     },
   });
 }
-
-export function useDeleteDeviceCategory() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<DeviceCategoryRow>(`/device-categories/${id}`, { method: "DELETE" }),
-    onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: [DEVICE_CATEGORIES_QUERY_KEY] });
-      queryClient.removeQueries({ queryKey: [DEVICE_CATEGORIES_QUERY_KEY, id] });
-    },
-  });
-}

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Pencil, Search, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,14 +60,12 @@ export interface DeviceTypeAliasChildHandlers {
   editDeviceTypeId: string;
   savingEdit: boolean;
   togglingId: string | null;
-  pendingDeleteId: string | null;
   onEditAliasChange: (value: string) => void;
   onEditDeviceTypeChange: (value: string) => void;
   onStartEdit: (row: DeviceTypeAliasRow) => void;
   onCancelEdit: () => void;
   onSaveEdit: (id: string) => void;
   onToggleActive: (row: DeviceTypeAliasRow) => void;
-  onDelete: (id: string) => void;
 }
 
 function ChildRows({
@@ -173,17 +171,6 @@ function ChildRows({
                     aria-label="Edit alias"
                   >
                     <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 text-slate-400 hover:text-red-600"
-                    onClick={() => h.onDelete(row.id)}
-                    disabled={h.pendingDeleteId === row.id}
-                    aria-label="Hapus alias"
-                  >
-                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               ) : null}

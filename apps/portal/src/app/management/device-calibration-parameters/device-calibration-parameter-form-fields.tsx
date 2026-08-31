@@ -254,8 +254,7 @@ export function DeviceCalibrationParameterFormFields({
                 items={capabilityItems.map((item) => ({
                   id: item.id,
                   label: item.name,
-                  searchValue: `${item.name} ${item.code}`,
-                  hint: item.code,
+                  searchValue: item.name,
                 }))}
                 selectedId={value.capabilityItemId}
                 onSelect={(id) => onChange("capabilityItemId", id)}
@@ -267,22 +266,19 @@ export function DeviceCalibrationParameterFormFields({
         <div className={gridClass}>
           <div>
             <label htmlFor="code" className="block text-sm font-medium text-slate-700">
-              Kode <span className="text-red-500">*</span>
+              Kode
             </label>
             <Input
               id="code"
-              value={value.code}
-              onChange={(e) => onChange("code", e.target.value.toUpperCase())}
+              value={mode === "edit" ? value.code : "Otomatis"}
+              readOnly
+              disabled
               className={fieldClass}
-              placeholder="REFERENCE_VALUE"
-              maxLength={64}
-              required
-              disabled={mode === "edit"}
             />
             <p className="mt-1 text-xs text-slate-500">
               {mode === "edit"
-                ? "Kode tidak dapat diubah setelah dibuat"
-                : "Unik dalam satu Device Name + Capability Item (huruf besar)"}
+                ? "Kode otomatis — tidak dapat diubah."
+                : "Kode dibuat otomatis oleh sistem saat disimpan."}
             </p>
           </div>
           <div>
@@ -444,7 +440,6 @@ export function buildDeviceCalibrationParameterCreatePayload(
   return {
     deviceTypeId: form.deviceTypeId,
     capabilityItemId: form.capabilityItemId,
-    code: form.code.trim(),
     name: form.name.trim(),
     uomId: form.uomId,
     ...(description ? { description } : {}),
@@ -456,7 +451,7 @@ export function buildDeviceCalibrationParameterCreatePayload(
 }
 
 export function buildDeviceCalibrationParameterUpdatePayload(
-  form: DeviceCalibrationParameterFormValue,
+  form: DeviceCalibrationParameterFormValue & { isActive?: boolean },
 ) {
   const minRaw = form.toleranceMin.trim();
   const maxRaw = form.toleranceMax.trim();
@@ -464,7 +459,6 @@ export function buildDeviceCalibrationParameterUpdatePayload(
   return {
     deviceTypeId: form.deviceTypeId,
     capabilityItemId: form.capabilityItemId,
-    code: form.code.trim(),
     name: form.name.trim(),
     ...(form.uomId ? { uomId: form.uomId } : {}),
     description: form.description.trim() ? form.description.trim() : null,
@@ -472,6 +466,7 @@ export function buildDeviceCalibrationParameterUpdatePayload(
     toleranceMax: maxRaw === "" ? null : Number(maxRaw),
     toleranceNote: form.toleranceNote.trim() ? form.toleranceNote.trim() : null,
     decimalPlaces: dpRaw === "" ? null : Number(dpRaw),
+    ...(form.isActive !== undefined ? { isActive: form.isActive } : {}),
   };
 }
 

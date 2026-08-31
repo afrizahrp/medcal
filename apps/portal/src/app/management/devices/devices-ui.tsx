@@ -31,6 +31,8 @@ export interface DeviceCustomerRef {
 export interface DeviceRow {
   id: string;
   companyId: string;
+  /** System-issued, immutable business code (DVC-000001). */
+  code: string;
   customerId: string;
   deviceTypeId: string;
   brand: string | null;
@@ -230,6 +232,7 @@ export function DeviceTable({ devices }: { devices: DeviceRow[] }) {
       <table className="w-full min-w-[980px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+            <th className="px-4 py-3">Kode</th>
             <th className="px-4 py-3">Device Type</th>
             <th className="px-4 py-3">Brand</th>
             <th className="px-4 py-3">Model</th>
@@ -242,6 +245,7 @@ export function DeviceTable({ devices }: { devices: DeviceRow[] }) {
         <tbody className="divide-y divide-slate-100">
           {devices.map((row) => (
             <tr key={row.id} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-mono text-xs font-medium text-slate-800">{row.code}</td>
               <td className="px-4 py-3">
                 <Badge variant="secondary" className="font-medium text-slate-600">
                   {row.deviceType.name}

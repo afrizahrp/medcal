@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
@@ -23,11 +23,7 @@ import {
   equipmentTypeFormSurfaceClass,
   selectClassName,
 } from "../equipment-types-ui";
-import {
-  useDeleteEquipmentType,
-  useEquipmentType,
-  useUpdateEquipmentType,
-} from "../use-equipment-types-query";
+import { useEquipmentType, useUpdateEquipmentType } from "../use-equipment-types-query";
 
 const emptyForm: EquipmentTypeFormValue = {
   code: "",
@@ -56,11 +52,9 @@ function DetailField({ label, children }: { label: string; children: ReactNode }
 
 export default function EquipmentTypeDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const { capabilities } = useAuthz();
   const typeQuery = useEquipmentType(params.id);
   const updateMutation = useUpdateEquipmentType();
-  const deleteMutation = useDeleteEquipmentType();
 
   const row = typeQuery.data;
   const [editing, setEditing] = useState(false);
@@ -133,10 +127,6 @@ export default function EquipmentTypeDetailPage() {
     setError(null);
     setSuccess(null);
 
-    if (!form.code.trim()) {
-      setError("Kode Equipment Type wajib diisi.");
-      return;
-    }
     if (!form.name.trim()) {
       setError("Nama Equipment Type wajib diisi.");
       return;
@@ -150,19 +140,6 @@ export default function EquipmentTypeDetailPage() {
       setSuccess("Perubahan tersimpan.");
       setEditing(false);
       await typeQuery.refetch();
-    } catch (err) {
-      setError(formatEquipmentTypeApiError(err));
-    }
-  }
-
-  async function remove() {
-    if (!capabilities?.equipmentTypeDelete) return;
-    if (!confirm(`Yakin ingin menghapus Equipment Type "${row!.name}"?`)) return;
-    setError(null);
-    setSuccess(null);
-    try {
-      await deleteMutation.mutateAsync(row!.id);
-      router.push("/equipment-types");
     } catch (err) {
       setError(formatEquipmentTypeApiError(err));
     }
@@ -246,16 +223,6 @@ export default function EquipmentTypeDetailPage() {
             </dl>
 
             <div className="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
-              {capabilities.equipmentTypeDelete ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={remove}
-                  disabled={deleteMutation.isPending}
-                >
-                  {deleteMutation.isPending ? "Menghapus…" : "Hapus"}
-                </Button>
-              ) : null}
               {capabilities.equipmentTypeUpdate ? (
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   Edit

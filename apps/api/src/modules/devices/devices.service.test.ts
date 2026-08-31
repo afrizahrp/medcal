@@ -74,6 +74,9 @@ afterAll(async () => {
     await prisma.customer.deleteMany({ where: { id: { in: createdCustomerIds } } });
   }
   for (const companyId of createdCompanyIds) {
+    await prisma.masterCodeSequence
+      .deleteMany({ where: { scope: `DEVICE#${companyId}` } })
+      .catch(() => undefined);
     await prisma.company.delete({ where: { id: companyId } }).catch(() => undefined);
   }
 });
@@ -92,6 +95,11 @@ describe("deviceCreateSchema / deviceUpdateSchema", () => {
   it("rejects deviceTypeId = null on update", () => {
     expect(deviceUpdateSchema.safeParse({ deviceTypeId: null }).success).toBe(false);
     expect(deviceUpdateSchema.safeParse({ deviceTypeId: "" }).success).toBe(false);
+  });
+
+  it("strips a code field on update — code is immutable and system-issued", () => {
+    const parsed = deviceUpdateSchema.parse({ brand: "x", code: "HACK" });
+    expect("code" in parsed).toBe(false);
   });
 });
 
@@ -121,6 +129,27 @@ describe("DevicesService.create", () => {
     expect(device.category).toBe("Patient monitoring");
     expect(device.status).toBe("ACTIVE");
     expect(device.companyId).toBe(realCompanyId);
+    expect(device.code).toMatch(/^DVC-\d{6}$/);
+  });
+
+  it("assigns sequential DVC- business codes within a company", async () => {
+    const deviceType = await createDeviceType();
+    const customer = await createCustomer(realCompanyId);
+
+    const first = await service.create(realCompanyId, {
+      customerId: customer.id,
+      deviceTypeId: deviceType.id,
+    });
+    createdDeviceIds.push(first.id);
+    const second = await service.create(realCompanyId, {
+      customerId: customer.id,
+      deviceTypeId: deviceType.id,
+    });
+    createdDeviceIds.push(second.id);
+
+    expect(first.code).toMatch(/^DVC-\d{6}$/);
+    expect(second.code).toMatch(/^DVC-\d{6}$/);
+    expect(Number(second.code.slice(4))).toBe(Number(first.code.slice(4)) + 1);
   });
 
   it("rejects a non-existent deviceTypeId", async () => {

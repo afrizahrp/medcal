@@ -54,10 +54,6 @@ export default function NewEquipmentTypePage() {
     setError(null);
     setSuccess(null);
 
-    if (!form.code.trim()) {
-      setError("Kode Equipment Type wajib diisi.");
-      return;
-    }
     if (!form.name.trim()) {
       setError("Nama Equipment Type wajib diisi.");
       return;

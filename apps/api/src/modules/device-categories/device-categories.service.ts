@@ -1,10 +1,9 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { prisma } from "@medcal/db";
+import { MasterCodeService, prisma } from "@medcal/db";
 import type { DeviceCategory, Prisma } from "@medcal/db";
 import {
   DEVICE_CATEGORY_SORTABLE_FIELDS,
@@ -27,23 +26,18 @@ export interface DeviceCategoryListResult {
 @Injectable()
 export class DeviceCategoriesService {
   async create(input: DeviceCategoryCreateInput): Promise<DeviceCategory> {
-    const existing = await prisma.deviceCategory.findUnique({
-      where: { code: input.code },
-    });
-    if (existing) {
-      throw new ConflictException({
-        message: "A device category with this code already exists",
-        code: "DUPLICATE_DEVICE_CATEGORY_CODE",
-        existingId: existing.id,
+    // `code` is a system-issued, immutable business identifier (DVCAT-001),
+    // allocated in the same transaction as the insert. Existing slug codes on
+    // pre-Phase-2 rows are left untouched and coexist.
+    return prisma.$transaction(async (tx) => {
+      const code = await MasterCodeService.allocate({ entity: "DEVICE_CATEGORY", tx });
+      return tx.deviceCategory.create({
+        data: {
+          code,
+          name: input.name,
+          description: input.description,
+        },
       });
-    }
-
-    return prisma.deviceCategory.create({
-      data: {
-        code: input.code,
-        name: input.name,
-        description: input.description,
-      },
     });
   }
 
@@ -95,23 +89,13 @@ export class DeviceCategoriesService {
   }
 
   async update(id: string, input: DeviceCategoryUpdateInput): Promise<DeviceCategory> {
-    const existing = await this.findOne(id);
+    await this.findOne(id);
 
-    if (input.code !== undefined && input.code !== existing.code) {
-      const duplicate = await prisma.deviceCategory.findUnique({ where: { code: input.code } });
-      if (duplicate) {
-        throw new ConflictException({
-          message: "A device category with this code already exists",
-          code: "DUPLICATE_DEVICE_CATEGORY_CODE",
-          existingId: duplicate.id,
-        });
-      }
-    }
-
+    // `code` is immutable and system-issued — deviceCategoryUpdateSchema does
+    // not accept it and it is never written here.
     return prisma.deviceCategory.update({
       where: { id },
       data: {
-        ...(input.code !== undefined ? { code: input.code } : {}),
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),

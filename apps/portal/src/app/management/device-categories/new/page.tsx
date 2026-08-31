@@ -53,10 +53,6 @@ export default function NewDeviceCategoryPage() {
     setError(null);
     setSuccess(null);
 
-    if (!form.code.trim()) {
-      setError("Kode kategori wajib diisi.");
-      return;
-    }
     if (!form.name.trim()) {
       setError("Nama kategori wajib diisi.");
       return;

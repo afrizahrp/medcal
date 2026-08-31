@@ -1,10 +1,9 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { prisma } from "@medcal/db";
+import { MasterCodeService, prisma } from "@medcal/db";
 import type { Prisma } from "@medcal/db";
 import {
   EQUIPMENT_SORTABLE_FIELDS,
@@ -53,40 +52,27 @@ export class EquipmentService {
     }
   }
 
-  private async assertUniqueCode(
-    companyId: string,
-    code: string,
-    excludeId?: string,
-  ): Promise<void> {
-    const duplicate = await prisma.equipment.findFirst({
-      where: { companyId, code, ...(excludeId ? { NOT: { id: excludeId } } : {}) },
-    });
-    if (duplicate) {
-      throw new ConflictException({
-        message: "An equipment unit with this code already exists for this company",
-        code: "DUPLICATE_EQUIPMENT_CODE",
-        existingId: duplicate.id,
-      });
-    }
-  }
-
   async create(companyId: string, input: EquipmentCreateInput): Promise<EquipmentWithRelations> {
     await this.assertEquipmentTypeExists(input.equipmentTypeId);
-    const code = input.code.trim();
-    await this.assertUniqueCode(companyId, code);
 
-    return prisma.equipment.create({
-      data: {
-        companyId,
-        equipmentTypeId: input.equipmentTypeId,
-        code,
-        brand: emptyToNull(input.brand) ?? undefined,
-        model: emptyToNull(input.model) ?? undefined,
-        serialNumber: emptyToNull(input.serialNumber) ?? undefined,
-        notes: emptyToNull(input.notes) ?? undefined,
-        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
-      },
-      include: equipmentInclude,
+    // `code` is a system-issued, immutable asset identifier (EQU-000001),
+    // allocated in the same transaction as the insert. Legacy hand-entered
+    // codes on existing rows are left untouched and coexist.
+    return prisma.$transaction(async (tx) => {
+      const code = await MasterCodeService.allocate({ entity: "EQUIPMENT", companyId, tx });
+      return tx.equipment.create({
+        data: {
+          companyId,
+          equipmentTypeId: input.equipmentTypeId,
+          code,
+          brand: emptyToNull(input.brand) ?? undefined,
+          model: emptyToNull(input.model) ?? undefined,
+          serialNumber: emptyToNull(input.serialNumber) ?? undefined,
+          notes: emptyToNull(input.notes) ?? undefined,
+          ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+        },
+        include: equipmentInclude,
+      });
     });
   }
 
@@ -158,15 +144,12 @@ export class EquipmentService {
       await this.assertEquipmentTypeExists(input.equipmentTypeId);
     }
 
-    if (input.code !== undefined && input.code.trim() !== existing.code) {
-      await this.assertUniqueCode(companyId, input.code.trim(), id);
-    }
-
+    // `code` is immutable and system-issued — equipmentUpdateSchema does not
+    // accept it and it is never written here.
     return prisma.equipment.update({
       where: { id: existing.id },
       data: {
         ...(input.equipmentTypeId !== undefined ? { equipmentTypeId: input.equipmentTypeId } : {}),
-        ...(input.code !== undefined ? { code: input.code.trim() } : {}),
         ...(input.brand !== undefined ? { brand: emptyToNull(input.brand) } : {}),
         ...(input.model !== undefined ? { model: emptyToNull(input.model) } : {}),
         ...(input.serialNumber !== undefined

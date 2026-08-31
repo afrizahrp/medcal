@@ -19,9 +19,15 @@ export interface DeviceCapabilityFormFieldsProps {
     field: K,
     value: DeviceCapabilityFormValue[K],
   ) => void;
+  /** "create" shows the code as an auto placeholder; "edit" shows it read-only. */
+  mode?: "create" | "edit";
 }
 
-export function DeviceCapabilityFormFields({ value, onChange }: DeviceCapabilityFormFieldsProps) {
+export function DeviceCapabilityFormFields({
+  value,
+  onChange,
+  mode = "create",
+}: DeviceCapabilityFormFieldsProps) {
   return (
     <div className="space-y-5">
       <section className="space-y-3">
@@ -30,18 +36,20 @@ export function DeviceCapabilityFormFields({ value, onChange }: DeviceCapability
         <div className={gridClass}>
           <div>
             <label htmlFor="code" className="block text-sm font-medium text-slate-700">
-              Kode <span className="text-red-500">*</span>
+              Kode
             </label>
             <Input
               id="code"
-              value={value.code}
-              onChange={(e) => onChange("code", e.target.value.toUpperCase())}
+              value={mode === "edit" ? value.code : "Otomatis"}
+              readOnly
+              disabled
               className={fieldClass}
-              placeholder="NIBP"
-              maxLength={64}
-              required
             />
-            <p className="mt-1 text-xs text-slate-500">Kode unik (huruf besar)</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {mode === "edit"
+                ? "Kode otomatis — tidak dapat diubah."
+                : "Kode dibuat otomatis oleh sistem saat disimpan."}
+            </p>
           </div>
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-slate-700">
@@ -79,17 +87,18 @@ export function DeviceCapabilityFormFields({ value, onChange }: DeviceCapability
 export function buildDeviceCapabilityCreatePayload(form: DeviceCapabilityFormValue) {
   const description = form.description.trim();
   return {
-    code: form.code.trim(),
     name: form.name.trim(),
     ...(description ? { description } : {}),
   };
 }
 
-export function buildDeviceCapabilityUpdatePayload(form: DeviceCapabilityFormValue) {
+export function buildDeviceCapabilityUpdatePayload(
+  form: DeviceCapabilityFormValue & { isActive?: boolean },
+) {
   return {
-    code: form.code.trim(),
     name: form.name.trim(),
     description: form.description.trim() ? form.description.trim() : null,
+    ...(form.isActive !== undefined ? { isActive: form.isActive } : {}),
   };
 }
 

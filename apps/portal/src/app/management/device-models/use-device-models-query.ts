@@ -10,6 +10,7 @@ export const DEVICE_MODELS_QUERY_KEY = "device-models" as const;
 export interface DeviceModelsQueryParams {
   search: string;
   deviceTypeId: string;
+  isActive: boolean | "";
   sortBy: string;
   sortDir: "asc" | "desc";
   page: number;
@@ -20,6 +21,7 @@ function buildSearchParams(params: DeviceModelsQueryParams): URLSearchParams {
   const qs = new URLSearchParams();
   if (params.search.trim()) qs.set("search", params.search.trim());
   if (params.deviceTypeId) qs.set("deviceTypeId", params.deviceTypeId);
+  if (params.isActive !== "") qs.set("isActive", String(params.isActive));
   qs.set("sortBy", params.sortBy);
   qs.set("sortDir", params.sortDir);
   qs.set("page", String(params.page));
@@ -33,6 +35,7 @@ export function useDeviceModels(params: DeviceModelsQueryParams) {
       DEVICE_MODELS_QUERY_KEY,
       params.search,
       params.deviceTypeId,
+      params.isActive,
       params.sortBy,
       params.sortDir,
       params.page,
@@ -78,18 +81,6 @@ export function useUpdateDeviceModel() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [DEVICE_MODELS_QUERY_KEY] });
       queryClient.invalidateQueries({ queryKey: [DEVICE_MODELS_QUERY_KEY, variables.id] });
-    },
-  });
-}
-
-export function useDeleteDeviceModel() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<DeviceModelRow>(`/device-models/${id}`, { method: "DELETE" }),
-    onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: [DEVICE_MODELS_QUERY_KEY] });
-      queryClient.removeQueries({ queryKey: [DEVICE_MODELS_QUERY_KEY, id] });
     },
   });
 }

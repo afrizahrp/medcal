@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
@@ -24,7 +24,6 @@ import {
   selectClassName,
 } from "../equipment-units-ui";
 import {
-  useDeleteEquipmentUnit,
   useEquipmentTypeOptions,
   useEquipmentUnit,
   useUpdateEquipmentUnit,
@@ -33,7 +32,6 @@ import { EquipmentCalibrationRecordsPanel } from "../equipment-calibration-recor
 
 const emptyForm: EquipmentUnitFormValue = {
   equipmentTypeId: "",
-  code: "",
   brand: "",
   model: "",
   serialNumber: "",
@@ -43,7 +41,6 @@ const emptyForm: EquipmentUnitFormValue = {
 function formFromRow(row: EquipmentUnitRow): EquipmentUnitFormValue {
   return {
     equipmentTypeId: row.equipmentTypeId,
-    code: row.code,
     brand: row.brand ?? "",
     model: row.model ?? "",
     serialNumber: row.serialNumber ?? "",
@@ -62,11 +59,9 @@ function DetailField({ label, children }: { label: string; children: ReactNode }
 
 export default function EquipmentUnitDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const { capabilities } = useAuthz();
   const unitQuery = useEquipmentUnit(params.id);
   const updateMutation = useUpdateEquipmentUnit();
-  const deleteMutation = useDeleteEquipmentUnit();
   const optionsQuery = useEquipmentTypeOptions(Boolean(capabilities?.equipmentRead));
 
   const row = unitQuery.data;
@@ -150,10 +145,6 @@ export default function EquipmentUnitDetailPage() {
       setError("Equipment Type wajib dipilih.");
       return;
     }
-    if (!form.code.trim()) {
-      setError("Kode Equipment Unit wajib diisi.");
-      return;
-    }
 
     try {
       await updateMutation.mutateAsync({
@@ -163,19 +154,6 @@ export default function EquipmentUnitDetailPage() {
       setSuccess("Perubahan tersimpan.");
       setEditing(false);
       await unitQuery.refetch();
-    } catch (err) {
-      setError(formatEquipmentUnitApiError(err));
-    }
-  }
-
-  async function remove() {
-    if (!capabilities?.equipmentDelete) return;
-    if (!confirm(`Yakin ingin menghapus Equipment Unit "${row!.code}"?`)) return;
-    setError(null);
-    setSuccess(null);
-    try {
-      await deleteMutation.mutateAsync(row!.id);
-      router.push("/equipment-units");
     } catch (err) {
       setError(formatEquipmentUnitApiError(err));
     }
@@ -219,6 +197,8 @@ export default function EquipmentUnitDetailPage() {
               value={form}
               onChange={setField}
               equipmentTypeOptions={equipmentTypeOptions}
+              mode="edit"
+              currentCode={row.code}
             />
 
             <div className={equipmentUnitFormActionsClass}>
@@ -267,16 +247,6 @@ export default function EquipmentUnitDetailPage() {
             </dl>
 
             <div className="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
-              {capabilities.equipmentDelete ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={remove}
-                  disabled={deleteMutation.isPending}
-                >
-                  {deleteMutation.isPending ? "Menghapus…" : "Hapus"}
-                </Button>
-              ) : null}
               {capabilities.equipmentUpdate ? (
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   Edit

@@ -701,9 +701,11 @@ export type PriceListItemUpdateInput = z.infer<typeof priceListItemUpdateSchema>
 
 const optionalDescription = z.string().max(500).optional();
 
-/** POST /device-categories body */
+/**
+ * POST /device-categories body. `code` is not accepted — it is a system-issued,
+ * immutable business identifier (DVCAT-001) allocated by MasterCodeService.
+ */
 export const deviceCategoryCreateSchema = z.object({
-  code: z.string().min(1).max(64).toUpperCase(),
   name: z.string().min(1).max(150),
   description: optionalDescription,
 });
@@ -723,9 +725,8 @@ export type DeviceCategoryListQuery = z.infer<typeof deviceCategoryListQuerySche
 /** Whitelisted `sortBy` values for GET /device-categories — see resolveSortOrder. */
 export const DEVICE_CATEGORY_SORTABLE_FIELDS = ["createdAt", "code", "name"] as const;
 
-/** PATCH /device-categories/:id body */
+/** PATCH /device-categories/:id body. `code` is immutable and cannot be changed. */
 export const deviceCategoryUpdateSchema = z.object({
-  code: z.string().min(1).max(64).toUpperCase().optional(),
   name: z.string().min(1).max(150).optional(),
   description: z.string().max(500).nullable().optional(),
   isActive: z.boolean().optional(),
@@ -733,10 +734,12 @@ export const deviceCategoryUpdateSchema = z.object({
 
 export type DeviceCategoryUpdateInput = z.infer<typeof deviceCategoryUpdateSchema>;
 
-/** POST /device-types body */
+/**
+ * POST /device-types body. `code` is not accepted — system-issued, immutable
+ * business identifier (DVTP-001).
+ */
 export const deviceTypeCreateSchema = z.object({
   categoryId: z.string().min(1),
-  code: z.string().min(1).max(64).toUpperCase(),
   name: z.string().min(1).max(150),
   description: optionalDescription,
 });
@@ -757,10 +760,9 @@ export type DeviceTypeListQuery = z.infer<typeof deviceTypeListQuerySchema>;
 /** Whitelisted `sortBy` values for GET /device-types — see resolveSortOrder. */
 export const DEVICE_TYPE_SORTABLE_FIELDS = ["createdAt", "code", "name"] as const;
 
-/** PATCH /device-types/:id body */
+/** PATCH /device-types/:id body. `code` is immutable and cannot be changed. */
 export const deviceTypeUpdateSchema = z.object({
   categoryId: z.string().min(1).optional(),
-  code: z.string().min(1).max(64).toUpperCase().optional(),
   name: z.string().min(1).max(150).optional(),
   description: z.string().max(500).nullable().optional(),
   isActive: z.boolean().optional(),
@@ -785,6 +787,10 @@ export type DeviceModelCreateInput = z.infer<typeof deviceModelCreateSchema>;
 /** GET /device-models query params */
 export const deviceModelListQuerySchema = baseListQuerySchema.extend({
   deviceTypeId: z.string().min(1).optional(),
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
 });
 
 export type DeviceModelListQuery = z.infer<typeof deviceModelListQuerySchema>;
@@ -798,6 +804,7 @@ export const deviceModelUpdateSchema = z.object({
   manufacturer: z.string().trim().min(1).max(150).optional(),
   model: z.string().trim().min(1).max(150).optional(),
   description: z.string().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
 });
 
 export type DeviceModelUpdateInput = z.infer<typeof deviceModelUpdateSchema>;
@@ -806,9 +813,11 @@ export type DeviceModelUpdateInput = z.infer<typeof deviceModelUpdateSchema>;
 // DeviceCapability + DeviceCapabilityItem Master Data
 // =============================================================================
 
-/** POST /device-capabilities body */
+/**
+ * POST /device-capabilities body. `code` is not accepted — system-issued,
+ * immutable business identifier (DVCAP-001).
+ */
 export const deviceCapabilityCreateSchema = z.object({
-  code: z.string().min(1).max(64).toUpperCase(),
   name: z.string().min(1).max(150),
   description: optionalDescription,
 });
@@ -816,36 +825,54 @@ export const deviceCapabilityCreateSchema = z.object({
 export type DeviceCapabilityCreateInput = z.infer<typeof deviceCapabilityCreateSchema>;
 
 /** GET /device-capabilities query params */
-export const deviceCapabilityListQuerySchema = baseListQuerySchema;
+export const deviceCapabilityListQuerySchema = baseListQuerySchema.extend({
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
 
 export type DeviceCapabilityListQuery = z.infer<typeof deviceCapabilityListQuerySchema>;
 
 /** Whitelisted `sortBy` values for GET /device-capabilities — see resolveSortOrder. */
 export const DEVICE_CAPABILITY_SORTABLE_FIELDS = ["createdAt", "code", "name"] as const;
 
-/** PATCH /device-capabilities/:id body */
+/** PATCH /device-capabilities/:id body. `code` is immutable and cannot be changed. */
 export const deviceCapabilityUpdateSchema = z.object({
-  code: z.string().min(1).max(64).toUpperCase().optional(),
   name: z.string().min(1).max(150).optional(),
   description: z.string().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
 });
 
 export type DeviceCapabilityUpdateInput = z.infer<typeof deviceCapabilityUpdateSchema>;
 
-/** POST /device-capabilities/:id/items body */
+/**
+ * POST /device-capabilities/:id/items body. DeviceCapabilityItem is an internal
+ * taxonomy leaf with no business identity — it has no `code`; `name` is unique
+ * within its capability.
+ */
 export const deviceCapabilityItemCreateSchema = z.object({
-  code: z.string().min(1).max(64).toUpperCase(),
   name: z.string().min(1).max(150),
   description: optionalDescription,
 });
 
 export type DeviceCapabilityItemCreateInput = z.infer<typeof deviceCapabilityItemCreateSchema>;
 
+/** GET /device-capabilities/:id/items query params */
+export const deviceCapabilityItemListQuerySchema = z.object({
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type DeviceCapabilityItemListQuery = z.infer<typeof deviceCapabilityItemListQuerySchema>;
+
 /** PATCH /device-capabilities/:id/items/:itemId body */
 export const deviceCapabilityItemUpdateSchema = z.object({
-  code: z.string().min(1).max(64).toUpperCase().optional(),
   name: z.string().min(1).max(150).optional(),
   description: z.string().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
 });
 
 export type DeviceCapabilityItemUpdateInput = z.infer<typeof deviceCapabilityItemUpdateSchema>;
@@ -899,11 +926,11 @@ const optionalDecimalPlaces = z.preprocess((value) => {
   return value;
 }, z.number().int().min(0).max(10).nullable().optional());
 
+// `code` is not accepted — system-issued, immutable business identifier (DCP-0001).
 export const deviceCalibrationParameterCreateSchema = z
   .object({
     deviceTypeId: z.string().min(1),
     capabilityItemId: z.string().min(1),
-    code: z.string().min(1).max(64).toUpperCase(),
     name: z.string().min(1).max(150),
     description: optionalDescription,
     uomId: z.string().min(1),
@@ -924,6 +951,10 @@ export const deviceCalibrationParameterListQuerySchema = baseListQuerySchema.ext
   capabilityId: z.string().min(1).optional(),
   capabilityItemId: z.string().min(1).optional(),
   uomId: z.string().min(1).optional(),
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
 });
 
 export type DeviceCalibrationParameterListQuery = z.infer<
@@ -938,7 +969,6 @@ export const deviceCalibrationParameterUpdateSchema = z
   .object({
     deviceTypeId: z.string().min(1).optional(),
     capabilityItemId: z.string().min(1).optional(),
-    code: z.string().min(1).max(64).toUpperCase().optional(),
     name: z.string().min(1).max(150).optional(),
     description: z.string().max(500).nullable().optional(),
     uomId: z.string().min(1).optional(),
@@ -946,6 +976,7 @@ export const deviceCalibrationParameterUpdateSchema = z
     toleranceMax: optionalFiniteNumber,
     toleranceNote: z.string().max(500).nullable().optional(),
     decimalPlaces: optionalDecimalPlaces,
+    isActive: z.boolean().optional(),
   })
   .superRefine(refineToleranceBounds);
 
@@ -964,6 +995,10 @@ export const deviceCalibrationParameterGroupedQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   page: z.coerce.number().int().min(1).optional(),
   pageSize: z.coerce.number().int().min(1).max(100).optional(),
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
 });
 
 export type DeviceCalibrationParameterGroupedQuery = z.infer<
@@ -975,9 +1010,11 @@ export type DeviceCalibrationParameterGroupedQuery = z.infer<
 // (Phase 1 — "Required Equipment". No physical Equipment instance layer.)
 // =============================================================================
 
-/** POST /equipment-types body */
+/**
+ * POST /equipment-types body. `code` is not accepted — system-issued, immutable
+ * business identifier (EQTP-001).
+ */
 export const equipmentTypeCreateSchema = z.object({
-  code: z.string().min(1).max(64).toUpperCase(),
   name: z.string().min(1).max(150),
   description: optionalDescription,
   category: z.string().trim().max(100).optional(),
@@ -998,9 +1035,8 @@ export type EquipmentTypeListQuery = z.infer<typeof equipmentTypeListQuerySchema
 /** Whitelisted `sortBy` values for GET /equipment-types — see resolveSortOrder. */
 export const EQUIPMENT_TYPE_SORTABLE_FIELDS = ["createdAt", "code", "name"] as const;
 
-/** PATCH /equipment-types/:id body */
+/** PATCH /equipment-types/:id body. `code` is immutable and cannot be changed. */
 export const equipmentTypeUpdateSchema = z.object({
-  code: z.string().min(1).max(64).toUpperCase().optional(),
   name: z.string().min(1).max(150).optional(),
   description: z.string().max(500).nullable().optional(),
   category: z.string().trim().max(100).nullable().optional(),
@@ -1052,10 +1088,12 @@ export type DeviceTypeEquipmentRequirementGroupedQuery = z.infer<
 
 const optionalEquipmentText = z.string().trim().max(150).optional();
 
-/** POST /equipment body */
+/**
+ * POST /equipment body. `code` is not accepted — it is a system-issued,
+ * immutable asset identifier (EQU-000001) allocated by MasterCodeService.
+ */
 export const equipmentCreateSchema = z.object({
   equipmentTypeId: z.string().min(1),
-  code: z.string().trim().min(1).max(64),
   brand: optionalEquipmentText,
   model: optionalEquipmentText,
   serialNumber: z.string().trim().max(100).optional(),
@@ -1079,10 +1117,9 @@ export type EquipmentListQuery = z.infer<typeof equipmentListQuerySchema>;
 /** Whitelisted `sortBy` values for GET /equipment — see resolveSortOrder. */
 export const EQUIPMENT_SORTABLE_FIELDS = ["createdAt", "code"] as const;
 
-/** PATCH /equipment/:id body */
+/** PATCH /equipment/:id body. `code` is immutable and cannot be changed. */
 export const equipmentUpdateSchema = z.object({
   equipmentTypeId: z.string().min(1).optional(),
-  code: z.string().trim().min(1).max(64).optional(),
   brand: z.string().trim().max(150).nullable().optional(),
   model: z.string().trim().max(150).nullable().optional(),
   serialNumber: z.string().trim().max(100).nullable().optional(),

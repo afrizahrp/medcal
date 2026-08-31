@@ -20,7 +20,7 @@ import {
 } from "./device-capabilities-ui";
 import { useDeviceCapabilities } from "./use-device-capabilities-query";
 
-const URL_KEYS = ["search", "sortBy", "sortDir", "page", "pageSize"] as const;
+const URL_KEYS = ["search", "isActive", "sortBy", "sortDir", "page", "pageSize"] as const;
 
 export default function DeviceCapabilitiesPageClient() {
   const { capabilities } = useAuthz();
@@ -31,6 +31,8 @@ export default function DeviceCapabilitiesPageClient() {
   const page = Number(params.page) || 1;
   const pageSize = Number(params.pageSize) || 10;
   const committedSearch = params.search ?? "";
+  const isActive: boolean | "" =
+    params.isActive === "true" ? true : params.isActive === "false" ? false : "";
 
   const [searchInput, setSearchInput] = useState(committedSearch);
   const debouncedSearch = useDebouncedValue(searchInput, 500);
@@ -44,6 +46,7 @@ export default function DeviceCapabilitiesPageClient() {
 
   const query = useDeviceCapabilities({
     search: committedSearch,
+    isActive,
     sortBy,
     sortDir,
     page,
@@ -84,7 +87,14 @@ export default function DeviceCapabilitiesPageClient() {
       </div>
 
       <Surface className={cn("mt-6 p-4 md:p-6", fetching && "opacity-70")}>
-        <DeviceCapabilityFilters searchInput={searchInput} onSearchChange={setSearchInput} />
+        <DeviceCapabilityFilters
+          searchInput={searchInput}
+          onSearchChange={setSearchInput}
+          isActive={isActive}
+          onIsActiveChange={(next) =>
+            setParams({ isActive: next === "" ? undefined : String(next), page: undefined })
+          }
+        />
 
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
@@ -93,10 +103,10 @@ export default function DeviceCapabilitiesPageClient() {
         ) : result && result.data.length === 0 ? (
           <DeviceCapabilityEmptyState
             onClearFilters={
-              committedSearch
+              committedSearch || isActive !== ""
                 ? () => {
                     setSearchInput("");
-                    setParams({ search: undefined, page: undefined });
+                    setParams({ search: undefined, isActive: undefined, page: undefined });
                   }
                 : undefined
             }

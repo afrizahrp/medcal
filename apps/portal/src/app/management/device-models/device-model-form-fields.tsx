@@ -162,12 +162,15 @@ export function buildDeviceModelCreatePayload(form: DeviceModelFormValue) {
   };
 }
 
-export function buildDeviceModelUpdatePayload(form: DeviceModelFormValue) {
+export function buildDeviceModelUpdatePayload(
+  form: DeviceModelFormValue & { isActive?: boolean },
+) {
   return {
     deviceTypeId: form.deviceTypeId,
     manufacturer: form.manufacturer.trim(),
     model: form.model.trim(),
     description: form.description.trim() ? form.description.trim() : null,
+    ...(form.isActive !== undefined ? { isActive: form.isActive } : {}),
   };
 }
 

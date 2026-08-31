@@ -21,13 +21,23 @@ import {
 import { useDeviceModels } from "./use-device-models-query";
 import { useDeviceTypes } from "../device-types/use-device-types-query";
 
-const URL_KEYS = ["search", "deviceTypeId", "sortBy", "sortDir", "page", "pageSize"] as const;
+const URL_KEYS = [
+  "search",
+  "deviceTypeId",
+  "isActive",
+  "sortBy",
+  "sortDir",
+  "page",
+  "pageSize",
+] as const;
 
 export default function DeviceModelsPageClient() {
   const { capabilities } = useAuthz();
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
   const deviceTypeId = params.deviceTypeId ?? "";
+  const isActive: boolean | "" =
+    params.isActive === "true" ? true : params.isActive === "false" ? false : "";
   const sortBy = params.sortBy ?? "createdAt";
   const sortDir = (params.sortDir as "asc" | "desc" | undefined) ?? "desc";
   const page = Number(params.page) || 1;
@@ -57,6 +67,7 @@ export default function DeviceModelsPageClient() {
   const query = useDeviceModels({
     search: committedSearch,
     deviceTypeId,
+    isActive,
     sortBy,
     sortDir,
     page,
@@ -104,6 +115,10 @@ export default function DeviceModelsPageClient() {
             setParams({ deviceTypeId: next || undefined, page: undefined })
           }
           deviceTypes={typesQuery.data?.data ?? []}
+          isActive={isActive}
+          onIsActiveChange={(next) =>
+            setParams({ isActive: next === "" ? undefined : String(next), page: undefined })
+          }
         />
 
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
@@ -113,12 +128,13 @@ export default function DeviceModelsPageClient() {
         ) : result && result.data.length === 0 ? (
           <DeviceModelEmptyState
             onClearFilters={
-              committedSearch || deviceTypeId
+              committedSearch || deviceTypeId || isActive !== ""
                 ? () => {
                     setSearchInput("");
                     setParams({
                       search: undefined,
                       deviceTypeId: undefined,
+                      isActive: undefined,
                       page: undefined,
                     });
                   }

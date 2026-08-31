@@ -86,6 +86,7 @@ export class DeviceModelsService {
 
     const where: Prisma.DeviceModelWhereInput = {
       ...(query.deviceTypeId ? { deviceTypeId: query.deviceTypeId } : {}),
+      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...(query.search
         ? {
             OR: [
@@ -159,6 +160,7 @@ export class DeviceModelsService {
         ...(input.manufacturer !== undefined ? { manufacturer: input.manufacturer } : {}),
         ...(input.model !== undefined ? { model: input.model } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
       },
       include: { deviceType: { select: deviceTypeSelect } },
     });

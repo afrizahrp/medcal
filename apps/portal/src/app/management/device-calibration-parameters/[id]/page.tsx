@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
@@ -16,15 +16,16 @@ import {
 } from "../device-calibration-parameter-form-fields";
 import {
   type DeviceCalibrationParameterRow,
+  DeviceCalibrationParameterStatusBadge,
   PageHeader,
   Surface,
   deviceCalibrationParameterFormActionsClass,
   deviceCalibrationParameterFormPageClass,
   deviceCalibrationParameterFormSurfaceClass,
   formatCalibrationTolerance,
+  selectClassName,
 } from "../device-calibration-parameters-ui";
 import {
-  useDeleteDeviceCalibrationParameter,
   useDeviceCalibrationParameter,
   useUpdateDeviceCalibrationParameter,
 } from "../use-device-calibration-parameters-query";
@@ -78,15 +79,14 @@ function DetailField({ label, children }: { label: string; children: ReactNode }
 
 export default function DeviceCalibrationParameterDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const { capabilities } = useAuthz();
   const parameterQuery = useDeviceCalibrationParameter(params.id);
   const updateMutation = useUpdateDeviceCalibrationParameter();
-  const deleteMutation = useDeleteDeviceCalibrationParameter();
 
   const row = parameterQuery.data;
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<DeviceCalibrationParameterFormValue>(emptyForm);
+  const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -101,6 +101,7 @@ export default function DeviceCalibrationParameterDetailPage() {
   });
   const capabilitiesQuery = useDeviceCapabilities({
     search: "",
+    isActive: "",
     sortBy: "name",
     sortDir: "asc",
     page: 1,
@@ -120,6 +121,7 @@ export default function DeviceCalibrationParameterDetailPage() {
   useEffect(() => {
     if (!row) return;
     setForm(formFromRow(row));
+    setIsActive(row.isActive);
   }, [row]);
 
   if (!capabilities?.deviceCalibrationParameterRead) {
@@ -170,6 +172,7 @@ export default function DeviceCalibrationParameterDetailPage() {
 
   function resetForm() {
     setForm(formFromRow(row!));
+    setIsActive(row!.isActive);
     setError(null);
   }
 
@@ -185,10 +188,6 @@ export default function DeviceCalibrationParameterDetailPage() {
     }
     if (!form.capabilityItemId) {
       setError("Capability Item wajib dipilih.");
-      return;
-    }
-    if (!form.code.trim()) {
-      setError("Kode wajib diisi.");
       return;
     }
     if (!form.name.trim()) {
@@ -208,24 +207,11 @@ export default function DeviceCalibrationParameterDetailPage() {
     try {
       await updateMutation.mutateAsync({
         id: row!.id,
-        input: buildDeviceCalibrationParameterUpdatePayload(form),
+        input: buildDeviceCalibrationParameterUpdatePayload({ ...form, isActive }),
       });
       setSuccess("Perubahan tersimpan.");
       setEditing(false);
       await parameterQuery.refetch();
-    } catch (err) {
-      setError(formatDeviceCalibrationParameterApiError(err));
-    }
-  }
-
-  async function remove() {
-    if (!capabilities?.deviceCalibrationParameterDelete) return;
-    if (!confirm(`Yakin ingin menghapus Calibration Parameter "${row!.name}"?`)) return;
-    setError(null);
-    setSuccess(null);
-    try {
-      await deleteMutation.mutateAsync(row!.id);
-      router.push("/device-calibration-parameters");
     } catch (err) {
       setError(formatDeviceCalibrationParameterApiError(err));
     }
@@ -246,8 +232,25 @@ export default function DeviceCalibrationParameterDetailPage() {
       {success ? <p className="mt-3 text-sm text-emerald-700">{success}</p> : null}
 
       <Surface className={deviceCalibrationParameterFormSurfaceClass}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-600">{row.deviceType.name}</p>
+          {editing ? (
+            <select
+              value={isActive ? "true" : "false"}
+              onChange={(e) => setIsActive(e.target.value === "true")}
+              className={`${selectClassName} min-w-[140px]`}
+              aria-label="Status"
+            >
+              <option value="true">Aktif</option>
+              <option value="false">Nonaktif</option>
+            </select>
+          ) : (
+            <DeviceCalibrationParameterStatusBadge isActive={row.isActive} />
+          )}
+        </div>
+
         {editing ? (
-          <form onSubmit={save}>
+          <form onSubmit={save} className="mt-3">
             <DeviceCalibrationParameterFormFields
               value={form}
               onChange={setField}
@@ -282,7 +285,7 @@ export default function DeviceCalibrationParameterDetailPage() {
           </form>
         ) : (
           <>
-            <dl className="space-y-3 text-sm">
+            <dl className="mt-3 space-y-3 text-sm">
               <DetailField label="Device Name">
                 <span className="font-medium">{row.deviceType.name}</span>
               </DetailField>
@@ -339,16 +342,6 @@ export default function DeviceCalibrationParameterDetailPage() {
             </dl>
 
             <div className="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
-              {capabilities.deviceCalibrationParameterDelete ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={remove}
-                  disabled={deleteMutation.isPending}
-                >
-                  {deleteMutation.isPending ? "Menghapus…" : "Hapus"}
-                </Button>
-              ) : null}
               {capabilities.deviceCalibrationParameterUpdate ? (
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   Edit
