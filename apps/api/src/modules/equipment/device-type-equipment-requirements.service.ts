@@ -12,6 +12,17 @@ import type {
 } from "@medcal/shared";
 
 const DEFAULT_PAGE_SIZE = 10;
+const ORDER_STEP = 10;
+
+/**
+ * Requirements within a DeviceType are ordered by their persisted `sortOrder`,
+ * then case-insensitively by equipment type name as a deterministic tie-break.
+ */
+const requirementOrderBy = [
+  { deviceType: { name: "asc" } },
+  { sortOrder: "asc" },
+  { equipmentType: { name: "asc" } },
+] as const satisfies Prisma.DeviceTypeEquipmentRequirementOrderByWithRelationInput[];
 
 const equipmentTypeSelect = {
   id: true,
@@ -116,13 +127,21 @@ export class DeviceTypeEquipmentRequirementsService {
       });
     }
 
-    return prisma.deviceTypeEquipmentRequirement.create({
-      data: {
-        deviceTypeId: input.deviceTypeId,
-        equipmentTypeId: input.equipmentTypeId,
-        notes: input.notes,
-      },
-      include: requirementInclude,
+    // Append the new requirement to the end of its DeviceType's order.
+    return prisma.$transaction(async (tx) => {
+      const agg = await tx.deviceTypeEquipmentRequirement.aggregate({
+        where: { deviceTypeId: input.deviceTypeId },
+        _max: { sortOrder: true },
+      });
+      return tx.deviceTypeEquipmentRequirement.create({
+        data: {
+          deviceTypeId: input.deviceTypeId,
+          equipmentTypeId: input.equipmentTypeId,
+          notes: input.notes,
+          sortOrder: (agg._max.sortOrder ?? 0) + ORDER_STEP,
+        },
+        include: requirementInclude,
+      });
     });
   }
 
@@ -171,7 +190,7 @@ export class DeviceTypeEquipmentRequirementsService {
         ...(query.equipmentTypeId ? { equipmentTypeId: query.equipmentTypeId } : {}),
       },
       include: requirementInclude,
-      orderBy: [{ deviceType: { name: "asc" } }, { equipmentType: { name: "asc" } }],
+      orderBy: requirementOrderBy,
     });
   }
 
@@ -186,7 +205,7 @@ export class DeviceTypeEquipmentRequirementsService {
     const rows = await prisma.deviceTypeEquipmentRequirement.findMany({
       where: buildSearchWhere(query.search?.trim() || undefined),
       include: requirementInclude,
-      orderBy: [{ deviceType: { name: "asc" } }, { equipmentType: { name: "asc" } }],
+      orderBy: requirementOrderBy,
     });
 
     const groups = new Map<string, DeviceTypeEquipmentRequirementGroup>();
@@ -230,5 +249,57 @@ export class DeviceTypeEquipmentRequirementsService {
       totalRequirements: rows.length,
       totalDeviceTypes: total,
     };
+  }
+
+  private static assertSameSet(provided: string[], actual: Set<string>): void {
+    const providedSet = new Set(provided);
+    const sameSize = providedSet.size === provided.length && providedSet.size === actual.size;
+    const sameMembers = sameSize && [...actual].every((id) => providedSet.has(id));
+    if (!sameMembers) {
+      throw new BadRequestException({
+        message:
+          "requirementIds must contain exactly the equipment requirements currently attached to this device type, with no duplicates",
+        code: "EQUIPMENT_REQUIREMENT_ORDER_MISMATCH",
+      });
+    }
+  }
+
+  /**
+   * Persist the operational order of a DeviceType's equipment requirements.
+   * `requirementIds` must be the FULL ordered list of the requirements currently
+   * attached to that device type — a set mismatch (unknown id, missing id, id
+   * belonging to another device type, or a duplicate) is rejected so a
+   * requirement can never be reassigned or partially reordered. Written in one
+   * transaction as contiguous multiples of 10.
+   */
+  async reorder(
+    deviceTypeId: string,
+    requirementIds: string[],
+  ): Promise<DeviceTypeEquipmentRequirementWithRelations[]> {
+    await this.assertDeviceTypeExists(deviceTypeId);
+
+    const scoped = await prisma.deviceTypeEquipmentRequirement.findMany({
+      where: { deviceTypeId },
+      select: { id: true },
+    });
+    DeviceTypeEquipmentRequirementsService.assertSameSet(
+      requirementIds,
+      new Set(scoped.map((row) => row.id)),
+    );
+
+    await prisma.$transaction(
+      requirementIds.map((id, index) =>
+        prisma.deviceTypeEquipmentRequirement.update({
+          where: { id },
+          data: { sortOrder: (index + 1) * ORDER_STEP },
+        }),
+      ),
+    );
+
+    return prisma.deviceTypeEquipmentRequirement.findMany({
+      where: { deviceTypeId },
+      include: requirementInclude,
+      orderBy: [{ sortOrder: "asc" }, { equipmentType: { name: "asc" } }],
+    });
   }
 }

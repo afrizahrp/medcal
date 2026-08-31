@@ -1108,6 +1108,21 @@ export type DeviceTypeEquipmentRequirementGroupedQuery = z.infer<
   typeof deviceTypeEquipmentRequirementGroupedQuerySchema
 >;
 
+/**
+ * PATCH /device-type-equipment-requirements/device-types/:deviceTypeId/requirement-order
+ * body. `requirementIds` is the FULL ordered list of the equipment requirements
+ * currently attached to that device type — the server rejects any set mismatch
+ * (unknown id, missing id, id from another device type, or a duplicate) and
+ * persists the whole ordering in one transaction.
+ */
+export const deviceTypeEquipmentRequirementReorderSchema = z.object({
+  requirementIds: z.array(z.string().min(1)).min(1),
+});
+
+export type DeviceTypeEquipmentRequirementReorderInput = z.infer<
+  typeof deviceTypeEquipmentRequirementReorderSchema
+>;
+
 // =============================================================================
 // Equipment — physical reference-equipment unit (Phase 2A, company-scoped)
 // =============================================================================

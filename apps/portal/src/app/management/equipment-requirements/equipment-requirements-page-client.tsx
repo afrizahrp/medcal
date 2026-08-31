@@ -27,6 +27,7 @@ import {
   useCreateEquipmentRequirement,
   useDeleteEquipmentRequirement,
   useEquipmentRequirementGroups,
+  useReorderEquipmentRequirements,
 } from "./use-equipment-requirements-query";
 
 const URL_KEYS = ["search", "expanded", "page", "pageSize"] as const;
@@ -74,6 +75,16 @@ export default function EquipmentRequirementsPageClient() {
 
   const createMutation = useCreateEquipmentRequirement();
   const deleteMutation = useDeleteEquipmentRequirement();
+  const reorderMutation = useReorderEquipmentRequirements();
+
+  const canReorder = Boolean(capabilities?.equipmentRequirementUpdate);
+  const reorderError = reorderMutation.isError
+    ? "Gagal menyimpan urutan baru — urutan dikembalikan seperti semula. Coba lagi."
+    : null;
+
+  function reorderRequirements(deviceTypeId: string, requirementIds: string[]) {
+    reorderMutation.mutate({ deviceTypeId, requirementIds });
+  }
 
   const equipmentTypeOptions: EquipmentTypeOption[] = useMemo(
     () =>
@@ -180,6 +191,7 @@ export default function EquipmentRequirementsPageClient() {
       </div>
 
       {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+      {reorderError ? <p className="mt-4 text-sm text-red-600">{reorderError}</p> : null}
 
       {showAddPanel && canManage ? (
         <Surface className="mt-4 p-4 md:p-5">
@@ -263,9 +275,11 @@ export default function EquipmentRequirementsPageClient() {
                 expandedIds={expandedIds}
                 onToggle={toggle}
                 canManage={canManage}
+                canReorder={canReorder}
                 equipmentTypeOptions={equipmentTypeOptions}
                 onAdd={addRequirement}
                 onRemove={removeRequirement}
+                onReorder={reorderRequirements}
                 pendingAdd={createMutation.isPending}
                 pendingRemoveId={pendingRemoveId}
               />

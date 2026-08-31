@@ -1095,6 +1095,15 @@ model DeviceTypeEquipmentRequirement {
   deviceTypeId    String
   equipmentTypeId String
   notes           String?
+  // Operational order of this equipment within its parent DeviceType on the
+  // Equipment Requirements screen and the future generated calibration
+  // worksheet ("A. Daftar Alat yang Digunakan"). The order is business data,
+  // not presentation — it belongs on this DeviceType x EquipmentType
+  // relationship, never on the reusable EquipmentType master. Written in a
+  // single transactional pass (multiples of 10); reads tie-break on equipment
+  // type name for determinism. Existing rows are seeded per-DeviceType from
+  // row-creation order by the add_equipment_requirement_sort_order migration.
+  sortOrder       Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

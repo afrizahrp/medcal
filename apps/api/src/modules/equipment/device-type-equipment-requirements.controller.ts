@@ -14,6 +14,7 @@ import {
 import {
   deviceTypeEquipmentRequirementCreateSchema,
   deviceTypeEquipmentRequirementGroupedQuerySchema,
+  deviceTypeEquipmentRequirementReorderSchema,
   deviceTypeEquipmentRequirementUpdateSchema,
 } from "@medcal/shared";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
@@ -72,6 +73,23 @@ export class DeviceTypeEquipmentRequirementsController {
       });
     }
     return this.service.create(parsed.data);
+  }
+
+  @Patch("device-types/:deviceTypeId/requirement-order")
+  @RequirePermission("equipmentRequirement", "update")
+  async reorder(
+    @Param("deviceTypeId") deviceTypeId: string,
+    @Body() rawBody: unknown,
+  ): Promise<DeviceTypeEquipmentRequirementWithRelations[]> {
+    const parsed = deviceTypeEquipmentRequirementReorderSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid equipment requirement order payload",
+        code: "INVALID_EQUIPMENT_REQUIREMENT_ORDER",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.reorder(deviceTypeId, parsed.data.requirementIds);
   }
 
   @Patch(":id")

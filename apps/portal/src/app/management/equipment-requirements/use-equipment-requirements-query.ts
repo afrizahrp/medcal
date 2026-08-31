@@ -68,3 +68,57 @@ export function useDeleteEquipmentRequirement() {
     },
   });
 }
+
+const GROUPED_KEY = [EQUIPMENT_REQUIREMENTS_QUERY_KEY, "grouped"] as const;
+
+/**
+ * Persist the per-DeviceType order of its equipment requirements. Optimistically
+ * rewrites every cached grouped page, rolls back to the snapshot on failure, and
+ * refetches on settle so the server order is authoritative.
+ */
+export function useReorderEquipmentRequirements() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      deviceTypeId,
+      requirementIds,
+    }: {
+      deviceTypeId: string;
+      requirementIds: string[];
+    }) =>
+      apiFetch(
+        `/device-type-equipment-requirements/device-types/${deviceTypeId}/requirement-order`,
+        { method: "PATCH", body: JSON.stringify({ requirementIds }) },
+      ),
+    onMutate: async ({ deviceTypeId, requirementIds }) => {
+      await queryClient.cancelQueries({ queryKey: GROUPED_KEY });
+      const snapshot = queryClient.getQueriesData<EquipmentRequirementGroupedResponse>({
+        queryKey: GROUPED_KEY,
+      });
+      queryClient.setQueriesData<EquipmentRequirementGroupedResponse>(
+        { queryKey: GROUPED_KEY },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            data: old.data.map((group) => {
+              if (group.deviceType.id !== deviceTypeId) return group;
+              const byId = new Map(group.requirements.map((r) => [r.id, r]));
+              const requirements = requirementIds
+                .map((id) => byId.get(id))
+                .filter((r): r is (typeof group.requirements)[number] => Boolean(r));
+              return { ...group, requirements };
+            }),
+          };
+        },
+      );
+      return { snapshot };
+    },
+    onError: (_error, _variables, context) => {
+      context?.snapshot.forEach(([key, data]) => queryClient.setQueryData(key, data));
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [EQUIPMENT_REQUIREMENTS_QUERY_KEY] });
+    },
+  });
+}
