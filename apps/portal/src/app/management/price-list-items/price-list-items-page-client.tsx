@@ -202,15 +202,15 @@ export default function PriceListItemsPageClient() {
         {canManage ? (
           <Button type="button" className="shrink-0" onClick={() => setShowAdd((v) => !v)}>
             <Plus className="h-4 w-4" />
-            Tambah tarif
+            Tarif
           </Button>
         ) : null}
       </div>
 
       <p className="mt-2 max-w-2xl text-sm text-slate-500">
-        Tarif default per Device Name. Saat quotation dibuat dari Requisition, sistem mengambil tarif
-        yang aktif pada tanggal quotation dan menyimpannya sebagai <em>snapshot</em> di quotation.
-        Perubahan tarif di sini tidak mengubah quotation yang sudah dibuat.
+        Tarif default per Device Name. Saat quotation dibuat dari Requisition, sistem mengambil
+        tarif yang aktif pada tanggal quotation dan menyimpannya sebagai <em>snapshot</em> di
+        quotation. Perubahan tarif di sini tidak mengubah quotation yang sudah dibuat.
       </p>
 
       {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
@@ -261,7 +261,9 @@ export default function PriceListItemsPageClient() {
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-slate-600">Catatan (opsional)</label>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Catatan (opsional)
+              </label>
               <Input
                 value={draft.notes}
                 onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
