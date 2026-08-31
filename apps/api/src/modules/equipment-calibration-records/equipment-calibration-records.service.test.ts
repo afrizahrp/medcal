@@ -6,9 +6,12 @@ import { EquipmentCalibrationRecordsService } from "./equipment-calibration-reco
 import { equipmentCalibrationFileOwnerPolicy } from "./equipment-calibration-file-owner-policy";
 
 const service = new EquipmentCalibrationRecordsService();
-const realCompanyId = "PKM";
+// Disposable companies created in beforeAll — never a real tenant.
+let realCompanyId: string;
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const uniqueCode = () => `EQC${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+const newCompanyId = () =>
+  `C${randomUUID().replace(/[^A-Z0-9]/gi, "").slice(0, 2).toUpperCase()}`;
 
 let userId: string;
 let equipmentTypeId: string;
@@ -26,6 +29,11 @@ beforeAll(async () => {
     }));
   userId = user.id;
 
+  realCompanyId = newCompanyId();
+  await prisma.company.create({
+    data: { id: realCompanyId, name: "Calib Primary Test Co", status: "ACTIVE" },
+  });
+
   const et = await prisma.equipmentType.create({
     data: { code: uniqueCode(), name: "Calib Test Analyzer" },
   });
@@ -35,13 +43,9 @@ beforeAll(async () => {
   });
   equipmentId = eq.id;
 
-  // Fixed id + upsert: a random 2-char suffix collides with other suites'
-  // company ids under parallel test execution.
-  otherCompanyId = "ZQC";
-  await prisma.company.upsert({
-    where: { id: otherCompanyId },
-    create: { id: otherCompanyId, name: "Calib Other Co", status: "ACTIVE" },
-    update: {},
+  otherCompanyId = newCompanyId();
+  await prisma.company.create({
+    data: { id: otherCompanyId, name: "Calib Other Test Co", status: "ACTIVE" },
   });
   const otherEq = await prisma.equipment.create({
     data: { companyId: otherCompanyId, equipmentTypeId, code: uniqueCode() },
@@ -55,7 +59,9 @@ afterAll(async () => {
   });
   await prisma.equipment.deleteMany({ where: { equipmentTypeId } });
   await prisma.equipmentType.deleteMany({ where: { id: equipmentTypeId } });
-  // The shared "ZQC" company row is left in place — other parallel runs may hold it.
+  await prisma.company.deleteMany({
+    where: { id: { in: [realCompanyId, otherCompanyId] } },
+  });
 });
 
 function createInput(over: Record<string, unknown> = {}) {

@@ -10,6 +10,8 @@
     "migrate:deploy": "prisma migrate deploy",
     "studio": "prisma studio",
     "format": "prisma format",
+    "prepare-test-db": "node ./scripts/prepare-test-db.mjs",
+    "pretest": "node ./scripts/prepare-test-db.mjs",
     "test": "vitest run",
     "seed:contact-topics": "tsx prisma/seed-contact-topics.ts",
     "seed:menu": "tsx prisma/seed-menu.ts",

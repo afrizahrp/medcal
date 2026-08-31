@@ -10,6 +10,7 @@
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "lint": "echo \"lint api skipped\"",
+    "pretest": "pnpm --filter @medcal/db run prepare-test-db",
     "test": "vitest run"
   },
   "dependencies": {
