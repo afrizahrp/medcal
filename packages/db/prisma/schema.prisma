@@ -942,6 +942,7 @@ model DeviceType {
   models                   DeviceModel[]
   devices                  Device[]
   calibrationParameters    DeviceCalibrationParameter[]
+  capabilityOrders         DeviceTypeCapabilityOrder[]
   calibrationRequestItems  CalibrationRequestItem[]
   equipmentRequirements    DeviceTypeEquipmentRequirement[]
   aliases                  DeviceTypeAlias[]
@@ -1141,7 +1142,8 @@ model DeviceCapability {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  items DeviceCapabilityItem[]
+  items            DeviceCapabilityItem[]
+  deviceTypeOrders DeviceTypeCapabilityOrder[]
 
   @@index([isActive])
 }
@@ -1191,6 +1193,11 @@ model DeviceCalibrationParameter {
   // safe default of 0 (accurate per-parameter values are a separate follow-up).
   // A CHECK constraint bounds it to 0..10 (see migrations).
   decimalPlaces    Int?
+  // Display order of this parameter within its (deviceTypeId, capability) scope
+  // on the calibration-parameter screen and the future generated worksheet.
+  // Written in a single transactional pass (multiples of 10); reads tie-break
+  // on `name`. Existing rows are seeded by backfill-calibration-ordering.ts.
+  sortOrder        Int                  @default(0)
   isActive         Boolean              @default(true)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
@@ -1204,6 +1211,27 @@ model DeviceCalibrationParameter {
   @@index([capabilityItemId])
   @@index([uomId])
   @@index([isActive])
+}
+
+// Per-DeviceType ordering of DeviceCapabilities on the calibration-parameter
+// screen and (future) generated worksheet. A DeviceCapability is a shared
+// global master reused across many DeviceTypes, so its display order cannot
+// live on the master — it belongs on this DeviceType x Capability relationship.
+// `sortOrder` is an integer written in a single transactional pass (multiples
+// of 10); reads tie-break on capability name for determinism.
+model DeviceTypeCapabilityOrder {
+  id           String   @id @default(cuid())
+  deviceTypeId String
+  capabilityId String
+  sortOrder    Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  deviceType DeviceType       @relation(fields: [deviceTypeId], references: [id], onDelete: Cascade)
+  capability DeviceCapability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceTypeId, capabilityId])
+  @@index([deviceTypeId])
 }
 
 model Device {

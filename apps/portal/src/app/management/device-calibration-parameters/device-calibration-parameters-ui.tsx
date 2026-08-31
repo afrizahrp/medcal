@@ -1,13 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Plus, Search } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DraggableAttributes,
+  type DraggableSyntheticListeners,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { ChevronDown, ChevronRight, GripVertical, Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../../../components/management/page-header";
 import { PaginationBar, Surface, selectClassName } from "../leads/leads-ui";
+import { reorderIds, sameOrder } from "./device-calibration-parameter-ordering";
 
 export interface DeviceCalibrationParameterTypeRef {
   id: string;
@@ -48,6 +67,7 @@ export interface DeviceCalibrationParameterRow {
   toleranceMax: string | number | null;
   toleranceNote: string | null;
   decimalPlaces: number | null;
+  sortOrder: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -99,11 +119,22 @@ export interface DeviceCalibrationParameterListResponse {
   totalPages: number;
 }
 
+/** One Capability inside a Device-Type group, with its ordered parameters. */
+export interface DeviceCalibrationParameterCapabilityGroupRow {
+  capability: DeviceCalibrationParameterCapabilityRef;
+  sortOrder: number | null;
+  count: number;
+  parameters: DeviceCalibrationParameterRow[];
+}
+
 /** GET /device-calibration-parameters/grouped — parameters grouped by Device Type. */
 export interface DeviceCalibrationParameterGroupRow {
   deviceType: DeviceCalibrationParameterTypeRef;
   categoryName: string | null;
   count: number;
+  /** Capabilities in persisted per-DeviceType order, each with ordered parameters. */
+  capabilities: DeviceCalibrationParameterCapabilityGroupRow[];
+  /** Flattened view of `capabilities` (same order) — kept for backward compatibility. */
   parameters: DeviceCalibrationParameterRow[];
 }
 
@@ -190,63 +221,197 @@ export function DeviceCalibrationParameterSearchBar({
   );
 }
 
-const CHILD_HEADER = [
-  "Capability",
-  "Parameter",
-  "UOM",
-  "Decimal",
-  "Tolerance",
-  "Status",
-  "",
-] as const;
+const CHILD_HEADER = ["", "Parameter", "UOM", "Decimal", "Tolerance", "Status", ""] as const;
+
+export interface DeviceCalibrationParameterReorderHandlers {
+  onReorderCapabilities: (deviceTypeId: string, capabilityIds: string[]) => void;
+  onReorderParameters: (
+    deviceTypeId: string,
+    capabilityId: string,
+    parameterIds: string[],
+  ) => void;
+}
+
+type DragHandleProps = {
+  attributes: DraggableAttributes;
+  listeners: DraggableSyntheticListeners;
+};
+
+function DragHandle({ attributes, listeners }: DragHandleProps) {
+  return (
+    <button
+      type="button"
+      aria-label="Ubah urutan"
+      className="cursor-grab touch-none rounded p-1 text-slate-300 transition-colors hover:text-slate-500 active:cursor-grabbing"
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical className="h-4 w-4" />
+    </button>
+  );
+}
+
+function SortableCapabilityHeaderRow({
+  deviceTypeId,
+  cap,
+  canReorder,
+}: {
+  deviceTypeId: string;
+  cap: DeviceCalibrationParameterCapabilityGroupRow;
+  canReorder: boolean;
+}) {
+  const { setNodeRef, transform, transition, attributes, listeners, isDragging } = useSortable({
+    id: cap.capability.id,
+    data: { type: "capability", deviceTypeId },
+    disabled: !canReorder,
+  });
+  return (
+    <tr
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "border-b border-slate-100 bg-slate-100/70",
+        isDragging && "relative z-10 shadow-sm",
+      )}
+    >
+      <td colSpan={7} className="px-4 py-1.5 pl-4">
+        <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          {canReorder ? <DragHandle attributes={attributes} listeners={listeners} /> : null}
+          {cap.capability.name}
+          <span className="font-normal normal-case text-slate-400">· {cap.count} parameter</span>
+        </span>
+      </td>
+    </tr>
+  );
+}
+
+function SortableParameterRow({
+  deviceTypeId,
+  capabilityId,
+  row,
+  canReorder,
+}: {
+  deviceTypeId: string;
+  capabilityId: string;
+  row: DeviceCalibrationParameterRow;
+  canReorder: boolean;
+}) {
+  const { setNodeRef, transform, transition, attributes, listeners, isDragging } = useSortable({
+    id: row.id,
+    data: { type: "parameter", deviceTypeId, capabilityId },
+    disabled: !canReorder,
+  });
+  return (
+    <tr
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "border-b border-slate-100 text-sm last:border-0 hover:bg-slate-50",
+        isDragging && "relative z-10 bg-white shadow-sm",
+      )}
+    >
+      <td className="px-4 py-2 pl-6">
+        {canReorder ? (
+          <DragHandle attributes={attributes} listeners={listeners} />
+        ) : (
+          <span className="inline-block w-6" />
+        )}
+      </td>
+      <td className="px-4 py-2 font-medium text-slate-900">
+        {row.name}
+        {row.valueType !== "NUMBER" ? (
+          <Badge variant="secondary" className="ml-2 font-mono text-[10px] text-slate-500">
+            {row.valueType}
+          </Badge>
+        ) : null}
+      </td>
+      <td className="px-4 py-2 text-slate-600">{row.uom ? row.uom.symbol : "—"}</td>
+      <td className="px-4 py-2 tabular-nums text-slate-700">{formatDecimalPlaces(row)}</td>
+      <td className="px-4 py-2 text-slate-600">
+        {formatCalibrationTolerance(row) ?? <span className="text-slate-400">—</span>}
+      </td>
+      <td className="px-4 py-2">
+        <DeviceCalibrationParameterStatusBadge isActive={row.isActive} />
+      </td>
+      <td className="px-4 py-2 text-right">
+        <Link href={`/device-calibration-parameters/${row.id}`}>
+          <Button variant="ghost" size="sm">
+            Edit
+          </Button>
+        </Link>
+      </td>
+    </tr>
+  );
+}
 
 function ChildRows({
   group,
   canCreate,
+  canReorder,
+  reorder,
 }: {
   group: DeviceCalibrationParameterGroupRow;
   canCreate: boolean;
+  canReorder: boolean;
+  reorder?: DeviceCalibrationParameterReorderHandlers;
 }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const dndEnabled = canReorder && Boolean(reorder);
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!reorder || !over || active.id === over.id) return;
+    const activeData = active.data.current as { type?: string; capabilityId?: string } | undefined;
+    const overData = over.data.current as { type?: string; capabilityId?: string } | undefined;
+    if (!activeData || !overData || activeData.type !== overData.type) return;
+
+    if (activeData.type === "capability") {
+      const ids = group.capabilities.map((c) => c.capability.id);
+      const next = reorderIds(ids, String(active.id), String(over.id));
+      if (!sameOrder(ids, next)) reorder.onReorderCapabilities(group.deviceType.id, next);
+      return;
+    }
+    // Parameters may only be reordered within their own Capability.
+    if (activeData.capabilityId !== overData.capabilityId || !activeData.capabilityId) return;
+    const cap = group.capabilities.find((c) => c.capability.id === activeData.capabilityId);
+    if (!cap) return;
+    const ids = cap.parameters.map((p) => p.id);
+    const next = reorderIds(ids, String(active.id), String(over.id));
+    if (!sameOrder(ids, next)) {
+      reorder.onReorderParameters(group.deviceType.id, cap.capability.id, next);
+    }
+  }
+
   return (
     <>
       <tr className="bg-slate-50/60 text-[11px] font-medium uppercase tracking-wider text-slate-400">
         {CHILD_HEADER.map((label, i) => (
-          <td key={label || i} className="px-4 py-1.5 pl-10">
+          <td key={label || i} className="px-4 py-1.5 pl-4">
             {label}
           </td>
         ))}
       </tr>
-      {group.parameters.map((row) => (
-        <tr key={row.id} className="border-b border-slate-100 text-sm last:border-0 hover:bg-slate-50">
-          <td className="px-4 py-2 pl-10 text-slate-500">{row.capabilityItem.capability.name}</td>
-          <td className="px-4 py-2 font-medium text-slate-900">
-            {row.name}
-            {row.valueType !== "NUMBER" ? (
-              <Badge variant="secondary" className="ml-2 font-mono text-[10px] text-slate-500">
-                {row.valueType}
-              </Badge>
-            ) : null}
-          </td>
-          <td className="px-4 py-2 text-slate-600">{row.uom ? row.uom.symbol : "—"}</td>
-          <td className="px-4 py-2 tabular-nums text-slate-700">{formatDecimalPlaces(row)}</td>
-          <td className="px-4 py-2 text-slate-600">
-            {formatCalibrationTolerance(row) ?? <span className="text-slate-400">—</span>}
-          </td>
-          <td className="px-4 py-2">
-            <DeviceCalibrationParameterStatusBadge isActive={row.isActive} />
-          </td>
-          <td className="px-4 py-2 text-right">
-            <Link href={`/device-calibration-parameters/${row.id}`}>
-              <Button variant="ghost" size="sm">
-                Edit
-              </Button>
-            </Link>
-          </td>
-        </tr>
-      ))}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext
+          items={group.capabilities.map((c) => c.capability.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {group.capabilities.map((cap) => (
+            <CapabilitySection
+              key={cap.capability.id}
+              deviceTypeId={group.deviceType.id}
+              cap={cap}
+              canReorder={dndEnabled}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
       {canCreate ? (
         <tr className="border-b border-slate-100 last:border-0">
-          <td colSpan={7} className="px-4 py-1.5 pl-10">
+          <td colSpan={7} className="px-4 py-1.5 pl-6">
             <Link
               href={`/device-calibration-parameters/new?deviceTypeId=${group.deviceType.id}`}
               className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
@@ -261,16 +426,50 @@ function ChildRows({
   );
 }
 
+function CapabilitySection({
+  deviceTypeId,
+  cap,
+  canReorder,
+}: {
+  deviceTypeId: string;
+  cap: DeviceCalibrationParameterCapabilityGroupRow;
+  canReorder: boolean;
+}) {
+  return (
+    <>
+      <SortableCapabilityHeaderRow deviceTypeId={deviceTypeId} cap={cap} canReorder={canReorder} />
+      <SortableContext
+        items={cap.parameters.map((p) => p.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        {cap.parameters.map((row) => (
+          <SortableParameterRow
+            key={row.id}
+            deviceTypeId={deviceTypeId}
+            capabilityId={cap.capability.id}
+            row={row}
+            canReorder={canReorder}
+          />
+        ))}
+      </SortableContext>
+    </>
+  );
+}
+
 export function DeviceTypeParameterTable({
   groups,
   expandedIds,
   onToggle,
   canCreate,
+  canReorder = false,
+  reorder,
 }: {
   groups: DeviceCalibrationParameterGroupRow[];
   expandedIds: Set<string>;
   onToggle: (deviceTypeId: string) => void;
   canCreate: boolean;
+  canReorder?: boolean;
+  reorder?: DeviceCalibrationParameterReorderHandlers;
 }) {
   return (
     <div className="overflow-x-auto rounded-md border border-slate-200">
@@ -309,7 +508,14 @@ export function DeviceTypeParameterTable({
                     {group.count} parameter
                   </td>
                 </tr>
-              {expanded ? <ChildRows group={group} canCreate={canCreate} /> : null}
+              {expanded ? (
+                <ChildRows
+                  group={group}
+                  canCreate={canCreate}
+                  canReorder={canReorder}
+                  reorder={reorder}
+                />
+              ) : null}
             </tbody>
           );
         })}

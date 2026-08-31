@@ -328,39 +328,201 @@ describe("DeviceCalibrationParametersService.findAllGroupedByDeviceType", () => 
     expect(grouped.totalParameters).toBe(2);
   });
 
-  it("sorts parameters by name within a capability, capabilities by name", async () => {
+  it("groups parameters by capability and orders both levels by persisted sortOrder", async () => {
     const deviceType = await createDeviceType();
     const uom = await createUom();
     const marker = uniqueSlug();
 
-    const envCap = await capabilitiesService.create({ name: `alpha env ${marker}` });
-    const safetyCap = await capabilitiesService.create({ name: `Zeta safety ${marker}` });
-    createdCapabilityIds.push(envCap.id, safetyCap.id);
-    const envItem = await capabilitiesService.createItem(envCap.id, { name: "Env Item" });
-    const safetyItem = await capabilitiesService.createItem(safetyCap.id, { name: "Safety Item" });
-    createdItemIds.push(envItem.id, safetyItem.id);
+    // Names chosen so alphabetical order is the REVERSE of creation order.
+    const zCap = await capabilitiesService.create({ name: `Z env ${marker}` });
+    const aCap = await capabilitiesService.create({ name: `A safety ${marker}` });
+    createdCapabilityIds.push(zCap.id, aCap.id);
+    const zItem = await capabilitiesService.createItem(zCap.id, { name: "Z Item" });
+    const aItem = await capabilitiesService.createItem(aCap.id, { name: "A Item" });
+    createdItemIds.push(zItem.id, aItem.id);
 
-    const specs = [
-      { item: safetyItem.id, name: `${marker} Resistansi Isolasi` },
-      { item: envItem.id, name: `${marker} Kelembaban` },
-      { item: safetyItem.id, name: `${marker} Arus Bocor Peralatan` },
-      { item: envItem.id, name: `${marker} Suhu` },
-      { item: safetyItem.id, name: `${marker} arus bocor bagian` },
+    const p1 = await service.create(baseInput(deviceType.id, zItem.id, uom.id, `${marker} zzz first`));
+    const p2 = await service.create(baseInput(deviceType.id, zItem.id, uom.id, `${marker} aaa second`));
+    const p3 = await service.create(baseInput(deviceType.id, aItem.id, uom.id, `${marker} mmm third`));
+    createdParameterIds.push(p1.id, p2.id, p3.id);
+
+    const grouped = await service.findAllGroupedByDeviceType({ search: marker });
+    const group = grouped.data.find((g) => g.deviceType.id === deviceType.id)!;
+
+    // Capabilities in creation order (zCap, aCap) — not alphabetical (aCap, zCap).
+    expect(group.capabilities.map((c) => c.capability.id)).toEqual([zCap.id, aCap.id]);
+    // Parameters inside a capability in creation order — not alphabetical.
+    expect(group.capabilities[0].parameters.map((p) => p.id)).toEqual([p1.id, p2.id]);
+    // Flat list is the concatenation of the ordered capability groups.
+    expect(group.parameters.map((p) => p.id)).toEqual([p1.id, p2.id, p3.id]);
+  });
+});
+
+describe("DeviceCalibrationParametersService — reorderCapabilities / reorderParameters", () => {
+  async function seedTwoCapabilities() {
+    const deviceType = await createDeviceType();
+    const uom = await createUom();
+    const marker = uniqueSlug();
+    const capA = await capabilitiesService.create({ name: `Cap A ${marker}` });
+    const capB = await capabilitiesService.create({ name: `Cap B ${marker}` });
+    createdCapabilityIds.push(capA.id, capB.id);
+    const itemA = await capabilitiesService.createItem(capA.id, { name: "Item A" });
+    const itemB = await capabilitiesService.createItem(capB.id, { name: "Item B" });
+    createdItemIds.push(itemA.id, itemB.id);
+    const a1 = await service.create(baseInput(deviceType.id, itemA.id, uom.id, `${marker} A1`));
+    const a2 = await service.create(baseInput(deviceType.id, itemA.id, uom.id, `${marker} A2`));
+    const a3 = await service.create(baseInput(deviceType.id, itemA.id, uom.id, `${marker} A3`));
+    const b1 = await service.create(baseInput(deviceType.id, itemB.id, uom.id, `${marker} B1`));
+    createdParameterIds.push(a1.id, a2.id, a3.id, b1.id);
+    return { deviceType, uom, marker, capA, capB, itemA, itemB, a1, a2, a3, b1 };
+  }
+
+  function group(grouped: Awaited<ReturnType<typeof service.findAllGroupedByDeviceType>>, id: string) {
+    return grouped.data.find((g) => g.deviceType.id === id)!;
+  }
+
+  it("persists a new capability order for the device type", async () => {
+    const { deviceType, marker, capA, capB } = await seedTwoCapabilities();
+    await service.reorderCapabilities(deviceType.id, [capB.id, capA.id]);
+    const g = group(await service.findAllGroupedByDeviceType({ search: marker }), deviceType.id);
+    expect(g.capabilities.map((c) => c.capability.id)).toEqual([capB.id, capA.id]);
+  });
+
+  it("persists a new parameter order within a capability", async () => {
+    const { deviceType, marker, capA, a1, a2, a3 } = await seedTwoCapabilities();
+    await service.reorderParameters(deviceType.id, capA.id, [a3.id, a1.id, a2.id]);
+    const g = group(await service.findAllGroupedByDeviceType({ search: marker }), deviceType.id);
+    const capAGroup = g.capabilities.find((c) => c.capability.id === capA.id)!;
+    expect(capAGroup.parameters.map((p) => p.id)).toEqual([a3.id, a1.id, a2.id]);
+  });
+
+  it("survives a re-read (order is DB-backed, not in-memory)", async () => {
+    const { deviceType, marker, capA, capB, a1, a2, a3 } = await seedTwoCapabilities();
+    await service.reorderCapabilities(deviceType.id, [capB.id, capA.id]);
+    await service.reorderParameters(deviceType.id, capA.id, [a2.id, a3.id, a1.id]);
+    const first = group(await service.findAllGroupedByDeviceType({ search: marker }), deviceType.id);
+    const second = group(await service.findAllGroupedByDeviceType({ search: marker }), deviceType.id);
+    expect(first.parameters.map((p) => p.id)).toEqual(second.parameters.map((p) => p.id));
+    expect(second.capabilities.map((c) => c.capability.id)).toEqual([capB.id, capA.id]);
+  });
+
+  it("rejects a capability id from another device type", async () => {
+    const first = await seedTwoCapabilities();
+    const second = await seedTwoCapabilities();
+    await expect(
+      service.reorderCapabilities(first.deviceType.id, [first.capA.id, second.capB.id]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects a parameter id from another capability", async () => {
+    const { deviceType, capA, a1, a2, a3, b1 } = await seedTwoCapabilities();
+    await expect(
+      service.reorderParameters(deviceType.id, capA.id, [a1.id, a2.id, a3.id, b1.id]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects an incomplete or duplicated id list", async () => {
+    const { deviceType, capA, a1, a2 } = await seedTwoCapabilities();
+    await expect(
+      service.reorderParameters(deviceType.id, capA.id, [a1.id, a2.id]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.reorderParameters(deviceType.id, capA.id, [a1.id, a1.id, a2.id]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("appends a newly added capability to the end of the order", async () => {
+    const { deviceType, uom, marker, capA, capB } = await seedTwoCapabilities();
+    await service.reorderCapabilities(deviceType.id, [capB.id, capA.id]);
+    const capC = await capabilitiesService.create({ name: `Cap C ${marker}` });
+    createdCapabilityIds.push(capC.id);
+    const itemC = await capabilitiesService.createItem(capC.id, { name: "Item C" });
+    createdItemIds.push(itemC.id);
+    const c1 = await service.create(baseInput(deviceType.id, itemC.id, uom.id, `${marker} C1`));
+    createdParameterIds.push(c1.id);
+    const g = group(await service.findAllGroupedByDeviceType({ search: marker }), deviceType.id);
+    expect(g.capabilities.map((c) => c.capability.id)).toEqual([capB.id, capA.id, capC.id]);
+  });
+
+  it("appends a newly added parameter to the end of its capability", async () => {
+    const { deviceType, uom, marker, capA, itemA, a1, a2, a3 } = await seedTwoCapabilities();
+    await service.reorderParameters(deviceType.id, capA.id, [a3.id, a2.id, a1.id]);
+    const a4 = await service.create(baseInput(deviceType.id, itemA.id, uom.id, `${marker} A4`));
+    createdParameterIds.push(a4.id);
+    const g = group(await service.findAllGroupedByDeviceType({ search: marker }), deviceType.id);
+    const capAGroup = g.capabilities.find((c) => c.capability.id === capA.id)!;
+    expect(capAGroup.parameters.map((p) => p.id)).toEqual([a3.id, a2.id, a1.id, a4.id]);
+  });
+
+  it("keeps a deterministic order after a delete (sortOrder gaps are allowed)", async () => {
+    const { deviceType, marker, capA, a1, a2, a3 } = await seedTwoCapabilities();
+    await service.reorderParameters(deviceType.id, capA.id, [a1.id, a2.id, a3.id]);
+    await service.remove(a2.id);
+    createdParameterIds.splice(createdParameterIds.indexOf(a2.id), 1);
+    const g = group(await service.findAllGroupedByDeviceType({ search: marker }), deviceType.id);
+    const capAGroup = g.capabilities.find((c) => c.capability.id === capA.id)!;
+    expect(capAGroup.parameters.map((p) => p.id)).toEqual([a1.id, a3.id]);
+  });
+
+  it("Bed Side Monitor: reorder produces the manual worksheet sequence", async () => {
+    const deviceType = await createDeviceType();
+    const uom = await createUom();
+    const marker = uniqueSlug();
+    const capabilityNames = [
+      "Pengukuran Kondisi Lingkungan",
+      "Pemeriksaan Kondisi Fisik dan Fungsi",
+      "Pengukuran Keselamatan Listrik",
+      "Kinerja Peralatan",
     ];
-    for (const spec of specs) {
-      const row = await service.create(baseInput(deviceType.id, spec.item, uom.id, spec.name));
+    const caps: { id: string; itemId: string }[] = [];
+    for (const name of capabilityNames) {
+      const capability = await capabilitiesService.create({ name: `${name} ${marker}` });
+      createdCapabilityIds.push(capability.id);
+      const item = await capabilitiesService.createItem(capability.id, { name: `${name} item` });
+      createdItemIds.push(item.id);
+      caps.push({ id: capability.id, itemId: item.id });
+    }
+
+    const electricalParamNames = [
+      "Resistansi Pembumian Protektif",
+      "Resistansi Isolasi",
+      "Arus Bocor Peralatan",
+      "Arus Bocor bagian yang diaplikasikan",
+    ];
+    const electricalIds: Record<string, string> = {};
+    for (const i of [3, 1, 0, 2]) {
+      // scrambled insert order
+      const row = await service.create(
+        baseInput(deviceType.id, caps[2].itemId, uom.id, `${electricalParamNames[i]} ${marker}`),
+      );
+      createdParameterIds.push(row.id);
+      electricalIds[electricalParamNames[i]] = row.id;
+    }
+    for (const idx of [0, 1, 3]) {
+      const row = await service.create(
+        baseInput(deviceType.id, caps[idx].itemId, uom.id, `placeholder ${idx} ${marker}`),
+      );
       createdParameterIds.push(row.id);
     }
 
-    const grouped = await service.findAllGroupedByDeviceType({ search: marker });
-    const group = grouped.data.find((g) => g.deviceType.id === deviceType.id);
-    expect(group!.parameters.map((p) => p.name)).toEqual([
-      `${marker} Kelembaban`,
-      `${marker} Suhu`,
-      `${marker} arus bocor bagian`,
-      `${marker} Arus Bocor Peralatan`,
-      `${marker} Resistansi Isolasi`,
-    ]);
+    await service.reorderCapabilities(
+      deviceType.id,
+      caps.map((c) => c.id),
+    );
+    await service.reorderParameters(
+      deviceType.id,
+      caps[2].id,
+      electricalParamNames.map((name) => electricalIds[name]),
+    );
+
+    const g = group(await service.findAllGroupedByDeviceType({ search: marker }), deviceType.id);
+    expect(g.capabilities.map((c) => c.capability.name)).toEqual(
+      capabilityNames.map((name) => `${name} ${marker}`),
+    );
+    const electrical = g.capabilities.find((c) => c.capability.id === caps[2].id)!;
+    expect(electrical.parameters.map((p) => p.name)).toEqual(
+      electricalParamNames.map((name) => `${name} ${marker}`),
+    );
   });
 });
 

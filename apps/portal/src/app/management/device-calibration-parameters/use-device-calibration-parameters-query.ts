@@ -8,6 +8,7 @@ import type {
 } from "@medcal/shared";
 import type {
   DeviceCalibrationParameterGroupedResponse,
+  DeviceCalibrationParameterGroupRow,
   DeviceCalibrationParameterListResponse,
   DeviceCalibrationParameterRow,
 } from "./device-calibration-parameters-ui";
@@ -131,6 +132,124 @@ export function useUpdateDeviceCalibrationParameter() {
       queryClient.invalidateQueries({
         queryKey: [DEVICE_CALIBRATION_PARAMETERS_QUERY_KEY, variables.id],
       });
+    },
+  });
+}
+
+const GROUPED_KEY = [DEVICE_CALIBRATION_PARAMETERS_QUERY_KEY, "grouped"] as const;
+
+function mapGroup(
+  data: DeviceCalibrationParameterGroupedResponse | undefined,
+  deviceTypeId: string,
+  transform: (group: DeviceCalibrationParameterGroupRow) => DeviceCalibrationParameterGroupRow,
+): DeviceCalibrationParameterGroupedResponse | undefined {
+  if (!data) return data;
+  return {
+    ...data,
+    data: data.data.map((group) =>
+      group.deviceType.id === deviceTypeId ? transform(group) : group,
+    ),
+  };
+}
+
+function withFlatParameters(
+  group: DeviceCalibrationParameterGroupRow,
+): DeviceCalibrationParameterGroupRow {
+  return { ...group, parameters: group.capabilities.flatMap((cap) => cap.parameters) };
+}
+
+/**
+ * Reorder a device type's Capabilities. Optimistically rewrites every cached
+ * grouped page, then rolls back on failure and refetches on settle.
+ */
+export function useReorderDeviceCalibrationCapabilities() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      deviceTypeId,
+      capabilityIds,
+    }: {
+      deviceTypeId: string;
+      capabilityIds: string[];
+    }) =>
+      apiFetch(`/device-calibration-parameters/device-types/${deviceTypeId}/capability-order`, {
+        method: "PATCH",
+        body: JSON.stringify({ capabilityIds }),
+      }),
+    onMutate: async ({ deviceTypeId, capabilityIds }) => {
+      await queryClient.cancelQueries({ queryKey: GROUPED_KEY });
+      const snapshot = queryClient.getQueriesData<DeviceCalibrationParameterGroupedResponse>({
+        queryKey: GROUPED_KEY,
+      });
+      queryClient.setQueriesData<DeviceCalibrationParameterGroupedResponse>(
+        { queryKey: GROUPED_KEY },
+        (old) =>
+          mapGroup(old, deviceTypeId, (group) => {
+            const byId = new Map(group.capabilities.map((cap) => [cap.capability.id, cap]));
+            const capabilities = capabilityIds
+              .map((id) => byId.get(id))
+              .filter((cap): cap is (typeof group.capabilities)[number] => Boolean(cap));
+            return withFlatParameters({ ...group, capabilities });
+          }),
+      );
+      return { snapshot };
+    },
+    onError: (_error, _variables, context) => {
+      context?.snapshot.forEach(([key, data]) => queryClient.setQueryData(key, data));
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [DEVICE_CALIBRATION_PARAMETERS_QUERY_KEY] });
+    },
+  });
+}
+
+/**
+ * Reorder the parameters inside one (deviceType, capability) scope.
+ * Optimistic with rollback, same as the capability reorder.
+ */
+export function useReorderDeviceCalibrationParameters() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      deviceTypeId,
+      capabilityId,
+      parameterIds,
+    }: {
+      deviceTypeId: string;
+      capabilityId: string;
+      parameterIds: string[];
+    }) =>
+      apiFetch(
+        `/device-calibration-parameters/device-types/${deviceTypeId}/capabilities/${capabilityId}/parameter-order`,
+        { method: "PATCH", body: JSON.stringify({ parameterIds }) },
+      ),
+    onMutate: async ({ deviceTypeId, capabilityId, parameterIds }) => {
+      await queryClient.cancelQueries({ queryKey: GROUPED_KEY });
+      const snapshot = queryClient.getQueriesData<DeviceCalibrationParameterGroupedResponse>({
+        queryKey: GROUPED_KEY,
+      });
+      queryClient.setQueriesData<DeviceCalibrationParameterGroupedResponse>(
+        { queryKey: GROUPED_KEY },
+        (old) =>
+          mapGroup(old, deviceTypeId, (group) => {
+            const capabilities = group.capabilities.map((cap) => {
+              if (cap.capability.id !== capabilityId) return cap;
+              const byId = new Map(cap.parameters.map((param) => [param.id, param]));
+              const parameters = parameterIds
+                .map((id) => byId.get(id))
+                .filter((param): param is (typeof cap.parameters)[number] => Boolean(param));
+              return { ...cap, parameters };
+            });
+            return withFlatParameters({ ...group, capabilities });
+          }),
+      );
+      return { snapshot };
+    },
+    onError: (_error, _variables, context) => {
+      context?.snapshot.forEach(([key, data]) => queryClient.setQueryData(key, data));
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [DEVICE_CALIBRATION_PARAMETERS_QUERY_KEY] });
     },
   });
 }

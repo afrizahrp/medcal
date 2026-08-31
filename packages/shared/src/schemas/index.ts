@@ -1005,6 +1005,32 @@ export type DeviceCalibrationParameterGroupedQuery = z.infer<
   typeof deviceCalibrationParameterGroupedQuerySchema
 >;
 
+/**
+ * PATCH /device-calibration-parameters/device-types/:deviceTypeId/capability-order
+ * body. `capabilityIds` is the FULL ordered list of the capabilities currently
+ * attached to the device type — the server rejects any set mismatch.
+ */
+export const deviceCalibrationParameterCapabilityOrderSchema = z.object({
+  capabilityIds: z.array(z.string().min(1)).min(1),
+});
+
+export type DeviceCalibrationParameterCapabilityOrderInput = z.infer<
+  typeof deviceCalibrationParameterCapabilityOrderSchema
+>;
+
+/**
+ * PATCH /device-calibration-parameters/device-types/:deviceTypeId/capabilities/:capabilityId/parameter-order
+ * body. `parameterIds` is the FULL ordered list of the parameters in that
+ * (deviceType, capability) scope — the server rejects any set mismatch.
+ */
+export const deviceCalibrationParameterParameterOrderSchema = z.object({
+  parameterIds: z.array(z.string().min(1)).min(1),
+});
+
+export type DeviceCalibrationParameterParameterOrderInput = z.infer<
+  typeof deviceCalibrationParameterParameterOrderSchema
+>;
+
 // =============================================================================
 // EquipmentType + DeviceTypeEquipmentRequirement Master Data
 // (Phase 1 — "Required Equipment". No physical Equipment instance layer.)

@@ -18,7 +18,11 @@ import {
   DeviceTypeParameterTable,
   DeviceCalibrationParameterEmptyState,
 } from "./device-calibration-parameters-ui";
-import { useDeviceCalibrationParameterGroups } from "./use-device-calibration-parameters-query";
+import {
+  useDeviceCalibrationParameterGroups,
+  useReorderDeviceCalibrationCapabilities,
+  useReorderDeviceCalibrationParameters,
+} from "./use-device-calibration-parameters-query";
 
 const URL_KEYS = ["search", "isActive", "expanded", "page", "pageSize"] as const;
 
@@ -48,6 +52,23 @@ export default function DeviceCalibrationParametersPageClient() {
     page,
     pageSize,
   });
+
+  const canReorder = Boolean(capabilities?.deviceCalibrationParameterUpdate);
+  const reorderCapabilitiesMutation = useReorderDeviceCalibrationCapabilities();
+  const reorderParametersMutation = useReorderDeviceCalibrationParameters();
+  const reorderHandlers = useMemo(
+    () => ({
+      onReorderCapabilities: (deviceTypeId: string, capabilityIds: string[]) =>
+        reorderCapabilitiesMutation.mutate({ deviceTypeId, capabilityIds }),
+      onReorderParameters: (deviceTypeId: string, capabilityId: string, parameterIds: string[]) =>
+        reorderParametersMutation.mutate({ deviceTypeId, capabilityId, parameterIds }),
+    }),
+    [reorderCapabilitiesMutation, reorderParametersMutation],
+  );
+  const reorderError =
+    reorderCapabilitiesMutation.isError || reorderParametersMutation.isError
+      ? "Gagal menyimpan urutan baru — urutan dikembalikan seperti semula. Coba lagi."
+      : null;
 
   const manuallyExpanded = useMemo(
     () => new Set((params.expanded ?? "").split(",").filter(Boolean)),
@@ -120,6 +141,7 @@ export default function DeviceCalibrationParametersPageClient() {
         ) : null}
 
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+        {reorderError ? <p className="mt-4 text-sm text-red-600">{reorderError}</p> : null}
 
         {loading ? (
           <p className="mt-6 text-sm text-slate-400">Memuat…</p>
@@ -139,6 +161,8 @@ export default function DeviceCalibrationParametersPageClient() {
                 expandedIds={expandedIds}
                 onToggle={toggle}
                 canCreate={Boolean(capabilities.deviceCalibrationParameterCreate)}
+                canReorder={canReorder}
+                reorder={reorderHandlers}
               />
             </div>
             <PaginationBar
