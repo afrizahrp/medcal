@@ -159,6 +159,22 @@ function assertNonTerminal(status: string, actionCode: string, message: string):
   }
 }
 
+/**
+ * While a delivery note (Surat Jalan Alat) is ISSUED, the work order's equipment
+ * list is frozen and the work order cannot be cancelled — the delivery note must
+ * be cancelled first. A CANCELLED delivery note lifts the lock. `deliveryNote` is
+ * always loaded via `workOrderInclude`.
+ */
+function assertNoActiveDeliveryNote(
+  deliveryNote: { status: string } | null,
+  code: string,
+  message: string,
+): void {
+  if (deliveryNote && deliveryNote.status === "ISSUED") {
+    throw new BadRequestException({ message, code });
+  }
+}
+
 @Injectable()
 export class WorkOrdersService {
   async create(companyId: string, input: WorkOrderCreateInput): Promise<WorkOrderWithItems> {
@@ -632,6 +648,11 @@ export class WorkOrdersService {
       "INVALID_STATUS_FOR_EQUIPMENT_UPDATE",
       "Cannot change equipment on a terminal work order",
     );
+    assertNoActiveDeliveryNote(
+      existing.deliveryNote,
+      "DELIVERY_NOTE_ISSUED_EQUIPMENT_LOCKED",
+      "The equipment list is locked — a delivery note (Surat Jalan) has been issued",
+    );
 
     const { rows, warnings } = await validateEquipmentSelection(
       prisma,
@@ -682,6 +703,11 @@ export class WorkOrdersService {
       "INVALID_STATUS_FOR_EQUIPMENT_UPDATE",
       "Cannot confirm equipment on a terminal work order",
     );
+    assertNoActiveDeliveryNote(
+      existing.deliveryNote,
+      "DELIVERY_NOTE_ISSUED_EQUIPMENT_LOCKED",
+      "The equipment list is locked — a delivery note (Surat Jalan) has been issued",
+    );
     if (existing.equipment.length === 0) {
       throw new BadRequestException({
         message: "Select at least one equipment unit before confirming",
@@ -725,6 +751,11 @@ export class WorkOrdersService {
       existing.status,
       "INVALID_STATUS_FOR_EQUIPMENT_UPDATE",
       "Cannot reorder equipment on a terminal work order",
+    );
+    assertNoActiveDeliveryNote(
+      existing.deliveryNote,
+      "DELIVERY_NOTE_ISSUED_EQUIPMENT_LOCKED",
+      "The equipment order is locked — a delivery note (Surat Jalan) has been issued",
     );
 
     const rowByEquipmentId = new Map(
@@ -774,6 +805,11 @@ export class WorkOrdersService {
         code: "ALREADY_CANCELLED",
       });
     }
+    assertNoActiveDeliveryNote(
+      existing.deliveryNote,
+      "DELIVERY_NOTE_MUST_BE_CANCELLED_FIRST",
+      "Cancel the delivery note (Surat Jalan) before cancelling this work order",
+    );
     assertTransition(existing.status, "CANCELLED");
 
     return prisma.workOrder.update({

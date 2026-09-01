@@ -61,6 +61,14 @@ export class DeliveryNotesService {
     const workOrder = await this.loadWorkOrder(companyId, workOrderId);
 
     if (workOrder.deliveryNote) {
+      if (workOrder.deliveryNote.status === "CANCELLED") {
+        throw new BadRequestException({
+          message:
+            "The delivery note for this work order was cancelled and cannot be re-issued",
+          code: "DELIVERY_NOTE_CANCELLED",
+        });
+      }
+      // Idempotent: an active delivery note already exists — reuse it, no new number.
       return workOrder.deliveryNote;
     }
     if (workOrder.serviceMode !== "ON_SITE") {

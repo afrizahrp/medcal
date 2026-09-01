@@ -1496,4 +1496,104 @@ describe("WorkOrdersService reference equipment", () => {
     expect(pdf.filename.endsWith(".pdf")).toBe(true);
     expect(dn.items).toHaveLength(3);
   });
+
+  // ---- DLN status + work-order cancellation dependency ----------------------
+
+  /** Simulates the future controlled void operation (no normal-user mechanism yet). */
+  async function markDeliveryNoteCancelled(deliveryNoteId: string) {
+    await prisma.equipmentDeliveryNote.update({
+      where: { id: deliveryNoteId },
+      data: { status: "CANCELLED" },
+    });
+  }
+
+  it("newly issued delivery note has status ISSUED", async () => {
+    const { workOrderId } = await confirmedWorkOrder();
+    const dn = await deliveryNotesService.issue(realCompanyId, workOrderId);
+    expect(dn.status).toBe("ISSUED");
+  });
+
+  it("A — a work order without a delivery note follows the existing cancel rules", async () => {
+    const { workOrderId } = await confirmedWorkOrder();
+    const cancelled = await workOrdersService.cancel(realCompanyId, workOrderId);
+    expect(cancelled.status).toBe("CANCELLED");
+  });
+
+  it("B — a work order with an ISSUED delivery note cannot be cancelled directly", async () => {
+    const { workOrderId } = await confirmedWorkOrder();
+    await deliveryNotesService.issue(realCompanyId, workOrderId);
+    await expect(workOrdersService.cancel(realCompanyId, workOrderId)).rejects.toMatchObject({
+      response: { code: "DELIVERY_NOTE_MUST_BE_CANCELLED_FIRST" },
+    });
+    // E — no active DLN left behind: the work order stayed non-cancelled.
+    const wo = await workOrdersService.findOne(realCompanyId, workOrderId);
+    expect(wo.status).not.toBe("CANCELLED");
+    expect(wo.deliveryNote?.status).toBe("ISSUED");
+  });
+
+  it("C — once the delivery note is CANCELLED the work order may be cancelled", async () => {
+    const { workOrderId } = await confirmedWorkOrder();
+    const dn = await deliveryNotesService.issue(realCompanyId, workOrderId);
+    await markDeliveryNoteCancelled(dn.id);
+    const cancelled = await workOrdersService.cancel(realCompanyId, workOrderId);
+    expect(cancelled.status).toBe("CANCELLED");
+  });
+
+  it("D — a CANCELLED delivery note can still be read and reprinted", async () => {
+    const { workOrderId } = await confirmedWorkOrder();
+    const dn = await deliveryNotesService.issue(realCompanyId, workOrderId);
+    await markDeliveryNoteCancelled(dn.id);
+
+    const read = await deliveryNotesService.findOne(realCompanyId, workOrderId);
+    expect(read.status).toBe("CANCELLED");
+    expect(read.number).toBe(dn.number);
+    expect(read.items).toHaveLength(3); // 5 — snapshot items intact
+
+    const pdf = await deliveryNotesService.buildPdf(realCompanyId, workOrderId);
+    expect(pdf.buffer.subarray(0, 5).toString()).toBe("%PDF-");
+  });
+
+  it("3/4 — a CANCELLED delivery note is not active and cannot be re-issued", async () => {
+    const { workOrderId } = await confirmedWorkOrder();
+    const dn = await deliveryNotesService.issue(realCompanyId, workOrderId);
+    await markDeliveryNoteCancelled(dn.id);
+    await expect(deliveryNotesService.issue(realCompanyId, workOrderId)).rejects.toMatchObject({
+      response: { code: "DELIVERY_NOTE_CANCELLED" },
+    });
+    // The DLN number is never reused: still exactly one row, same number.
+    const rows = await prisma.equipmentDeliveryNote.findMany({ where: { workOrderId } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].number).toBe(dn.number);
+  });
+
+  it("9 — there is no normal CANCELLED -> ISSUED transition", () => {
+    // The service exposes issue / findOne / buildPdf only — no un-cancel / reopen.
+    expect(
+      Object.getOwnPropertyNames(Object.getPrototypeOf(deliveryNotesService)).filter((name) =>
+        /reopen|uncancel|activate|restore/i.test(name),
+      ),
+    ).toEqual([]);
+  });
+
+  it("locks the equipment list while a delivery note is ISSUED, and unlocks it once CANCELLED", async () => {
+    const { workOrderId, unitA, unitB, unitC } = await confirmedWorkOrder();
+    const dn = await deliveryNotesService.issue(realCompanyId, workOrderId);
+
+    await expect(
+      workOrdersService.reorderEquipment(realCompanyId, workOrderId, [unitC.id, unitA.id, unitB.id]),
+    ).rejects.toMatchObject({ response: { code: "DELIVERY_NOTE_ISSUED_EQUIPMENT_LOCKED" } });
+    await expect(
+      workOrdersService.replaceEquipment(realCompanyId, workOrderId, {
+        equipment: [{ equipmentId: unitA.id, equipmentTypeId: unitA.equipmentTypeId }],
+      }),
+    ).rejects.toMatchObject({ response: { code: "DELIVERY_NOTE_ISSUED_EQUIPMENT_LOCKED" } });
+
+    await markDeliveryNoteCancelled(dn.id);
+    const reordered = await workOrdersService.reorderEquipment(realCompanyId, workOrderId, [
+      unitC.id,
+      unitA.id,
+      unitB.id,
+    ]);
+    expect(reordered.equipment.map((row) => row.equipmentId)).toEqual([unitC.id, unitA.id, unitB.id]);
+  });
 });

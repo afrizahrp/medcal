@@ -123,3 +123,44 @@ Confirmed **unchanged**:
 **Files changed by this task:** `packages/db/prisma/schema.prisma` (+2 models, +1 enum value, +2 back-relations), `packages/db/prisma/migrations/20260901114658_add_equipment_delivery_note/`, `packages/db/src/document-number/document-type-prefix.ts` (+1 line), `document-type-table.ts` (+1 line), `apps/api/src/modules/work-orders/{delivery-notes.service.ts, delivery-notes.controller.ts, equipment-delivery-note-pdf.ts}` (new), `work-orders.module.ts` (register), `work-orders.service.ts` (`workOrderInclude` +`deliveryNote`), `work-orders.service.test.ts`, `apps/portal/src/app/management/work-orders/{work-order-delivery-note-section.tsx (new), [id]/page.tsx, use-work-orders-query.ts, work-orders-ui.tsx}`.
 
 **Not touched by this task (pre-existing uncommitted edits by another process, left as-is):** `apps/portal/src/app/management/{email/email-page-client.tsx, menu-management/page.tsx, users/[id]/page.tsx, whitelist/page.tsx}`.
+
+---
+
+## CORRECTION — DLN status + WorkOrder-cancellation dependency (2026-09-01)
+
+### Business-rule correction
+The rule is **not** "an issued DLN permanently forbids WO cancellation". It is:
+`Active (ISSUED) DLN → WO cancel BLOCKED` · `CANCELLED DLN (or none) → WO cancel allowed, per the existing WO lifecycle`.
+(The earlier implementation never over-restricted — `WorkOrdersService.cancel` had no DLN check at all, so a WO with a live DLN could be cancelled and orphan it. That is now fixed.)
+
+### Architectural gap found & reported
+The `EquipmentDeliveryNote` model had **no status field** and there is **no DLN void/cancel workflow** in the repo. Per the correction note, the status field was explicitly required with a spelled-out minimum design, so it was implemented. The **DLN-cancellation *action*** (the transition ISSUED → CANCELLED) is the spec's "future controlled backdoor with mandatory audit logging" and is **deliberately NOT implemented here** — there is currently no normal-user or admin endpoint that cancels a DLN. Until that task lands, a DLN reaches CANCELLED only by a direct DB operation. Tests simulate that transition with a direct `prisma.equipmentDeliveryNote.update`.
+
+### Schema (additive)
+Migration `20260901134947_add_equipment_delivery_note_status`:
+- `enum EquipmentDeliveryNoteStatus { ISSUED, CANCELLED }` — matches existing document status-enum convention (`QuotationStatus`, `PurchaseOrderStatus`, …).
+- `EquipmentDeliveryNote.status EquipmentDeliveryNoteStatus @default(ISSUED)`.
+- **No `cancelledAt`** — no document model in the repo carries a per-status timestamp; the who/why/when belongs to the future audit-logged void operation. `updatedAt` already exists.
+
+### Server-side enforcement (`WorkOrdersService`, new `assertNoActiveDeliveryNote` helper — `deliveryNote` is already loaded by `workOrderInclude`)
+- `cancel()` → blocked with `DELIVERY_NOTE_MUST_BE_CANCELLED_FIRST` while `deliveryNote.status === "ISSUED"`; proceeds normally when the DLN is `CANCELLED` or absent.
+- `replaceEquipment()`, `reorderEquipment()`, `confirmEquipment()` → blocked with `DELIVERY_NOTE_ISSUED_EQUIPMENT_LOCKED` while the DLN is `ISSUED` (the equipment list + order are frozen once the Surat Jalan is out); unlocked once `CANCELLED`. This closes the previously-open hole where equipment could still be edited after issuance.
+- `DeliveryNotesService.issue()` → a `CANCELLED` DLN is **not** re-issued: throws `DELIVERY_NOTE_CANCELLED` (no new number, single row preserved). An `ISSUED` DLN is still returned idempotently.
+- `DeliveryNotesService.findOne()` / `buildPdf()` → unchanged: a `CANCELLED` DLN is still fully readable and printable (number, snapshot items intact); the response now carries `status`.
+
+### UI
+`<WorkOrderDeliveryNoteSection>`: `CANCELLED` shows a red **"Dibatalkan"** badge + an explanatory banner ("dokumen tetap tersimpan untuk arsip dan masih dapat dicetak, tetapi bukan lagi Surat Jalan yang aktif"); the PDF/reprint button stays; it is never presented as an active document. No "issue" button appears (server would reject re-issue anyway).
+
+### Tests (added to the same describe block — `work-orders.service.test.ts`, +8)
+`ISSUED` default on issue; **A** no-DLN WO cancels normally; **B** ISSUED-DLN WO cancel rejected + no orphan (covers **E**); **C** cancel allowed after DLN CANCELLED; **D** CANCELLED DLN still read + PDF, items intact (covers **5**); **3/4** CANCELLED DLN not active + cannot re-issue + number never reused; **9** no reopen/uncancel method on the service; equipment `replace`/`reorder` locked while ISSUED and unlocked after CANCELLED. **F** — no other document lifecycle touched (SPK/WOL/Quotation/PO cancel paths unchanged).
+
+### Verification (this correction)
+- `pnpm --filter @medcal/api test -- work-orders.service` → **74 passed**.
+- `pnpm --filter @medcal/db test -- document-number` → **20 passed**; `pnpm --filter @medcal/portal test -- work-order` → **25 passed**.
+- Typecheck `@medcal/api` / `@medcal/shared` / `@medcal/portal` **pass**; `pnpm --filter @medcal/api build` + `--filter @medcal/portal build` **pass**.
+
+### Scope
+Unchanged: SPK/WOL numbering & rules, `DocumentNumberService`, DLN numbering & format, Equipment Requirements, Equipment master, Calibration Request / Requisition / Quotation / Purchase Order, RBAC semantics, PDF layout. The WorkOrder **status enum/model is not changed** — the dependency rule is a precondition check on the existing `cancel` transition, not a new state. No DLN void endpoint, no audit-log infrastructure, no revision/supersede mechanism, no admin backdoor.
+
+### Still OPEN (needs a business decision / separate task)
+The **DLN cancellation/void operation** itself: who may void a DLN, under what conditions, with what audit trail, and whether voiding is even permitted after the WO leaves PLANNED. This is the spec's deferred "controlled backdoor" — not designed or built here.

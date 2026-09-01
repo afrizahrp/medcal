@@ -126,9 +126,12 @@ export interface WorkOrderDeliveryNoteItem {
   sortOrder: number;
 }
 
+export type WorkOrderDeliveryNoteStatus = "ISSUED" | "CANCELLED";
+
 export interface WorkOrderDeliveryNote {
   id: string;
   number: string;
+  status: WorkOrderDeliveryNoteStatus;
   issuedAt: string;
   workOrderNumber: string;
   customerName: string;

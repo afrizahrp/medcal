@@ -29,6 +29,7 @@ export function WorkOrderDeliveryNoteSection({
   if (workOrder.serviceMode !== "ON_SITE") return null;
 
   const deliveryNote = workOrder.deliveryNote;
+  const cancelled = deliveryNote?.status === "CANCELLED";
   const confirmed = workOrder.equipmentConfirmedAt !== null;
   const hasEquipment = workOrder.equipment.length > 0;
   const eligible = confirmed && hasEquipment;
@@ -65,19 +66,29 @@ export function WorkOrderDeliveryNoteSection({
           <FileText className="h-4 w-4" />
           Surat Jalan Alat
         </h3>
-        {deliveryNote ? (
-          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-            Terbit
-          </span>
-        ) : (
+        {!deliveryNote ? (
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
             Belum terbit
+          </span>
+        ) : cancelled ? (
+          <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+            Dibatalkan
+          </span>
+        ) : (
+          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+            Terbit
           </span>
         )}
       </div>
 
       {deliveryNote ? (
         <dl className="mt-3 space-y-1 text-sm text-slate-700">
+          {cancelled ? (
+            <p className="mb-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+              Surat Jalan ini telah dibatalkan. Dokumen tetap tersimpan untuk arsip dan masih
+              dapat dicetak, tetapi bukan lagi Surat Jalan yang aktif.
+            </p>
+          ) : null}
           <div className="flex gap-2">
             <dt className="w-28 text-slate-500">Nomor</dt>
             <dd className="font-mono">{deliveryNote.number}</dd>

@@ -1650,11 +1650,21 @@ model WorkOrderEquipment {
 // issuance is idempotent and a reprint reuses the same number. Once created the
 // header + its item snapshots are immutable — later edits to WorkOrderEquipment
 // or the Equipment master never change an issued delivery note.
+// ISSUED = active delivery note. CANCELLED = voided; historically preserved
+// (number never reused, item snapshots intact) and still readable/printable, but
+// no longer an active document. There is no normal-user CANCELLED -> ISSUED
+// transition — voiding is a future controlled operation with audit logging.
+enum EquipmentDeliveryNoteStatus {
+  ISSUED
+  CANCELLED
+}
+
 model EquipmentDeliveryNote {
-  id              String   @id @default(cuid())
+  id              String                      @id @default(cuid())
   companyId       String
-  workOrderId     String   @unique
+  workOrderId     String                      @unique
   number          String
+  status          EquipmentDeliveryNoteStatus @default(ISSUED)
   // Business date the equipment leaves PKM — the scheduled on-site date when
   // known (WorkOrder.scheduledStart), else the issuance timestamp. Snapshotted.
   issuedAt        DateTime
@@ -1663,8 +1673,8 @@ model EquipmentDeliveryNote {
   customerName    String
   customerAddress String?
   locationText    String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
 
   company   Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   workOrder WorkOrder                   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
