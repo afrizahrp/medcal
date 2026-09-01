@@ -7,6 +7,7 @@ export const DOCUMENT_TYPE_PREFIX: Record<DocumentType, string> = {
   QUOTATION: "QUO",
   PURCHASE_ORDER: "PUR",
   WORK_ORDER: "SPK",
+  WORK_ORDER_SEND_TO_LAB: "WOL",
   INVOICE: "INV",
   CERTIFICATE: "CER",
   CREDIT_NOTE: "CRN",

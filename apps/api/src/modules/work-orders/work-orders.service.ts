@@ -189,9 +189,15 @@ export class WorkOrdersService {
         }
 
         const issuedAt = new Date();
+        // serviceMode determines the Work Order document identity:
+        //   ON_SITE      -> WORK_ORDER              -> SPK/YYYY/MM/NNNNN
+        //   SEND_TO_LAB  -> WORK_ORDER_SEND_TO_LAB  -> WOL/YYYY/MM/NNNNN
+        // The two series have independent sequences keyed (companyId, documentType, year).
+        const documentType =
+          request.serviceMode === "ON_SITE" ? "WORK_ORDER" : "WORK_ORDER_SEND_TO_LAB";
         const number = await DocumentNumberService.allocate({
           companyId,
-          documentType: "WORK_ORDER",
+          documentType,
           issuedAt,
           tx,
         });
@@ -324,7 +330,7 @@ export class WorkOrdersService {
     await prisma.workOrder.update({
       where: { id },
       data: {
-        ...(input.serviceMode !== undefined ? { serviceMode: input.serviceMode } : {}),
+        // serviceMode is immutable after create — it drives the document number.
         ...(input.addressText !== undefined ? { addressText: input.addressText } : {}),
         ...(input.geoLat !== undefined ? { geoLat: input.geoLat } : {}),
         ...(input.geoLng !== undefined ? { geoLng: input.geoLng } : {}),

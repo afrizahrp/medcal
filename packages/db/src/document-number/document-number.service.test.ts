@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "../index";
+import { DOCUMENT_TYPE_PREFIX } from "./document-type-prefix";
 import { DocumentNumberService } from "./document-number.service";
 import { parseDocumentNumberYearMonth } from "./format-document-number";
 
@@ -210,5 +211,93 @@ describe("DocumentNumberService.allocate", () => {
     } finally {
       await prisma.customer.delete({ where: { id: legacyCustomer.id } });
     }
+  });
+
+  describe("Work Order SPK / WOL split", () => {
+    const aug2026 = new Date("2026-08-15T08:00:00.000Z");
+    const sep2026 = new Date("2026-09-15T08:00:00.000Z");
+    const dec2026 = new Date("2026-12-20T08:00:00.000Z");
+    const jan2027 = new Date("2027-01-05T08:00:00.000Z");
+
+    const allocate = (
+      companyId: string,
+      documentType: "WORK_ORDER" | "WORK_ORDER_SEND_TO_LAB",
+      issuedAt: Date,
+    ) =>
+      prisma.$transaction((tx) =>
+        DocumentNumberService.allocate({ companyId, documentType, issuedAt, tx }),
+      );
+
+    it("has no WOS prefix and no WORK_ORDER_ON_SITE document type", () => {
+      expect(Object.values(DOCUMENT_TYPE_PREFIX)).not.toContain("WOS");
+      expect(DOCUMENT_TYPE_PREFIX).not.toHaveProperty("WORK_ORDER_ON_SITE");
+      expect(DOCUMENT_TYPE_PREFIX.WORK_ORDER).toBe("SPK");
+      expect(DOCUMENT_TYPE_PREFIX.WORK_ORDER_SEND_TO_LAB).toBe("WOL");
+    });
+
+    it("issues independent SPK and WOL sequences for the same company/year", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+
+      expect(await allocate(TEST_COMPANY_A, "WORK_ORDER", aug2026)).toBe(
+        "SPK/2026/08/00001",
+      );
+      expect(await allocate(TEST_COMPANY_A, "WORK_ORDER_SEND_TO_LAB", aug2026)).toBe(
+        "WOL/2026/08/00001",
+      );
+      expect(await allocate(TEST_COMPANY_A, "WORK_ORDER", aug2026)).toBe(
+        "SPK/2026/08/00002",
+      );
+      expect(await allocate(TEST_COMPANY_A, "WORK_ORDER_SEND_TO_LAB", aug2026)).toBe(
+        "WOL/2026/08/00002",
+      );
+    });
+
+    it("does not reset the SPK sequence when the month changes", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+
+      expect(await allocate(TEST_COMPANY_A, "WORK_ORDER", aug2026)).toBe(
+        "SPK/2026/08/00001",
+      );
+      expect(await allocate(TEST_COMPANY_A, "WORK_ORDER", sep2026)).toBe(
+        "SPK/2026/09/00002",
+      );
+    });
+
+    it("resets the SPK sequence on a new year", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+
+      expect(await allocate(TEST_COMPANY_A, "WORK_ORDER", dec2026)).toBe(
+        "SPK/2026/12/00001",
+      );
+      expect(await allocate(TEST_COMPANY_A, "WORK_ORDER", jan2027)).toBe(
+        "SPK/2027/01/00001",
+      );
+    });
+
+    it("isolates the SPK sequence between companies", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+      await cleanupSequences(TEST_COMPANY_B);
+
+      expect(await allocate(TEST_COMPANY_A, "WORK_ORDER", aug2026)).toBe(
+        "SPK/2026/08/00001",
+      );
+      expect(await allocate(TEST_COMPANY_B, "WORK_ORDER", aug2026)).toBe(
+        "SPK/2026/08/00001",
+      );
+    });
+
+    it("starts SPK at 00001 even after WOL numbers exist for the year", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+
+      // Consume WOL/2026/08/00001..00003 first.
+      await allocate(TEST_COMPANY_A, "WORK_ORDER_SEND_TO_LAB", aug2026);
+      await allocate(TEST_COMPANY_A, "WORK_ORDER_SEND_TO_LAB", aug2026);
+      await allocate(TEST_COMPANY_A, "WORK_ORDER_SEND_TO_LAB", aug2026);
+
+      // The SPK counter is a separate DocumentNumberSequence row and is unaffected.
+      expect(await allocate(TEST_COMPANY_A, "WORK_ORDER", aug2026)).toBe(
+        "SPK/2026/08/00001",
+      );
+    });
   });
 });

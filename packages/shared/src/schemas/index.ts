@@ -518,9 +518,12 @@ export type WorkOrderListQuery = z.infer<typeof workOrderListQuerySchema>;
 /** Whitelisted `sortBy` values for GET /work-orders — see resolveSortOrder. */
 export const WORK_ORDER_SORTABLE_FIELDS = ["createdAt", "number", "status"] as const;
 
-/** PATCH /work-orders/:id body (only allowed while non-terminal). */
+/**
+ * PATCH /work-orders/:id body (only allowed while non-terminal).
+ * `serviceMode` is intentionally NOT editable here — it determines the Work Order
+ * document identity (SPK vs WOL) and is immutable after create.
+ */
 export const workOrderUpdateSchema = z.object({
-  serviceMode: z.enum(serviceModeValues).optional(),
   addressText: workOrderNullableString,
   geoLat: workOrderNullableCoord,
   geoLng: workOrderNullableCoord,

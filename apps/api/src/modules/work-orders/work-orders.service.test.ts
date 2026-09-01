@@ -354,7 +354,7 @@ describe("workOrderUpdateSchema", () => {
       expect(parsed.data).not.toHaveProperty("quotationId");
       expect(parsed.data).not.toHaveProperty("customerId");
       expect(parsed.data).not.toHaveProperty("number");
-      expect(parsed.data.serviceMode).toBe("SEND_TO_LAB");
+      expect(parsed.data).not.toHaveProperty("serviceMode");
       expect(parsed.data.addressText).toBe("New site");
     }
   });
@@ -391,7 +391,8 @@ describe("WorkOrdersService.create", () => {
     expect(result.serviceMode).toBe("SEND_TO_LAB");
     expect(result.serviceMode).toBe(request.serviceMode);
     expect(isValidDocumentNumber(result.number)).toBe(true);
-    expect(result.number.startsWith("SPK/")).toBe(true);
+    // SEND_TO_LAB ("In Lab") -> WORK_ORDER_SEND_TO_LAB -> WOL series
+    expect(result.number.startsWith("WOL/")).toBe(true);
     expect(result.addressText).toBe("RS Example");
     expect(result.locationNotes).toBe("Lantai 2");
     expect(result.items).toHaveLength(purchaseOrder.items.length);
@@ -416,6 +417,39 @@ describe("WorkOrdersService.create", () => {
       where: { purchaseOrderId: purchaseOrder.id, workOrderId: { not: null } },
     });
     expect(allocationPointers).toBe(0);
+  });
+
+  it("allocates an SPK number for an ON_SITE work order", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      serviceMode: "ON_SITE",
+    });
+
+    const result = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+
+    expect(result.serviceMode).toBe("ON_SITE");
+    expect(isValidDocumentNumber(result.number)).toBe(true);
+    expect(result.number.startsWith("SPK/")).toBe(true);
+  });
+
+  it("keeps SPK and WOL sequences independent for the same company", async () => {
+    const onSite = await createApprovedPurchaseOrder(realCompanyId, {
+      serviceMode: "ON_SITE",
+    });
+    const inLab = await createApprovedPurchaseOrder(realCompanyId, {
+      serviceMode: "SEND_TO_LAB",
+    });
+
+    const spk = await createTrackedWorkOrder(realCompanyId, onSite.purchaseOrder.id);
+    const wol = await createTrackedWorkOrder(realCompanyId, inLab.purchaseOrder.id);
+
+    expect(spk.number.startsWith("SPK/")).toBe(true);
+    expect(wol.number.startsWith("WOL/")).toBe(true);
+    // Same trailing 5-digit counter is expected when each series is at the same
+    // position — they do not share a counter.
+    const spkSeq = spk.number.split("/")[3];
+    const wolSeq = wol.number.split("/")[3];
+    expect(spkSeq).toMatch(/^\d{5}$/);
+    expect(wolSeq).toMatch(/^\d{5}$/);
   });
 
   it("rejects a missing purchase order", async () => {
@@ -571,7 +605,7 @@ describe("WorkOrdersService.findOne / findAll", () => {
 });
 
 describe("WorkOrdersService.update", () => {
-  it("updates operational fields and serviceMode while non-terminal", async () => {
+  it("updates operational fields while non-terminal and never changes serviceMode", async () => {
     const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
       serviceMode: "ON_SITE",
     });
@@ -583,12 +617,12 @@ describe("WorkOrdersService.update", () => {
     const sourceQty = Number(created.items[0]?.qty);
 
     const updated = await workOrdersService.update(realCompanyId, created.id, {
-      serviceMode: "SEND_TO_LAB",
       addressText: "Updated site",
       locationNotes: "Gate B",
     });
 
-    expect(updated.serviceMode).toBe("SEND_TO_LAB");
+    // serviceMode is immutable after create (it determines the SPK/WOL identity).
+    expect(updated.serviceMode).toBe("ON_SITE");
     expect(updated.addressText).toBe("Updated site");
     expect(updated.locationNotes).toBe("Gate B");
     expect(updated.number).toBe(sourceNumber);
