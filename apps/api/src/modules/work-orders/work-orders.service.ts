@@ -60,6 +60,7 @@ const workOrderInclude = {
       number: true,
       status: true,
       customerPoNumber: true,
+      customerPoDate: true,
       quotationId: true,
     },
   },

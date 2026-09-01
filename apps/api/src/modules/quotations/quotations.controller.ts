@@ -14,6 +14,7 @@ import {
 import {
   quotationCreateSchema,
   quotationListQuerySchema,
+  quotationPreviewSchema,
   quotationUpdateSchema,
 } from "@medcal/shared";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
@@ -23,6 +24,7 @@ import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   QuotationsService,
   type QuotationListResult,
+  type QuotationPreviewResult,
   type QuotationWithItems,
 } from "./quotations.service";
 
@@ -49,6 +51,23 @@ export class QuotationsController {
       });
     }
     return this.service.create(companyId, parsed.data);
+  }
+
+  @Post("preview")
+  @RequirePermission("quotation", "create")
+  async preview(
+    @CompanyId() companyId: string,
+    @Body() rawBody: unknown,
+  ): Promise<QuotationPreviewResult> {
+    const parsed = quotationPreviewSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid quotation preview payload",
+        code: "INVALID_QUOTATION_PREVIEW",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.preview(companyId, parsed.data);
   }
 
   @Get()

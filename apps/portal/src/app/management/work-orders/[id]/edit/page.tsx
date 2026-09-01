@@ -180,7 +180,8 @@ export default function EditWorkOrderPage() {
             </div>
           </dl>
 
-          <WorkOrderFormFields value={form} onChange={setForm} />
+          {/* serviceMode is immutable after creation (it determines SPK vs WOL). */}
+          <WorkOrderFormFields value={form} onChange={setForm} showServiceMode={false} />
 
           <div className="mt-6 border-t border-slate-100 pt-6">
             <WorkOrderItemsTable items={workOrder.items} />

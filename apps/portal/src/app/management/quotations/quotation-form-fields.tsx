@@ -171,7 +171,9 @@ export function QuotationFormFields({
               <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                 <th className="px-3 py-2">Device</th>
                 <th className="px-3 py-2">Deskripsi</th>
-                <th className="px-3 py-2 w-24">Qty</th>
+                <th className={cn("px-3 py-2 w-24", readOnlyItems && "text-right")}>Qty</th>
+                {readOnlyItems && <th className="px-3 py-2 w-44 text-right">Harga Satuan</th>}
+                {readOnlyItems && <th className="px-3 py-2 w-44 text-right">Jumlah</th>}
                 {!readOnlyItems && <th className="px-3 py-2 w-36">Unit Price</th>}
                 {!readOnlyItems && <th className="px-3 py-2 w-36">Discount</th>}
                 {!readOnlyItems && <th className="px-3 py-2 text-right">Line Total</th>}
@@ -203,7 +205,9 @@ export function QuotationFormFields({
                     </td>
                     <td className="px-3 py-3 align-top">
                       {readOnlyItems ? (
-                        <p className="text-sm font-medium text-slate-900">{item.qty || "1"}</p>
+                        <p className="text-right text-sm font-medium text-slate-900">
+                          {item.qty || "1"}
+                        </p>
                       ) : (
                         <Input
                           type="number"
@@ -223,6 +227,28 @@ export function QuotationFormFields({
                         />
                       )}
                     </td>
+                    {readOnlyItems && (
+                      <td className="px-3 py-3 align-top text-right">
+                        {item.pricePending || item.unitPrice === "" ? (
+                          <span className="text-xs font-medium text-amber-600">
+                            Harga belum dikonfigurasi
+                          </span>
+                        ) : (
+                          <span className="text-sm text-slate-900">
+                            {formatIdr(item.unitPrice)}
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {readOnlyItems && (
+                      <td className="px-3 py-3 align-top text-right text-sm font-medium text-slate-900">
+                        {item.pricePending || item.unitPrice === "" ? (
+                          <span className="text-slate-400">—</span>
+                        ) : (
+                          formatIdr(lineTotal)
+                        )}
+                      </td>
+                    )}
                     {!readOnlyItems && (
                       <td className="px-3 py-3 align-top">
                         <Input

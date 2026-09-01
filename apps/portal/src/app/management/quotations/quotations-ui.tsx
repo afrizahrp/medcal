@@ -410,6 +410,12 @@ export type QuotationFormItem = {
   discountAmount: string;
   deviceLabel: string;
   deviceIdLabel: string;
+  /**
+   * New-quotation flow only: the server-resolved Price List tariff is missing
+   * for this line. Mirrors QuotationItem.pricePending — the quotation can still
+   * be created (DRAFT) but not sent until a unit price is entered.
+   */
+  pricePending?: boolean;
 };
 
 export function itemsFromRequest(

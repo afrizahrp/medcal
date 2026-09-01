@@ -152,9 +152,8 @@ describe("buildWorkOrderCreatePayload", () => {
 });
 
 describe("buildWorkOrderUpdatePayload", () => {
-  it("does not include source or commercial fields", () => {
+  it("does not include source, commercial, or serviceMode fields", () => {
     const payload = buildWorkOrderUpdatePayload({
-      serviceMode: "SEND_TO_LAB",
       addressText: "Site A",
       geoLat: "",
       geoLng: "",
@@ -162,7 +161,7 @@ describe("buildWorkOrderUpdatePayload", () => {
       scheduledStart: "",
       scheduledEnd: "",
     });
-    expect(payload.serviceMode).toBe("SEND_TO_LAB");
+    expect(payload).not.toHaveProperty("serviceMode");
     expect(payload.addressText).toBe("Site A");
     expect(payload.geoLat).toBeNull();
     expect(payload).not.toHaveProperty("purchaseOrderId");

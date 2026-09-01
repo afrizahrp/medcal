@@ -80,7 +80,9 @@ export interface CalibrationRequestListResponse {
 
 export const SERVICE_MODE_LABELS: Record<ServiceMode, string> = {
   ON_SITE: "On Site",
-  SEND_TO_LAB: "Send to Lab",
+  // Business term is "In Lab" (internal enum stays SEND_TO_LAB). Drives the WOL
+  // Work Order document identity.
+  SEND_TO_LAB: "In Lab",
 };
 
 export const SERVICE_MODE_OPTIONS: ServiceMode[] = ["ON_SITE", "SEND_TO_LAB"];

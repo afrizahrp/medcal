@@ -9,6 +9,7 @@ import {
   QUOTATION_SORTABLE_FIELDS,
   type QuotationCreateInput,
   type QuotationListQuery,
+  type QuotationPreviewInput,
   type QuotationUpdateInput,
 } from "@medcal/shared";
 import { resolveSortOrder } from "../../common/sort-query";
@@ -49,6 +50,21 @@ export interface QuotationListResult {
   pageSize: number;
   total: number;
   totalPages: number;
+}
+
+/** One line of the read-only New-Quotation price preview. */
+export interface QuotationPreviewItem {
+  requestItemId: string;
+  description: string;
+  qty: Prisma.Decimal;
+  unitPrice: Prisma.Decimal;
+  lineTotal: Prisma.Decimal;
+  /** No active Price List tariff on the preview date — unitPrice is 0. */
+  pricePending: boolean;
+}
+
+export interface QuotationPreviewResult {
+  items: QuotationPreviewItem[];
 }
 
 /** Full per-line shape accepted on PATCH (manual edit of a DRAFT quotation). */
@@ -296,7 +312,7 @@ type RequestForGeneration = Prisma.CalibrationRequestGetPayload<{
  * `pricePending = true` (BR-11) — such a quotation cannot be sent/approved.
  */
 async function buildGeneratedRows(
-  tx: Prisma.TransactionClient,
+  tx: Prisma.TransactionClient | typeof prisma,
   companyId: string,
   quotationId: string,
   request: RequestForGeneration,
@@ -443,6 +459,48 @@ export class QuotationsService {
         include: quotationInclude,
       });
     });
+  }
+
+  /**
+   * Read-only price preview for the New Quotation screen. Resolves the Price
+   * List tariff for every requisition line exactly the way `create` snapshots it
+   * (buildGeneratedRows) — but persists nothing. The unit price shown here is
+   * therefore the same authoritative value the quotation will carry once created.
+   */
+  async preview(
+    companyId: string,
+    input: QuotationPreviewInput,
+  ): Promise<QuotationPreviewResult> {
+    const request = await prisma.calibrationRequest.findFirst({
+      where: { id: input.requestId, companyId },
+      include: { items: { include: { deviceType: { select: { name: true } } } } },
+    });
+    if (!request) {
+      throw new BadRequestException({
+        message: "Requisition not found",
+        code: "CALIBRATION_REQUEST_NOT_FOUND",
+      });
+    }
+
+    const rows = await buildGeneratedRows(
+      prisma,
+      companyId,
+      "preview",
+      request,
+      new Map(),
+      new Date(),
+    );
+
+    return {
+      items: rows.map((row) => ({
+        requestItemId: row.requestItemId,
+        description: row.description,
+        qty: row.qty,
+        unitPrice: row.unitPrice,
+        lineTotal: row.lineTotal,
+        pricePending: row.pricePending,
+      })),
+    };
   }
 
   async findAll(companyId: string, query: QuotationListQuery): Promise<QuotationListResult> {

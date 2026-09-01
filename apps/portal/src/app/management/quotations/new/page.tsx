@@ -20,7 +20,8 @@ import {
   itemsFromRequest,
   moneyNumber,
 } from "../quotations-ui";
-import { useCreateQuotation, useQuotations } from "../use-quotations-query";
+import { applyResolvedPrices } from "../quotation-preview";
+import { useCreateQuotation, useQuotationPreview, useQuotations } from "../use-quotations-query";
 import { useTaxes } from "../use-taxes-query";
 
 const QUOTABLE_STATUSES = ["SUBMITTED", "IN_QUOTATION"] as const;
@@ -46,6 +47,7 @@ function NewQuotationPageInner() {
   );
   const createMutation = useCreateQuotation();
   const taxesQuery = useTaxes();
+  const previewQuery = useQuotationPreview(requestId || undefined);
 
   const [form, setForm] = useState<QuotationFormValue>({
     source: "PORTAL",
@@ -68,6 +70,15 @@ function NewQuotationPageInner() {
       setInitialized(true);
     }
   }, [request, initialized]);
+
+  // Overlay the server-resolved Price List tariffs once the preview arrives.
+  // Same authoritative value the quotation is created with — previewTotals then
+  // derives subtotal / tax / total from it.
+  useEffect(() => {
+    const lines = previewQuery.data?.items;
+    if (!lines) return;
+    setForm((prev) => ({ ...prev, items: applyResolvedPrices(prev.items, lines) }));
+  }, [previewQuery.data]);
 
   if (!capabilities?.quotationCreate) {
     return <AccessDenied />;

@@ -3,7 +3,11 @@ import { BadRequestException, ConflictException, NotFoundException } from "@nest
 import { afterAll, describe, expect, it } from "vitest";
 import { Prisma, prisma } from "@medcal/db";
 import { isValidDocumentNumber } from "@medcal/db";
-import { quotationCreateSchema, quotationUpdateSchema } from "@medcal/shared";
+import {
+  quotationCreateSchema,
+  quotationPreviewSchema,
+  quotationUpdateSchema,
+} from "@medcal/shared";
 import { CalibrationRequestsService } from "../calibration-requests/calibration-requests.service";
 import { QuotationsService } from "./quotations.service";
 
@@ -251,6 +255,106 @@ describe("quotationCreateSchema", () => {
         headerDiscountAmount: -1,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("QuotationsService.preview — read-only Price List preview", () => {
+  it("resolves the tariff for a submitted request without persisting a quotation", async () => {
+    const dt = await makeDeviceType();
+    await seedPrice(realCompanyId, dt.id, 150_000);
+    const { request } = await createSubmittedRequest(realCompanyId, { deviceTypeId: dt.id });
+
+    const preview = await quotationsService.preview(realCompanyId, { requestId: request.id });
+
+    expect(preview.items).toHaveLength(1);
+    expect(preview.items[0]?.requestItemId).toBe(request.items[0]?.id);
+    expect(preview.items[0]?.pricePending).toBe(false);
+    expect(Number(preview.items[0]?.unitPrice)).toBe(150_000);
+    expect(Number(preview.items[0]?.lineTotal)).toBe(150_000);
+
+    const count = await prisma.quotation.count({ where: { requestId: request.id } });
+    expect(count).toBe(0);
+    const cr = await prisma.calibrationRequest.findFirstOrThrow({ where: { id: request.id } });
+    expect(cr.status).toBe("SUBMITTED");
+  });
+
+  it("returns each line's own tariff for a multi-device request", async () => {
+    const a = await makeDeviceType("Bio Safety Cabinet");
+    const b = await makeDeviceType("Audiometer");
+    await seedPrice(realCompanyId, a.id, 1_250_000);
+    await seedPrice(realCompanyId, b.id, 800_000);
+    const { request } = await createSubmittedRequest(realCompanyId, {
+      items: [
+        { deviceTypeId: a.id, qty: 3 },
+        { deviceTypeId: b.id, qty: 1 },
+      ],
+    });
+
+    const preview = await quotationsService.preview(realCompanyId, { requestId: request.id });
+    const byDesc = new Map(preview.items.map((i) => [i.description, i]));
+    expect(Number(byDesc.get("Bio Safety Cabinet")?.unitPrice)).toBe(1_250_000);
+    expect(Number(byDesc.get("Audiometer")?.unitPrice)).toBe(800_000);
+  });
+
+  it("keeps unitPrice per-unit and lineTotal = qty × unitPrice for qty > 1", async () => {
+    const dt = await makeDeviceType();
+    await seedPrice(realCompanyId, dt.id, 100_000);
+    const { request } = await createSubmittedRequest(realCompanyId, {
+      deviceTypeId: dt.id,
+      items: [{ deviceId: null, qty: 4 }],
+    });
+
+    const preview = await quotationsService.preview(realCompanyId, { requestId: request.id });
+    expect(Number(preview.items[0]?.qty)).toBe(4);
+    expect(Number(preview.items[0]?.unitPrice)).toBe(100_000);
+    expect(Number(preview.items[0]?.lineTotal)).toBe(400_000);
+  });
+
+  it("flags a line with no active tariff as pricePending (unitPrice 0)", async () => {
+    const dt = await makeDeviceType(); // no seedPrice
+    const { request } = await createSubmittedRequest(realCompanyId, { deviceTypeId: dt.id });
+
+    const preview = await quotationsService.preview(realCompanyId, { requestId: request.id });
+    expect(preview.items[0]?.pricePending).toBe(true);
+    expect(Number(preview.items[0]?.unitPrice)).toBe(0);
+  });
+
+  it("the previewed unit price equals the value the quotation is created with", async () => {
+    const dt = await makeDeviceType();
+    await seedPrice(realCompanyId, dt.id, 137_500);
+    const { request } = await createSubmittedRequest(realCompanyId, {
+      deviceTypeId: dt.id,
+      items: [{ deviceId: null, qty: 2 }],
+    });
+
+    const preview = await quotationsService.preview(realCompanyId, { requestId: request.id });
+    const created = await createQuoted(realCompanyId, { requestId: request.id });
+    createdQuotationIds.push(created.id);
+
+    expect(Number(preview.items[0]?.unitPrice)).toBe(Number(created.items[0]?.unitPrice));
+    expect(Number(preview.items[0]?.lineTotal)).toBe(Number(created.items[0]?.lineTotal));
+    const previewSubtotal = preview.items.reduce((sum, i) => sum + Number(i.lineTotal), 0);
+    expect(previewSubtotal).toBe(Number(created.subtotal));
+  });
+
+  it("rejects a preview for a requisition from another company", async () => {
+    const dt = await makeDeviceType();
+    await seedPrice(realCompanyId, dt.id, 100_000);
+    const { request } = await createSubmittedRequest(realCompanyId, { deviceTypeId: dt.id });
+    await expect(
+      quotationsService.preview("OTHER", { requestId: request.id }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "CALIBRATION_REQUEST_NOT_FOUND" }),
+    });
+  });
+});
+
+describe("quotationPreviewSchema", () => {
+  it("accepts a bare requestId", () => {
+    expect(quotationPreviewSchema.safeParse({ requestId: "req-1" }).success).toBe(true);
+  });
+  it("rejects a missing requestId", () => {
+    expect(quotationPreviewSchema.safeParse({}).success).toBe(false);
   });
 });
 

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiFetchBlob } from "@medcal/shared";
 import type { QuotationCreateInput, QuotationUpdateInput } from "@medcal/shared";
 import { CALIBRATION_REQUESTS_QUERY_KEY } from "../calibration-requests/use-calibration-requests-query";
+import type { QuotationPreviewResponse } from "./quotation-preview";
 import type {
   QuotationListResponse,
   QuotationRow,
@@ -68,6 +69,24 @@ export function useQuotation(id: string | undefined) {
     queryKey: [QUOTATIONS_QUERY_KEY, id],
     queryFn: () => apiFetch<QuotationRow>(`/quotations/${id}`),
     enabled: Boolean(id),
+  });
+}
+
+/**
+ * Read-only Price List preview for the New Quotation screen. Returns the same
+ * unit price the quotation will be created with — no side effects. Keyed on the
+ * requisition; the tariff does not depend on tax or header discount, so those
+ * stay client-side (previewTotals) without a refetch.
+ */
+export function useQuotationPreview(requestId: string | undefined) {
+  return useQuery({
+    queryKey: [QUOTATIONS_QUERY_KEY, "preview", requestId],
+    queryFn: () =>
+      apiFetch<QuotationPreviewResponse>("/quotations/preview", {
+        method: "POST",
+        body: JSON.stringify({ requestId }),
+      }),
+    enabled: Boolean(requestId),
   });
 }
 

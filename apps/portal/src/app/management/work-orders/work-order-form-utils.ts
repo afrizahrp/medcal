@@ -1,6 +1,5 @@
 import { ApiError } from "@medcal/shared";
 import type { WorkOrderAssignInput, WorkOrderCreateInput, WorkOrderUpdateInput } from "@medcal/shared";
-import type { ServiceMode } from "../calibration-requests/calibration-requests-ui";
 
 export type WorkOrderStatus = "PLANNED" | "ASSIGNED" | "IN_PROGRESS" | "DONE" | "CANCELLED";
 export type AssignmentRole = "LEAD" | "ASSIST";
@@ -125,7 +124,6 @@ export function buildWorkOrderCreatePayload(input: {
 }
 
 export function buildWorkOrderUpdatePayload(input: {
-  serviceMode: ServiceMode;
   addressText: string;
   geoLat: string;
   geoLng: string;
@@ -133,8 +131,8 @@ export function buildWorkOrderUpdatePayload(input: {
   scheduledStart: string;
   scheduledEnd: string;
 }): WorkOrderUpdateInput {
+  // serviceMode is immutable after create (it determines SPK vs WOL) — not sent.
   return {
-    serviceMode: input.serviceMode,
     addressText: emptyToNull(input.addressText),
     geoLat: parseOptionalCoord(input.geoLat),
     geoLng: parseOptionalCoord(input.geoLng),

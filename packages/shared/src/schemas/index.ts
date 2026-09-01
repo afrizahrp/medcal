@@ -414,6 +414,18 @@ export const quotationCreateSchema = z.object({
 
 export type QuotationCreateInput = z.infer<typeof quotationCreateSchema>;
 
+/**
+ * POST /quotations/preview body — read-only. Returns the same Price List tariff
+ * the server would snapshot at create time (see buildGeneratedRows), so the
+ * New Quotation screen can show the resolved unit price before the quotation
+ * exists. Never persists anything.
+ */
+export const quotationPreviewSchema = z.object({
+  requestId: z.string().min(1),
+});
+
+export type QuotationPreviewInput = z.infer<typeof quotationPreviewSchema>;
+
 /** GET /quotations query params */
 export const quotationListQuerySchema = baseListQuerySchema.extend({
   status: z.enum(quotationStatusValues).optional(),
