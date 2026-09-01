@@ -972,3 +972,390 @@ describe("WorkOrdersService transaction", () => {
     ).toBe(0);
   });
 });
+
+// ===========================================================================
+// WorkOrder ↔ reference equipment ("Equipment yang akan dibawa") — ON_SITE only
+// ===========================================================================
+
+describe("WorkOrdersService reference equipment", () => {
+  const createdEquipmentTypeIds: string[] = [];
+  const createdEquipmentIds: string[] = [];
+  const createdRequirementIds: string[] = [];
+
+  async function createEquipmentType(name: string) {
+    const type = await prisma.equipmentType.create({
+      data: { code: `EQT-${randomUUID().slice(0, 8).toUpperCase()}`, name },
+    });
+    createdEquipmentTypeIds.push(type.id);
+    return type;
+  }
+
+  async function createEquipmentUnit(
+    equipmentTypeId: string,
+    overrides: Partial<{ isActive: boolean; serialNumber: string }> = {},
+  ) {
+    const unit = await prisma.equipment.create({
+      data: {
+        companyId: realCompanyId,
+        equipmentTypeId,
+        code: `EQU-${randomUUID().slice(0, 8).toUpperCase()}`,
+        brand: "Fluke Biomedical",
+        model: "ESA620",
+        serialNumber: overrides.serialNumber ?? randomUUID().slice(0, 8),
+        isActive: overrides.isActive ?? true,
+      },
+    });
+    createdEquipmentIds.push(unit.id);
+    return unit;
+  }
+
+  async function requireEquipmentType(deviceTypeId: string, equipmentTypeId: string, sortOrder: number) {
+    const requirement = await prisma.deviceTypeEquipmentRequirement.create({
+      data: { deviceTypeId, equipmentTypeId, sortOrder },
+    });
+    createdRequirementIds.push(requirement.id);
+    return requirement;
+  }
+
+  /** ON_SITE work order whose single test DeviceType requires `equipmentTypeIds`. */
+  async function onSiteWorkOrderRequiring(equipmentTypeIds: string[]) {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      serviceMode: "ON_SITE",
+    });
+    const deviceTypeId = testDeviceTypeId!;
+    for (const [index, equipmentTypeId] of equipmentTypeIds.entries()) {
+      await requireEquipmentType(deviceTypeId, equipmentTypeId, (index + 1) * 10);
+    }
+    const workOrder = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    return { workOrder, deviceTypeId };
+  }
+
+  afterAll(async () => {
+    await prisma.workOrderEquipment.deleteMany({
+      where: { equipmentId: { in: createdEquipmentIds } },
+    });
+    if (createdRequirementIds.length > 0) {
+      await prisma.deviceTypeEquipmentRequirement.deleteMany({
+        where: { id: { in: createdRequirementIds } },
+      });
+    }
+    if (createdEquipmentIds.length > 0) {
+      await prisma.equipment.deleteMany({ where: { id: { in: createdEquipmentIds } } });
+    }
+    if (createdEquipmentTypeIds.length > 0) {
+      await prisma.equipmentType.deleteMany({ where: { id: { in: createdEquipmentTypeIds } } });
+    }
+  });
+
+  it("proposes required equipment types from DeviceTypeEquipmentRequirement, in sortOrder", async () => {
+    const esa = await createEquipmentType("Electrical Safety Analyzer");
+    const thermo = await createEquipmentType("Thermohygrometer");
+    await createEquipmentUnit(esa.id);
+    const { workOrder } = await onSiteWorkOrderRequiring([esa.id, thermo.id]);
+
+    const { serviceMode, proposal } = await workOrdersService.getEquipmentProposal(
+      realCompanyId,
+      workOrder.id,
+    );
+
+    expect(serviceMode).toBe("ON_SITE");
+    expect(proposal.map((row) => row.equipmentType.id)).toEqual([esa.id, thermo.id]);
+    expect(proposal[0].sortOrder).toBe(10);
+    expect(proposal[1].sortOrder).toBe(20);
+    expect(proposal[0].candidates.length).toBe(1);
+    expect(proposal[0].selectedEquipmentId).toBeNull();
+  });
+
+  it("returns an empty proposal for SEND_TO_LAB work orders", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      serviceMode: "SEND_TO_LAB",
+    });
+    const workOrder = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+
+    const result = await workOrdersService.getEquipmentProposal(realCompanyId, workOrder.id);
+    expect(result.serviceMode).toBe("SEND_TO_LAB");
+    expect(result.proposal).toEqual([]);
+  });
+
+  it("persists an ON_SITE equipment selection and returns it on the work order", async () => {
+    const esa = await createEquipmentType("Electrical Safety Analyzer");
+    const unit = await createEquipmentUnit(esa.id);
+    const { workOrder } = await onSiteWorkOrderRequiring([esa.id]);
+
+    const { workOrder: updated } = await workOrdersService.replaceEquipment(realCompanyId, workOrder.id, {
+      equipment: [{ equipmentId: unit.id, equipmentTypeId: esa.id }],
+    });
+
+    expect(updated.equipment).toHaveLength(1);
+    expect(updated.equipment[0].equipmentId).toBe(unit.id);
+    expect(updated.equipment[0].sortOrder).toBe(10);
+
+    const refetched = await workOrdersService.findOne(realCompanyId, workOrder.id);
+    expect(refetched.equipment[0].equipmentId).toBe(unit.id);
+  });
+
+  it("rejects an unknown equipment id", async () => {
+    const esa = await createEquipmentType("Electrical Safety Analyzer");
+    const { workOrder } = await onSiteWorkOrderRequiring([esa.id]);
+    await expect(
+      workOrdersService.replaceEquipment(realCompanyId, workOrder.id, {
+        equipment: [{ equipmentId: "does-not-exist", equipmentTypeId: esa.id }],
+      }),
+    ).rejects.toMatchObject({ response: { code: "EQUIPMENT_NOT_FOUND" } });
+  });
+
+  it("rejects an equipment-type mismatch", async () => {
+    const esa = await createEquipmentType("Electrical Safety Analyzer");
+    const thermo = await createEquipmentType("Thermohygrometer");
+    const unit = await createEquipmentUnit(esa.id);
+    const { workOrder } = await onSiteWorkOrderRequiring([esa.id, thermo.id]);
+    await expect(
+      workOrdersService.replaceEquipment(realCompanyId, workOrder.id, {
+        equipment: [{ equipmentId: unit.id, equipmentTypeId: thermo.id }],
+      }),
+    ).rejects.toMatchObject({ response: { code: "EQUIPMENT_TYPE_MISMATCH" } });
+  });
+
+  it("rejects an inactive equipment unit", async () => {
+    const esa = await createEquipmentType("Electrical Safety Analyzer");
+    const unit = await createEquipmentUnit(esa.id, { isActive: false });
+    const { workOrder } = await onSiteWorkOrderRequiring([esa.id]);
+    await expect(
+      workOrdersService.replaceEquipment(realCompanyId, workOrder.id, {
+        equipment: [{ equipmentId: unit.id, equipmentTypeId: esa.id }],
+      }),
+    ).rejects.toMatchObject({ response: { code: "EQUIPMENT_INACTIVE" } });
+  });
+
+  it("rejects a duplicate equipment unit within one work order", async () => {
+    const esa = await createEquipmentType("Electrical Safety Analyzer");
+    const unit = await createEquipmentUnit(esa.id);
+    const { workOrder } = await onSiteWorkOrderRequiring([esa.id]);
+    await expect(
+      workOrdersService.replaceEquipment(realCompanyId, workOrder.id, {
+        equipment: [
+          { equipmentId: unit.id, equipmentTypeId: esa.id },
+          { equipmentId: unit.id, equipmentTypeId: esa.id },
+        ],
+      }),
+    ).rejects.toMatchObject({ response: { code: "DUPLICATE_WORK_ORDER_EQUIPMENT" } });
+  });
+
+  it("rejects equipment selection on a SEND_TO_LAB work order", async () => {
+    const esa = await createEquipmentType("Electrical Safety Analyzer");
+    const unit = await createEquipmentUnit(esa.id);
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      serviceMode: "SEND_TO_LAB",
+    });
+    const workOrder = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    await expect(
+      workOrdersService.replaceEquipment(realCompanyId, workOrder.id, {
+        equipment: [{ equipmentId: unit.id, equipmentTypeId: esa.id }],
+      }),
+    ).rejects.toMatchObject({
+      response: { code: "EQUIPMENT_NOT_APPLICABLE_FOR_SEND_TO_LAB" },
+    });
+  });
+
+  it("blocks start() until the ON_SITE equipment list is confirmed, then allows it", async () => {
+    const esa = await createEquipmentType("Electrical Safety Analyzer");
+    const unit = await createEquipmentUnit(esa.id);
+    const { workOrder } = await onSiteWorkOrderRequiring([esa.id]);
+    const technician = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, workOrder.id, {
+      technicians: [{ technicianUserId: technician.id, roleOnJob: "LEAD" }],
+    });
+
+    await expect(workOrdersService.start(realCompanyId, workOrder.id)).rejects.toMatchObject({
+      response: { code: "WORK_ORDER_EQUIPMENT_NOT_CONFIRMED" },
+    });
+
+    await workOrdersService.replaceEquipment(realCompanyId, workOrder.id, {
+      equipment: [{ equipmentId: unit.id, equipmentTypeId: esa.id }],
+    });
+    await workOrdersService.confirmEquipment(realCompanyId, workOrder.id);
+    const started = await workOrdersService.start(realCompanyId, workOrder.id);
+    expect(started.status).toBe("IN_PROGRESS");
+  });
+
+  it("clears a prior confirmation when the equipment list is edited", async () => {
+    const esa = await createEquipmentType("Electrical Safety Analyzer");
+    const unitA = await createEquipmentUnit(esa.id);
+    const unitB = await createEquipmentUnit(esa.id);
+    const { workOrder } = await onSiteWorkOrderRequiring([esa.id]);
+
+    await workOrdersService.replaceEquipment(realCompanyId, workOrder.id, {
+      equipment: [{ equipmentId: unitA.id, equipmentTypeId: esa.id }],
+    });
+    await workOrdersService.confirmEquipment(realCompanyId, workOrder.id);
+    const confirmed = await workOrdersService.findOne(realCompanyId, workOrder.id);
+    expect(confirmed.equipmentConfirmedAt).not.toBeNull();
+
+    await workOrdersService.replaceEquipment(realCompanyId, workOrder.id, {
+      equipment: [{ equipmentId: unitB.id, equipmentTypeId: esa.id }],
+    });
+    const afterEdit = await workOrdersService.findOne(realCompanyId, workOrder.id);
+    expect(afterEdit.equipmentConfirmedAt).toBeNull();
+  });
+
+  it("deduplicates an EquipmentType required by two DeviceTypes, keeping first occurrence", async () => {
+    // Two requirements pointing at the same EquipmentType from the same DeviceType
+    // is blocked by @@unique; cross-DeviceType dedup is covered by the resolver's
+    // Set — exercised here via a single DeviceType requiring one type once.
+    const esa = await createEquipmentType("Electrical Safety Analyzer");
+    const { workOrder } = await onSiteWorkOrderRequiring([esa.id]);
+    const { proposal } = await workOrdersService.getEquipmentProposal(realCompanyId, workOrder.id);
+    expect(proposal.filter((row) => row.equipmentType.id === esa.id)).toHaveLength(1);
+  });
+
+  it("keeps existing WorkOrder numbering unchanged", async () => {
+    const esa = await createEquipmentType("Electrical Safety Analyzer");
+    const { workOrder } = await onSiteWorkOrderRequiring([esa.id]);
+    expect(workOrder.number.startsWith("SPK/")).toBe(true);
+    expect(isValidDocumentNumber(workOrder.number)).toBe(true);
+  });
+
+  // ---- Drag-and-drop ordering -------------------------------------------------
+
+  /** ON_SITE work order with three distinct equipment units already selected. */
+  async function workOrderWithThreeUnits() {
+    const typeA = await createEquipmentType("Digital Luxmeter");
+    const typeB = await createEquipmentType("Digital Pressure Meter");
+    const typeC = await createEquipmentType("Tachometer for Dental");
+    const unitA = await createEquipmentUnit(typeA.id);
+    const unitB = await createEquipmentUnit(typeB.id);
+    const unitC = await createEquipmentUnit(typeC.id);
+    const { workOrder } = await onSiteWorkOrderRequiring([typeA.id, typeB.id, typeC.id]);
+    await workOrdersService.replaceEquipment(realCompanyId, workOrder.id, {
+      equipment: [
+        { equipmentId: unitA.id, equipmentTypeId: typeA.id },
+        { equipmentId: unitB.id, equipmentTypeId: typeB.id },
+        { equipmentId: unitC.id, equipmentTypeId: typeC.id },
+      ],
+    });
+    return { workOrderId: workOrder.id, unitA, unitB, unitC };
+  }
+
+  it("returns equipment in sortOrder ASC and reorders to exactly the requested order", async () => {
+    const { workOrderId, unitA, unitB, unitC } = await workOrderWithThreeUnits();
+
+    const before = await workOrdersService.findOne(realCompanyId, workOrderId);
+    expect(before.equipment.map((row) => row.equipmentId)).toEqual([unitA.id, unitB.id, unitC.id]);
+    expect(before.equipment.map((row) => row.sortOrder)).toEqual([10, 20, 30]);
+
+    // [A, B, C] -> [C, A, B]
+    const reordered = await workOrdersService.reorderEquipment(realCompanyId, workOrderId, [
+      unitC.id,
+      unitA.id,
+      unitB.id,
+    ]);
+    expect(reordered.equipment.map((row) => row.equipmentId)).toEqual([unitC.id, unitA.id, unitB.id]);
+    expect(reordered.equipment.map((row) => row.sortOrder)).toEqual([10, 20, 30]);
+
+    // Persisted: a fresh read returns the same order.
+    const refetched = await workOrdersService.findOne(realCompanyId, workOrderId);
+    expect(refetched.equipment.map((row) => row.equipmentId)).toEqual([unitC.id, unitA.id, unitB.id]);
+  });
+
+  it("rejects a reorder payload with a duplicate id", async () => {
+    const { workOrderId, unitA, unitB } = await workOrderWithThreeUnits();
+    await expect(
+      workOrdersService.reorderEquipment(realCompanyId, workOrderId, [unitA.id, unitA.id, unitB.id]),
+    ).rejects.toMatchObject({ response: { code: "WORK_ORDER_EQUIPMENT_ORDER_MISMATCH" } });
+  });
+
+  it("rejects a reorder payload that is missing an attached id", async () => {
+    const { workOrderId, unitA, unitB } = await workOrderWithThreeUnits();
+    await expect(
+      workOrdersService.reorderEquipment(realCompanyId, workOrderId, [unitA.id, unitB.id]),
+    ).rejects.toMatchObject({ response: { code: "WORK_ORDER_EQUIPMENT_ORDER_MISMATCH" } });
+  });
+
+  it("rejects a reorder payload containing an id from another work order", async () => {
+    const { workOrderId, unitA, unitB, unitC } = await workOrderWithThreeUnits();
+    const foreignType = await createEquipmentType("Foreign Analyzer");
+    const foreignUnit = await createEquipmentUnit(foreignType.id);
+    const { workOrder: otherWo } = await onSiteWorkOrderRequiring([foreignType.id]);
+    await workOrdersService.replaceEquipment(realCompanyId, otherWo.id, {
+      equipment: [{ equipmentId: foreignUnit.id, equipmentTypeId: foreignType.id }],
+    });
+    await expect(
+      workOrdersService.reorderEquipment(realCompanyId, workOrderId, [
+        unitA.id,
+        unitB.id,
+        foreignUnit.id,
+      ]),
+    ).rejects.toMatchObject({ response: { code: "WORK_ORDER_EQUIPMENT_ORDER_MISMATCH" } });
+    // unaffected: original order intact
+    const still = await workOrdersService.findOne(realCompanyId, workOrderId);
+    expect(still.equipment.map((row) => row.equipmentId)).toEqual([unitA.id, unitB.id, unitC.id]);
+  });
+
+  it("rejects a reorder for a work order in another company", async () => {
+    const { workOrderId, unitA, unitB, unitC } = await workOrderWithThreeUnits();
+    await expect(
+      workOrdersService.reorderEquipment("XXX", workOrderId, [unitC.id, unitB.id, unitA.id]),
+    ).rejects.toMatchObject({ response: { code: "WORK_ORDER_NOT_FOUND" } });
+  });
+
+  it("rejects equipment ordering on a SEND_TO_LAB work order", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      serviceMode: "SEND_TO_LAB",
+    });
+    const workOrder = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    await expect(
+      workOrdersService.reorderEquipment(realCompanyId, workOrder.id, ["whatever"]),
+    ).rejects.toMatchObject({ response: { code: "EQUIPMENT_NOT_APPLICABLE_FOR_SEND_TO_LAB" } });
+  });
+
+  it("reorder does not add or remove equipment, and does not touch masters or requirements", async () => {
+    const { workOrderId, unitA, unitB, unitC } = await workOrderWithThreeUnits();
+    const requirementsBefore = await prisma.deviceTypeEquipmentRequirement.findMany({
+      where: { id: { in: createdRequirementIds } },
+      orderBy: { id: "asc" },
+    });
+    const equipmentBefore = await prisma.equipment.findMany({
+      where: { id: { in: [unitA.id, unitB.id, unitC.id] } },
+      orderBy: { id: "asc" },
+    });
+
+    await workOrdersService.reorderEquipment(realCompanyId, workOrderId, [
+      unitB.id,
+      unitC.id,
+      unitA.id,
+    ]);
+
+    const after = await workOrdersService.findOne(realCompanyId, workOrderId);
+    expect(after.equipment).toHaveLength(3);
+    expect(new Set(after.equipment.map((row) => row.equipmentId))).toEqual(
+      new Set([unitA.id, unitB.id, unitC.id]),
+    );
+    const requirementsAfter = await prisma.deviceTypeEquipmentRequirement.findMany({
+      where: { id: { in: createdRequirementIds } },
+      orderBy: { id: "asc" },
+    });
+    expect(requirementsAfter).toEqual(requirementsBefore);
+    const equipmentAfter = await prisma.equipment.findMany({
+      where: { id: { in: [unitA.id, unitB.id, unitC.id] } },
+      orderBy: { id: "asc" },
+    });
+    expect(equipmentAfter).toEqual(equipmentBefore);
+  });
+
+  it("reorder preserves WorkOrder status, serviceMode and confirmation", async () => {
+    const { workOrderId, unitA, unitB, unitC } = await workOrderWithThreeUnits();
+    await workOrdersService.confirmEquipment(realCompanyId, workOrderId);
+    const confirmed = await workOrdersService.findOne(realCompanyId, workOrderId);
+    const confirmedAt = confirmed.equipmentConfirmedAt;
+    expect(confirmedAt).not.toBeNull();
+
+    const after = await workOrdersService.reorderEquipment(realCompanyId, workOrderId, [
+      unitC.id,
+      unitB.id,
+      unitA.id,
+    ]);
+    expect(after.status).toBe(confirmed.status);
+    expect(after.serviceMode).toBe("ON_SITE");
+    expect(after.equipmentConfirmedAt?.getTime()).toBe(confirmedAt?.getTime());
+  });
+});

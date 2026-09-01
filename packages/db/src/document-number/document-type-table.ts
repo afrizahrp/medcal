@@ -8,6 +8,7 @@ export const DOCUMENT_TYPE_NUMBER_TABLE: Record<DocumentType, string> = {
   PURCHASE_ORDER: "PurchaseOrder",
   WORK_ORDER: "WorkOrder",
   WORK_ORDER_SEND_TO_LAB: "WorkOrder",
+  EQUIPMENT_DELIVERY_NOTE: "EquipmentDeliveryNote",
   INVOICE: "Invoice",
   CERTIFICATE: "Certificate",
   CREDIT_NOTE: "CreditNote",

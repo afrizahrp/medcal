@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { ConfirmDialog } from "../calibration-requests/calibration-requests-ui";
 import { Surface, selectClassName } from "./equipment-units-ui";
 import {
   downloadCalibrationCertificate,
@@ -311,6 +312,8 @@ function RecordDetail({
   const [form, setForm] = useState<FormValue>(() => formFromRow(record));
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const locked = record.status === "CONFIRMED";
   const editable = canManage && !locked;
 
@@ -339,21 +342,21 @@ function RecordDetail({
   }
 
   async function confirm() {
-    if (!window.confirm("Konfirmasi record ini? Setelah CONFIRMED tidak dapat diubah atau dihapus.")) return;
     setError(null);
     try {
       if (dirty) await update.mutateAsync({ id: record.id, input: toUpdatePayload(form) });
       await update.mutateAsync({ id: record.id, input: { status: "CONFIRMED" } as never });
+      setConfirmOpen(false);
     } catch (err) {
       setError(apiErr(err));
     }
   }
 
   async function remove() {
-    if (!window.confirm("Hapus record kalibrasi DRAFT ini?")) return;
     setError(null);
     try {
       await del.mutateAsync(record.id);
+      setDeleteOpen(false);
     } catch (err) {
       setError(apiErr(err));
     }
@@ -377,13 +380,24 @@ function RecordDetail({
 
       {editable ? (
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
-          <Button type="button" variant="outline" size="sm" onClick={remove} disabled={del.isPending}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setDeleteOpen(true)}
+            disabled={del.isPending}
+          >
             {del.isPending ? "Menghapus…" : "Hapus"}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={save} disabled={update.isPending || !dirty}>
             Simpan draft
           </Button>
-          <Button type="button" size="sm" onClick={confirm} disabled={update.isPending}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setConfirmOpen(true)}
+            disabled={update.isPending}
+          >
             Konfirmasi (lock)
           </Button>
         </div>
@@ -392,6 +406,27 @@ function RecordDetail({
           Record CONFIRMED — evidence historis, terkunci dari perubahan.
         </p>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Konfirmasi Record"
+        description="Record kalibrasi yang sudah CONFIRMED tidak dapat diubah atau dihapus."
+        confirmLabel="Konfirmasi"
+        loading={update.isPending}
+        onConfirm={confirm}
+        onCancel={() => setConfirmOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Hapus Record Kalibrasi"
+        description="Hapus record kalibrasi DRAFT ini? Tindakan ini tidak dapat dibatalkan."
+        confirmLabel="Hapus"
+        variant="destructive"
+        loading={del.isPending}
+        onConfirm={remove}
+        onCancel={() => setDeleteOpen(false)}
+      />
     </div>
   );
 }

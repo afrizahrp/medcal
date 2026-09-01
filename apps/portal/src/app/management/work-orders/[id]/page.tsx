@@ -32,6 +32,7 @@ import {
   workOrderActions,
   type AssignmentRole,
 } from "../work-order-form-utils";
+import { WorkOrderEquipmentSection } from "../work-order-equipment-section";
 import {
   openWorkOrderPdf,
   useAssignWorkOrder,
@@ -304,6 +305,12 @@ export default function WorkOrderDetailPage() {
         <div className="mt-5 border-t border-slate-100 pt-5">
           <WorkOrderItemsTable items={workOrder.items} />
         </div>
+
+        <WorkOrderEquipmentSection
+          workOrder={workOrder}
+          editable={!actions.isLocked}
+          onChanged={() => query.refetch()}
+        />
 
         <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
           <Button type="button" variant="outline" onClick={handlePrint} disabled={printPending}>

@@ -9,6 +9,7 @@ import { useUrlQueryState } from "@/hooks/use-url-query-state";
 import { AccessDenied } from "../../../components/access-denied";
 import { useRequireSession, useAuthz } from "@medcal/auth/client";
 import { PaginationBar } from "../leads/leads-ui";
+import { ConfirmDialog } from "../calibration-requests/calibration-requests-ui";
 import {
   EmailComposeFab,
   EmailFilters,

@@ -504,6 +504,46 @@ const workOrderNullableString = z.string().max(2000).nullable().optional();
 const workOrderNullableCoord = z.coerce.number().finite().nullable().optional();
 const workOrderNullableDate = z.coerce.date().nullable().optional();
 
+/**
+ * One reference-equipment unit selected for an ON_SITE work order
+ * ("Equipment yang akan dibawa"). `equipmentTypeId` is the type the row is
+ * selected to satisfy — the server verifies it matches the Equipment's own type.
+ */
+export const workOrderEquipmentItemSchema = z.object({
+  equipmentId: z.string().min(1),
+  equipmentTypeId: z.string().min(1),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export type WorkOrderEquipmentItemInput = z.infer<typeof workOrderEquipmentItemSchema>;
+
+/** PUT /work-orders/:id/equipment body — full-set replace, order is significant. */
+export const workOrderEquipmentReplaceSchema = z.object({
+  equipment: z.array(workOrderEquipmentItemSchema).max(200),
+});
+
+export type WorkOrderEquipmentReplaceInput = z.infer<typeof workOrderEquipmentReplaceSchema>;
+
+/**
+ * PATCH /work-orders/:id/equipment/order body — reorder only. `equipmentIds`
+ * must be the FULL set of equipment currently attached to the work order, in the
+ * new operational order. Never adds, removes, or reassigns equipment.
+ */
+export const workOrderEquipmentOrderSchema = z.object({
+  equipmentIds: z.array(z.string().min(1)).min(1).max(200),
+});
+
+export type WorkOrderEquipmentOrderInput = z.infer<typeof workOrderEquipmentOrderSchema>;
+
+/** GET /work-orders/equipment-proposal query — pre-create proposal from a PO. */
+export const workOrderEquipmentProposalQuerySchema = z.object({
+  purchaseOrderId: z.string().min(1),
+});
+
+export type WorkOrderEquipmentProposalQuery = z.infer<
+  typeof workOrderEquipmentProposalQuerySchema
+>;
+
 /** POST /work-orders body — source/commercial values are derived from the PO. */
 export const workOrderCreateSchema = z.object({
   purchaseOrderId: z.string().min(1),
@@ -513,6 +553,12 @@ export const workOrderCreateSchema = z.object({
   locationNotes: workOrderNullableString,
   scheduledStart: workOrderNullableDate,
   scheduledEnd: workOrderNullableDate,
+  /**
+   * ON_SITE only: the initial reference-equipment selection. Optional — the
+   * list can also be built later on the work-order detail page. Ignored (must
+   * be empty) for SEND_TO_LAB work orders.
+   */
+  equipment: z.array(workOrderEquipmentItemSchema).max(200).optional(),
 });
 
 export type WorkOrderCreateInput = z.infer<typeof workOrderCreateSchema>;

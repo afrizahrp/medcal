@@ -5,14 +5,21 @@ import { apiFetch, apiFetchBlob } from "@medcal/shared";
 import type {
   WorkOrderAssignInput,
   WorkOrderCreateInput,
+  WorkOrderEquipmentReplaceInput,
   WorkOrderUpdateInput,
 } from "@medcal/shared";
 import { PURCHASE_ORDERS_QUERY_KEY } from "../purchase-orders/use-purchase-orders-query";
 import type {
+  WorkOrderEquipmentProposalResponse,
   WorkOrderListResponse,
   WorkOrderRow,
   WorkOrderStatus,
 } from "./work-orders-ui";
+
+interface WorkOrderEquipmentReplaceResponse {
+  workOrder: WorkOrderRow;
+  warnings: Array<{ code: string; equipmentId: string; message: string }>;
+}
 
 export const WORK_ORDERS_QUERY_KEY = "work-orders" as const;
 
@@ -166,6 +173,82 @@ export function useCancelWorkOrder() {
       apiFetch<WorkOrderRow>(`/work-orders/${id}/cancel`, { method: "POST" }),
     onSuccess: (_data, id) => {
       invalidateWorkOrderQueries(queryClient, id);
+    },
+  });
+}
+
+export function useWorkOrderEquipmentProposal(id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: [WORK_ORDERS_QUERY_KEY, id, "equipment-proposal"],
+    queryFn: () =>
+      apiFetch<WorkOrderEquipmentProposalResponse>(`/work-orders/${id}/equipment-proposal`),
+    enabled: Boolean(id) && enabled,
+  });
+}
+
+export function useReplaceWorkOrderEquipment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: WorkOrderEquipmentReplaceInput }) =>
+      apiFetch<WorkOrderEquipmentReplaceResponse>(`/work-orders/${id}/equipment`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (_data, variables) => {
+      invalidateWorkOrderQueries(queryClient, variables.id);
+      queryClient.invalidateQueries({
+        queryKey: [WORK_ORDERS_QUERY_KEY, variables.id, "equipment-proposal"],
+      });
+    },
+  });
+}
+
+export function useConfirmWorkOrderEquipment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<WorkOrderRow>(`/work-orders/${id}/equipment/confirm`, { method: "POST" }),
+    onSuccess: (_data, id) => {
+      invalidateWorkOrderQueries(queryClient, id);
+    },
+  });
+}
+
+/**
+ * Persist the drag-and-drop order of one WorkOrder's actual equipment.
+ * `equipmentIds` is the COMPLETE reordered Equipment-id list. Optimistically
+ * reorders the cached work order, rolls back to the snapshot on failure, and
+ * refetches on settle so the server order is authoritative.
+ */
+export function useReorderWorkOrderEquipment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, equipmentIds }: { id: string; equipmentIds: string[] }) =>
+      apiFetch<WorkOrderRow>(`/work-orders/${id}/equipment/order`, {
+        method: "PATCH",
+        body: JSON.stringify({ equipmentIds }),
+      }),
+    onMutate: async ({ id, equipmentIds }) => {
+      const key = [WORK_ORDERS_QUERY_KEY, id];
+      await queryClient.cancelQueries({ queryKey: key });
+      const snapshot = queryClient.getQueryData<WorkOrderRow>(key);
+      if (snapshot) {
+        const byEquipmentId = new Map(snapshot.equipment.map((row) => [row.equipment.id, row]));
+        const reordered = equipmentIds
+          .map((equipmentId) => byEquipmentId.get(equipmentId))
+          .filter((row): row is (typeof snapshot.equipment)[number] => Boolean(row))
+          .map((row, index) => ({ ...row, sortOrder: (index + 1) * 10 }));
+        if (reordered.length === snapshot.equipment.length) {
+          queryClient.setQueryData<WorkOrderRow>(key, { ...snapshot, equipment: reordered });
+        }
+      }
+      return { key, snapshot };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.snapshot) queryClient.setQueryData(context.key, context.snapshot);
+    },
+    onSettled: (_data, _error, variables) => {
+      invalidateWorkOrderQueries(queryClient, variables.id);
     },
   });
 }

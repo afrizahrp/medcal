@@ -222,6 +222,7 @@ enum DocumentType {
   PURCHASE_ORDER
   WORK_ORDER
   WORK_ORDER_SEND_TO_LAB
+  EQUIPMENT_DELIVERY_NOTE
   INVOICE
   CERTIFICATE
   CREDIT_NOTE
@@ -321,29 +322,31 @@ model Company {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  memberships             UserMembership[]
-  contactMessages         ContactMessage[]
-  chatSessions            ChatSession[]
-  leads                   Lead[]
-  customers               Customer[]
-  devices                 Device[]
-  equipment               Equipment[]
+  memberships                 UserMembership[]
+  contactMessages             ContactMessage[]
+  chatSessions                ChatSession[]
+  leads                       Lead[]
+  customers                   Customer[]
+  devices                     Device[]
+  equipment                   Equipment[]
   equipmentCalibrationRecords EquipmentCalibrationRecord[]
-  calibrationRequests     CalibrationRequest[]
-  serviceTariffs          ServiceTariff[]
-  priceListItems          PriceListItem[]
-  taxes                   Tax[]
-  quotations              Quotation[]
-  purchaseOrders          PurchaseOrder[]
-  workOrders              WorkOrder[]
-  certificates            Certificate[]
-  invoices                Invoice[]
-  creditNotes             CreditNote[]
-  reminderEvents          ReminderEvent[]
-  fileObjects             FileObject[]
-  fcmTokens               FCMToken[]
-  emails                  Email[]
-  documentNumberSequences DocumentNumberSequence[]
+  calibrationRequests         CalibrationRequest[]
+  serviceTariffs              ServiceTariff[]
+  priceListItems              PriceListItem[]
+  taxes                       Tax[]
+  quotations                  Quotation[]
+  purchaseOrders              PurchaseOrder[]
+  workOrders                  WorkOrder[]
+  certificates                Certificate[]
+  invoices                    Invoice[]
+  creditNotes                 CreditNote[]
+  reminderEvents              ReminderEvent[]
+  fileObjects                 FileObject[]
+  fcmTokens                   FCMToken[]
+  emails                      Email[]
+  documentNumberSequences     DocumentNumberSequence[]
+  workOrderEquipment          WorkOrderEquipment[]
+  equipmentDeliveryNotes      EquipmentDeliveryNote[]
 }
 
 model DocumentNumberSequence {
@@ -388,23 +391,23 @@ model User {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  memberships            UserMembership[]
-  customerLinks          CustomerUserLink[]
-  fcmTokens              FCMToken[]
-  assignedLeads          Lead[]                @relation("LeadAssignee")
-  confirmedMatches       ContactMessage[]      @relation("MatchConfirmer")
-  workOrderAssignments   WorkOrderAssignment[]
-  qualityReviews         QualityReview[]       @relation("Reviewer")
-  sessions               Session[]
-  accounts               Account[]
-  emailWhitelistCreated  EmailWhitelist[]      @relation("EmailWhitelistCreator")
-  emailWhitelistRevoked  EmailWhitelist[]      @relation("EmailWhitelistRevoker")
-  menusCreated           Menu[]                @relation("MenuCreatedBy")
-  menusUpdated           Menu[]                @relation("MenuUpdatedBy")
-  sentEmails             Email[]               @relation("EmailSender")
-  rolePermissionsCreated RolePermission[]      @relation("RolePermissionCreatedBy")
-  rolePermissionsUpdated RolePermission[]      @relation("RolePermissionUpdatedBy")
-  uploadedFiles          FileObject[]          @relation("FileUploadedBy")
+  memberships                   UserMembership[]
+  customerLinks                 CustomerUserLink[]
+  fcmTokens                     FCMToken[]
+  assignedLeads                 Lead[]                       @relation("LeadAssignee")
+  confirmedMatches              ContactMessage[]             @relation("MatchConfirmer")
+  workOrderAssignments          WorkOrderAssignment[]
+  qualityReviews                QualityReview[]              @relation("Reviewer")
+  sessions                      Session[]
+  accounts                      Account[]
+  emailWhitelistCreated         EmailWhitelist[]             @relation("EmailWhitelistCreator")
+  emailWhitelistRevoked         EmailWhitelist[]             @relation("EmailWhitelistRevoker")
+  menusCreated                  Menu[]                       @relation("MenuCreatedBy")
+  menusUpdated                  Menu[]                       @relation("MenuUpdatedBy")
+  sentEmails                    Email[]                      @relation("EmailSender")
+  rolePermissionsCreated        RolePermission[]             @relation("RolePermissionCreatedBy")
+  rolePermissionsUpdated        RolePermission[]             @relation("RolePermissionUpdatedBy")
+  uploadedFiles                 FileObject[]                 @relation("FileUploadedBy")
   equipmentCalibrationsCreated  EquipmentCalibrationRecord[] @relation("EquipmentCalibrationCreatedBy")
   equipmentCalibrationsAccepted EquipmentCalibrationRecord[] @relation("EquipmentCalibrationAcceptedBy")
 }
@@ -939,15 +942,15 @@ model DeviceType {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  category                 DeviceCategory               @relation(fields: [categoryId], references: [id])
-  models                   DeviceModel[]
-  devices                  Device[]
-  calibrationParameters    DeviceCalibrationParameter[]
-  capabilityOrders         DeviceTypeCapabilityOrder[]
-  calibrationRequestItems  CalibrationRequestItem[]
-  equipmentRequirements    DeviceTypeEquipmentRequirement[]
-  aliases                  DeviceTypeAlias[]
-  priceListItems           PriceListItem[]
+  category                DeviceCategory                   @relation(fields: [categoryId], references: [id])
+  models                  DeviceModel[]
+  devices                 Device[]
+  calibrationParameters   DeviceCalibrationParameter[]
+  capabilityOrders        DeviceTypeCapabilityOrder[]
+  calibrationRequestItems CalibrationRequestItem[]
+  equipmentRequirements   DeviceTypeEquipmentRequirement[]
+  aliases                 DeviceTypeAlias[]
+  priceListItems          PriceListItem[]
 
   @@index([categoryId])
   @@index([isActive])
@@ -1028,7 +1031,8 @@ model Equipment {
   company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   equipmentType EquipmentType @relation(fields: [equipmentTypeId], references: [id])
 
-  calibrationRecords EquipmentCalibrationRecord[]
+  calibrationRecords  EquipmentCalibrationRecord[]
+  workOrderSelections WorkOrderEquipment[]
 
   @@unique([companyId, code])
   @@index([companyId, isActive])
@@ -1056,24 +1060,24 @@ enum EquipmentCalibrationRecordStatus {
 // (FileObject.ownerType = EQUIPMENT_CALIBRATION, ownerId = this record's id) —
 // no typed relation because FileObject.ownerId is polymorphic.
 model EquipmentCalibrationRecord {
-  id                String                          @id @default(cuid())
+  id                String                           @id @default(cuid())
   companyId         String
   equipmentId       String
-  calibrationDate   DateTime                        @db.Date
-  validFrom         DateTime?                       @db.Date
-  validUntil        DateTime                        @db.Date
+  calibrationDate   DateTime                         @db.Date
+  validFrom         DateTime?                        @db.Date
+  validUntil        DateTime                         @db.Date
   certificateNumber String?
   provider          String?
   result            String?
   remarks           String?
-  acceptedForUse    Boolean                         @default(false)
+  acceptedForUse    Boolean                          @default(false)
   acceptedByUserId  String?
   acceptedAt        DateTime?
   acceptanceNotes   String?
   status            EquipmentCalibrationRecordStatus @default(DRAFT)
   createdByUserId   String?
-  createdAt         DateTime                        @default(now())
-  updatedAt         DateTime                        @updatedAt
+  createdAt         DateTime                         @default(now())
+  updatedAt         DateTime                         @updatedAt
 
   company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   equipment  Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
@@ -1277,11 +1281,11 @@ model Device {
 }
 
 model CalibrationRequest {
-  id         String                   @id @default(cuid())
-  companyId  String
-  customerId String
-  number     String
-  leadId     String?
+  id          String      @id @default(cuid())
+  companyId   String
+  customerId  String
+  number      String
+  leadId      String?
   serviceMode ServiceMode
 
   /// The date expected/requested by the customer for calibration service.
@@ -1311,31 +1315,31 @@ model CalibrationRequest {
 }
 
 model CalibrationRequestItem {
-  id           String   @id @default(cuid())
-  companyId    String
-  requestId    String
-  deviceTypeId String
+  id                 String   @id @default(cuid())
+  companyId          String
+  requestId          String
+  deviceTypeId       String
   /// Customer's original terminology / name for the equipment, preserved verbatim
   /// (e.g. "Tensimeter Digital" while the mapped DeviceType is "Sphygmomanometer").
   /// Nullable: not always captured for manual / legacy rows.
   customerDeviceName String?
   /// Customer-provided equipment model designation, if available (free-text).
   /// Not a relation to any Model master.
-  model        String?
+  model              String?
   /// Customer-provided physical device identifier (free-text). Not a FK to Device,
   /// and intentionally NULLABLE — a missing customer Device ID is a valid business
   /// state. Never store a fake placeholder ("000" / "-" / "N/A"). This is NOT the
   /// future CalibrationJob Device.id (that physical identity is assigned later,
   /// on site, by the technician).
-  deviceId     String?
+  deviceId           String?
   /// Aggregate quantity for this line — how many physical units of this
   /// device the customer is requesting. Excel import keeps one row per
   /// spreadsheet line and stores its Qty here (it is NOT split into N rows).
   /// Manual "+ Requisition" entry creates one row per device, so qty stays 1.
   /// A CHECK constraint enforces qty >= 1 (see migration).
-  qty          Int      @default(1)
-  notes        String?
-  createdAt    DateTime @default(now())
+  qty                Int      @default(1)
+  notes              String?
+  createdAt          DateTime @default(now())
 
   request        CalibrationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   deviceType     DeviceType         @relation(fields: [deviceTypeId], references: [id])
@@ -1360,7 +1364,7 @@ model ServiceTariff {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   items              QuotationItem[]
   purchaseOrderItems PurchaseOrderItem[]
 
@@ -1401,29 +1405,29 @@ model PriceListItem {
 }
 
 model Quotation {
-  id                 String          @id @default(cuid())
-  companyId          String
-  customerId         String
-  number             String
-  requestId          String  @unique
-  source             QuotationSource @default(PORTAL)
-  status             QuotationStatus @default(DRAFT)
-  validUntil         DateTime?
+  id                   String          @id @default(cuid())
+  companyId            String
+  customerId           String
+  number               String
+  requestId            String          @unique
+  source               QuotationSource @default(PORTAL)
+  status               QuotationStatus @default(DRAFT)
+  validUntil           DateTime?
   subtotal             Decimal         @db.Decimal(18, 2)
   headerDiscountAmount Decimal         @default(0) @db.Decimal(18, 2)
   taxCode              String
   taxRate              Decimal         @db.Decimal(5, 4)
   taxAmount            Decimal         @db.Decimal(18, 2)
   totalAmount          Decimal         @db.Decimal(18, 2)
-  currency           String          @default("IDR")
-  approvedAt         DateTime?
-  approvedByUserId   String?
-  customerApprovedAt DateTime?
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  currency             String          @default("IDR")
+  approvedAt           DateTime?
+  approvedByUserId     String?
+  customerApprovedAt   DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
-  company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer   Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  company        Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer       Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
   request        CalibrationRequest @relation(fields: [requestId], references: [id])
   items          QuotationItem[]
   purchaseOrders PurchaseOrder[]
@@ -1436,13 +1440,13 @@ model Quotation {
 }
 
 model QuotationItem {
-  id            String   @id @default(cuid())
-  companyId     String
-  quotationId   String
-  deviceId      String?
-  requestItemId String?
-  tariffId      String?
-  description   String
+  id             String   @id @default(cuid())
+  companyId      String
+  quotationId    String
+  deviceId       String?
+  requestItemId  String?
+  tariffId       String?
+  description    String
   qty            Decimal  @default(1) @db.Decimal(18, 4)
   unitPrice      Decimal  @db.Decimal(18, 2)
   discountAmount Decimal  @default(0) @db.Decimal(18, 2)
@@ -1451,12 +1455,12 @@ model QuotationItem {
   /// line's DeviceType. unitPrice is stored as 0 and the Quotation cannot be
   /// sent/approved until a real price is entered (see QuotationsService.send).
   pricePending   Boolean  @default(false)
-  createdAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
 
-  quotation          Quotation            @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  device             Device?              @relation(fields: [deviceId], references: [id])
+  quotation          Quotation               @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  device             Device?                 @relation(fields: [deviceId], references: [id])
   requestItem        CalibrationRequestItem? @relation(fields: [requestItemId], references: [id])
-  tariff             ServiceTariff?       @relation(fields: [tariffId], references: [id])
+  tariff             ServiceTariff?          @relation(fields: [tariffId], references: [id])
   purchaseOrderItems PurchaseOrderItem[]
 
   @@index([quotationId])
@@ -1528,39 +1532,46 @@ model PurchaseOrderItem {
 }
 
 model WorkOrder {
-  id              String          @id @default(cuid())
-  companyId       String
-  quotationId     String
-  purchaseOrderId String
-  customerId      String
-  number          String
-  serviceMode     ServiceMode
-  addressText     String?
-  geoLat          Float?
-  geoLng          Float?
-  locationNotes   String?
-  scheduledStart  DateTime?
-  scheduledEnd    DateTime?
-  status          WorkOrderStatus @default(PLANNED)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id                   String          @id @default(cuid())
+  companyId            String
+  quotationId          String
+  purchaseOrderId      String
+  customerId           String
+  number               String
+  serviceMode          ServiceMode
+  addressText          String?
+  geoLat               Float?
+  geoLng               Float?
+  locationNotes        String?
+  scheduledStart       DateTime?
+  scheduledEnd         DateTime?
+  status               WorkOrderStatus @default(PLANNED)
+  /// ON_SITE only: set when the planner confirms the reference-equipment list
+  /// ("Equipment yang akan dibawa"). Cleared whenever that list is edited.
+  /// Required before POST /work-orders/:id/start for ON_SITE work orders.
+  /// Always null for SEND_TO_LAB.
+  equipmentConfirmedAt DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
-  company            Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  quotation          Quotation             @relation(fields: [quotationId], references: [id])
-  purchaseOrder      PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
-  customer           Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  company            Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  quotation          Quotation              @relation(fields: [quotationId], references: [id])
+  purchaseOrder      PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  customer           Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
   items              WorkOrderItem[]
   assignments        WorkOrderAssignment[]
   jobs               CalibrationJob[]
+  equipment          WorkOrderEquipment[]
+  deliveryNote       EquipmentDeliveryNote?
   /// Legacy allocation pointer on PurchaseOrderItem. Unused by WorkOrder MVP.
   purchaseOrderItems PurchaseOrderItem[]
+  /// Partial unique index `WorkOrder_purchaseOrderId_active_key` (status <> CANCELLED)
+  /// is created in SQL. Prisma cannot model it; do not add @@unique([purchaseOrderId]).
 
   @@unique([companyId, number])
   @@index([companyId, status])
   @@index([quotationId])
   @@index([purchaseOrderId])
-  /// Partial unique index `WorkOrder_purchaseOrderId_active_key` (status <> CANCELLED)
-  /// is created in SQL. Prisma cannot model it; do not add @@unique([purchaseOrderId]).
 }
 
 /// Operational snapshot of a PurchaseOrderItem. MVP copies every PO item 1:1.
@@ -1595,6 +1606,91 @@ model WorkOrderAssignment {
 
   @@unique([workOrderId, technicianUserId])
   @@index([technicianUserId])
+}
+
+// Actual PKM reference-equipment units selected to be brought for a specific
+// ON_SITE WorkOrder ("Equipment yang akan dibawa"). The DEFAULT proposal is
+// DERIVED at read time from DeviceTypeEquipmentRequirement of the WorkOrder's
+// calibration items (item -> purchaseOrderItem -> quotationItem -> requestItem
+// -> deviceType), but once selected the list belongs to the WorkOrder and is
+// independent of both DeviceTypeEquipmentRequirement and any future
+// EquipmentDeliveryNote. SEND_TO_LAB WorkOrders never have rows here.
+model WorkOrderEquipment {
+  id              String   @id @default(cuid())
+  companyId       String
+  workOrderId     String
+  equipmentId     String
+  // Snapshot of the EquipmentType this row was selected to satisfy — kept so the
+  // "which requirement does this cover" grouping survives if the Equipment unit
+  // is later re-typed. Not a hard constraint target.
+  equipmentTypeId String
+  // Operational order within THIS WorkOrder's list (multiples of 10). Seeded from
+  // the deduplicated DeviceTypeEquipmentRequirement order at proposal time; user
+  // reorder persists here only — never on Equipment.
+  sortOrder       Int      @default(0)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+
+  @@unique([workOrderId, equipmentId])
+  @@index([workOrderId])
+  @@index([equipmentId])
+  @@index([companyId])
+}
+
+// "Surat Jalan Alat" — the delivery note that accompanies the PKM reference
+// equipment a technician carries to a customer site. ON_SITE work orders only
+// (SEND_TO_LAB calibrates inside the PKM lab and needs no delivery note).
+// Number is a DLN/YYYY/MM/NNNNN series allocated by DocumentNumberService,
+// independent of SPK/WOL. Exactly one per work order (`workOrderId @unique`):
+// issuance is idempotent and a reprint reuses the same number. Once created the
+// header + its item snapshots are immutable — later edits to WorkOrderEquipment
+// or the Equipment master never change an issued delivery note.
+model EquipmentDeliveryNote {
+  id              String   @id @default(cuid())
+  companyId       String
+  workOrderId     String   @unique
+  number          String
+  // Business date the equipment leaves PKM — the scheduled on-site date when
+  // known (WorkOrder.scheduledStart), else the issuance timestamp. Snapshotted.
+  issuedAt        DateTime
+  // Snapshots taken at issuance so the historical document is self-contained.
+  workOrderNumber String
+  customerName    String
+  customerAddress String?
+  locationText    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company   Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workOrder WorkOrder                   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  items     EquipmentDeliveryNoteItem[]
+
+  @@unique([companyId, number])
+  @@index([companyId])
+}
+
+// Immutable snapshot of one WorkOrderEquipment row at delivery-note issuance.
+// `equipmentId` is a plain reference (no FK) — every field the PDF needs is
+// copied here so the document never depends on mutable master data.
+model EquipmentDeliveryNoteItem {
+  id             String   @id @default(cuid())
+  deliveryNoteId String
+  equipmentId    String
+  equipmentName  String
+  brand          String?
+  model          String?
+  serialNumber   String?
+  sortOrder      Int
+  createdAt      DateTime @default(now())
+
+  deliveryNote EquipmentDeliveryNote @relation(fields: [deliveryNoteId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryNoteId])
 }
 
 // =============================================================================
@@ -1762,8 +1858,8 @@ model Tax {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  company    Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  invoices   Invoice[]
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
 
   @@unique([companyId, taxCode])
 }
@@ -1897,23 +1993,23 @@ model ReminderEvent {
 }
 
 model FileObject {
-  id           String        @id @default(cuid())
-  companyId    String
-  customerId   String?
-  ownerType    FileOwnerType
-  ownerId      String
-  storageKey   String
-  mimeType     String?
-  sizeBytes    Int?
-  originalName String?
+  id               String        @id @default(cuid())
+  companyId        String
+  customerId       String?
+  ownerType        FileOwnerType
+  ownerId          String
+  storageKey       String
+  mimeType         String?
+  sizeBytes        Int?
+  originalName     String?
   // sha256 hex digest of the stored binary — integrity, restore verification,
   // dedupe check. Nullable only to stay additive over the pre-existing (unused)
   // schema; the FilesModule always sets it on upload.
   checksum         String?
   // Who provided this evidence. Nullable for system-generated files.
   uploadedByUserId String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer        Customer?           @relation(fields: [customerId], references: [id])

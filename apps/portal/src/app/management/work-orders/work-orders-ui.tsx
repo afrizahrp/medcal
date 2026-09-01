@@ -69,6 +69,53 @@ export interface WorkOrderItem {
   };
 }
 
+export interface WorkOrderEquipmentTypeRef {
+  id: string;
+  code: string;
+  name: string;
+  category: string | null;
+}
+
+export interface WorkOrderEquipmentRow {
+  id: string;
+  equipmentTypeId: string;
+  sortOrder: number;
+  notes: string | null;
+  equipment: {
+    id: string;
+    code: string;
+    brand: string | null;
+    model: string | null;
+    serialNumber: string | null;
+    isActive: boolean;
+    equipmentType: WorkOrderEquipmentTypeRef;
+  };
+}
+
+export interface WorkOrderEquipmentCandidate {
+  id: string;
+  code: string;
+  brand: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  equipmentTypeId: string;
+  calibrationStatus: "VALID" | "EXPIRED" | "NOT_YET_VALID" | "NO_RECORD";
+  validUntil: string | null;
+}
+
+export interface WorkOrderEquipmentProposalRow {
+  equipmentType: WorkOrderEquipmentTypeRef;
+  sortOrder: number;
+  coveredFromDeviceTypeId: string;
+  candidates: WorkOrderEquipmentCandidate[];
+  selectedEquipmentId: string | null;
+}
+
+export interface WorkOrderEquipmentProposalResponse {
+  serviceMode: ServiceMode;
+  proposal: WorkOrderEquipmentProposalRow[];
+}
+
 export interface WorkOrderRow {
   id: string;
   companyId: string;
@@ -84,9 +131,11 @@ export interface WorkOrderRow {
   scheduledStart: string | null;
   scheduledEnd: string | null;
   status: WorkOrderStatus;
+  equipmentConfirmedAt: string | null;
   createdAt: string;
   updatedAt: string;
   items: WorkOrderItem[];
+  equipment: WorkOrderEquipmentRow[];
   customer: QuotationCustomer;
   purchaseOrder: {
     id: string;

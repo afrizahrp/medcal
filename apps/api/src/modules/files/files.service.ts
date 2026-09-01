@@ -40,7 +40,7 @@ const FORBIDDEN = new ForbiddenException({ code: "FORBIDDEN", message: "Forbidde
 export class FilesService {
   constructor(
     @Inject(STORAGE_DRIVER) private readonly storage: StorageDriver,
-    private readonly registry: FileOwnerPolicyRegistry,
+    @Inject(FileOwnerPolicyRegistry) private readonly registry: FileOwnerPolicyRegistry,
   ) {}
 
   async upload(ctx: UploadContext): Promise<FileObject> {

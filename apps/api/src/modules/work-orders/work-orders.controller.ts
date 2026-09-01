@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   StreamableFile,
   UseGuards,
@@ -14,6 +15,9 @@ import {
 import {
   workOrderAssignSchema,
   workOrderCreateSchema,
+  workOrderEquipmentOrderSchema,
+  workOrderEquipmentProposalQuerySchema,
+  workOrderEquipmentReplaceSchema,
   workOrderListQuerySchema,
   workOrderUpdateSchema,
 } from "@medcal/shared";
@@ -66,6 +70,77 @@ export class WorkOrdersController {
       });
     }
     return this.service.findAll(companyId, parsed.data);
+  }
+
+  @Get("equipment-proposal")
+  @RequirePermission("workOrder", "read")
+  async equipmentProposalForPurchaseOrder(
+    @CompanyId() companyId: string,
+    @Query() rawQuery: unknown,
+  ) {
+    const parsed = workOrderEquipmentProposalQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid equipment proposal query",
+        code: "INVALID_WORK_ORDER_EQUIPMENT_PROPOSAL_QUERY",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.getEquipmentProposalForPurchaseOrder(
+      companyId,
+      parsed.data.purchaseOrderId,
+    );
+  }
+
+  @Get(":id/equipment-proposal")
+  @RequirePermission("workOrder", "read")
+  async equipmentProposal(@CompanyId() companyId: string, @Param("id") id: string) {
+    return this.service.getEquipmentProposal(companyId, id);
+  }
+
+  @Put(":id/equipment")
+  @RequirePermission("workOrder", "update")
+  async replaceEquipment(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ) {
+    const parsed = workOrderEquipmentReplaceSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid equipment selection",
+        code: "INVALID_WORK_ORDER_EQUIPMENT",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.replaceEquipment(companyId, id, parsed.data);
+  }
+
+  @Post(":id/equipment/confirm")
+  @RequirePermission("workOrder", "update")
+  async confirmEquipment(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<WorkOrderWithItems> {
+    return this.service.confirmEquipment(companyId, id);
+  }
+
+  @Patch(":id/equipment/order")
+  @RequirePermission("workOrder", "update")
+  async reorderEquipment(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<WorkOrderWithItems> {
+    const parsed = workOrderEquipmentOrderSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid equipment order",
+        code: "INVALID_WORK_ORDER_EQUIPMENT_ORDER",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.reorderEquipment(companyId, id, parsed.data.equipmentIds);
   }
 
   @Get(":id/pdf")

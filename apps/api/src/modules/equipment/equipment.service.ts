@@ -164,9 +164,18 @@ export class EquipmentService {
 
   async remove(companyId: string, id: string): Promise<EquipmentWithRelations> {
     const existing = await this.findOne(companyId, id);
-    // Phase 2A: Equipment has no downstream references yet (JobReferenceEquipmentUsed
-    // link, WorkOrderEquipment, EquipmentCalibrationRecord are all future). A plain
-    // delete is safe; prefer isActive=false for soft-retire in the UI.
+    // A unit that has ever been selected for a work order (WorkOrderEquipment,
+    // onDelete: Restrict) cannot be hard-deleted — soft-retire with isActive=false
+    // instead. EquipmentCalibrationRecord rows cascade-delete with the unit.
+    const workOrderUse = await prisma.workOrderEquipment.count({
+      where: { equipmentId: existing.id },
+    });
+    if (workOrderUse > 0) {
+      throw new BadRequestException({
+        message: "This equipment unit is referenced by a work order; deactivate it instead",
+        code: "EQUIPMENT_IN_USE",
+      });
+    }
     await prisma.equipment.delete({ where: { id: existing.id } });
     return existing;
   }
