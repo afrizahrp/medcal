@@ -68,15 +68,15 @@ export function WorkOrderDeliveryNoteSection({
         </h3>
         {!deliveryNote ? (
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
-            Belum terbit
+            Not issued
           </span>
         ) : cancelled ? (
           <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
-            Dibatalkan
+            Cancelled
           </span>
         ) : (
           <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-            Terbit
+            Issued
           </span>
         )}
       </div>
