@@ -12,6 +12,7 @@ import { CalibrationRequestsService } from "../calibration-requests/calibration-
 import { QuotationsService } from "../quotations/quotations.service";
 import { PurchaseOrdersService } from "../purchase-orders/purchase-orders.service";
 import { WorkOrdersService } from "./work-orders.service";
+import { DeliveryNotesService } from "./delivery-notes.service";
 
 const workOrdersService = new WorkOrdersService();
 const purchaseOrdersService = new PurchaseOrdersService();
@@ -70,7 +71,16 @@ async function cleanupSequences(companyId: string) {
   await prisma.documentNumberSequence.deleteMany({
     where: {
       companyId,
-      documentType: { in: ["WORK_ORDER", "PURCHASE_ORDER", "QUOTATION", "CALIBRATION_REQUEST"] },
+      documentType: {
+        in: [
+          "WORK_ORDER",
+          "WORK_ORDER_SEND_TO_LAB",
+          "EQUIPMENT_DELIVERY_NOTE",
+          "PURCHASE_ORDER",
+          "QUOTATION",
+          "CALIBRATION_REQUEST",
+        ],
+      },
     },
   });
 }
@@ -1357,5 +1367,133 @@ describe("WorkOrdersService reference equipment", () => {
     expect(after.status).toBe(confirmed.status);
     expect(after.serviceMode).toBe("ON_SITE");
     expect(after.equipmentConfirmedAt?.getTime()).toBe(confirmedAt?.getTime());
+  });
+
+  // ---- Delivery Note (Surat Jalan Alat / DLN) --------------------------------
+
+  const deliveryNotesService = new DeliveryNotesService();
+
+  /** Confirmed ON_SITE work order with three ordered equipment units. */
+  async function confirmedWorkOrder() {
+    const built = await workOrderWithThreeUnits();
+    await workOrdersService.confirmEquipment(realCompanyId, built.workOrderId);
+    return built;
+  }
+
+  it("issues a Delivery Note for a confirmed ON_SITE work order", async () => {
+    const { workOrderId, unitA, unitB, unitC } = await confirmedWorkOrder();
+    const dn = await deliveryNotesService.issue(realCompanyId, workOrderId);
+
+    expect(dn.number.startsWith("DLN/")).toBe(true);
+    expect(isValidDocumentNumber(dn.number)).toBe(true);
+    // Equipment comes from WorkOrderEquipment, in sortOrder ASC.
+    expect(dn.items.map((item) => item.equipmentId)).toEqual([unitA.id, unitB.id, unitC.id]);
+    expect(dn.items.map((item) => item.sortOrder)).toEqual([10, 20, 30]);
+    // Master fields are snapshotted onto the item.
+    expect(dn.items[0].brand).toBe("Fluke Biomedical");
+    expect(dn.items[0].serialNumber).toBeTruthy();
+    expect(dn.workOrderNumber.startsWith("SPK/")).toBe(true);
+  });
+
+  it("blocks a Delivery Note for a SEND_TO_LAB work order", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      serviceMode: "SEND_TO_LAB",
+    });
+    const workOrder = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    await expect(
+      deliveryNotesService.issue(realCompanyId, workOrder.id),
+    ).rejects.toMatchObject({
+      response: { code: "DELIVERY_NOTE_NOT_APPLICABLE_FOR_SEND_TO_LAB" },
+    });
+  });
+
+  it("blocks a Delivery Note when equipment is not confirmed", async () => {
+    const { workOrderId } = await workOrderWithThreeUnits(); // selected, not confirmed
+    await expect(
+      deliveryNotesService.issue(realCompanyId, workOrderId),
+    ).rejects.toMatchObject({ response: { code: "WORK_ORDER_EQUIPMENT_NOT_CONFIRMED" } });
+  });
+
+  it("blocks a Delivery Note when there is no equipment", async () => {
+    const esa = await createEquipmentType("Electrical Safety Analyzer");
+    const { workOrder } = await onSiteWorkOrderRequiring([esa.id]);
+    await expect(
+      deliveryNotesService.issue(realCompanyId, workOrder.id),
+    ).rejects.toMatchObject({ response: { code: "WORK_ORDER_EQUIPMENT_NOT_CONFIRMED" } });
+  });
+
+  it("is idempotent — a reprint reuses the same DLN number", async () => {
+    const { workOrderId } = await confirmedWorkOrder();
+    const first = await deliveryNotesService.issue(realCompanyId, workOrderId);
+    const second = await deliveryNotesService.issue(realCompanyId, workOrderId);
+    expect(second.id).toBe(first.id);
+    expect(second.number).toBe(first.number);
+    const count = await prisma.equipmentDeliveryNote.count({ where: { workOrderId } });
+    expect(count).toBe(1);
+  });
+
+  it("gives two work orders independent, incrementing DLN numbers", async () => {
+    const a = await confirmedWorkOrder();
+    const b = await confirmedWorkOrder();
+    const dnA = await deliveryNotesService.issue(realCompanyId, a.workOrderId);
+    const dnB = await deliveryNotesService.issue(realCompanyId, b.workOrderId);
+    const seqA = Number(dnA.number.split("/")[3]);
+    const seqB = Number(dnB.number.split("/")[3]);
+    expect(seqB).toBe(seqA + 1);
+  });
+
+  it("keeps SPK/WOL numbering independent of the DLN series", async () => {
+    const { workOrderId } = await confirmedWorkOrder();
+    const woBefore = await workOrdersService.findOne(realCompanyId, workOrderId);
+    const dn = await deliveryNotesService.issue(realCompanyId, workOrderId);
+    const woAfter = await workOrdersService.findOne(realCompanyId, workOrderId);
+    expect(woAfter.number).toBe(woBefore.number); // SPK untouched
+    expect(dn.number.startsWith("DLN/")).toBe(true);
+    expect(woAfter.number.startsWith("SPK/")).toBe(true);
+  });
+
+  it("rejects issuing a Delivery Note for another company's work order", async () => {
+    const { workOrderId } = await confirmedWorkOrder();
+    await expect(
+      deliveryNotesService.issue("XXX", workOrderId),
+    ).rejects.toMatchObject({ response: { code: "WORK_ORDER_NOT_FOUND" } });
+  });
+
+  it("snapshots the equipment — later master edits do not change the Delivery Note", async () => {
+    const { workOrderId, unitA } = await confirmedWorkOrder();
+    const dn = await deliveryNotesService.issue(realCompanyId, workOrderId);
+    const originalName = dn.items[0].equipmentName;
+    const originalSerial = dn.items[0].serialNumber;
+
+    await prisma.equipment.update({
+      where: { id: unitA.id },
+      data: { serialNumber: "CHANGED-SN", brand: "Changed Brand" },
+    });
+
+    const reread = await deliveryNotesService.findOne(realCompanyId, workOrderId);
+    expect(reread.items[0].equipmentName).toBe(originalName);
+    expect(reread.items[0].serialNumber).toBe(originalSerial);
+    expect(reread.items[0].serialNumber).not.toBe("CHANGED-SN");
+  });
+
+  it("does not query DeviceTypeEquipmentRequirement as the document source", async () => {
+    const { workOrderId, unitA, unitB, unitC } = await confirmedWorkOrder();
+    const spy = vi.spyOn(prisma.deviceTypeEquipmentRequirement, "findMany");
+    const dn = await deliveryNotesService.issue(realCompanyId, workOrderId);
+    expect(spy).not.toHaveBeenCalled();
+    expect(new Set(dn.items.map((item) => item.equipmentId))).toEqual(
+      new Set([unitA.id, unitB.id, unitC.id]),
+    );
+    spy.mockRestore();
+  });
+
+  it("renders a PDF with the DLN number and ordered equipment", async () => {
+    const { workOrderId } = await confirmedWorkOrder();
+    const dn = await deliveryNotesService.issue(realCompanyId, workOrderId);
+    const pdf = await deliveryNotesService.buildPdf(realCompanyId, workOrderId);
+    expect(pdf.buffer.length).toBeGreaterThan(1000);
+    expect(pdf.buffer.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(pdf.filename.endsWith(".pdf")).toBe(true);
+    expect(dn.items).toHaveLength(3);
   });
 });

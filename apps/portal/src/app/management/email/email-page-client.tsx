@@ -92,6 +92,7 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [rowActionError, setRowActionError] = useState<string | null>(null);
+  const [permanentDeleteId, setPermanentDeleteId] = useState<string | null>(null);
 
   const actionBusyId =
     trashMutation.isPending && trashMutation.variables
@@ -133,13 +134,12 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
     }
   }
 
-  async function handlePermanentDelete(id: string) {
-    if (!window.confirm("Hapus email ini secara permanen? Tindakan ini tidak dapat dibatalkan.")) {
-      return;
-    }
+  async function handlePermanentDelete() {
+    if (!permanentDeleteId) return;
     setRowActionError(null);
     try {
-      await permanentDeleteMutation.mutateAsync(id);
+      await permanentDeleteMutation.mutateAsync(permanentDeleteId);
+      setPermanentDeleteId(null);
     } catch {
       setRowActionError("Gagal menghapus email secara permanen.");
     }
@@ -214,7 +214,7 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
             actionBusyId={actionBusyId}
             onDelete={folder === "TRASH" ? undefined : handleDelete}
             onRestore={folder === "TRASH" ? handleRestore : undefined}
-            onPermanentDelete={folder === "TRASH" ? handlePermanentDelete : undefined}
+            onPermanentDelete={folder === "TRASH" ? setPermanentDeleteId : undefined}
           />
         </div>
         <PaginationBar
@@ -236,6 +236,17 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
       </Surface>
 
       <EmailComposeFab visible={Boolean(capabilities?.emailSend)} />
+
+      <ConfirmDialog
+        open={permanentDeleteId !== null}
+        title="Hapus Email Permanen"
+        description="Hapus email ini secara permanen? Tindakan ini tidak dapat dibatalkan."
+        confirmLabel="Hapus Permanen"
+        variant="destructive"
+        loading={permanentDeleteMutation.isPending}
+        onConfirm={handlePermanentDelete}
+        onCancel={() => setPermanentDeleteId(null)}
+      />
     </div>
   );
 }

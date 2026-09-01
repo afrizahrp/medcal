@@ -253,6 +253,34 @@ export function useReorderWorkOrderEquipment() {
   });
 }
 
+/** Issue the "Surat Jalan Alat" (DLN) for an ON_SITE work order. Idempotent. */
+export function useIssueDeliveryNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/work-orders/${id}/delivery-note`, { method: "POST" }),
+    onSuccess: (_data, id) => {
+      invalidateWorkOrderQueries(queryClient, id);
+    },
+  });
+}
+
+export async function openDeliveryNotePdf(workOrderId: string, filename?: string): Promise<void> {
+  const blob = await apiFetchBlob(`/work-orders/${workOrderId}/delivery-note/pdf`);
+  if (blob.size === 0) throw new Error("Empty delivery note PDF");
+  const url = URL.createObjectURL(blob);
+  const tab = window.open(url, "_blank", "noopener,noreferrer");
+  if (!tab) {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    if (filename) anchor.download = filename;
+    anchor.click();
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export function useAssignableUsers(enabled = true) {
   return useQuery({
     queryKey: [WORK_ORDERS_QUERY_KEY, "assignable-users"],

@@ -7,6 +7,7 @@ import { apiFetch, ApiError, isForbidden } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../components/access-denied";
+import { ConfirmDialog } from "../calibration-requests/calibration-requests-ui";
 
 type MenuApplication = "MANAGEMENT" | "TECHNICIAN" | "CUSTOMER";
 
@@ -37,6 +38,7 @@ export default function MenuManagementPage() {
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<MenuRow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,8 +74,9 @@ export default function MenuManagementPage() {
     }
   }
 
-  async function remove(row: MenuRow) {
-    if (!confirm(`Yakin ingin menghapus menu "${row.label}"?`)) return;
+  async function remove() {
+    const row = pendingDelete;
+    if (!row) return;
     setDeletingId(row.id);
     setError(null);
     try {
@@ -89,6 +92,7 @@ export default function MenuManagementPage() {
       }
     } finally {
       setDeletingId(null);
+      setPendingDelete(null);
     }
   }
 
@@ -221,7 +225,7 @@ export default function MenuManagementPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                                onClick={() => remove(row)}
+                                onClick={() => setPendingDelete(row)}
                                 disabled={deletingId === row.id}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -238,6 +242,21 @@ export default function MenuManagementPage() {
           );
         })
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Hapus Menu"
+        description={
+          pendingDelete
+            ? `Yakin ingin menghapus menu "${pendingDelete.label}"?`
+            : ""
+        }
+        confirmLabel="Hapus"
+        variant="destructive"
+        loading={deletingId !== null}
+        onConfirm={remove}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

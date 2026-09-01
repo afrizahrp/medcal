@@ -10,6 +10,7 @@ import { useAuth, invalidateAuthQueries } from "@medcal/auth/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
+import { ConfirmDialog } from "../../calibration-requests/calibration-requests-ui";
 
 type UserStatus = "INVITED" | "ACTIVE" | "DISABLED";
 type MembershipRole =
@@ -82,6 +83,7 @@ export default function UserDetailPage() {
   const [draftReceiveNotifications, setDraftReceiveNotifications] = useState(false);
   const [saving, setSaving] = useState(false);
   const [removingMembership, setRemovingMembership] = useState(false);
+  const [removeMembershipOpen, setRemoveMembershipOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -193,7 +195,6 @@ export default function UserDetailPage() {
 
   async function removeMembership() {
     if (!user || !user.membership) return;
-    if (!confirm("Yakin ingin menghapus membership user ini?")) return;
     setRemovingMembership(true);
     setError(null);
     setSuccess(null);
@@ -212,6 +213,7 @@ export default function UserDetailPage() {
       }
     } finally {
       setRemovingMembership(false);
+      setRemoveMembershipOpen(false);
     }
   }
 
@@ -385,7 +387,7 @@ export default function UserDetailPage() {
               <div className="mt-4 flex justify-end">
                 <Button
                   variant="destructive"
-                  onClick={removeMembership}
+                  onClick={() => setRemoveMembershipOpen(true)}
                   disabled={removingMembership}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -396,6 +398,17 @@ export default function UserDetailPage() {
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={removeMembershipOpen}
+        title="Hapus Membership"
+        description="Yakin ingin menghapus membership user ini? Akses user ke company ini akan dicabut."
+        confirmLabel="Hapus Membership"
+        variant="destructive"
+        loading={removingMembership}
+        onConfirm={removeMembership}
+        onCancel={() => setRemoveMembershipOpen(false)}
+      />
     </div>
   );
 }

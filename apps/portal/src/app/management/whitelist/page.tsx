@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AccessDenied } from "../../../components/access-denied";
+import { ConfirmDialog } from "../calibration-requests/calibration-requests-ui";
 
 type WhitelistStatus = "ACTIVE" | "REVOKED";
 
@@ -34,6 +35,7 @@ export default function WhitelistPage() {
   const [newEmail, setNewEmail] = useState("");
   const [adding, setAdding] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [pendingRevoke, setPendingRevoke] = useState<{ id: string; email: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,19 +88,21 @@ export default function WhitelistPage() {
     }
   }
 
-  async function revokeEntry(id: string, email: string) {
-    if (!confirm(`Yakin ingin mencabut akses untuk ${email}?`)) return;
-    setRevokingId(id);
+  async function revokeEntry() {
+    const target = pendingRevoke;
+    if (!target) return;
+    setRevokingId(target.id);
     setError(null);
     setSuccess(null);
     try {
-      await apiFetch(`/whitelist/${id}/revoke`, { method: "POST" });
-      setSuccess(`Akses untuk ${email} berhasil dicabut.`);
+      await apiFetch(`/whitelist/${target.id}/revoke`, { method: "POST" });
+      setSuccess(`Akses untuk ${target.email} berhasil dicabut.`);
       await load();
     } catch {
       setError("Gagal mencabut akses.");
     } finally {
       setRevokingId(null);
+      setPendingRevoke(null);
     }
   }
 
@@ -222,7 +226,7 @@ export default function WhitelistPage() {
                           variant="ghost"
                           size="sm"
                           className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                          onClick={() => revokeEntry(entry.id, entry.email)}
+                          onClick={() => setPendingRevoke({ id: entry.id, email: entry.email })}
                           disabled={revokingId === entry.id}
                         >
                           <ShieldX className="h-4 w-4" />
@@ -237,6 +241,21 @@ export default function WhitelistPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={pendingRevoke !== null}
+        title="Cabut Akses Whitelist"
+        description={
+          pendingRevoke
+            ? `Yakin ingin mencabut akses untuk ${pendingRevoke.email}?`
+            : ""
+        }
+        confirmLabel="Cabut Akses"
+        variant="destructive"
+        loading={revokingId !== null}
+        onConfirm={revokeEntry}
+        onCancel={() => setPendingRevoke(null)}
+      />
     </div>
   );
 }

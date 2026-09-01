@@ -116,6 +116,28 @@ export interface WorkOrderEquipmentProposalResponse {
   proposal: WorkOrderEquipmentProposalRow[];
 }
 
+export interface WorkOrderDeliveryNoteItem {
+  id: string;
+  equipmentId: string;
+  equipmentName: string;
+  brand: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  sortOrder: number;
+}
+
+export interface WorkOrderDeliveryNote {
+  id: string;
+  number: string;
+  issuedAt: string;
+  workOrderNumber: string;
+  customerName: string;
+  customerAddress: string | null;
+  locationText: string | null;
+  createdAt: string;
+  items: WorkOrderDeliveryNoteItem[];
+}
+
 export interface WorkOrderRow {
   id: string;
   companyId: string;
@@ -136,6 +158,7 @@ export interface WorkOrderRow {
   updatedAt: string;
   items: WorkOrderItem[];
   equipment: WorkOrderEquipmentRow[];
+  deliveryNote: WorkOrderDeliveryNote | null;
   customer: QuotationCustomer;
   purchaseOrder: {
     id: string;
