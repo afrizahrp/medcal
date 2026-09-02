@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { CalendarIcon, Pencil, Plus, Trash2, X } from "lucide-react";
-import { ApiError, isForbidden } from "@medcal/shared";
+import { ApiError, formatIdr, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,12 +37,6 @@ const URL_KEYS = [
   "page",
   "pageSize",
 ] as const;
-
-const idr = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-  maximumFractionDigits: 0,
-});
 
 /** Parse a `yyyy-mm-dd[...]` API date string as a local calendar day (no TZ shift). */
 function parseDateOnly(value: string | null | undefined): Date | undefined {
@@ -500,7 +494,7 @@ export default function PriceListItemsPageClient() {
                             />
                           ) : (
                             <span className="font-medium text-slate-900">
-                              {idr.format(Number(row.unitPrice))}
+                              {formatIdr(row.unitPrice)}
                             </span>
                           )}
                         </td>

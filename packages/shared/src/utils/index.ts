@@ -1,3 +1,23 @@
+/**
+ * Indonesian Rupiah display formatter. Presentation only — never use the
+ * result for calculation or as a form/API value. Whole rupiah, no decimals
+ * (id-ID business amounts are not sub-unit), grouped with "." thousands
+ * separators: 1250000 -> "Rp 1.250.000", 0 -> "Rp 0", -1000 -> "-Rp 1.000".
+ * null / "" / non-finite input renders as "Rp 0". The narrow no-break space
+ * ICU emits after "Rp" is normalized to a plain space for predictable output.
+ */
+export function formatIdr(value: string | number | null | undefined): string {
+  const n = value == null || value === "" ? 0 : Number(value);
+  const safe = Number.isFinite(n) ? n : 0;
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  })
+    .format(safe)
+    .replace(/ /g, " ");
+}
+
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }

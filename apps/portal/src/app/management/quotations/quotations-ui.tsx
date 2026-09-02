@@ -4,7 +4,7 @@ import Link from "next/link";
 import { SortableTh } from "@/components/ui/sortable-th";
 import type { TableSort } from "@/hooks/use-table-sort";
 import { Search } from "lucide-react";
-import { ApiError } from "@medcal/shared";
+import { ApiError, formatIdr } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -182,14 +182,10 @@ export function isPositiveIntegerQty(value: string): boolean {
   return /^\d+$/.test(value) && Number(value) > 0;
 }
 
-export function formatIdr(value: MoneyValue | null | undefined): string {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(moneyNumber(value));
-}
+// Rupiah display formatting lives in @medcal/shared (formatIdr) so every
+// surface renders the same amount identically. Re-exported here because many
+// quotation/purchase-order modules import it from this file.
+export { formatIdr };
 
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
