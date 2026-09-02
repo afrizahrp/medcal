@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { format } from "date-fns";
+import { CalendarIcon, Pencil, Plus, Trash2, X } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
 import { useTableSort } from "@/hooks/use-table-sort";
@@ -41,9 +44,91 @@ const idr = new Intl.NumberFormat("id-ID", {
   maximumFractionDigits: 0,
 });
 
-function fmtDate(value: string | null): string {
-  if (!value) return "—";
-  return value.slice(0, 10);
+/** Parse a `yyyy-mm-dd[...]` API date string as a local calendar day (no TZ shift). */
+function parseDateOnly(value: string | null | undefined): Date | undefined {
+  if (!value) return undefined;
+  const [y, m, d] = value.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return undefined;
+  return new Date(y, m - 1, d);
+}
+
+/** Presentation only — dd/mm/yyyy. The wire/DB format stays ISO date-only. */
+function fmtDate(value: string | null | undefined): string {
+  const dt = parseDateOnly(value);
+  return dt ? format(dt, "dd/MM/yyyy") : "—";
+}
+
+/** `Date` (from the calendar) → the `yyyy-MM-dd` string the API/create flow uses. */
+function toDateOnlyString(date: Date | undefined): string {
+  return date ? format(date, "yyyy-MM-dd") : "";
+}
+
+/**
+ * The Portal's standard date picker (Popover + Calendar), same composition as
+ * the Purchase Order / Quotation forms. Displays the selected day as dd/mm/yyyy.
+ */
+function DateField({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  allowClear = false,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+  allowClear?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = parseDateOnly(value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          aria-label={ariaLabel}
+          className={cn("h-8 w-[140px] justify-start font-normal", !selected && "text-slate-400")}
+        >
+          <CalendarIcon className="mr-2 h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">
+            {selected ? format(selected, "dd/MM/yyyy") : placeholder}
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={selected}
+          onSelect={(date) => {
+            onChange(toDateOnlyString(date));
+            setOpen(false);
+          }}
+          captionLayout="dropdown"
+          startMonth={new Date(2020, 0)}
+          endMonth={new Date(2035, 11)}
+          autoFocus
+        />
+        {allowClear && selected ? (
+          <div className="border-t border-slate-100 p-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              Hapus tanggal
+            </Button>
+          </div>
+        ) : null}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function formatError(err: unknown): string {
@@ -95,6 +180,8 @@ export default function PriceListItemsPageClient() {
   const [draft, setDraft] = useState<DraftFields>(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState("");
+  const [editFrom, setEditFrom] = useState("");
+  const [editUntil, setEditUntil] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -146,10 +233,19 @@ export default function PriceListItemsPageClient() {
 
   if (forbidden) return <AccessDenied />;
 
+  const draftRangeInvalid =
+    draft.effectiveFrom !== "" &&
+    draft.effectiveUntil !== "" &&
+    draft.effectiveUntil < draft.effectiveFrom;
+
   async function submitNew() {
     setError(null);
     const price = Number(draft.unitPrice);
     if (!draft.deviceTypeId || !(price > 0) || !draft.effectiveFrom) return;
+    if (draftRangeInvalid) {
+      setError("Tanggal berakhir tidak boleh sebelum tanggal berlaku.");
+      return;
+    }
     try {
       await createMutation.mutateAsync({
         deviceTypeId: draft.deviceTypeId,
@@ -168,15 +264,32 @@ export default function PriceListItemsPageClient() {
   function startEdit(row: PriceListItemRow) {
     setEditingId(row.id);
     setEditPrice(String(row.unitPrice));
+    setEditFrom(row.effectiveFrom ? row.effectiveFrom.slice(0, 10) : "");
+    setEditUntil(row.effectiveUntil ? row.effectiveUntil.slice(0, 10) : "");
     setError(null);
   }
+
+  // Mirror the server rule (INVALID_EFFECTIVE_RANGE): a set end date must not
+  // predate the start date. yyyy-MM-dd strings compare lexicographically.
+  const editRangeInvalid = editFrom !== "" && editUntil !== "" && editUntil < editFrom;
 
   async function saveEdit(id: string) {
     setError(null);
     const price = Number(editPrice);
-    if (!(price > 0)) return;
+    if (!(price > 0) || !editFrom) return;
+    if (editRangeInvalid) {
+      setError("Tanggal berakhir tidak boleh sebelum tanggal berlaku.");
+      return;
+    }
     try {
-      await updateMutation.mutateAsync({ id, input: { unitPrice: price } });
+      await updateMutation.mutateAsync({
+        id,
+        input: {
+          unitPrice: price,
+          effectiveFrom: new Date(editFrom),
+          effectiveUntil: editUntil ? new Date(editUntil) : null,
+        },
+      });
       setEditingId(null);
     } catch (err) {
       setError(formatError(err));
@@ -256,20 +369,23 @@ export default function PriceListItemsPageClient() {
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">Berlaku dari</label>
-              <Input
-                type="date"
+              <DateField
                 value={draft.effectiveFrom}
-                onChange={(e) => setDraft((d) => ({ ...d, effectiveFrom: e.target.value }))}
+                onChange={(next) => setDraft((d) => ({ ...d, effectiveFrom: next }))}
+                placeholder="Pilih tanggal…"
+                ariaLabel="Berlaku dari"
               />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">
                 Berlaku sampai (opsional)
               </label>
-              <Input
-                type="date"
+              <DateField
                 value={draft.effectiveUntil}
-                onChange={(e) => setDraft((d) => ({ ...d, effectiveUntil: e.target.value }))}
+                onChange={(next) => setDraft((d) => ({ ...d, effectiveUntil: next }))}
+                placeholder="Tanpa batas"
+                ariaLabel="Berlaku sampai"
+                allowClear
               />
             </div>
             <div className="sm:col-span-2">
@@ -291,7 +407,8 @@ export default function PriceListItemsPageClient() {
                 createMutation.isPending ||
                 !draft.deviceTypeId ||
                 !(Number(draft.unitPrice) > 0) ||
-                !draft.effectiveFrom
+                !draft.effectiveFrom ||
+                draftRangeInvalid
               }
             >
               {createMutation.isPending ? "Menyimpan…" : "Simpan"}
@@ -347,7 +464,7 @@ export default function PriceListItemsPageClient() {
               <table className="w-full min-w-[820px]">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                    <th className="px-4 py-3">Device Name</th>
+                    <SortableTh field="deviceName" label="Device Name" sort={sort} />
                     <SortableTh
                       field="unitPrice"
                       label="Unit Price"
@@ -388,7 +505,33 @@ export default function PriceListItemsPageClient() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-600">
-                          {fmtDate(row.effectiveFrom)} — {fmtDate(row.effectiveUntil)}
+                          {editing ? (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <DateField
+                                value={editFrom}
+                                onChange={setEditFrom}
+                                placeholder="Mulai"
+                                ariaLabel="Berlaku dari"
+                              />
+                              <span className="text-slate-400">—</span>
+                              <DateField
+                                value={editUntil}
+                                onChange={setEditUntil}
+                                placeholder="Tanpa batas"
+                                ariaLabel="Berlaku sampai"
+                                allowClear
+                              />
+                              {editRangeInvalid ? (
+                                <span className="w-full text-xs text-red-600">
+                                  Tanggal berakhir tidak boleh sebelum tanggal berlaku.
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <>
+                              {fmtDate(row.effectiveFrom)} — {fmtDate(row.effectiveUntil)}
+                            </>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <Badge
@@ -411,7 +554,12 @@ export default function PriceListItemsPageClient() {
                                     type="button"
                                     size="sm"
                                     onClick={() => saveEdit(row.id)}
-                                    disabled={updateMutation.isPending || !(Number(editPrice) > 0)}
+                                    disabled={
+                                      updateMutation.isPending ||
+                                      !(Number(editPrice) > 0) ||
+                                      !editFrom ||
+                                      editRangeInvalid
+                                    }
                                   >
                                     Simpan
                                   </Button>

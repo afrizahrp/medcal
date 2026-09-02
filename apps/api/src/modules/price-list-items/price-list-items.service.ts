@@ -11,7 +11,7 @@ import {
   type PriceListItemListQuery,
   type PriceListItemUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
+import { resolveSortOrder } from "../../common/sort-query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -207,12 +207,20 @@ export class PriceListItemsService {
       "effectiveFrom",
     );
 
+    // `deviceName` is the Price List "Device Name" column — a relational sort on
+    // the parent DeviceType, not a scalar column. Always `id`-tie-broken so
+    // pagination is deterministic when two rows share a device name.
+    const orderBy: Prisma.PriceListItemOrderByWithRelationInput[] =
+      sortField === "deviceName"
+        ? [{ deviceType: { name: sortDir } }, { id: "desc" }]
+        : [{ [sortField]: sortDir }, { id: "desc" }];
+
     const [total, data] = await Promise.all([
       prisma.priceListItem.count({ where }),
       prisma.priceListItem.findMany({
         where,
         include: { deviceType: { select: deviceTypeSelect } },
-        orderBy: withIdTieBreaker(sortField, sortDir),
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),

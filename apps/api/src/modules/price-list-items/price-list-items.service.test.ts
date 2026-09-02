@@ -38,7 +38,9 @@ afterAll(async () => {
     await prisma.priceListItem.deleteMany({ where: { id: { in: createdPriceListItemIds } } });
   }
   if (createdDeviceTypeIds.length > 0) {
-    await prisma.priceListItem.deleteMany({ where: { deviceTypeId: { in: createdDeviceTypeIds } } });
+    await prisma.priceListItem.deleteMany({
+      where: { deviceTypeId: { in: createdDeviceTypeIds } },
+    });
     await prisma.deviceType.deleteMany({ where: { id: { in: createdDeviceTypeIds } } });
   }
   if (createdDeviceCategoryIds.length > 0) {
@@ -70,7 +72,11 @@ describe("PriceListItemsService.create (test 1 / 7)", () => {
   it("rejects a non-positive price", async () => {
     const deviceTypeId = await makeDeviceType();
     await expect(
-      service.create(companyId, { deviceTypeId, unitPrice: 0, effectiveFrom: new Date("2026-01-01") }),
+      service.create(companyId, {
+        deviceTypeId,
+        unitPrice: 0,
+        effectiveFrom: new Date("2026-01-01"),
+      }),
     ).rejects.toBeDefined();
   });
 
@@ -81,7 +87,9 @@ describe("PriceListItemsService.create (test 1 / 7)", () => {
         unitPrice: 1000,
         effectiveFrom: new Date("2026-01-01"),
       }),
-    ).rejects.toMatchObject({ response: expect.objectContaining({ code: "DEVICE_TYPE_NOT_FOUND" }) });
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "DEVICE_TYPE_NOT_FOUND" }),
+    });
   });
 
   it("rejects effectiveUntil before effectiveFrom", async () => {
@@ -93,7 +101,9 @@ describe("PriceListItemsService.create (test 1 / 7)", () => {
         effectiveFrom: new Date("2026-06-01"),
         effectiveUntil: new Date("2026-01-01"),
       }),
-    ).rejects.toMatchObject({ response: expect.objectContaining({ code: "INVALID_EFFECTIVE_RANGE" }) });
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "INVALID_EFFECTIVE_RANGE" }),
+    });
   });
 });
 
@@ -238,7 +248,9 @@ describe("PriceListItemsService.resolve (tests 4 / 5 / 6)", () => {
 describe("PriceListItemsService — company isolation (test 2)", () => {
   it("resolve is scoped to the company and findOne rejects a foreign row", async () => {
     const otherCompanyId = `P${randomUUID().slice(0, 2).toUpperCase()}`;
-    await prisma.company.create({ data: { id: otherCompanyId, name: "PLI Foreign", status: "ACTIVE" } });
+    await prisma.company.create({
+      data: { id: otherCompanyId, name: "PLI Foreign", status: "ACTIVE" },
+    });
     createdCompanyIds.push(otherCompanyId);
 
     const deviceTypeId = await makeDeviceType();
@@ -269,6 +281,55 @@ describe("PriceListItemsService.update / remove", () => {
     expect(Number(updated.unitPrice)).toBe(111_000);
   });
 
+  it("updates the validity period in place (inline BERLAKU edit)", async () => {
+    const deviceTypeId = await makeDeviceType();
+    const row = track(
+      await service.create(companyId, {
+        deviceTypeId,
+        unitPrice: 100_000,
+        effectiveFrom: new Date("2026-01-01"),
+      }),
+    );
+    const updated = await service.update(companyId, row.id, {
+      effectiveFrom: new Date("2026-02-01"),
+      effectiveUntil: new Date("2027-12-31"),
+    });
+    expect(updated.effectiveFrom.toISOString().slice(0, 10)).toBe("2026-02-01");
+    expect(updated.effectiveUntil?.toISOString().slice(0, 10)).toBe("2027-12-31");
+    expect(updated.isActive).toBe(true);
+  });
+
+  it("rejects a validity-period edit whose end date precedes the start date", async () => {
+    const deviceTypeId = await makeDeviceType();
+    const row = track(
+      await service.create(companyId, {
+        deviceTypeId,
+        unitPrice: 100_000,
+        effectiveFrom: new Date("2026-01-01"),
+      }),
+    );
+    await expect(
+      service.update(companyId, row.id, {
+        effectiveFrom: new Date("2026-06-01"),
+        effectiveUntil: new Date("2026-01-01"),
+      }),
+    ).rejects.toMatchObject({ response: { code: "INVALID_EFFECTIVE_RANGE" } });
+  });
+
+  it("clears effectiveUntil back to open-ended when null is sent", async () => {
+    const deviceTypeId = await makeDeviceType();
+    const row = track(
+      await service.create(companyId, {
+        deviceTypeId,
+        unitPrice: 100_000,
+        effectiveFrom: new Date("2026-01-01"),
+        effectiveUntil: new Date("2026-12-31"),
+      }),
+    );
+    const updated = await service.update(companyId, row.id, { effectiveUntil: null });
+    expect(updated.effectiveUntil).toBeNull();
+  });
+
   it("deletes a tariff", async () => {
     const deviceTypeId = await makeDeviceType();
     const row = await service.create(companyId, {
@@ -278,5 +339,109 @@ describe("PriceListItemsService.update / remove", () => {
     });
     await service.remove(companyId, row.id);
     await expect(service.findOne(companyId, row.id)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe("PriceListItemsService.findAll — sortBy=deviceName (Price List Device Name column)", () => {
+  async function makeNamedDeviceType(name: string): Promise<string> {
+    const category = await prisma.deviceCategory.create({
+      data: { code: `C${rand()}`, name: "PLI Sort Category" },
+    });
+    createdDeviceCategoryIds.push(category.id);
+    const deviceType = await prisma.deviceType.create({
+      data: { categoryId: category.id, code: `T${rand()}`, name },
+    });
+    createdDeviceTypeIds.push(deviceType.id);
+    return deviceType.id;
+  }
+
+  const tag = rand();
+  let alphaId = "";
+  let zebraId = "";
+
+  async function seed() {
+    if (alphaId) return;
+    zebraId = await makeNamedDeviceType(`ZZZ ${tag}`);
+    alphaId = await makeNamedDeviceType(`AAA ${tag}`);
+    track(
+      await service.create(companyId, {
+        deviceTypeId: zebraId,
+        unitPrice: 200_000,
+        effectiveFrom: new Date("2026-01-01"),
+      }),
+    );
+    track(
+      await service.create(companyId, {
+        deviceTypeId: alphaId,
+        unitPrice: 100_000,
+        effectiveFrom: new Date("2026-01-01"),
+      }),
+    );
+  }
+
+  it("sorts by device name ascending", async () => {
+    await seed();
+    const result = await service.findAll(companyId, {
+      search: tag,
+      sortBy: "deviceName",
+      sortDir: "asc",
+      pageSize: 100,
+    });
+    expect(result.data.map((r) => r.deviceType.name)).toEqual([`AAA ${tag}`, `ZZZ ${tag}`]);
+  });
+
+  it("sorts by device name descending", async () => {
+    await seed();
+    const result = await service.findAll(companyId, {
+      search: tag,
+      sortBy: "deviceName",
+      sortDir: "desc",
+      pageSize: 100,
+    });
+    expect(result.data.map((r) => r.deviceType.name)).toEqual([`ZZZ ${tag}`, `AAA ${tag}`]);
+  });
+
+  it("combines device-name sort with the deviceTypeId filter", async () => {
+    await seed();
+    const result = await service.findAll(companyId, {
+      deviceTypeId: alphaId,
+      sortBy: "deviceName",
+      sortDir: "asc",
+      pageSize: 100,
+    });
+    expect(result.data.every((r) => r.deviceTypeId === alphaId)).toBe(true);
+  });
+
+  it("combines device-name sort with the isActive filter", async () => {
+    await seed();
+    const result = await service.findAll(companyId, {
+      search: tag,
+      isActive: true,
+      sortBy: "deviceName",
+      sortDir: "asc",
+      pageSize: 100,
+    });
+    expect(result.data.every((r) => r.isActive)).toBe(true);
+    expect(result.data.map((r) => r.deviceType.name)).toEqual([`AAA ${tag}`, `ZZZ ${tag}`]);
+  });
+
+  it("keeps device-name sort stable across pages (search + pagination)", async () => {
+    await seed();
+    const query = { search: tag, sortBy: "deviceName", sortDir: "asc" as const };
+    const p1 = await service.findAll(companyId, { ...query, page: 1, pageSize: 1 });
+    const p2 = await service.findAll(companyId, { ...query, page: 2, pageSize: 1 });
+    expect(p1.data[0]?.deviceType.name).toBe(`AAA ${tag}`);
+    expect(p2.data[0]?.deviceType.name).toBe(`ZZZ ${tag}`);
+    expect(p1.data[0]?.id).not.toBe(p2.data[0]?.id);
+  });
+
+  it("falls back to the effectiveFrom default for an unwhitelisted sortBy", async () => {
+    await seed();
+    const result = await service.findAll(companyId, {
+      search: tag,
+      sortBy: "deviceType.name; DROP TABLE",
+      pageSize: 100,
+    });
+    expect(result.data.length).toBeGreaterThan(0);
   });
 });

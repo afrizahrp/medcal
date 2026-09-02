@@ -868,7 +868,13 @@ export const priceListItemResolveQuerySchema = z.object({
 export type PriceListItemResolveQuery = z.infer<typeof priceListItemResolveQuerySchema>;
 
 /** Whitelisted `sortBy` values for GET /price-list-items — see resolveSortOrder. */
-export const PRICE_LIST_ITEM_SORTABLE_FIELDS = ["createdAt", "effectiveFrom", "unitPrice"] as const;
+export const PRICE_LIST_ITEM_SORTABLE_FIELDS = [
+  "createdAt",
+  "effectiveFrom",
+  "unitPrice",
+  // Relational: mapped to `deviceType.name` in the service (see resolveSortOrder).
+  "deviceName",
+] as const;
 
 /** PATCH /price-list-items/:id body. */
 export const priceListItemUpdateSchema = z.object({
