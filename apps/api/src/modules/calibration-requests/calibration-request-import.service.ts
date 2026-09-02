@@ -23,12 +23,33 @@ export const MAX_DATA_ROWS = 1000;
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
+// ── AKD/AKL/NIE (Nomor Izin Edar) — optional customer declaration ────────────
+// Optional free-text the customer declares at Requisition. Independent of Qty —
+// a customer may declare a number even for an aggregate (Qty > 1) row:
+//   • empty     → akdAkl NULL / akdAklDeclaration NOT_PROVIDED
+//   • non-empty → akdAkl = value / akdAklDeclaration CUSTOMER_PROVIDED
+// This is NOT the final per-physical-device verified value; the Technician
+// resolves that later at CalibrationJob. Rows are never split into multiple
+// items.
+
 // ── Column header matching (deliberately narrow — spec §3) ───────────────────
 const HEADER_ALIASES = {
   customerDeviceName: ["nama alat", "nama alat customer", "device name", "customer device name"],
   model: ["model"],
   qty: ["qty", "quantity", "jumlah"],
   deviceId: ["device id", "deviceid", "id device"],
+  akdAkl: [
+    "akd/akl/nie",
+    "akd / akl / nie",
+    "akd/akl / nie",
+    "akd / akl/nie",
+    "akd akl nie",
+    "akd/akl",
+    "akd / akl",
+    "nie",
+    "no izin edar",
+    "nomor izin edar",
+  ],
 } as const;
 
 type ColumnKey = keyof typeof HEADER_ALIASES;
@@ -39,6 +60,8 @@ interface ParsedRow {
   model: string | null;
   deviceId: string | null;
   qty: number | null;
+  /** Customer-declared AKD/AKL/NIE, verbatim. NULL when the cell is empty. */
+  akdAkl: string | null;
   errors: string[];
 }
 
@@ -102,6 +125,20 @@ function parseDeviceId(value: ExcelJS.CellValue | undefined): {
   return { deviceId: text };
 }
 
+// ── AKD/AKL/NIE parsing ─────────────────────────────────────────────────────
+const AKD_AKL_MAX_LEN = 120;
+function parseAkdAkl(value: ExcelJS.CellValue | undefined): {
+  akdAkl: string | null;
+  error?: string;
+} {
+  const text = cellToText(value);
+  if (!text) return { akdAkl: null };
+  if (text.length > AKD_AKL_MAX_LEN) {
+    return { akdAkl: null, error: `AKD/AKL/NIE maksimal ${AKD_AKL_MAX_LEN} karakter` };
+  }
+  return { akdAkl: text };
+}
+
 // ── Workbook parsing ────────────────────────────────────────────────────────
 async function parseWorkbook(buffer: Buffer): Promise<ParsedRow[]> {
   const workbook = new ExcelJS.Workbook();
@@ -163,18 +200,21 @@ async function parseWorkbook(buffer: Buffer): Promise<ParsedRow[]> {
     const qtyCol = colByKey.get("qty")!;
     const modelCol = colByKey.get("model");
     const deviceIdCol = colByKey.get("deviceId");
+    const akdAklCol = colByKey.get("akdAkl");
 
     const customerDeviceName = cellToText(nameCell);
     const qtyCellValue = row.getCell(qtyCol).value;
     const modelText = modelCol ? cellToText(row.getCell(modelCol).value) : "";
     const deviceIdCellValue = deviceIdCol ? row.getCell(deviceIdCol).value : undefined;
+    const akdAklCellValue = akdAklCol ? row.getCell(akdAklCol).value : undefined;
 
     // Fully-empty row → skip silently.
     if (
       !customerDeviceName &&
       cellToText(qtyCellValue) === "" &&
       !modelText &&
-      cellToText(deviceIdCellValue) === ""
+      cellToText(deviceIdCellValue) === "" &&
+      cellToText(akdAklCellValue) === ""
     ) {
       continue;
     }
@@ -188,12 +228,16 @@ async function parseWorkbook(buffer: Buffer): Promise<ParsedRow[]> {
     const { deviceId, error: deviceIdError } = parseDeviceId(deviceIdCellValue);
     if (deviceIdError) errors.push(deviceIdError);
 
+    const { akdAkl, error: akdAklError } = parseAkdAkl(akdAklCellValue);
+    if (akdAklError) errors.push(akdAklError);
+
     rows.push({
       rowNumber,
       customerDeviceName,
       model: modelText || null,
       deviceId,
       qty,
+      akdAkl,
       errors,
     });
   }
@@ -215,7 +259,13 @@ interface MatchIndex {
     string,
     { deviceTypeId: string; name: string; code: string; alias: string } | "AMBIGUOUS"
   >;
-  allTargets: Array<{ deviceTypeId: string; name: string; code: string; normalized: string; via: string }>;
+  allTargets: Array<{
+    deviceTypeId: string;
+    name: string;
+    code: string;
+    normalized: string;
+    via: string;
+  }>;
 }
 
 async function buildMatchIndex(): Promise<MatchIndex> {
@@ -235,8 +285,17 @@ async function buildMatchIndex(): Promise<MatchIndex> {
   for (const dt of deviceTypes) {
     const key = normalizeDeviceTerm(dt.name);
     if (!key) continue;
-    nameMap.set(key, nameMap.has(key) ? "AMBIGUOUS" : { deviceTypeId: dt.id, name: dt.name, code: dt.code });
-    allTargets.push({ deviceTypeId: dt.id, name: dt.name, code: dt.code, normalized: key, via: "nama device type" });
+    nameMap.set(
+      key,
+      nameMap.has(key) ? "AMBIGUOUS" : { deviceTypeId: dt.id, name: dt.name, code: dt.code },
+    );
+    allTargets.push({
+      deviceTypeId: dt.id,
+      name: dt.name,
+      code: dt.code,
+      normalized: key,
+      via: "nama device type",
+    });
   }
 
   const aliasMap: MatchIndex["aliasMap"] = new Map();
@@ -355,7 +414,10 @@ function matchRow(customerDeviceName: string, index: MatchIndex): RowMatch {
 
   const aliasHit = index.aliasMap.get(key);
   if (aliasHit === "AMBIGUOUS") {
-    return { ...empty, error: `Alias "${customerDeviceName}" ambigu — memetakan ke lebih dari satu Device Type` };
+    return {
+      ...empty,
+      error: `Alias "${customerDeviceName}" ambigu — memetakan ke lebih dari satu Device Type`,
+    };
   }
   if (aliasHit) {
     return {
@@ -398,7 +460,11 @@ export class CalibrationRequestImportService {
         code: "UNSUPPORTED_FILE_TYPE",
       });
     }
-    if (file.mimetype && file.mimetype !== XLSX_MIME && file.mimetype !== "application/octet-stream") {
+    if (
+      file.mimetype &&
+      file.mimetype !== XLSX_MIME &&
+      file.mimetype !== "application/octet-stream"
+    ) {
       throw new BadRequestException({
         message: "Tipe file tidak valid untuk .xlsx",
         code: "UNSUPPORTED_FILE_TYPE",
@@ -435,6 +501,7 @@ export class CalibrationRequestImportService {
         model: parsed.model,
         deviceId: parsed.deviceId,
         qty: parsed.qty,
+        akdAkl: parsed.akdAkl,
         match: {
           deviceTypeId: match.deviceTypeId,
           deviceTypeName: match.deviceTypeName,
@@ -480,6 +547,10 @@ export class CalibrationRequestImportService {
       ...(row.model ? { model: row.model } : {}),
       ...(row.deviceId ? { deviceId: row.deviceId } : {}),
       qty: row.qty,
+      // Empty → create() derives NOT_PROVIDED; non-empty → CUSTOMER_PROVIDED.
+      // Independent of qty — this is a customer declaration, not the verified
+      // per-physical-device value (resolved later at CalibrationJob).
+      ...(row.akdAkl ? { akdAkl: row.akdAkl } : {}),
     }));
 
     return this.requestsService.create(companyId, {

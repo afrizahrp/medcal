@@ -15,6 +15,7 @@ type MembershipRole =
   | "ADMIN"
   | "SUPERVISOR"
   | "TECHNICIAN"
+  | "TECHNICIAN_MANAGER"
   | "FINANCE"
   | "CUSTOMER"
   | "CUSTOMER_SERVICE";
@@ -56,6 +57,7 @@ const ROLE_LABELS: Record<MembershipRole, string> = {
   ADMIN: "Admin",
   SUPERVISOR: "Supervisor",
   TECHNICIAN: "Teknisi",
+  TECHNICIAN_MANAGER: "Manajer Teknisi",
   FINANCE: "Keuangan",
   CUSTOMER: "Customer",
   CUSTOMER_SERVICE: "Customer Service",

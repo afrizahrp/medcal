@@ -113,6 +113,21 @@ enum CalibrationRequestStatus {
   FULFILLED
 }
 
+/// Status of the customer's AKD/AKL/NIE (Nomor Izin Edar — medical-device
+/// distribution permit) declaration for a Requisition line. This captures ONLY
+/// what the customer stated at intake — it is never technical verification.
+/// The authoritative, technician-verified value is snapshotted later on
+/// CalibrationJob (not modelled yet). NULL `akdAkl` is a valid state and must
+/// never be treated as NOT_APPLICABLE.
+enum AkdAklDeclaration {
+  /// Customer has not been asked / has not answered yet (default).
+  NOT_PROVIDED
+  /// Customer explicitly stated the device has no AKD/AKL/NIE.
+  CUSTOMER_DECLARED_NONE
+  /// Customer supplied an AKD/AKL/NIE value (stored in `akdAkl`).
+  CUSTOMER_PROVIDED
+}
+
 enum QuotationSource {
   PORTAL
   PHONE
@@ -1339,6 +1354,15 @@ model CalibrationRequestItem {
   /// Manual "+ Requisition" entry creates one row per device, so qty stays 1.
   /// A CHECK constraint enforces qty >= 1 (see migration).
   qty                Int      @default(1)
+  /// Customer-declared AKD/AKL/NIE (Nomor Izin Edar) for this device, verbatim
+  /// and free-text. Intentionally NULLABLE — the customer often does not know it
+  /// at Requisition stage. This is a declaration only, NOT technical
+  /// verification; the authoritative value is captured later on CalibrationJob.
+  /// Never store a placeholder ("-" / "N/A"); use `akdAklDeclaration` to record
+  /// "customer says there is none".
+  akdAkl             String?
+  /// Provenance of `akdAkl` — see the AkdAklDeclaration enum.
+  akdAklDeclaration  AkdAklDeclaration @default(NOT_PROVIDED)
   notes              String?
   createdAt          DateTime @default(now())
 

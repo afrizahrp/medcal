@@ -7,7 +7,14 @@ import { ArrowLeft, UserPlus, Users } from "lucide-react";
 import { ApiError, apiFetch, isAllowedRegistrationDomain } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
 
-type MembershipRole = "ADMIN" | "SUPERVISOR" | "TECHNICIAN" | "FINANCE" | "CUSTOMER" | "CUSTOMER_SERVICE";
+type MembershipRole =
+  | "ADMIN"
+  | "SUPERVISOR"
+  | "TECHNICIAN"
+  | "TECHNICIAN_MANAGER"
+  | "FINANCE"
+  | "CUSTOMER"
+  | "CUSTOMER_SERVICE";
 
 interface UserWithoutMembership {
   id: string;
@@ -19,6 +26,7 @@ const ROLE_LABELS: Record<MembershipRole, string> = {
   ADMIN: "Admin",
   SUPERVISOR: "Supervisor",
   TECHNICIAN: "Teknisi",
+  TECHNICIAN_MANAGER: "Manajer Teknisi",
   FINANCE: "Keuangan",
   CUSTOMER: "Customer",
   CUSTOMER_SERVICE: "Customer Service",
@@ -28,6 +36,7 @@ const ROLE_OPTIONS: MembershipRole[] = [
   "ADMIN",
   "SUPERVISOR",
   "TECHNICIAN",
+  "TECHNICIAN_MANAGER",
   "FINANCE",
   "CUSTOMER",
   "CUSTOMER_SERVICE",

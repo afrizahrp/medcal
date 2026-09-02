@@ -2,13 +2,7 @@ import { z } from "zod";
 
 /** Public edge → Nest ContactMessage create payload (thin validation) */
 export const contactMessageCreateSchema = z.object({
-  getFrom: z.enum([
-    "CONTACTFORM",
-    "WHATSAPP",
-    "CHAT_AI",
-    "CHAT_PERSON",
-    "EMAIL",
-  ]),
+  getFrom: z.enum(["CONTACTFORM", "WHATSAPP", "CHAT_AI", "CHAT_PERSON", "EMAIL"]),
   name: z.string().min(1).max(100),
   email: z.string().email().max(100),
   phone: z.string().max(20).optional(),
@@ -19,17 +13,9 @@ export const contactMessageCreateSchema = z.object({
   utmJson: z.record(z.string()).optional(),
 });
 
-export type ContactMessageCreateInput = z.infer<
-  typeof contactMessageCreateSchema
->;
+export type ContactMessageCreateInput = z.infer<typeof contactMessageCreateSchema>;
 
-const leadStatusValues = [
-  "NEW",
-  "CONTACTED",
-  "QUALIFIED",
-  "REJECTED",
-  "CONVERTED",
-] as const;
+const leadStatusValues = ["NEW", "CONTACTED", "QUALIFIED", "REJECTED", "CONVERTED"] as const;
 
 const contactStatusValues = ["PENDING", "READ", "REPLIED", "CLOSED"] as const;
 
@@ -55,9 +41,7 @@ const baseListQuerySchema = z.object({
 /** GET /leads query params (Lead Inbox, locked 2026-08-16) */
 export const leadListQuerySchema = baseListQuerySchema.extend({
   status: z.enum(leadStatusValues).optional(),
-  getFrom: z
-    .enum(["CONTACTFORM", "WHATSAPP", "CHAT_AI", "CHAT_PERSON", "EMAIL"])
-    .optional(),
+  getFrom: z.enum(["CONTACTFORM", "WHATSAPP", "CHAT_AI", "CHAT_PERSON", "EMAIL"]).optional(),
   topicId: z.coerce.number().int().optional(),
 });
 
@@ -87,9 +71,7 @@ export type LeadAssignInput = z.infer<typeof leadAssignSchema>;
  */
 export const contactMessageListQuerySchema = baseListQuerySchema.extend({
   status: z.enum(contactStatusValues).optional(),
-  getFrom: z
-    .enum(["CONTACTFORM", "WHATSAPP", "CHAT_AI", "CHAT_PERSON", "EMAIL"])
-    .optional(),
+  getFrom: z.enum(["CONTACTFORM", "WHATSAPP", "CHAT_AI", "CHAT_PERSON", "EMAIL"]).optional(),
   topicId: z.coerce.number().int().optional(),
 });
 
@@ -293,28 +275,72 @@ const calibrationRequestStatusValues = [
   "FULFILLED",
 ] as const;
 
+/**
+ * Provenance of a Requisition line's customer-declared AKD/AKL/NIE
+ * (Nomor Izin Edar). Declaration only — never technical verification.
+ */
+export const akdAklDeclarationValues = [
+  "NOT_PROVIDED",
+  "CUSTOMER_DECLARED_NONE",
+  "CUSTOMER_PROVIDED",
+] as const;
+
+export type AkdAklDeclaration = (typeof akdAklDeclarationValues)[number];
+
 /** Nested item input for CalibrationRequestItem */
-const calibrationRequestItemInputSchema = z.object({
-  deviceTypeId: z.string().min(1),
-  /** Customer's original terminology for the equipment. Optional. */
-  customerDeviceName: z.string().trim().max(200).optional(),
-  /** Customer-provided equipment model, if available. Optional. */
-  model: z.string().trim().max(120).optional(),
-  /**
-   * Customer-provided device/inventory identifier. Free text, intentionally
-   * optional — a missing customer Device ID is a valid business state and must
-   * be stored as NULL, never a placeholder. NOT the CalibrationJob Device.id.
-   */
-  deviceId: z.string().trim().max(120).optional(),
-  /**
-   * Aggregate quantity for this line — how many units of the device.
-   * Positive integer; defaults to 1 server-side. Manual "+ Requisition" entry
-   * omits it (one row per device). Excel import passes the spreadsheet Qty
-   * here and the row is persisted as a single item — never split into N rows.
-   */
-  qty: z.number().int().positive().optional(),
-  notes: z.string().max(1000).optional(),
-});
+const calibrationRequestItemInputSchema = z
+  .object({
+    deviceTypeId: z.string().min(1),
+    /** Customer's original terminology for the equipment. Optional. */
+    customerDeviceName: z.string().trim().max(200).optional(),
+    /** Customer-provided equipment model, if available. Optional. */
+    model: z.string().trim().max(120).optional(),
+    /**
+     * Customer-provided device/inventory identifier. Free text, intentionally
+     * optional — a missing customer Device ID is a valid business state and must
+     * be stored as NULL, never a placeholder. NOT the CalibrationJob Device.id.
+     */
+    deviceId: z.string().trim().max(120).optional(),
+    /**
+     * Aggregate quantity for this line — how many units of the device.
+     * Positive integer; defaults to 1 server-side. Manual "+ Requisition" entry
+     * omits it (one row per device). Excel import passes the spreadsheet Qty
+     * here and the row is persisted as a single item — never split into N rows.
+     */
+    qty: z.number().int().positive().optional(),
+    /**
+     * Customer-declared AKD/AKL/NIE (Nomor Izin Edar). Free text, verbatim,
+     * intentionally optional — the customer often does not know it at Requisition
+     * stage. A declaration only, NOT technical verification. Empty string is
+     * coerced to undefined; use `akdAklDeclaration` to record an explicit "none".
+     */
+    akdAkl: z
+      .string()
+      .trim()
+      .max(120)
+      .optional()
+      .transform((v) => (v ? v : undefined)),
+    /** Provenance of `akdAkl`. Defaults to NOT_PROVIDED server-side. */
+    akdAklDeclaration: z.enum(akdAklDeclarationValues).optional(),
+    notes: z.string().max(1000).optional(),
+  })
+  .superRefine((item, ctx) => {
+    // Basic, non-regulatory consistency check for a customer-declared value.
+    if (item.akdAklDeclaration === "CUSTOMER_PROVIDED" && !item.akdAkl) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["akdAkl"],
+        message: "AKD/AKL/NIE wajib diisi ketika status = CUSTOMER_PROVIDED",
+      });
+    }
+    if (item.akdAkl && item.akdAklDeclaration && item.akdAklDeclaration !== "CUSTOMER_PROVIDED") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["akdAklDeclaration"],
+        message: "AKD/AKL/NIE hanya boleh diisi ketika status = CUSTOMER_PROVIDED",
+      });
+    }
+  });
 
 /** POST /calibration-requests body */
 export const calibrationRequestCreateSchema = z.object({
@@ -338,11 +364,7 @@ export const calibrationRequestListQuerySchema = baseListQuerySchema.extend({
 export type CalibrationRequestListQuery = z.infer<typeof calibrationRequestListQuerySchema>;
 
 /** Whitelisted `sortBy` values for GET /calibration-requests — see resolveSortOrder. */
-export const CALIBRATION_REQUEST_SORTABLE_FIELDS = [
-  "createdAt",
-  "number",
-  "status",
-] as const;
+export const CALIBRATION_REQUEST_SORTABLE_FIELDS = ["createdAt", "number", "status"] as const;
 
 /** PATCH /calibration-requests/:id body (only allowed while DRAFT) */
 export const calibrationRequestUpdateSchema = z.object({
@@ -490,13 +512,7 @@ export type PurchaseOrderUpdateInput = z.infer<typeof purchaseOrderUpdateSchema>
 // WorkOrder (APPROVED PurchaseOrder → WorkOrder)
 // =============================================================================
 
-const workOrderStatusValues = [
-  "PLANNED",
-  "ASSIGNED",
-  "IN_PROGRESS",
-  "DONE",
-  "CANCELLED",
-] as const;
+const workOrderStatusValues = ["PLANNED", "ASSIGNED", "IN_PROGRESS", "DONE", "CANCELLED"] as const;
 
 const assignmentRoleValues = ["LEAD", "ASSIST"] as const;
 
@@ -540,9 +556,7 @@ export const workOrderEquipmentProposalQuerySchema = z.object({
   purchaseOrderId: z.string().min(1),
 });
 
-export type WorkOrderEquipmentProposalQuery = z.infer<
-  typeof workOrderEquipmentProposalQuerySchema
->;
+export type WorkOrderEquipmentProposalQuery = z.infer<typeof workOrderEquipmentProposalQuerySchema>;
 
 /** POST /work-orders body — source/commercial values are derived from the PO. */
 export const workOrderCreateSchema = z.object({
@@ -738,11 +752,7 @@ export const priceListItemResolveQuerySchema = z.object({
 export type PriceListItemResolveQuery = z.infer<typeof priceListItemResolveQuerySchema>;
 
 /** Whitelisted `sortBy` values for GET /price-list-items — see resolveSortOrder. */
-export const PRICE_LIST_ITEM_SORTABLE_FIELDS = [
-  "createdAt",
-  "effectiveFrom",
-  "unitPrice",
-] as const;
+export const PRICE_LIST_ITEM_SORTABLE_FIELDS = ["createdAt", "effectiveFrom", "unitPrice"] as const;
 
 /** PATCH /price-list-items/:id body. */
 export const priceListItemUpdateSchema = z.object({
@@ -1426,6 +1436,13 @@ export interface CalibrationRequestImportPreviewRow {
   model: string | null;
   deviceId: string | null;
   qty: number | null;
+  /**
+   * Customer-declared AKD/AKL/NIE (Nomor Izin Edar), verbatim. NULL when the
+   * cell is empty. Optional and independent of qty — a customer may declare a
+   * number even for an aggregate (qty > 1) row. Not the verified
+   * per-physical-device value.
+   */
+  akdAkl: string | null;
   match: {
     deviceTypeId: string | null;
     deviceTypeName: string | null;
@@ -1459,6 +1476,16 @@ export const calibrationRequestImportConfirmRowSchema = z.object({
   model: z.string().trim().max(120).optional(),
   deviceId: z.string().trim().max(120).optional(),
   qty: z.number().int().positive(),
+  /**
+   * Customer-declared AKD/AKL/NIE. Optional, independent of qty.
+   * Empty → NOT_PROVIDED; present → CUSTOMER_PROVIDED (derived server-side).
+   */
+  akdAkl: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .transform((v) => (v ? v : undefined)),
   deviceTypeId: z.string().min(1),
 });
 

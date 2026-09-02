@@ -43,9 +43,32 @@ export interface CalibrationRequestItem {
   deviceId: string | null;
   /** Aggregate quantity of units for this line (>= 1). */
   qty: number;
+  /**
+   * Customer-declared AKD/AKL/NIE (Nomor Izin Edar). May be null — the customer
+   * often does not know it at Requisition stage. Declaration only, never
+   * technical verification.
+   */
+  akdAkl: string | null;
+  /** Provenance of `akdAkl`. */
+  akdAklDeclaration: AkdAklDeclarationValue;
   notes: string | null;
   deviceType: CalibrationRequestDeviceType;
 }
+
+export type AkdAklDeclarationValue =
+  "NOT_PROVIDED" | "CUSTOMER_DECLARED_NONE" | "CUSTOMER_PROVIDED";
+
+export const AKD_AKL_DECLARATION_OPTIONS: AkdAklDeclarationValue[] = [
+  "NOT_PROVIDED",
+  "CUSTOMER_DECLARED_NONE",
+  "CUSTOMER_PROVIDED",
+];
+
+export const AKD_AKL_DECLARATION_LABELS: Record<AkdAklDeclarationValue, string> = {
+  NOT_PROVIDED: "Belum diberikan customer",
+  CUSTOMER_DECLARED_NONE: "Customer menyatakan tidak ada",
+  CUSTOMER_PROVIDED: "Customer memberikan nomor",
+};
 
 export interface CalibrationRequestCustomer {
   id: string;
@@ -165,11 +188,7 @@ export function CalibrationRequestFilters({
   );
 }
 
-export function CalibrationRequestTable({
-  requests,
-}: {
-  requests: CalibrationRequestRow[];
-}) {
+export function CalibrationRequestTable({ requests }: { requests: CalibrationRequestRow[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[700px]">
@@ -217,16 +236,10 @@ export function CalibrationRequestTable({
   );
 }
 
-export function CalibrationRequestEmptyState({
-  onClearFilters,
-}: {
-  onClearFilters?: () => void;
-}) {
+export function CalibrationRequestEmptyState({ onClearFilters }: { onClearFilters?: () => void }) {
   return (
     <div className="py-10 text-center">
-      <p className="text-sm text-slate-500">
-        Belum ada requisition yang cocok dengan filter.
-      </p>
+      <p className="text-sm text-slate-500">Belum ada requisition yang cocok dengan filter.</p>
       {onClearFilters ? (
         <Button type="button" variant="outline" className="mt-3" onClick={onClearFilters}>
           Reset filter
@@ -236,13 +249,7 @@ export function CalibrationRequestEmptyState({
   );
 }
 
-export function DetailField({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+export function DetailField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
       <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
@@ -361,10 +368,7 @@ export function CustomerCommandSelect({
             }}
           >
             <Check
-              className={cn(
-                "mr-2 h-4 w-4",
-                value === customer.id ? "opacity-100" : "opacity-0",
-              )}
+              className={cn("mr-2 h-4 w-4", value === customer.id ? "opacity-100" : "opacity-0")}
             />
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{customer.name}</p>

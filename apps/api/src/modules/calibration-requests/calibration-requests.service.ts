@@ -113,6 +113,9 @@ export class CalibrationRequestsService {
           model: item.model || null,
           deviceId: item.deviceId || null,
           qty: item.qty ?? 1,
+          akdAkl: item.akdAkl || null,
+          akdAklDeclaration:
+            item.akdAklDeclaration ?? (item.akdAkl ? "CUSTOMER_PROVIDED" : "NOT_PROVIDED"),
           notes: item.notes,
         })),
       });
@@ -249,6 +252,9 @@ export class CalibrationRequestsService {
             model: item.model || null,
             deviceId: item.deviceId || null,
             qty: item.qty ?? 1,
+            akdAkl: item.akdAkl || null,
+            akdAklDeclaration:
+              item.akdAklDeclaration ?? (item.akdAkl ? "CUSTOMER_PROVIDED" : "NOT_PROVIDED"),
             notes: item.notes,
           })),
         });

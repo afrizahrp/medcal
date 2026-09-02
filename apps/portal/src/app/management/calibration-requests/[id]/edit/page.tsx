@@ -25,10 +25,13 @@ import {
   selectClassName,
   SERVICE_MODE_OPTIONS,
   SERVICE_MODE_LABELS,
+  AKD_AKL_DECLARATION_OPTIONS,
+  AKD_AKL_DECLARATION_LABELS,
   DeviceTypeItemSelect,
   type ServiceMode,
   type CalibrationRequestRow,
   type DeviceTypeOption,
+  type AkdAklDeclarationValue,
 } from "../../calibration-requests-ui";
 import {
   useCalibrationRequest,
@@ -44,6 +47,10 @@ interface ItemInput {
   deviceId: string;
   /** Aggregate quantity for the line. Carried through edits unchanged. */
   qty: number;
+  /** Customer-declared AKD/AKL/NIE (Nomor Izin Edar). Optional. */
+  akdAkl: string;
+  /** Provenance of the declared AKD/AKL/NIE. */
+  akdAklDeclaration: AkdAklDeclarationValue;
   notes: string;
 }
 
@@ -53,6 +60,8 @@ const emptyItemInput = (): ItemInput => ({
   model: "",
   deviceId: "",
   qty: 1,
+  akdAkl: "",
+  akdAklDeclaration: "NOT_PROVIDED",
   notes: "",
 });
 
@@ -63,6 +72,8 @@ function itemsFromRequest(request: CalibrationRequestRow): ItemInput[] {
     model: item.model ?? "",
     deviceId: item.deviceId ?? "",
     qty: item.qty ?? 1,
+    akdAkl: item.akdAkl ?? "",
+    akdAklDeclaration: item.akdAklDeclaration ?? "NOT_PROVIDED",
     notes: item.notes ?? "",
   }));
 }
@@ -205,7 +216,7 @@ export default function EditCalibrationRequestPage() {
 
   function updateItem(index: number, field: keyof ItemInput, value: string) {
     setItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
+      prev.map((item, i) => (i === index ? ({ ...item, [field]: value } as ItemInput) : item)),
     );
   }
 
@@ -250,6 +261,8 @@ export default function EditCalibrationRequestPage() {
             model: item.model.trim() || undefined,
             deviceId: item.deviceId.trim() || undefined,
             qty: item.qty > 0 ? item.qty : 1,
+            akdAkl: item.akdAkl.trim() || undefined,
+            akdAklDeclaration: item.akdAklDeclaration,
             notes: item.notes.trim() || undefined,
           })),
         },
@@ -288,9 +301,7 @@ export default function EditCalibrationRequestPage() {
       <form onSubmit={submit}>
         <Surface className={formSurfaceClass}>
           {error ? (
-            <div className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
+            <div className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
           ) : null}
 
           <div className="space-y-6">
@@ -498,6 +509,40 @@ export default function EditCalibrationRequestPage() {
                               maxLength={120}
                             />
                           </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-slate-600">
+                              AKD / AKL / NIE — Status{" "}
+                              <span className="font-normal text-slate-400">
+                                (deklarasi customer)
+                              </span>
+                            </label>
+                            <select
+                              value={item.akdAklDeclaration}
+                              onChange={(e) =>
+                                updateItem(index, "akdAklDeclaration", e.target.value)
+                              }
+                              className={cn(selectClassName, "w-full")}
+                            >
+                              {AKD_AKL_DECLARATION_OPTIONS.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {AKD_AKL_DECLARATION_LABELS[opt]}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {item.akdAklDeclaration === "CUSTOMER_PROVIDED" ? (
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-slate-600">
+                                Nomor AKD / AKL / NIE
+                              </label>
+                              <Input
+                                value={item.akdAkl}
+                                onChange={(e) => updateItem(index, "akdAkl", e.target.value)}
+                                placeholder="Nomor Izin Edar dari customer"
+                                maxLength={120}
+                              />
+                            </div>
+                          ) : null}
                           <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">
                               Notes

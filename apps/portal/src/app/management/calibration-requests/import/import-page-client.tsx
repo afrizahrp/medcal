@@ -90,8 +90,7 @@ export default function ImportCalibrationRequestPageClient() {
         blocking += 1;
         continue;
       }
-      const rowReady =
-        row.qty != null && row.qty > 0 && row.resolvedDeviceTypeId !== "";
+      const rowReady = row.qty != null && row.qty > 0 && row.resolvedDeviceTypeId !== "";
       if (rowReady) {
         readyItems += 1;
         units += row.qty ?? 0;
@@ -158,6 +157,7 @@ export default function ImportCalibrationRequestPageClient() {
           ...(row.model ? { model: row.model } : {}),
           ...(row.deviceId ? { deviceId: row.deviceId } : {}),
           qty: row.qty ?? 1,
+          ...(row.akdAkl ? { akdAkl: row.akdAkl } : {}),
           deviceTypeId: row.resolvedDeviceTypeId,
         })),
       });
@@ -306,7 +306,7 @@ export default function ImportCalibrationRequestPageClient() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] text-sm">
+                <table className="w-full min-w-[1000px] text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                       <th className="px-3 py-2">#</th>
@@ -314,6 +314,7 @@ export default function ImportCalibrationRequestPageClient() {
                       <th className="px-3 py-2">Model</th>
                       <th className="px-3 py-2">Qty</th>
                       <th className="px-3 py-2">Device ID</th>
+                      <th className="px-3 py-2">AKD/AKL/NIE</th>
                       <th className="px-3 py-2">Device Name</th>
                       <th className="px-3 py-2">Match</th>
                     </tr>
@@ -351,6 +352,9 @@ export default function ImportCalibrationRequestPageClient() {
                           </td>
                           <td className="px-3 py-2 align-top font-mono text-xs text-slate-600">
                             {row.deviceId ?? <span className="text-slate-400">NULL</span>}
+                          </td>
+                          <td className="px-3 py-2 align-top font-mono text-xs text-slate-600">
+                            {row.akdAkl ?? <span className="text-slate-400">NOT_PROVIDED</span>}
                           </td>
                           <td className="px-3 py-2 align-top">
                             {row.errors.length > 0 ? (
@@ -420,7 +424,6 @@ export default function ImportCalibrationRequestPageClient() {
                   Konfirmasi dinonaktifkan.
                 </p>
               ) : null}
-
             </section>
           ) : null}
 

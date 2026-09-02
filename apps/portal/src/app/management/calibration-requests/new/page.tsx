@@ -23,9 +23,12 @@ import {
   selectClassName,
   SERVICE_MODE_OPTIONS,
   SERVICE_MODE_LABELS,
+  AKD_AKL_DECLARATION_OPTIONS,
+  AKD_AKL_DECLARATION_LABELS,
   CustomerCommandSelect,
   DeviceTypeItemSelect,
   type ServiceMode,
+  type AkdAklDeclarationValue,
 } from "../calibration-requests-ui";
 import { useCreateCalibrationRequest } from "../use-calibration-requests-query";
 import { useCustomers } from "../../customers/use-customers-query";
@@ -36,6 +39,10 @@ interface ItemInput {
   customerDeviceName: string;
   model: string;
   deviceId: string;
+  /** Customer-declared AKD/AKL/NIE (Nomor Izin Edar). Optional. */
+  akdAkl: string;
+  /** Provenance of the declared AKD/AKL/NIE. */
+  akdAklDeclaration: AkdAklDeclarationValue;
   notes: string;
 }
 
@@ -44,6 +51,8 @@ const emptyItem = (): ItemInput => ({
   customerDeviceName: "",
   model: "",
   deviceId: "",
+  akdAkl: "",
+  akdAklDeclaration: "NOT_PROVIDED",
   notes: "",
 });
 
@@ -90,7 +99,9 @@ export default function NewCalibrationRequestPage() {
   }
 
   function updateItem(index: number, field: keyof ItemInput, value: string) {
-    setItems((prev) => prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)));
+    setItems((prev) =>
+      prev.map((item, i) => (i === index ? ({ ...item, [field]: value } as ItemInput) : item)),
+    );
   }
 
   async function submit(e: React.FormEvent) {
@@ -131,6 +142,8 @@ export default function NewCalibrationRequestPage() {
           customerDeviceName: item.customerDeviceName.trim() || undefined,
           model: item.model.trim() || undefined,
           deviceId: item.deviceId.trim() || undefined,
+          akdAkl: item.akdAkl.trim() || undefined,
+          akdAklDeclaration: item.akdAklDeclaration,
           notes: item.notes.trim() || undefined,
         })),
       });
@@ -345,6 +358,40 @@ export default function NewCalibrationRequestPage() {
                                 maxLength={120}
                               />
                             </div>
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-slate-600">
+                                AKD / AKL / NIE — Status{" "}
+                                <span className="font-normal text-slate-400">
+                                  (deklarasi customer)
+                                </span>
+                              </label>
+                              <select
+                                value={item.akdAklDeclaration}
+                                onChange={(e) =>
+                                  updateItem(index, "akdAklDeclaration", e.target.value)
+                                }
+                                className={cn(selectClassName, "w-full")}
+                              >
+                                {AKD_AKL_DECLARATION_OPTIONS.map((opt) => (
+                                  <option key={opt} value={opt}>
+                                    {AKD_AKL_DECLARATION_LABELS[opt]}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            {item.akdAklDeclaration === "CUSTOMER_PROVIDED" ? (
+                              <div>
+                                <label className="mb-1 block text-xs font-medium text-slate-600">
+                                  Nomor AKD / AKL / NIE
+                                </label>
+                                <Input
+                                  value={item.akdAkl}
+                                  onChange={(e) => updateItem(index, "akdAkl", e.target.value)}
+                                  placeholder="Nomor Izin Edar dari customer"
+                                  maxLength={120}
+                                />
+                              </div>
+                            ) : null}
                             <div>
                               <label className="mb-1 block text-xs font-medium text-slate-600">
                                 Notes

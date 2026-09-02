@@ -14,6 +14,7 @@ type Role =
   | "SUPERVISOR"
   | "ADMIN"
   | "TECHNICIAN"
+  | "TECHNICIAN_MANAGER"
   | "FINANCE"
   | "CUSTOMER"
   | "CUSTOMER_SERVICE";
@@ -34,6 +35,7 @@ const ROLES: Role[] = [
   "SUPERVISOR",
   "ADMIN",
   "TECHNICIAN",
+  "TECHNICIAN_MANAGER",
   "FINANCE",
   "CUSTOMER",
   "CUSTOMER_SERVICE",

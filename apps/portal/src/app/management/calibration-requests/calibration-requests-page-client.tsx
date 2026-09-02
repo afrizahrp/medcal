@@ -88,12 +88,15 @@ export default function CalibrationRequestsPageClient() {
                 </TooltipTrigger>
                 <TooltipContent className="max-w-[240px]">
                   <p className="font-semibold text-slate-900">Format Excel</p>
-                  <p className="mt-1 text-slate-600">Nama Alat · Model · Qty · Device ID</p>
+                  <p className="mt-1 text-slate-600">
+                    Nama Alat · Model · Qty · Device ID · AKD/AKL/NIE
+                  </p>
                   <ul className="mt-1.5 space-y-0.5 text-slate-600">
                     <li>• Nama Alat: wajib</li>
                     <li>• Model: opsional</li>
                     <li>• Qty: wajib</li>
                     <li>• Device ID: opsional</li>
+                    <li>• AKD/AKL/NIE: opsional</li>
                   </ul>
                 </TooltipContent>
               </Tooltip>

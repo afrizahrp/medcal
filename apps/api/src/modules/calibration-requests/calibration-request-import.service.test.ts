@@ -20,10 +20,7 @@ const typeIdByName: Record<string, string> = {};
 
 type Cell = string | number | null;
 
-async function buildXlsx(
-  header: string[],
-  rows: Cell[][],
-): Promise<Buffer> {
+async function buildXlsx(header: string[], rows: Cell[][]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Sheet1");
   ws.addRow(header);
@@ -118,11 +115,17 @@ async function makeCustomer(): Promise<string> {
 }
 
 const HEADER = ["Nama Alat", "Model", "Qty", "Device ID"];
+const HEADER_AKD = ["Nama Alat", "Model", "Qty", "Device ID", "AKD/AKL/NIE"];
 
 describe("CalibrationRequestImportService.preview", () => {
   it("rejects a non-xlsx file", async () => {
     await expect(
-      service.preview({ originalname: "x.csv", mimetype: "text/csv", size: 3, buffer: Buffer.from("a,b") }),
+      service.preview({
+        originalname: "x.csv",
+        mimetype: "text/csv",
+        size: 3,
+        buffer: Buffer.from("a,b"),
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -184,9 +187,7 @@ describe("CalibrationRequestImportService.preview", () => {
   it("rejects multiple Device IDs in one cell", async () => {
     const buf = await buildXlsx(HEADER, [[`Tensimeter ${SUFFIX}`, "AB-123", 3, "TEN-001,TEN-002"]]);
     const preview = await service.preview(asFile(buf));
-    expect(
-      preview.rows[0]?.errors.some((e) => /satu Device ID/i.test(e)),
-    ).toBe(true);
+    expect(preview.rows[0]?.errors.some((e) => /satu Device ID/i.test(e))).toBe(true);
   });
 
   it("blank Device ID becomes NULL (no placeholder)", async () => {
@@ -201,6 +202,45 @@ describe("CalibrationRequestImportService.preview", () => {
     expect(preview.rows[0]?.qty).toBe(5);
     expect(preview.rows[0]?.deviceId).toBe("TEN-001");
     expect(preview.rows[0]?.warnings).toEqual([]);
+    expect(preview.rows[0]?.errors).toEqual([]);
+  });
+
+  it("AKD/AKL/NIE: empty cell → akdAkl null, no error (any Qty)", async () => {
+    const buf = await buildXlsx(HEADER_AKD, [
+      [`Tensimeter ${SUFFIX}`, "AB-123", 1, "", ""],
+      [BEDSIDE, "BSM-501", 4, "", "   "],
+    ]);
+    const preview = await service.preview(asFile(buf));
+    expect(preview.rows[0]?.akdAkl).toBeNull();
+    expect(preview.rows[1]?.akdAkl).toBeNull();
+    expect(preview.rows.every((r) => r.errors.length === 0)).toBe(true);
+  });
+
+  it("AKD/AKL/NIE: a value is carried on the row regardless of Qty, no error", async () => {
+    const buf = await buildXlsx(HEADER_AKD, [
+      [`Tensimeter ${SUFFIX}`, "AB-123", 1, "", "AKD 20403012345"],
+      [BEDSIDE, "BSM-501", 3, "", "AKL 30301099999"],
+    ]);
+    const preview = await service.preview(asFile(buf));
+    expect(preview.rows[0]?.akdAkl).toBe("AKD 20403012345");
+    expect(preview.rows[0]?.qty).toBe(1);
+    expect(preview.rows[1]?.akdAkl).toBe("AKL 30301099999");
+    expect(preview.rows[1]?.qty).toBe(3);
+    expect(preview.rows.every((r) => r.errors.length === 0)).toBe(true);
+  });
+
+  it("AKD/AKL/NIE: over 120 characters is a row error", async () => {
+    const buf = await buildXlsx(HEADER_AKD, [
+      [`Tensimeter ${SUFFIX}`, "AB-123", 1, "", "A".repeat(121)],
+    ]);
+    const preview = await service.preview(asFile(buf));
+    expect(preview.rows[0]?.errors.some((e) => /120 karakter/i.test(e))).toBe(true);
+  });
+
+  it("AKD/AKL/NIE: works when the column is absent (backward compatible)", async () => {
+    const buf = await buildXlsx(HEADER, [[`Tensimeter ${SUFFIX}`, "AB-123", 2, ""]]);
+    const preview = await service.preview(asFile(buf));
+    expect(preview.rows[0]?.akdAkl).toBeNull();
     expect(preview.rows[0]?.errors).toEqual([]);
   });
 
@@ -252,8 +292,7 @@ describe("CalibrationRequestImportService.confirm", () => {
     expect(created.status).toBe("DRAFT");
     expect(created.number.startsWith("CRQ/")).toBe(true);
 
-    const byName = (name: string) =>
-      created.items.find((i) => i.customerDeviceName === name);
+    const byName = (name: string) => created.items.find((i) => i.customerDeviceName === name);
 
     const tensimeter = byName(`Tensimeter ${SUFFIX}`)!;
     expect(tensimeter.qty).toBe(5);
@@ -295,6 +334,60 @@ describe("CalibrationRequestImportService.confirm", () => {
     createdRequestIds.push(created.id);
     expect(created.items).toHaveLength(1);
     expect(created.items[0]?.qty).toBe(1);
+  });
+
+  it("persists AKD/AKL/NIE as CUSTOMER_PROVIDED (any Qty); empty row stays NOT_PROVIDED", async () => {
+    const customerId = await makeCustomer();
+    const buf = await buildXlsx(HEADER_AKD, [
+      [`Tensimeter ${SUFFIX}`, "AB-123", 5, "", "AKD 20403012345"],
+      [BEDSIDE, "BSM-501", 4, "", ""],
+    ]);
+    const preview = await service.preview(asFile(buf));
+    expect(preview.rows.every((r) => r.errors.length === 0 && r.match.deviceTypeId)).toBe(true);
+
+    const created = await service.confirm(realCompanyId, {
+      customerId,
+      serviceMode: "ON_SITE",
+      rows: preview.rows.map((r) => ({
+        customerDeviceName: r.customerDeviceName,
+        ...(r.model ? { model: r.model } : {}),
+        qty: r.qty ?? 1,
+        ...(r.akdAkl ? { akdAkl: r.akdAkl } : {}),
+        deviceTypeId: r.match.deviceTypeId!,
+      })),
+    });
+    createdRequestIds.push(created.id);
+
+    const tensimeter = created.items.find((i) => i.customerDeviceName === `Tensimeter ${SUFFIX}`)!;
+    expect(tensimeter.qty).toBe(5);
+    expect(tensimeter.akdAkl).toBe("AKD 20403012345");
+    expect(tensimeter.akdAklDeclaration).toBe("CUSTOMER_PROVIDED");
+
+    const bedside = created.items.find((i) => i.customerDeviceName === BEDSIDE)!;
+    expect(bedside.qty).toBe(4);
+    expect(bedside.akdAkl).toBeNull();
+    expect(bedside.akdAklDeclaration).toBe("NOT_PROVIDED");
+  });
+
+  it("confirm accepts a Qty > 1 row that carries AKD/AKL/NIE (customer declaration)", async () => {
+    const customerId = await makeCustomer();
+    const created = await service.confirm(realCompanyId, {
+      customerId,
+      serviceMode: "ON_SITE",
+      rows: [
+        {
+          customerDeviceName: "Aggregate",
+          qty: 3,
+          akdAkl: "AKD 20403012345",
+          deviceTypeId: typeIdByName[SPHYG]!,
+        },
+      ],
+    });
+    createdRequestIds.push(created.id);
+    expect(created.items).toHaveLength(1);
+    expect(created.items[0]?.qty).toBe(3);
+    expect(created.items[0]?.akdAkl).toBe("AKD 20403012345");
+    expect(created.items[0]?.akdAklDeclaration).toBe("CUSTOMER_PROVIDED");
   });
 
   it("rolls back entirely when a deviceTypeId is invalid (transaction safety)", async () => {

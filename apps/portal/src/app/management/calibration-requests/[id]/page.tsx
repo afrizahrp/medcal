@@ -92,8 +92,7 @@ export default function CalibrationRequestDetailPage() {
   }
 
   const isDraft = request.status === "DRAFT";
-  const canCancel =
-    request.status !== "CANCELLED" && request.status !== "FULFILLED";
+  const canCancel = request.status !== "CANCELLED" && request.status !== "FULFILLED";
   const isReadOnly = !isDraft;
   const quotationForbidden = isForbidden(quotationQuery.error);
   const quotationReady = !quotationQuery.isLoading && !quotationQuery.isError;
@@ -181,9 +180,7 @@ export default function CalibrationRequestDetailPage() {
             <DetailField label="Service Mode">
               <ServiceModeBadge mode={request.serviceMode} />
             </DetailField>
-            <DetailField label="Created">
-              {formatRelativeTime(request.createdAt)}
-            </DetailField>
+            <DetailField label="Created">{formatRelativeTime(request.createdAt)}</DetailField>
           </div>
 
           {request.expectedDate ? (
@@ -248,22 +245,15 @@ export default function CalibrationRequestDetailPage() {
         )}
 
         <div className="mt-5 border-t border-slate-100 pt-5">
-          <h3 className="text-sm font-semibold text-slate-900">
-            Devices ({request.items.length})
-          </h3>
+          <h3 className="text-sm font-semibold text-slate-900">Devices ({request.items.length})</h3>
           <div className="mt-3 space-y-2">
             {request.items.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
-              >
+              <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-medium text-slate-900">
                       {item.deviceType.name}
-                      <span className="ml-2 text-sm font-normal text-slate-500">
-                        × {item.qty}
-                      </span>
+                      <span className="ml-2 text-sm font-normal text-slate-500">× {item.qty}</span>
                     </p>
                     {item.customerDeviceName ? (
                       <p className="mt-0.5 text-xs text-slate-500">
@@ -281,8 +271,20 @@ export default function CalibrationRequestDetailPage() {
                         <span className="text-slate-400">Not provided</span>
                       )}
                     </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      AKD/AKL/NIE (deklarasi customer):{" "}
+                      {item.akdAklDeclaration === "CUSTOMER_PROVIDED" ? (
+                        <span className="font-mono">{item.akdAkl ?? "—"}</span>
+                      ) : item.akdAklDeclaration === "CUSTOMER_DECLARED_NONE" ? (
+                        <span className="text-slate-400">Customer menyatakan tidak ada</span>
+                      ) : (
+                        <span className="text-slate-400">Belum diberikan</span>
+                      )}
+                    </p>
                     {item.deviceType.category?.name ? (
-                      <p className="mt-0.5 text-xs text-slate-400">{item.deviceType.category.name}</p>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {item.deviceType.category.name}
+                      </p>
                     ) : null}
                     {item.notes ? (
                       <p className="mt-1 text-sm text-slate-600">{item.notes}</p>
@@ -322,11 +324,7 @@ export default function CalibrationRequestDetailPage() {
           ) : null}
 
           {canCancel && capabilities?.calibrationRequestCancel ? (
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => setShowCancelConfirm(true)}
-            >
+            <Button type="button" variant="destructive" onClick={() => setShowCancelConfirm(true)}>
               <X className="h-4 w-4" />
               Cancel Requisition
             </Button>
