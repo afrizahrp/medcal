@@ -186,6 +186,22 @@ enum CalibrationJobStatus {
   ACCEPTED_BY_QA
 }
 
+/// Per-CalibrationJob gate for the customer's AKD/AKL/NIE (Nomor Izin Edar)
+/// regulatory declaration. Decided per physical device/item by a
+/// TECHNICIAN_MANAGER, never per WorkOrder — a REJECTED job must not block
+/// sibling jobs in the same WorkOrder. Orthogonal to CalibrationJobStatus
+/// (which tracks execution progress, not this identity gate).
+enum AkdAklApprovalStatus {
+  /// AKD/AKL/NIE was declared (or is not applicable) — no manager decision needed.
+  NOT_REQUIRED
+  /// Technician escalated a missing/unacceptable declaration; awaiting TECHNICIAN_MANAGER.
+  PENDING_REVIEW
+  /// TECHNICIAN_MANAGER cleared this specific device to proceed with calibration.
+  APPROVED
+  /// TECHNICIAN_MANAGER refused; this job cannot proceed to calibration.
+  REJECTED
+}
+
 enum ReviewDecision {
   APPROVE
   REJECT
@@ -426,6 +442,7 @@ model User {
   uploadedFiles                 FileObject[]                 @relation("FileUploadedBy")
   equipmentCalibrationsCreated  EquipmentCalibrationRecord[] @relation("EquipmentCalibrationCreatedBy")
   equipmentCalibrationsAccepted EquipmentCalibrationRecord[] @relation("EquipmentCalibrationAcceptedBy")
+  calibrationJobsAkdAklApproved CalibrationJob[]             @relation("CalibrationJobAkdAklApprover")
 }
 
 // =============================================================================
@@ -1331,7 +1348,7 @@ model CalibrationRequest {
 }
 
 model CalibrationRequestItem {
-  id                 String   @id @default(cuid())
+  id                 String            @id @default(cuid())
   companyId          String
   requestId          String
   deviceTypeId       String
@@ -1353,7 +1370,7 @@ model CalibrationRequestItem {
   /// spreadsheet line and stores its Qty here (it is NOT split into N rows).
   /// Manual "+ Requisition" entry creates one row per device, so qty stays 1.
   /// A CHECK constraint enforces qty >= 1 (see migration).
-  qty                Int      @default(1)
+  qty                Int               @default(1)
   /// Customer-declared AKD/AKL/NIE (Nomor Izin Edar) for this device, verbatim
   /// and free-text. Intentionally NULLABLE — the customer often does not know it
   /// at Requisition stage. This is a declaration only, NOT technical
@@ -1364,11 +1381,12 @@ model CalibrationRequestItem {
   /// Provenance of `akdAkl` — see the AkdAklDeclaration enum.
   akdAklDeclaration  AkdAklDeclaration @default(NOT_PROVIDED)
   notes              String?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime          @default(now())
 
-  request        CalibrationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  deviceType     DeviceType         @relation(fields: [deviceTypeId], references: [id])
-  quotationItems QuotationItem[]
+  request         CalibrationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  deviceType      DeviceType         @relation(fields: [deviceTypeId], references: [id])
+  quotationItems  QuotationItem[]
+  calibrationJobs CalibrationJob[]
 
   @@index([requestId])
   @@index([deviceTypeId])
@@ -1733,20 +1751,80 @@ model EquipmentDeliveryNoteItem {
 // =============================================================================
 
 model CalibrationJob {
-  id                  String               @id @default(cuid())
-  companyId           String
-  workOrderId         String
-  purchaseOrderItemId String?
-  deviceId            String
-  status              CalibrationJobStatus @default(PENDING)
-  startedAt           DateTime?
-  submittedAt         DateTime?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id                       String  @id @default(cuid())
+  companyId                String
+  workOrderId              String
+  purchaseOrderItemId      String?
+  /// Physical Device master row, once a technician has verified identity on-site.
+  /// NULLABLE: identity is normally unknown until on-site verification, and the
+  /// WorkOrder proceeds to IN_PROGRESS regardless. A NULL deviceId is a normal
+  /// pending state, not an error. Postgres treats NULLs as distinct, so many
+  /// jobs with deviceId = NULL may coexist under one WorkOrder; the
+  /// @@unique([workOrderId, deviceId]) constraint only binds once deviceId is set.
+  deviceId                 String?
+  /// Trace back to the original customer requisition line this job fulfils, so
+  /// the customer's declaration (name / deviceId / akdAkl) stays reachable even
+  /// though it is not copied forward through the commercial chain. Optional-FK
+  /// pattern mirrors purchaseOrderItemId.
+  calibrationRequestItemId String?
+
+  // ── Unit fan-out ordinal ───────────────────────────────────────────────────
+  /// Position of this job within the set of N jobs fanned out from a single
+  /// WorkOrderItem (WorkOrderItem.qty = N). 1-based: the sole job of a qty-1
+  /// line carries unitOrdinal = 1. Lets the technician UI label "unit 2 of 3"
+  /// before any deviceId is matched, when sibling jobs are otherwise identical
+  /// (same purchaseOrderItemId, deviceId = NULL, same declared name). Assigned
+  /// by fan-out; never edited afterwards. No @default — fan-out must set it
+  /// explicitly so a missing assignment fails loudly (and trips
+  /// @@unique([workOrderId, purchaseOrderItemId, unitOrdinal])) rather than
+  /// silently collapsing every unit to 1.
+  unitOrdinal Int
+  /// Snapshot of N (WorkOrderItem.qty, coerced to Int) at fan-out time — the
+  /// denominator for "unit X of N". Frozen deliberately: if a sibling job is
+  /// later cancelled/deleted, the declared unit count this calibration belongs
+  /// to does not change.
+  unitTotal   Int
+
+  // ── Identity snapshot ──────────────────────────────────────────────────────
+  // Frozen ON the job, not read through Device, so later edits to the mutable
+  // Device master never rewrite what this calibration actually saw.
+  /// Device name as the customer originally described it (snapshot of
+  /// CalibrationRequestItem.customerDeviceName at job creation).
+  customerDeclaredDeviceName String?
+  /// AKD/AKL/NIE exactly as the customer declared it on the originating
+  /// CalibrationRequestItem, snapshot at job creation (mirrors
+  /// customerDeclaredDeviceName). NULLABLE: "customer did not declare one" is a
+  /// valid state, not missing data. Frozen here so later edits to the mutable
+  /// CalibrationRequestItem.akdAkl never rewrite what was on record when this
+  /// job's akdAklApprovalStatus (TECHNICIAN_MANAGER) gate was decided.
+  customerDeclaredAkdAkl     String?
+  /// Serial number the technician physically read off the device on-site.
+  technicianObservedSerial   String?
+  /// AKD/AKL/NIE the technician physically observed / confirmed on-site.
+  technicianObservedAkdAkl   String?
+
+  // ── AKD/AKL/NIE approval gate ──────────────────────────────────────────────
+  /// Manager decision state for this device's regulatory declaration.
+  akdAklApprovalStatus   AkdAklApprovalStatus @default(NOT_REQUIRED)
+  /// The TECHNICIAN_MANAGER who APPROVED/REJECTED. Set together with
+  /// akdAklApprovalStatus + akdAklApprovedAt. (Role is enforced in the service
+  /// layer, not by the schema.)
+  akdAklApprovedByUserId String?
+  akdAklApprovedAt       DateTime?
+  /// Manager's rationale, especially for REJECTED / conditional APPROVED.
+  akdAklDecisionNote     String?
+
+  status      CalibrationJobStatus @default(PENDING)
+  startedAt   DateTime?
+  submittedAt DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   workOrder              WorkOrder                   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   purchaseOrderItem      PurchaseOrderItem?          @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
-  device                 Device                      @relation(fields: [deviceId], references: [id])
+  device                 Device?                     @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  calibrationRequestItem CalibrationRequestItem?     @relation(fields: [calibrationRequestItemId], references: [id], onDelete: SetNull)
+  akdAklApprovedBy       User?                       @relation("CalibrationJobAkdAklApprover", fields: [akdAklApprovedByUserId], references: [id])
   results                MeasurementResult[]
   evidences              JobEvidence[]
   referenceEquipmentUsed JobReferenceEquipmentUsed[]
@@ -1755,8 +1833,12 @@ model CalibrationJob {
   certificate            Certificate?
 
   @@unique([workOrderId, deviceId])
+  @@unique([workOrderId, purchaseOrderItemId, unitOrdinal])
   @@index([companyId, status])
   @@index([purchaseOrderItemId])
+  @@index([calibrationRequestItemId])
+  @@index([companyId, akdAklApprovalStatus])
+  @@index([akdAklApprovedByUserId])
 }
 
 model MeasurementResult {

@@ -63,6 +63,9 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "ADMIN", resource: "workOrder", action: "update" },
   { role: "ADMIN", resource: "workOrder", action: "cancel" },
   { role: "ADMIN", resource: "workOrder", action: "assign" },
+  // CalibrationJob: operational read visibility only. The AKD/AKL identity
+  // approval verb (approveIdentity) is TECHNICIAN_MANAGER-only by decision.
+  { role: "ADMIN", resource: "calibrationJob", action: "read" },
   // System Settings (2026-08-26)
   { role: "ADMIN", resource: "tax", action: "manage" },
   // Price List / Tariff Master Data (2026-08-30 — Price List Phase 1)
@@ -134,10 +137,18 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   // TECHNICIAN
   { role: "TECHNICIAN", resource: "managementDashboard", action: "read" },
-  // TECHNICIAN_MANAGER (2026-09-02): role registered only. No approval workflow
-  // or calibration-execution grants yet — mirrors TECHNICIAN's baseline so an
-  // assigned user can reach the management dashboard.
+  // TECHNICIAN_MANAGER (2026-09-02): management dashboard + the AKD/AKL/NIE
+  // identity gate (see calibrationJob grants below).
   { role: "TECHNICIAN_MANAGER", resource: "managementDashboard", action: "read" },
+  // CalibrationJob AKD/AKL/NIE identity escalation & approval (2026-09-02).
+  // escalateIdentity: field actor raises a missing/unacceptable declaration.
+  // approveIdentity: TECHNICIAN_MANAGER is the sole approver — deliberately
+  // NOT granted to ADMIN/SUPERVISOR (SUPERADMIN keeps its hasPermission bypass).
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "read" },
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "escalateIdentity" },
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "read" },
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "escalateIdentity" },
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "approveIdentity" },
   // FINANCE
   { role: "FINANCE", resource: "managementDashboard", action: "read" },
   // CUSTOMER

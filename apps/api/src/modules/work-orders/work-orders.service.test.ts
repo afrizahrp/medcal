@@ -723,7 +723,7 @@ describe("WorkOrdersService status transitions", () => {
     expect(cancelled.status).toBe("CANCELLED");
   });
 
-  it("allows IN_PROGRESS → DONE without creating CalibrationJob", async () => {
+  it("fans out one CalibrationJob per unit when reaching IN_PROGRESS, then allows IN_PROGRESS → DONE", async () => {
     const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
     const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
     const technician = await createTechnician(realCompanyId);
@@ -731,9 +731,10 @@ describe("WorkOrdersService status transitions", () => {
       technicians: [{ technicianUserId: technician.id }],
     });
     await workOrdersService.start(realCompanyId, created.id);
+    // A single-quantity WorkOrderItem fans out to exactly one job.
+    expect(await prisma.calibrationJob.count({ where: { workOrderId: created.id } })).toBe(1);
     const done = await workOrdersService.done(realCompanyId, created.id);
     expect(done.status).toBe("DONE");
-    expect(await prisma.calibrationJob.count({ where: { workOrderId: created.id } })).toBe(0);
   });
 
   it("allows IN_PROGRESS → CANCELLED", async () => {
@@ -916,6 +917,92 @@ describe("WorkOrdersService status transitions", () => {
         expect.objectContaining({ code: "INVALID_WORK_ORDER_ASSIGNEE" }),
       );
     }
+  });
+});
+
+describe("WorkOrdersService CalibrationJob fan-out on start()", () => {
+  async function assignedWorkOrderReadyToStart() {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
+    const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    const technician = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, created.id, {
+      technicians: [{ technicianUserId: technician.id }],
+    });
+    return created;
+  }
+
+  it("creates qty-many jobs with correct unitOrdinal/unitTotal, null deviceId, and requestItem linkage", async () => {
+    const created = await assignedWorkOrderReadyToStart();
+    const item = created.items[0]!;
+    const requestItemId = item.purchaseOrderItem.quotationItem.requestItem!.id;
+
+    // Fan-out cardinality comes from WorkOrderItem.qty.
+    await prisma.workOrderItem.update({
+      where: { id: item.id },
+      data: { qty: new Prisma.Decimal(3) },
+    });
+    // Customer declaration is snapshot onto each job at fan-out time.
+    await prisma.calibrationRequestItem.update({
+      where: { id: requestItemId },
+      data: { customerDeviceName: "Infusion Pump A", akdAkl: "AKL 12345678901" },
+    });
+
+    await workOrdersService.start(realCompanyId, created.id);
+
+    const jobs = await prisma.calibrationJob.findMany({
+      where: { workOrderId: created.id },
+      orderBy: { unitOrdinal: "asc" },
+    });
+    expect(jobs).toHaveLength(3);
+    expect(jobs.map((job) => job.unitOrdinal)).toEqual([1, 2, 3]);
+    for (const job of jobs) {
+      expect(job.unitTotal).toBe(3);
+      expect(job.deviceId).toBeNull();
+      expect(job.purchaseOrderItemId).toBe(item.purchaseOrderItemId);
+      expect(job.calibrationRequestItemId).toBe(requestItemId);
+      expect(job.customerDeclaredDeviceName).toBe("Infusion Pump A");
+      expect(job.customerDeclaredAkdAkl).toBe("AKL 12345678901");
+      expect(job.status).toBe("PENDING");
+      expect(job.akdAklApprovalStatus).toBe("NOT_REQUIRED");
+    }
+  });
+
+  it("idempotency guard: fanOutCalibrationJobs is a no-op when jobs already exist", async () => {
+    const created = await assignedWorkOrderReadyToStart();
+    await workOrdersService.start(realCompanyId, created.id);
+    const first = await prisma.calibrationJob.findMany({ where: { workOrderId: created.id } });
+    expect(first).toHaveLength(1);
+
+    // A true "call start() twice" is blocked by the transition table
+    // (IN_PROGRESS → IN_PROGRESS is rejected), so exercise the guard directly.
+    await (workOrdersService as unknown as {
+      fanOutCalibrationJobs: (tx: typeof prisma, wo: unknown) => Promise<void>;
+    }).fanOutCalibrationJobs(prisma, await workOrdersService.findOne(realCompanyId, created.id));
+
+    const second = await prisma.calibrationJob.findMany({ where: { workOrderId: created.id } });
+    expect(second.map((job) => job.id).sort()).toEqual(first.map((job) => job.id).sort());
+  });
+
+  it("rejects a fractional WorkOrderItem.qty rather than flooring it", async () => {
+    const created = await assignedWorkOrderReadyToStart();
+    await prisma.workOrderItem.update({
+      where: { id: created.items[0]!.id },
+      data: { qty: new Prisma.Decimal("2.5") },
+    });
+
+    try {
+      await workOrdersService.start(realCompanyId, created.id);
+      expect.fail("expected WORK_ORDER_ITEM_QTY_NOT_FANOUT_SAFE");
+    } catch (err) {
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: "WORK_ORDER_ITEM_QTY_NOT_FANOUT_SAFE" }),
+      );
+    }
+    expect(await prisma.calibrationJob.count({ where: { workOrderId: created.id } })).toBe(0);
+    // The status update rolled back with the failed fan-out.
+    const wo = await workOrdersService.findOne(realCompanyId, created.id);
+    expect(wo.status).toBe("ASSIGNED");
   });
 });
 

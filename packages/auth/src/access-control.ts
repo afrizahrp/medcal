@@ -99,7 +99,18 @@ const ac = createAccessControl({
   quotation: ["read", "create", "update", "cancel", "approve"],
   purchaseOrder: ["read", "create", "update", "cancel", "approve"],
   workOrder: ["read", "create", "update", "cancel", "assign"],
-  calibrationJob: ["read", "create", "update", "complete"],
+  // escalateIdentity: technician (or their manager) moves a job into
+  //   PENDING_REVIEW when the customer's AKD/AKL/NIE is missing/unacceptable.
+  // approveIdentity: TECHNICIAN_MANAGER's per-job APPROVE/REJECT decision on
+  //   that regulatory declaration (sole approver — not granted to ADMIN).
+  calibrationJob: [
+    "read",
+    "create",
+    "update",
+    "complete",
+    "escalateIdentity",
+    "approveIdentity",
+  ],
   certificate: ["read", "create", "update", "issue"],
   invoice: ["read", "create", "update", "void"],
   payment: ["read", "create", "update", "reconcile"],

@@ -621,6 +621,52 @@ export const workOrderAssignSchema = z.object({
 export type WorkOrderAssignInput = z.infer<typeof workOrderAssignSchema>;
 
 // =============================================================================
+// Calibration Job — AKD/AKL/NIE identity gate
+// =============================================================================
+// Per-CalibrationJob (per physical device) regulatory-declaration gate. A
+// technician escalates a job whose AKD/AKL/NIE is missing/unacceptable; a
+// TECHNICIAN_MANAGER then APPROVEs or REJECTs that specific device. Decided
+// per job so one blocked device never blocks its WorkOrder siblings.
+
+/** POST /calibration-jobs/:id/escalate-identity body */
+export const calibrationJobEscalateIdentitySchema = z.object({
+  // What the technician physically read off the device (may be blank — "I
+  // looked and there is nothing"). Persisted to
+  // CalibrationJob.technicianObservedAkdAkl.
+  technicianObservedAkdAkl: z.string().trim().max(120).nullable().optional(),
+  // Free-text escalation context. v1 limitation: stored in
+  // CalibrationJob.akdAklDecisionNote and overwritten by the manager's
+  // decision note (no dedicated escalation-note column yet).
+  reason: z.string().trim().max(2000).optional(),
+});
+
+export type CalibrationJobEscalateIdentityInput = z.infer<
+  typeof calibrationJobEscalateIdentitySchema
+>;
+
+const akdAklDecisionValues = ["APPROVE", "REJECT"] as const;
+
+/** POST /calibration-jobs/:id/identity-decision body (TECHNICIAN_MANAGER only) */
+export const calibrationJobIdentityDecisionSchema = z
+  .object({
+    decision: z.enum(akdAklDecisionValues),
+    akdAklDecisionNote: z.string().trim().max(2000).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.decision === "REJECT" && !val.akdAklDecisionNote) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["akdAklDecisionNote"],
+        message: "A decision note is required when rejecting",
+      });
+    }
+  });
+
+export type CalibrationJobIdentityDecisionInput = z.infer<
+  typeof calibrationJobIdentityDecisionSchema
+>;
+
+// =============================================================================
 // UOM (Unit of Measurement) Master Data
 // =============================================================================
 

@@ -500,11 +500,93 @@ export class WorkOrdersService {
       }
     }
 
-    return prisma.workOrder.update({
-      where: { id },
-      data: { status: "IN_PROGRESS" },
-      include: workOrderInclude,
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.workOrder.update({
+          where: { id },
+          data: { status: "IN_PROGRESS" },
+        });
+        await this.fanOutCalibrationJobs(tx, existing);
+        return tx.workOrder.findFirstOrThrow({
+          where: { id, companyId },
+          include: workOrderInclude,
+        });
+      });
+    } catch (error) {
+      // Backstop for a genuine concurrent double-start race: the unique
+      // constraint @@unique([workOrderId, purchaseOrderItemId, unitOrdinal])
+      // trips with P2002 and Postgres aborts the whole transaction (so the
+      // status update rolled back too). The other transaction has already
+      // fanned out the jobs — just apply the status update and return.
+      if (isUniqueConstraintError(error)) {
+        await prisma.workOrder.update({
+          where: { id },
+          data: { status: "IN_PROGRESS" },
+        });
+        return this.findOne(companyId, id);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Coerce a WorkOrderItem.qty (Decimal(18,4)) to the positive integer unit
+   * count used for CalibrationJob fan-out. Fails loudly on a fractional or
+   * non-positive qty rather than flooring/rounding — a "3.5 units" line is a
+   * data error the planner must fix, not something fan-out should paper over.
+   */
+  private coerceFanOutQty(qty: Prisma.Decimal, workOrderItemId: string): number {
+    if (!qty.isInteger() || qty.lessThanOrEqualTo(0)) {
+      throw new BadRequestException({
+        message: `WorkOrderItem qty must be a positive whole number to fan out calibration jobs (got ${qty.toString()})`,
+        code: "WORK_ORDER_ITEM_QTY_NOT_FANOUT_SAFE",
+        workOrderItemId,
+        qty: qty.toString(),
+      });
+    }
+    return qty.toNumber();
+  }
+
+  /**
+   * Fan out CalibrationJob rows for every WorkOrderItem on a WorkOrder that is
+   * entering IN_PROGRESS: qty jobs per item, unitOrdinal 1..qty. Idempotent —
+   * if any job already exists for this WorkOrder it does nothing. Runs inside
+   * the caller's transaction.
+   */
+  private async fanOutCalibrationJobs(
+    tx: Prisma.TransactionClient,
+    workOrder: WorkOrderWithItems,
+  ): Promise<void> {
+    const alreadyFannedOut = await tx.calibrationJob.count({
+      where: { workOrderId: workOrder.id },
     });
+    if (alreadyFannedOut > 0) return;
+
+    const rows: Prisma.CalibrationJobCreateManyInput[] = [];
+    for (const item of workOrder.items) {
+      const unitTotal = this.coerceFanOutQty(item.qty, item.id);
+      const requestItem = item.purchaseOrderItem.quotationItem.requestItem ?? null;
+      for (let unitOrdinal = 1; unitOrdinal <= unitTotal; unitOrdinal++) {
+        rows.push({
+          companyId: workOrder.companyId,
+          workOrderId: workOrder.id,
+          purchaseOrderItemId: item.purchaseOrderItemId,
+          deviceId: null,
+          calibrationRequestItemId: requestItem?.id ?? null,
+          customerDeclaredDeviceName: requestItem?.customerDeviceName ?? null,
+          customerDeclaredAkdAkl: requestItem?.akdAkl ?? null,
+          unitOrdinal,
+          unitTotal,
+          // status -> PENDING (schema default)
+          // akdAklApprovalStatus -> NOT_REQUIRED (schema default); whether a null
+          // customerDeclaredAkdAkl should instead force PENDING_REVIEW here is a
+          // decision deferred to the AKD/AKL escalation task.
+        });
+      }
+    }
+    if (rows.length > 0) {
+      await tx.calibrationJob.createMany({ data: rows });
+    }
   }
 
   // ---------------------------------------------------------------------------

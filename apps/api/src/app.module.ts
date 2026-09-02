@@ -17,6 +17,7 @@ import { CalibrationRequestsModule } from "./modules/calibration-requests/calibr
 import { QuotationsModule } from "./modules/quotations/quotations.module";
 import { PurchaseOrdersModule } from "./modules/purchase-orders/purchase-orders.module";
 import { WorkOrdersModule } from "./modules/work-orders/work-orders.module";
+import { CalibrationJobsModule } from "./modules/calibration-jobs/calibration-jobs.module";
 import { UomsModule } from "./modules/uoms/uoms.module";
 import { DeviceCategoriesModule } from "./modules/device-categories/device-categories.module";
 import { DeviceTypesModule } from "./modules/device-types/device-types.module";
@@ -41,6 +42,7 @@ import { PriceListItemsModule } from "./modules/price-list-items/price-list-item
     QuotationsModule,
     PurchaseOrdersModule,
     WorkOrdersModule,
+    CalibrationJobsModule,
     UomsModule,
     DeviceCategoriesModule,
     DeviceTypesModule,
