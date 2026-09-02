@@ -1,15 +1,49 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma, prisma } from "@medcal/db";
 import type { AkdAklApprovalStatus } from "@medcal/db";
-import type {
-  CalibrationJobEscalateIdentityInput,
-  CalibrationJobIdentityDecisionInput,
+import {
+  CALIBRATION_JOB_SORTABLE_FIELDS,
+  type CalibrationJobAssignDeviceInput,
+  type CalibrationJobEscalateIdentityInput,
+  type CalibrationJobIdentityDecisionInput,
+  type CalibrationJobListQuery,
+  type CalibrationJobRegisterDeviceInput,
 } from "@medcal/shared";
+import { resolveSortOrder } from "../../common/sort-query";
+import { DevicesService, type DeviceWithRelations } from "../devices/devices.service";
 
 const calibrationJobInclude = {
-  workOrder: { select: { id: true, number: true, status: true } },
+  workOrder: { select: { id: true, number: true, status: true, customerId: true } },
+  device: {
+    select: { id: true, code: true, serialNumber: true, deviceTypeId: true, customerId: true },
+  },
   calibrationRequestItem: {
-    select: { id: true, customerDeviceName: true, akdAkl: true },
+    select: {
+      id: true,
+      customerDeviceName: true,
+      akdAkl: true,
+      deviceTypeId: true,
+      deviceType: { select: { id: true, code: true, name: true } },
+    },
+  },
+  purchaseOrderItem: {
+    select: {
+      quotationItem: {
+        select: {
+          requestItem: {
+            select: {
+              deviceTypeId: true,
+              deviceType: { select: { id: true, code: true, name: true } },
+            },
+          },
+        },
+      },
+    },
   },
   akdAklApprovedBy: { select: { id: true, name: true } },
 } as const;
@@ -49,8 +83,77 @@ function assertAkdAklTransition(from: AkdAklApprovalStatus, to: AkdAklApprovalSt
   }
 }
 
+export interface CalibrationJobListResult {
+  data: CalibrationJobDetail[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+const DEFAULT_PAGE_SIZE = 20;
+
+export interface CalibrationJobDeviceAssignmentResult {
+  job: CalibrationJobDetail;
+  /**
+   * True when the assigned device's deviceTypeId was checked against the job's
+   * resolved DeviceType. False only when the job's DeviceType could not be
+   * resolved (no calibrationRequestItem and no walkable PO chain) — the device
+   * is still assigned, just not validated.
+   */
+  deviceTypeValidated: boolean;
+}
+
 @Injectable()
 export class CalibrationJobsService {
+  private readonly devices = new DevicesService();
+
+  /** Portal management list. Company-scoped; filters mirror the WorkOrder list. */
+  async findAll(
+    companyId: string,
+    query: CalibrationJobListQuery,
+  ): Promise<CalibrationJobListResult> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
+
+    const where: Prisma.CalibrationJobWhereInput = {
+      companyId,
+      ...(query.workOrderId ? { workOrderId: query.workOrderId } : {}),
+      ...(query.akdAklApprovalStatus ? { akdAklApprovalStatus: query.akdAklApprovalStatus } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { customerDeclaredDeviceName: { contains: query.search, mode: "insensitive" } },
+              { technicianObservedSerial: { contains: query.search, mode: "insensitive" } },
+              { workOrder: { number: { contains: query.search, mode: "insensitive" } } },
+              { device: { serialNumber: { contains: query.search, mode: "insensitive" } } },
+            ],
+          }
+        : {}),
+    };
+
+    const { field: sortField, dir: sortDir } = resolveSortOrder(
+      CALIBRATION_JOB_SORTABLE_FIELDS,
+      query.sortBy,
+      query.sortDir,
+      "createdAt",
+    );
+
+    const [total, data] = await Promise.all([
+      prisma.calibrationJob.count({ where }),
+      prisma.calibrationJob.findMany({
+        where,
+        orderBy: { [sortField]: sortDir },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: calibrationJobInclude,
+      }),
+    ]);
+
+    return { data, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+  }
+
   async findOne(companyId: string, id: string): Promise<CalibrationJobDetail> {
     const job = await prisma.calibrationJob.findFirst({
       where: { id, companyId },
@@ -121,6 +224,178 @@ export class CalibrationJobsService {
     });
 
     return this.findOne(companyId, id);
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Physical device assignment
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * The DeviceType this job's device is expected to be, resolved from the
+   * commercial chain. Prefers the direct link (calibrationRequestItem), falls
+   * back to the PO-item walk, and returns null when neither resolves.
+   */
+  private resolveJobDeviceTypeId(job: CalibrationJobDetail): string | null {
+    return (
+      job.calibrationRequestItem?.deviceTypeId ??
+      job.purchaseOrderItem?.quotationItem?.requestItem?.deviceTypeId ??
+      null
+    );
+  }
+
+  private assertDeviceAssignable(job: CalibrationJobDetail): void {
+    this.assertIdentityGateOpen(job.status);
+    if (job.deviceId !== null) {
+      throw new ConflictException({
+        message:
+          "This calibration job already has a device assigned. Re-assignment is handled by the identity correction workflow.",
+        code: "CALIBRATION_JOB_DEVICE_ALREADY_ASSIGNED",
+        deviceId: job.deviceId,
+      });
+    }
+  }
+
+  /** Bind an existing Device master row to the job. */
+  async assignDevice(
+    companyId: string,
+    id: string,
+    input: CalibrationJobAssignDeviceInput,
+  ): Promise<CalibrationJobDeviceAssignmentResult> {
+    const job = await this.findOne(companyId, id);
+    this.assertDeviceAssignable(job);
+
+    const device = await prisma.device.findFirst({
+      where: { id: input.deviceId, companyId },
+      select: { id: true, customerId: true, deviceTypeId: true },
+    });
+    if (!device) {
+      throw new BadRequestException({
+        message: "Device not found",
+        code: "DEVICE_NOT_FOUND",
+      });
+    }
+
+    if (device.customerId !== job.workOrder.customerId) {
+      throw new BadRequestException({
+        message: "Device belongs to a different customer than this work order",
+        code: "DEVICE_CUSTOMER_MISMATCH",
+      });
+    }
+
+    const resolvedDeviceTypeId = this.resolveJobDeviceTypeId(job);
+    const deviceTypeValidated = resolvedDeviceTypeId !== null;
+    if (deviceTypeValidated && device.deviceTypeId !== resolvedDeviceTypeId) {
+      throw new BadRequestException({
+        message: "Device type does not match the calibration job's device type",
+        code: "DEVICE_TYPE_MISMATCH",
+        expected: resolvedDeviceTypeId,
+        actual: device.deviceTypeId,
+      });
+    }
+
+    await this.bindDevice(id, device.id);
+    return { job: await this.findOne(companyId, id), deviceTypeValidated };
+  }
+
+  /**
+   * Register a brand-new Device for the job's customer + resolved DeviceType and
+   * assign it, atomically. customerId and deviceTypeId are derived from the job,
+   * never taken from the caller.
+   */
+  async registerDevice(
+    companyId: string,
+    id: string,
+    input: CalibrationJobRegisterDeviceInput,
+  ): Promise<CalibrationJobDeviceAssignmentResult> {
+    const job = await this.findOne(companyId, id);
+    this.assertDeviceAssignable(job);
+
+    const deviceTypeId = this.resolveJobDeviceTypeId(job);
+    if (deviceTypeId === null) {
+      throw new BadRequestException({
+        message:
+          "Cannot register a device for this job: its device type could not be resolved from the requisition or purchase order. Match an existing device instead.",
+        code: "CALIBRATION_JOB_DEVICE_TYPE_UNRESOLVED",
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Re-check inside the transaction: a concurrent assignment may have landed
+      // between findOne and here.
+      const fresh = await tx.calibrationJob.findUniqueOrThrow({
+        where: { id },
+        select: { deviceId: true },
+      });
+      if (fresh.deviceId !== null) {
+        throw new ConflictException({
+          message: "This calibration job already has a device assigned.",
+          code: "CALIBRATION_JOB_DEVICE_ALREADY_ASSIGNED",
+          deviceId: fresh.deviceId,
+        });
+      }
+
+      const device = await this.devices.create(
+        companyId,
+        {
+          customerId: job.workOrder.customerId,
+          deviceTypeId,
+          brand: input.brand,
+          model: input.model,
+          // Prefill the serial from what the technician already recorded on the
+          // job, unless the caller supplied one explicitly.
+          serialNumber: input.serialNumber ?? job.technicianObservedSerial ?? undefined,
+          category: input.category,
+          locationText: input.locationText,
+          status: input.status,
+        },
+        tx,
+      );
+
+      await tx.calibrationJob.update({
+        where: { id },
+        data: { deviceId: device.id },
+      });
+    });
+
+    return { job: await this.findOne(companyId, id), deviceTypeValidated: true };
+  }
+
+  private async bindDevice(jobId: string, deviceId: string): Promise<void> {
+    try {
+      await prisma.calibrationJob.update({
+        where: { id: jobId },
+        data: { deviceId },
+      });
+    } catch (error) {
+      // @@unique([workOrderId, deviceId]) — the same physical device is already
+      // matched to another job on this work order.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException({
+          message: "This device is already assigned to another job on the same work order",
+          code: "DEVICE_ALREADY_ASSIGNED_ON_WORK_ORDER",
+        });
+      }
+      throw error;
+    }
+  }
+
+  /** Existing devices this job could be matched to — scoped to the job's customer
+   * and (when resolvable) DeviceType. Reuses the generic device search. */
+  async findDeviceCandidates(
+    companyId: string,
+    id: string,
+    search: string | undefined,
+  ): Promise<DeviceWithRelations[]> {
+    const job = await this.findOne(companyId, id);
+    const deviceTypeId = this.resolveJobDeviceTypeId(job);
+    const result = await this.devices.findAll(companyId, {
+      ...(search ? { search } : {}),
+      customerId: job.workOrder.customerId,
+      ...(deviceTypeId ? { deviceTypeId } : {}),
+      status: "ACTIVE",
+      pageSize: 20,
+    });
+    return result.data;
   }
 
   private assertIdentityGateOpen(jobStatus: string): void {

@@ -144,11 +144,15 @@ const PRESERVED_BASELINE: GrantRow[] = [
   // escalateIdentity: field actor raises a missing/unacceptable declaration.
   // approveIdentity: TECHNICIAN_MANAGER is the sole approver — deliberately
   // NOT granted to ADMIN/SUPERVISOR (SUPERADMIN keeps its hasPermission bypass).
+  // assignDevice: on-site device identification (match existing / register new).
+  // TECHNICIAN + TECHNICIAN_MANAGER only — mirrors the escalateIdentity grant.
   { role: "TECHNICIAN", resource: "calibrationJob", action: "read" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "escalateIdentity" },
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "assignDevice" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "read" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "escalateIdentity" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "approveIdentity" },
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "assignDevice" },
   // FINANCE
   { role: "FINANCE", resource: "managementDashboard", action: "read" },
   // CUSTOMER

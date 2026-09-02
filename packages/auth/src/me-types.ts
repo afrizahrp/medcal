@@ -81,6 +81,10 @@ export type MeCapabilities = {
   workOrderUpdate: boolean;
   workOrderCancel: boolean;
   workOrderAssign: boolean;
+  calibrationJobRead: boolean;
+  calibrationJobEscalateIdentity: boolean;
+  calibrationJobApproveIdentity: boolean;
+  calibrationJobAssignDevice: boolean;
   taxManage: boolean;
   priceListItemRead: boolean;
   priceListItemCreate: boolean;

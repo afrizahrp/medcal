@@ -88,7 +88,11 @@ export class MeController {
       deviceCapabilityItemCreate: hasPermission(membership.role, "deviceCapabilityItem", "create"),
       deviceCapabilityItemUpdate: hasPermission(membership.role, "deviceCapabilityItem", "update"),
       deviceCapabilityItemDelete: hasPermission(membership.role, "deviceCapabilityItem", "delete"),
-      deviceCalibrationParameterRead: hasPermission(membership.role, "deviceCalibrationParameter", "read"),
+      deviceCalibrationParameterRead: hasPermission(
+        membership.role,
+        "deviceCalibrationParameter",
+        "read",
+      ),
       deviceCalibrationParameterCreate: hasPermission(
         membership.role,
         "deviceCalibrationParameter",
@@ -159,6 +163,18 @@ export class MeController {
       workOrderUpdate: hasPermission(membership.role, "workOrder", "update"),
       workOrderCancel: hasPermission(membership.role, "workOrder", "cancel"),
       workOrderAssign: hasPermission(membership.role, "workOrder", "assign"),
+      calibrationJobRead: hasPermission(membership.role, "calibrationJob", "read"),
+      calibrationJobEscalateIdentity: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "escalateIdentity",
+      ),
+      calibrationJobApproveIdentity: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "approveIdentity",
+      ),
+      calibrationJobAssignDevice: hasPermission(membership.role, "calibrationJob", "assignDevice"),
       taxManage: hasPermission(membership.role, "tax", "manage"),
       priceListItemRead: hasPermission(membership.role, "priceListItem", "read"),
       priceListItemCreate: hasPermission(membership.role, "priceListItem", "create"),

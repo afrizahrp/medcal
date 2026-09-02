@@ -64,15 +64,26 @@ export class DevicesService {
     }
   }
 
-  async create(companyId: string, input: DeviceCreateInput): Promise<DeviceWithRelations> {
+  /**
+   * Create a physical Device. `code` is a system-issued, immutable business
+   * identifier (DVC-000001), allocated in the same transaction as the insert so
+   * both commit together.
+   *
+   * Pass `tx` to enlist in a caller's transaction (e.g. CalibrationJob
+   * register-and-assign, which must atomically create the device and bind it to
+   * the job). When omitted, a local transaction is opened.
+   */
+  async create(
+    companyId: string,
+    input: DeviceCreateInput,
+    tx?: Prisma.TransactionClient,
+  ): Promise<DeviceWithRelations> {
     await this.assertDeviceTypeExists(input.deviceTypeId);
     await this.assertCustomerInCompany(companyId, input.customerId);
 
-    // `code` is a system-issued, immutable business identifier (DVC-000001),
-    // allocated in the same transaction as the insert so both commit together.
-    return prisma.$transaction(async (tx) => {
-      const code = await MasterCodeService.allocate({ entity: "DEVICE", companyId, tx });
-      return tx.device.create({
+    const run = async (client: Prisma.TransactionClient): Promise<DeviceWithRelations> => {
+      const code = await MasterCodeService.allocate({ entity: "DEVICE", companyId, tx: client });
+      return client.device.create({
         data: {
           companyId,
           code,
@@ -87,7 +98,9 @@ export class DevicesService {
         },
         include: deviceInclude,
       });
-    });
+    };
+
+    return tx ? run(tx) : prisma.$transaction(run);
   }
 
   async findAll(companyId: string, query: DeviceListQuery): Promise<DeviceListResult> {

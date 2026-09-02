@@ -666,6 +666,76 @@ export type CalibrationJobIdentityDecisionInput = z.infer<
   typeof calibrationJobIdentityDecisionSchema
 >;
 
+// -----------------------------------------------------------------------------
+// Calibration Job — physical device assignment
+// -----------------------------------------------------------------------------
+// Once a technician has physically identified the device on-site, the job's
+// (until now NULL) deviceId is bound — either to an existing Device master row
+// or to one registered on the spot. One RBAC action (calibrationJob:assignDevice)
+// covers both. Re-assignment once set is disallowed here (deferred to the
+// Identity Correction workflow).
+
+/** POST /calibration-jobs/:id/assign-device body */
+export const calibrationJobAssignDeviceSchema = z.object({
+  deviceId: z.string().min(1),
+});
+
+export type CalibrationJobAssignDeviceInput = z.infer<typeof calibrationJobAssignDeviceSchema>;
+
+/**
+ * POST /calibration-jobs/:id/register-device body. Field bounds mirror
+ * deviceCreateSchema so the two stay in lockstep. `customerId` and
+ * `deviceTypeId` are NOT accepted here — both are derived server-side from the
+ * job (customer from the WorkOrder, device type from the originating
+ * CalibrationRequestItem).
+ */
+export const calibrationJobRegisterDeviceSchema = z.object({
+  brand: z.string().trim().max(150).optional(),
+  model: z.string().trim().max(150).optional(),
+  serialNumber: z.string().trim().max(100).optional(),
+  category: z.string().trim().max(150).optional(),
+  locationText: z.string().trim().max(200).optional(),
+  status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+});
+
+export type CalibrationJobRegisterDeviceInput = z.infer<typeof calibrationJobRegisterDeviceSchema>;
+
+// -----------------------------------------------------------------------------
+// Calibration Job — Portal management list
+// -----------------------------------------------------------------------------
+
+export const CALIBRATION_JOB_STATUS_VALUES = [
+  "PENDING",
+  "IN_PROGRESS",
+  "SUBMITTED",
+  "REWORK",
+  "ACCEPTED_BY_QA",
+] as const;
+
+export const AKD_AKL_APPROVAL_STATUS_VALUES = [
+  "NOT_REQUIRED",
+  "PENDING_REVIEW",
+  "APPROVED",
+  "REJECTED",
+] as const;
+
+/** GET /calibration-jobs query params */
+export const calibrationJobListQuerySchema = baseListQuerySchema.extend({
+  workOrderId: z.string().optional(),
+  akdAklApprovalStatus: z.enum(AKD_AKL_APPROVAL_STATUS_VALUES).optional(),
+  status: z.enum(CALIBRATION_JOB_STATUS_VALUES).optional(),
+});
+
+export type CalibrationJobListQuery = z.infer<typeof calibrationJobListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /calibration-jobs — see resolveSortOrder. */
+export const CALIBRATION_JOB_SORTABLE_FIELDS = [
+  "createdAt",
+  "unitOrdinal",
+  "akdAklApprovalStatus",
+  "status",
+] as const;
+
 // =============================================================================
 // UOM (Unit of Measurement) Master Data
 // =============================================================================

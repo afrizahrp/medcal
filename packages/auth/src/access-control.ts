@@ -103,6 +103,9 @@ const ac = createAccessControl({
   //   PENDING_REVIEW when the customer's AKD/AKL/NIE is missing/unacceptable.
   // approveIdentity: TECHNICIAN_MANAGER's per-job APPROVE/REJECT decision on
   //   that regulatory declaration (sole approver — not granted to ADMIN).
+  // assignDevice: on-site actor binds the job's physical Device — matching an
+  //   existing master row or registering a new one (both go through this one
+  //   action; device registration is plain data entry, not a regulated step).
   calibrationJob: [
     "read",
     "create",
@@ -110,6 +113,7 @@ const ac = createAccessControl({
     "complete",
     "escalateIdentity",
     "approveIdentity",
+    "assignDevice",
   ],
   certificate: ["read", "create", "update", "issue"],
   invoice: ["read", "create", "update", "void"],

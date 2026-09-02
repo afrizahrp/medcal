@@ -83,6 +83,10 @@ const ME_A = {
     workOrderUpdate: true,
     workOrderCancel: true,
     workOrderAssign: true,
+    calibrationJobRead: true,
+    calibrationJobEscalateIdentity: true,
+    calibrationJobApproveIdentity: true,
+    calibrationJobAssignDevice: true,
     taxManage: true,
   },
 };
@@ -150,6 +154,10 @@ const ME_B = {
     workOrderUpdate: false,
     workOrderCancel: false,
     workOrderAssign: false,
+    calibrationJobRead: false,
+    calibrationJobEscalateIdentity: false,
+    calibrationJobApproveIdentity: false,
+    calibrationJobAssignDevice: false,
     taxManage: false,
   },
 };
