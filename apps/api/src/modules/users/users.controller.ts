@@ -22,6 +22,8 @@ const userListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
   pageSize: z.coerce.number().int().min(1).max(100).optional(),
   search: z.string().optional(),
+  sortBy: z.string().optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).optional(),
   role: z
     .enum([

@@ -7,7 +7,7 @@ import {
   type CalibrationRequestListQuery,
   type CalibrationRequestUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -160,7 +160,7 @@ export class CalibrationRequestsService {
       prisma.calibrationRequest.count({ where }),
       prisma.calibrationRequest.findMany({
         where,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: calibrationRequestInclude,

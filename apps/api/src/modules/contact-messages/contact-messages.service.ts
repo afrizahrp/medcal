@@ -1,4 +1,11 @@
-import { BadRequestException, Inject, Injectable, InternalServerErrorException, NotFoundException, Optional } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  Optional,
+} from "@nestjs/common";
 import { prisma } from "@medcal/db";
 import type { ContactMessage, ContactStatus, ContactTopic, Prisma } from "@medcal/db";
 import { push } from "@medcal/notifications";
@@ -10,7 +17,7 @@ import {
 } from "@medcal/shared";
 import { CONTACT_MESSAGE_SORTABLE_FIELDS } from "@medcal/shared";
 import type { ContactMessageLeadResolution, ContactMessageListQuery } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { classifyLeadMatch, findLeadMatchCandidates } from "../leads/lead-matching";
 import type { Db } from "../leads/lead-matching";
 import { NotificationDispatchService } from "../push-tokens/notification-dispatch.service";
@@ -103,10 +110,7 @@ export class ContactMessagesService {
     }
 
     const domain = emailDomain(input.email);
-    let matchStatus:
-      | "NONE"
-      | "EXACT_EMAIL"
-      | "DOMAIN_CANDIDATE" = "NONE";
+    let matchStatus: "NONE" | "EXACT_EMAIL" | "DOMAIN_CANDIDATE" = "NONE";
     let matchedCustomerId: string | undefined;
 
     const exact = await tx.customerContact.findFirst({
@@ -253,7 +257,10 @@ export class ContactMessagesService {
   ): Promise<ContactMessage> {
     const message = await prisma.contactMessage.findFirst({ where: { id: messageId, companyId } });
     if (!message) {
-      throw new NotFoundException({ message: "Contact message not found", code: "CONTACT_MESSAGE_NOT_FOUND" });
+      throw new NotFoundException({
+        message: "Contact message not found",
+        code: "CONTACT_MESSAGE_NOT_FOUND",
+      });
     }
     if (message.leadId !== null) {
       throw new BadRequestException({
@@ -266,7 +273,9 @@ export class ContactMessagesService {
     let createdLeadIdOnFailure: string | undefined;
 
     if (resolution.action === "ATTACH") {
-      const targetLead = await prisma.lead.findFirst({ where: { id: resolution.leadId, companyId } });
+      const targetLead = await prisma.lead.findFirst({
+        where: { id: resolution.leadId, companyId },
+      });
       if (!targetLead) {
         throw new BadRequestException({ message: "Target lead not found", code: "LEAD_NOT_FOUND" });
       }
@@ -304,7 +313,10 @@ export class ContactMessagesService {
     return prisma.contactMessage.findUniqueOrThrow({ where: { id: messageId } });
   }
 
-  async findAll(companyId: string, query: ContactMessageListQuery = {}): Promise<ContactMessageListResult> {
+  async findAll(
+    companyId: string,
+    query: ContactMessageListQuery = {},
+  ): Promise<ContactMessageListResult> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
 
@@ -336,7 +348,7 @@ export class ContactMessagesService {
       prisma.contactMessage.count({ where }),
       prisma.contactMessage.findMany({
         where,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
@@ -357,10 +369,17 @@ export class ContactMessagesService {
     });
   }
 
-  async updateStatus(companyId: string, id: string, status: ContactStatus): Promise<ContactMessage> {
+  async updateStatus(
+    companyId: string,
+    id: string,
+    status: ContactStatus,
+  ): Promise<ContactMessage> {
     const message = await prisma.contactMessage.findFirst({ where: { id, companyId } });
     if (!message) {
-      throw new NotFoundException({ message: "Contact message not found", code: "CONTACT_MESSAGE_NOT_FOUND" });
+      throw new NotFoundException({
+        message: "Contact message not found",
+        code: "CONTACT_MESSAGE_NOT_FOUND",
+      });
     }
     // Guard mirrors ChatSessionsService.markRead's PENDING->READ transition
     // (E2E leads statistics sync audit, 2026-08-25) — READ is only ever

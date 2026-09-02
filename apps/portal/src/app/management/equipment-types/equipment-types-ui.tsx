@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,14 +76,20 @@ export function EquipmentTypeFilters({
   );
 }
 
-export function EquipmentTypeTable({ types }: { types: EquipmentTypeRow[] }) {
+export function EquipmentTypeTable({
+  types,
+  sort,
+}: {
+  types: EquipmentTypeRow[];
+  sort: TableSort;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[720px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-3">Kode</th>
-            <th className="px-4 py-3">Nama</th>
+            <SortableTh field="code" label="Kode" sort={sort} />
+            <SortableTh field="name" label="Nama" sort={sort} />
             <th className="px-4 py-3">Kategori</th>
             <th className="px-4 py-3">Deskripsi</th>
             <th className="px-4 py-3">Status</th>

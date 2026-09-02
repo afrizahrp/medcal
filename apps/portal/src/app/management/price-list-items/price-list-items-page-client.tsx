@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
+import { useTableSort } from "@/hooks/use-table-sort";
+import { SortableTh } from "@/components/ui/sortable-th";
 import { cn } from "@/lib/utils";
 import { AccessDenied } from "../../../components/access-denied";
 import { PageHeader } from "../../../components/management/page-header";
@@ -23,7 +25,15 @@ import {
   type PriceListItemRow,
 } from "./use-price-list-items-query";
 
-const URL_KEYS = ["search", "deviceTypeId", "isActive", "page", "pageSize"] as const;
+const URL_KEYS = [
+  "search",
+  "deviceTypeId",
+  "isActive",
+  "sortBy",
+  "sortDir",
+  "page",
+  "pageSize",
+] as const;
 
 const idr = new Intl.NumberFormat("id-ID", {
   style: "currency",
@@ -95,6 +105,8 @@ export default function PriceListItemsPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
 
+  const sort = useTableSort(params, setParams, "effectiveFrom");
+  const { sortBy, sortDir } = sort;
   const canManage = Boolean(capabilities?.priceListItemCreate);
 
   const typesQuery = useDeviceTypes({
@@ -112,8 +124,8 @@ export default function PriceListItemsPageClient() {
     search: committedSearch,
     deviceTypeId,
     isActive: isActive === "" ? "" : isActive === "true",
-    sortBy: "effectiveFrom",
-    sortDir: "desc",
+    sortBy,
+    sortDir,
     page,
     pageSize,
   });
@@ -336,8 +348,14 @@ export default function PriceListItemsPageClient() {
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                     <th className="px-4 py-3">Device Name</th>
-                    <th className="px-4 py-3 text-right">Unit Price</th>
-                    <th className="px-4 py-3">Berlaku</th>
+                    <SortableTh
+                      field="unitPrice"
+                      label="Unit Price"
+                      sort={sort}
+                      align="right"
+                      className="text-right"
+                    />
+                    <SortableTh field="effectiveFrom" label="Berlaku" sort={sort} />
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3"></th>
                   </tr>

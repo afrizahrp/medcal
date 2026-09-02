@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { MasterCodeService, prisma } from "@medcal/db";
 import type { EquipmentType, Prisma } from "@medcal/db";
 import {
@@ -11,7 +7,7 @@ import {
   type EquipmentTypeListQuery,
   type EquipmentTypeUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -68,7 +64,7 @@ export class EquipmentTypesService {
       prisma.equipmentType.count({ where }),
       prisma.equipmentType.findMany({
         where,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),

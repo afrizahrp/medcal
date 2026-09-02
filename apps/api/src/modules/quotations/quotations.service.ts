@@ -12,7 +12,7 @@ import {
   type QuotationPreviewInput,
   type QuotationUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { resolveActivePriceListItem } from "../price-list-items/price-list-items.service";
 import { renderQuotationPdf, type QuotationPdfResult } from "./quotation-pdf";
 
@@ -116,9 +116,7 @@ function computeHeaderTotals(
   taxAmount: Prisma.Decimal;
   totalAmount: Prisma.Decimal;
 } {
-  const subtotal = money(
-    lineTotals.reduce((acc, line) => acc.plus(line), new Prisma.Decimal(0)),
-  );
+  const subtotal = money(lineTotals.reduce((acc, line) => acc.plus(line), new Prisma.Decimal(0)));
   const headerDiscount = money(headerDiscountAmount);
   if (headerDiscount.isNegative()) {
     throw new BadRequestException({
@@ -333,7 +331,9 @@ async function buildGeneratedRows(
     const unitPrice = resolved ? toDecimal(resolved.unitPrice) : new Prisma.Decimal(0);
     // A pending (zero) price cannot carry a discount — force it to 0 so
     // computeItemLine's "discount exceeds gross" guard is not tripped.
-    const discountInput = pricePending ? new Prisma.Decimal(0) : toDecimal(override?.discountAmount ?? 0);
+    const discountInput = pricePending
+      ? new Prisma.Decimal(0)
+      : toDecimal(override?.discountAmount ?? 0);
     const line = computeItemLine(qty, unitPrice, discountInput);
     rows.push({
       companyId,
@@ -467,10 +467,7 @@ export class QuotationsService {
    * (buildGeneratedRows) — but persists nothing. The unit price shown here is
    * therefore the same authoritative value the quotation will carry once created.
    */
-  async preview(
-    companyId: string,
-    input: QuotationPreviewInput,
-  ): Promise<QuotationPreviewResult> {
+  async preview(companyId: string, input: QuotationPreviewInput): Promise<QuotationPreviewResult> {
     const request = await prisma.calibrationRequest.findFirst({
       where: { id: input.requestId, companyId },
       include: { items: { include: { deviceType: { select: { name: true } } } } },
@@ -533,7 +530,7 @@ export class QuotationsService {
       prisma.quotation.count({ where }),
       prisma.quotation.findMany({
         where,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: quotationInclude,

@@ -8,16 +8,10 @@ import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
+import { useTableSort } from "@/hooks/use-table-sort";
 import { cn } from "@/lib/utils";
 import { AccessDenied } from "../../../components/access-denied";
-import {
-  PageHeader,
-  Surface,
-  TaxFilters,
-  TaxTable,
-  TaxEmptyState,
-  PaginationBar,
-} from "./tax-ui";
+import { PageHeader, Surface, TaxFilters, TaxTable, TaxEmptyState, PaginationBar } from "./tax-ui";
 import { useTaxes } from "./use-tax-query";
 
 const URL_KEYS = ["search", "isActive", "sortBy", "sortDir", "page", "pageSize"] as const;
@@ -26,8 +20,8 @@ export default function TaxPageClient() {
   const { capabilities } = useAuthz();
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
-  const sortBy = params.sortBy ?? "createdAt";
-  const sortDir = (params.sortDir as "asc" | "desc" | undefined) ?? "desc";
+  const sort = useTableSort(params, setParams, "createdAt");
+  const { sortBy, sortDir } = sort;
   const page = Number(params.page) || 1;
   const pageSize = Number(params.pageSize) || 10;
   const committedSearch = params.search ?? "";
@@ -73,10 +67,7 @@ export default function TaxPageClient() {
   return (
     <div className="w-full px-4 py-6 md:px-6 md:py-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <PageHeader
-          title="Tax"
-          crumbs={[{ href: "/", label: "Dashboard" }, { label: "Tax" }]}
-        />
+        <PageHeader title="Tax" crumbs={[{ href: "/", label: "Dashboard" }, { label: "Tax" }]} />
 
         <Button asChild className="shrink-0">
           <Link href="/tax/new">
@@ -121,7 +112,7 @@ export default function TaxPageClient() {
         ) : result ? (
           <>
             <div className="mt-4">
-              <TaxTable taxes={result.data} />
+              <TaxTable taxes={result.data} sort={sort} />
             </div>
             <PaginationBar
               className="mt-4"

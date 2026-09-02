@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,10 +22,7 @@ import {
   type QuotationItem,
   type QuotationRow,
 } from "../quotations/quotations-ui";
-import {
-  formatTaxHeaderLabel,
-  type PurchaseOrderStatus,
-} from "./purchase-order-form-utils";
+import { formatTaxHeaderLabel, type PurchaseOrderStatus } from "./purchase-order-form-utils";
 
 export type { PurchaseOrderStatus };
 
@@ -53,8 +52,19 @@ export interface PurchaseOrderItem {
       deviceType: { id: string; code: string; name: string };
     } | null;
   } | null;
-  tariff: { id: string; code: string; name: string; unitPrice: MoneyValue; currency: string } | null;
-  device: { id: string; brand: string | null; model: string | null; serialNumber: string | null } | null;
+  tariff: {
+    id: string;
+    code: string;
+    name: string;
+    unitPrice: MoneyValue;
+    currency: string;
+  } | null;
+  device: {
+    id: string;
+    brand: string | null;
+    model: string | null;
+    serialNumber: string | null;
+  } | null;
 }
 
 export interface PurchaseOrderRow {
@@ -222,20 +232,26 @@ export function PurchaseOrderFilters({
   );
 }
 
-export function PurchaseOrderTable({ purchaseOrders }: { purchaseOrders: PurchaseOrderRow[] }) {
+export function PurchaseOrderTable({
+  purchaseOrders,
+  sort,
+}: {
+  purchaseOrders: PurchaseOrderRow[];
+  sort: TableSort;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[980px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-3">PO Number</th>
+            <SortableTh field="number" label="PO Number" sort={sort} />
             <th className="px-4 py-3">Customer</th>
             <th className="px-4 py-3">Quotation</th>
             <th className="px-4 py-3">Customer PO No</th>
             <th className="px-4 py-3">Customer PO Date</th>
-            <th className="px-4 py-3">Status</th>
+            <SortableTh field="status" label="Status" sort={sort} />
             <th className="px-4 py-3">Total</th>
-            <th className="px-4 py-3">Created At</th>
+            <SortableTh field="createdAt" label="Created At" sort={sort} />
             <th className="px-4 py-3"></th>
           </tr>
         </thead>
@@ -274,11 +290,7 @@ export function PurchaseOrderTable({ purchaseOrders }: { purchaseOrders: Purchas
   );
 }
 
-export function PurchaseOrderEmptyState({
-  onClearFilters,
-}: {
-  onClearFilters?: () => void;
-}) {
+export function PurchaseOrderEmptyState({ onClearFilters }: { onClearFilters?: () => void }) {
   return (
     <div className="py-10 text-center">
       <p className="text-sm text-slate-500">
@@ -385,7 +397,9 @@ export function PurchaseOrderSnapshot({
                       <p className="font-mono text-xs text-slate-400">{item.deviceId}</p>
                     ) : null}
                   </td>
-                  <td className="px-3 py-3 text-right text-sm text-slate-600">{formatQty(item.qty)}</td>
+                  <td className="px-3 py-3 text-right text-sm text-slate-600">
+                    {formatQty(item.qty)}
+                  </td>
                   <td className="px-3 py-3 text-right text-sm text-slate-600">
                     {formatIdr(item.unitPrice)}
                   </td>
@@ -403,7 +417,9 @@ export function PurchaseOrderSnapshot({
       </div>
 
       <dl className="grid gap-4 text-sm sm:grid-cols-2">
-        <DetailField label="Tax">{formatTaxHeaderLabel(taxCode, taxRate, taxDescription)}</DetailField>
+        <DetailField label="Tax">
+          {formatTaxHeaderLabel(taxCode, taxRate, taxDescription)}
+        </DetailField>
         <DetailField label="Tax Amount">{formatIdr(taxAmount)}</DetailField>
       </dl>
 

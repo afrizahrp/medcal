@@ -12,7 +12,7 @@ import {
   type DeviceCalibrationParameterListQuery,
   type DeviceCalibrationParameterUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -218,7 +218,10 @@ export class DeviceCalibrationParametersService {
     }
   }
 
-  private assertToleranceBounds(min: number | null | undefined, max: number | null | undefined): void {
+  private assertToleranceBounds(
+    min: number | null | undefined,
+    max: number | null | undefined,
+  ): void {
     if (min != null && max != null && min > max) {
       throw new BadRequestException({
         message: "toleranceMin must be less than or equal to toleranceMax",
@@ -334,11 +337,7 @@ export class DeviceCalibrationParametersService {
         tx,
       });
       const capabilityId = await this.resolveCapabilityId(tx, input.capabilityItemId);
-      const sortOrder = await this.appendToOrderingScope(
-        tx,
-        input.deviceTypeId,
-        capabilityId,
-      );
+      const sortOrder = await this.appendToOrderingScope(tx, input.deviceTypeId, capabilityId);
       return tx.deviceCalibrationParameter.create({
         data: {
           deviceTypeId: input.deviceTypeId,
@@ -385,7 +384,7 @@ export class DeviceCalibrationParametersService {
       prisma.deviceCalibrationParameter.findMany({
         where,
         include: parameterInclude,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -507,7 +506,10 @@ export class DeviceCalibrationParametersService {
     if (input.deviceTypeId !== undefined && input.deviceTypeId !== existing.deviceTypeId) {
       await this.assertDeviceTypeExists(input.deviceTypeId);
     }
-    if (input.capabilityItemId !== undefined && input.capabilityItemId !== existing.capabilityItemId) {
+    if (
+      input.capabilityItemId !== undefined &&
+      input.capabilityItemId !== existing.capabilityItemId
+    ) {
       await this.assertCapabilityItemExists(input.capabilityItemId);
     }
     if (input.uomId !== undefined && input.uomId !== existing.uomId) {

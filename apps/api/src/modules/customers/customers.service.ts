@@ -8,7 +8,7 @@ import {
   type CustomerListQuery,
   type CustomerUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import {
   assertNoDuplicateCustomerEmail,
   assertNoDuplicateCustomerTaxId,
@@ -128,7 +128,7 @@ export class CustomersService {
       prisma.customer.count({ where }),
       prisma.customer.findMany({
         where,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: { contacts: true },
@@ -149,7 +149,11 @@ export class CustomersService {
     return customer;
   }
 
-  async update(companyId: string, id: string, input: CustomerUpdateInput): Promise<CustomerWithContacts> {
+  async update(
+    companyId: string,
+    id: string,
+    input: CustomerUpdateInput,
+  ): Promise<CustomerWithContacts> {
     const existing = await prisma.customer.findFirst({ where: { id, companyId } });
     if (!existing) {
       throw new NotFoundException({ message: "Customer not found", code: "CUSTOMER_NOT_FOUND" });

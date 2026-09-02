@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import { Search } from "lucide-react";
 import { ApiError } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
@@ -262,19 +264,25 @@ export function QuotationFilters({
   );
 }
 
-export function QuotationTable({ quotations }: { quotations: QuotationRow[] }) {
+export function QuotationTable({
+  quotations,
+  sort,
+}: {
+  quotations: QuotationRow[];
+  sort: TableSort;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[860px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-3">Nomor</th>
+            <SortableTh field="number" label="Nomor" sort={sort} />
             <th className="px-4 py-3">Customer</th>
             <th className="px-4 py-3">Requisition</th>
             <th className="px-4 py-3">Total</th>
-            <th className="px-4 py-3">Status</th>
+            <SortableTh field="status" label="Status" sort={sort} />
             <th className="px-4 py-3">Valid Until</th>
-            <th className="px-4 py-3">Tanggal</th>
+            <SortableTh field="createdAt" label="Tanggal" sort={sort} />
             <th className="px-4 py-3"></th>
           </tr>
         </thead>

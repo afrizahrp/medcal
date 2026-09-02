@@ -23,7 +23,11 @@ async function makeUser(overrides: Record<string, unknown> = {}) {
   return user;
 }
 
-async function makeMembership(userId: string, companyId: string, role: "ADMIN" | "SUPERVISOR" | "TECHNICIAN" | "FINANCE" | "CUSTOMER") {
+async function makeMembership(
+  userId: string,
+  companyId: string,
+  role: "ADMIN" | "SUPERVISOR" | "TECHNICIAN" | "FINANCE" | "CUSTOMER",
+) {
   const membership = await prisma.userMembership.create({
     data: { userId, companyId, role, isDefault: false },
   });
@@ -44,7 +48,7 @@ describe("UsersService.findAll", () => {
     const otherCompanyId = `Y${randomUUID().slice(0, 2).toUpperCase()}`;
     await prisma.company.create({ data: { id: otherCompanyId, name: "Other", status: "ACTIVE" } });
     createdCompanyIds.push(otherCompanyId);
-    
+
     const otherUser = await makeUser();
     await makeMembership(otherUser.id, otherCompanyId, "ADMIN");
 
@@ -88,6 +92,56 @@ describe("UsersService.findAll", () => {
     expect(result.page).toBe(1);
     expect(result.pageSize).toBe(1);
   });
+
+  describe("sortBy / sortDir (Management List canonical pattern)", () => {
+    const tag = `Sort-${randomUUID().slice(0, 8)}`;
+
+    it("sorts by name ascending when requested", async () => {
+      const zebra = await makeUser({ name: `${tag}-ZZZ` });
+      const alpha = await makeUser({ name: `${tag}-AAA` });
+      await makeMembership(zebra.id, realCompanyId, "ADMIN");
+      await makeMembership(alpha.id, realCompanyId, "ADMIN");
+
+      const result = await service.findAll(realCompanyId, {
+        search: tag,
+        sortBy: "name",
+        sortDir: "asc",
+        pageSize: 100,
+      });
+      const names = result.data.map((u) => u.name);
+      expect(names).toEqual([`${tag}-AAA`, `${tag}-ZZZ`]);
+    });
+
+    it("sorts by name descending when requested", async () => {
+      const result = await service.findAll(realCompanyId, {
+        search: tag,
+        sortBy: "name",
+        sortDir: "desc",
+        pageSize: 100,
+      });
+      expect(result.data.map((u) => u.name)).toEqual([`${tag}-ZZZ`, `${tag}-AAA`]);
+    });
+
+    it("falls back to the createdAt-desc default for an unwhitelisted sortBy", async () => {
+      const fresh = await makeUser({ name: `${tag}-fallback` });
+      await makeMembership(fresh.id, realCompanyId, "ADMIN");
+
+      const result = await service.findAll(realCompanyId, {
+        search: tag,
+        sortBy: "passwordHash",
+        pageSize: 1,
+      });
+      expect(result.data[0]?.id).toBe(fresh.id);
+    });
+
+    it("keeps a deterministic order (id tie-breaker) across pages when sort values tie", async () => {
+      const query = { search: tag, sortBy: "status", sortDir: "asc" as const };
+      const pageOne = await service.findAll(realCompanyId, { ...query, page: 1, pageSize: 2 });
+      const pageTwo = await service.findAll(realCompanyId, { ...query, page: 2, pageSize: 2 });
+      const ids = [...pageOne.data, ...pageTwo.data].map((u) => u.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+  });
 });
 
 describe("UsersService.findOne", () => {
@@ -119,7 +173,9 @@ describe("UsersService.updateStatus", () => {
   it("throws NotFoundException for a User without membership in this company", async () => {
     const user = await makeUser();
 
-    await expect(service.updateStatus(realCompanyId, user.id, "DISABLED")).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.updateStatus(realCompanyId, user.id, "DISABLED")).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it("rejects disabling the last ACTIVE SUPERADMIN (F2)", async () => {
@@ -360,17 +416,17 @@ describe("UsersService.removeMembership", () => {
     });
     createdMembershipKeys.push({ userId: user.id, companyId: realCompanyId });
 
-    await expect(
-      service.removeMembership(realCompanyId, user.id),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.removeMembership(realCompanyId, user.id)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it("throws NotFoundException for non-existent membership", async () => {
     const user = await makeUser();
 
-    await expect(
-      service.removeMembership(realCompanyId, user.id),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.removeMembership(realCompanyId, user.id)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
 

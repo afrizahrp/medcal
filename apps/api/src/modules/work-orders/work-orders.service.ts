@@ -13,7 +13,7 @@ import {
   type WorkOrderListQuery,
   type WorkOrderUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { renderWorkOrderPdf, type WorkOrderPdfResult } from "./work-order-pdf";
 import {
   WORK_ORDER_EQUIPMENT_ORDER_STEP,
@@ -353,7 +353,7 @@ export class WorkOrdersService {
       prisma.workOrder.count({ where }),
       prisma.workOrder.findMany({
         where,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: workOrderInclude,
@@ -840,9 +840,7 @@ export class WorkOrdersService {
       "The equipment order is locked — a delivery note (Surat Jalan) has been issued",
     );
 
-    const rowByEquipmentId = new Map(
-      existing.equipment.map((row) => [row.equipmentId, row.id]),
-    );
+    const rowByEquipmentId = new Map(existing.equipment.map((row) => [row.equipmentId, row.id]));
     const providedSet = new Set(equipmentIds);
     const sameSet =
       providedSet.size === equipmentIds.length &&

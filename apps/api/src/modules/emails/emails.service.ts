@@ -18,7 +18,7 @@ import {
   type EmailUpdateInput,
 } from "@medcal/shared";
 import { hasPermission } from "@medcal/auth";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { QuotationsService } from "../quotations/quotations.service";
 import { emailNotConfigured, smtpDeliveryFailed } from "./email-errors";
 import { ImapSyncService } from "./imap-sync.service";
@@ -123,7 +123,7 @@ export class EmailsService {
       prisma.email.count({ where }),
       prisma.email.findMany({
         where,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
@@ -191,7 +191,10 @@ export class EmailsService {
   }
 
   async listForLead(companyId: string, leadId: string): Promise<EmailListResult> {
-    const lead = await prisma.lead.findFirst({ where: { id: leadId, companyId }, select: { id: true } });
+    const lead = await prisma.lead.findFirst({
+      where: { id: leadId, companyId },
+      select: { id: true },
+    });
     if (!lead) {
       throw new NotFoundException({ message: "Lead not found", code: "LEAD_NOT_FOUND" });
     }
@@ -278,7 +281,9 @@ export class EmailsService {
         readAt: new Date(),
       },
     });
-    this.logger.log(`SMTP send persisted id=${created.id} messageId=${created.messageId ? "set" : "missing"}`);
+    this.logger.log(
+      `SMTP send persisted id=${created.id} messageId=${created.messageId ? "set" : "missing"}`,
+    );
 
     if (input.quotationId) {
       try {
@@ -325,7 +330,10 @@ export class EmailsService {
   async updateDraft(companyId: string, id: string, input: EmailDraftInput): Promise<Email> {
     const email = await this.requireEmail(companyId, id);
     if (email.folder !== "DRAFTS" || email.deletedAt) {
-      throw new BadRequestException({ message: "Email is not a draft", code: "INVALID_EMAIL_PAYLOAD" });
+      throw new BadRequestException({
+        message: "Email is not a draft",
+        code: "INVALID_EMAIL_PAYLOAD",
+      });
     }
     return prisma.email.update({
       where: { id: email.id },
@@ -342,7 +350,10 @@ export class EmailsService {
   async sendDraft(companyId: string, userId: string, id: string): Promise<Email> {
     const draft = await this.requireEmail(companyId, id);
     if (draft.folder !== "DRAFTS" || draft.deletedAt) {
-      throw new BadRequestException({ message: "Email is not a draft", code: "INVALID_EMAIL_PAYLOAD" });
+      throw new BadRequestException({
+        message: "Email is not a draft",
+        code: "INVALID_EMAIL_PAYLOAD",
+      });
     }
     if (!draft.toEmail || !draft.subject || !draft.body) {
       throw new BadRequestException({
@@ -416,7 +427,10 @@ export class EmailsService {
       data.isStarred = input.isStarred;
     }
     if (Object.keys(data).length === 0) {
-      throw new BadRequestException({ message: "No valid fields to update", code: "INVALID_EMAIL_PAYLOAD" });
+      throw new BadRequestException({
+        message: "No valid fields to update",
+        code: "INVALID_EMAIL_PAYLOAD",
+      });
     }
     return prisma.email.update({ where: { id: email.id }, data });
   }
@@ -447,7 +461,10 @@ export class EmailsService {
   async restore(companyId: string, id: string): Promise<Email> {
     const email = await this.requireEmail(companyId, id);
     if (!email.deletedAt) {
-      throw new BadRequestException({ message: "Email is not in trash", code: "INVALID_EMAIL_PAYLOAD" });
+      throw new BadRequestException({
+        message: "Email is not in trash",
+        code: "INVALID_EMAIL_PAYLOAD",
+      });
     }
     return prisma.email.update({
       where: { id: email.id },
@@ -479,7 +496,10 @@ export class EmailsService {
   }
 
   private async requireLead(companyId: string, leadId: string): Promise<string> {
-    const lead = await prisma.lead.findFirst({ where: { id: leadId, companyId }, select: { id: true } });
+    const lead = await prisma.lead.findFirst({
+      where: { id: leadId, companyId },
+      select: { id: true },
+    });
     if (!lead) {
       throw new NotFoundException({ message: "Lead not found", code: "LEAD_NOT_FOUND" });
     }
@@ -493,14 +513,21 @@ export class EmailsService {
       select: { id: true, leadId: true },
     });
     if (!message) {
-      throw new NotFoundException({ message: "Contact message not found", code: "EMAIL_NOT_FOUND" });
+      throw new NotFoundException({
+        message: "Contact message not found",
+        code: "EMAIL_NOT_FOUND",
+      });
     }
     return message;
   }
 }
 
 function snippetOf(text: string): string {
-  return text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
+  return text
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
 }
 
 function smtpConfig(): SmtpConfig {
@@ -532,7 +559,10 @@ function parseFromAddress(from: string): string {
   return (match?.[1] || from).trim();
 }
 
-function buildReferences(existing: string | null | undefined, parentMessageId: string | null | undefined): string | null {
+function buildReferences(
+  existing: string | null | undefined,
+  parentMessageId: string | null | undefined,
+): string | null {
   if (!parentMessageId) return existing ?? null;
   if (!existing) return parentMessageId;
   if (existing.includes(parentMessageId)) return existing;

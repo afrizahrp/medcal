@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -85,13 +87,19 @@ export function EquipmentUnitFilters({
   );
 }
 
-export function EquipmentUnitTable({ units }: { units: EquipmentUnitRow[] }) {
+export function EquipmentUnitTable({
+  units,
+  sort,
+}: {
+  units: EquipmentUnitRow[];
+  sort: TableSort;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[820px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-3">Kode</th>
+            <SortableTh field="code" label="Kode" sort={sort} />
             <th className="px-4 py-3">Equipment Type</th>
             <th className="px-4 py-3">Merek</th>
             <th className="px-4 py-3">Model</th>

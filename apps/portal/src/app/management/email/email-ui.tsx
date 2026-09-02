@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -36,9 +38,17 @@ export function EmailComposeFab({ visible }: { visible: boolean }) {
   );
 }
 
-export function Surface({ children, className }: { children: React.ReactNode; className?: string }) {
+export function Surface({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <div className={cn("rounded-xl border border-slate-200/80 bg-white shadow-sm", className)}>{children}</div>
+    <div className={cn("rounded-xl border border-slate-200/80 bg-white shadow-sm", className)}>
+      {children}
+    </div>
   );
 }
 
@@ -84,8 +94,7 @@ export function EmailFolderNav({
                 ? stats?.drafts
                 : stats?.trash;
         const isActive = tab.folder === active;
-        const tooltip =
-          typeof count === "number" ? `${tab.label} (${count})` : tab.label;
+        const tooltip = typeof count === "number" ? `${tab.label} (${count})` : tab.label;
         const badge =
           typeof count === "number" && count > 0 ? (
             <span
@@ -203,6 +212,7 @@ function displayDate(row: EmailListRow, folder: EmailFolder): string {
 
 export function EmailInboxTable({
   rows,
+  sort,
   folder,
   loading,
   fetching,
@@ -215,6 +225,7 @@ export function EmailInboxTable({
   onPermanentDelete,
 }: {
   rows: EmailListRow[];
+  sort: TableSort;
   folder: EmailFolder;
   loading: boolean;
   fetching: boolean;
@@ -226,7 +237,8 @@ export function EmailInboxTable({
   onRestore?: (id: string) => void;
   onPermanentDelete?: (id: string) => void;
 }) {
-  const showActions = canDelete && (folder === "TRASH" ? Boolean(onRestore || onPermanentDelete) : Boolean(onDelete));
+  const showActions =
+    canDelete && (folder === "TRASH" ? Boolean(onRestore || onPermanentDelete) : Boolean(onDelete));
   const colSpan = showActions ? 5 : 4;
 
   function RowActions({ row }: { row: EmailListRow }) {
@@ -306,10 +318,14 @@ export function EmailInboxTable({
             <th className="px-4 py-3 font-medium">
               {folder === "SENT" || folder === "DRAFTS" ? "Kepada" : "Dari"}
             </th>
-            <th className="px-4 py-3 font-medium">Subjek</th>
+            <SortableTh field="subject" label="Subjek" sort={sort} className="font-medium" />
             <th className="px-4 py-3 font-medium">Lead</th>
-            <th className="px-4 py-3 font-medium">Waktu</th>
-            {showActions ? <th className="w-20 px-3 py-3 font-medium"><span className="sr-only">Aksi</span></th> : null}
+            <SortableTh field="createdAt" label="Waktu" sort={sort} className="font-medium" />
+            {showActions ? (
+              <th className="w-20 px-3 py-3 font-medium">
+                <span className="sr-only">Aksi</span>
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -355,16 +371,25 @@ export function EmailInboxTable({
                   </td>
                   <td className="px-4 py-3">
                     <Link href={`/email/${row.id}`} className="block max-w-[360px]">
-                      <span className={cn("block truncate text-slate-800", unread ? "font-semibold" : undefined)}>
+                      <span
+                        className={cn(
+                          "block truncate text-slate-800",
+                          unread ? "font-semibold" : undefined,
+                        )}
+                      >
                         {row.subject || "(tanpa subjek)"}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-slate-400">{row.snippet}</span>
+                      <span className="mt-0.5 block truncate text-xs text-slate-400">
+                        {row.snippet}
+                      </span>
                     </Link>
                   </td>
                   <td className="px-4 py-3">
                     <LeadBadge row={row} />
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-500">{displayDate(row, folder)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                    {displayDate(row, folder)}
+                  </td>
                   {showActions ? (
                     <td className="px-2 py-3">
                       <RowActions row={row} />
@@ -388,18 +413,27 @@ export function EmailInboxTable({
           rows.map((row) => {
             const unread = row.status === "UNREAD" && folder === "INBOX";
             return (
-              <li
-                key={row.id}
-                className={cn("relative", unread ? "bg-brand-50/40" : undefined)}
-              >
+              <li key={row.id} className={cn("relative", unread ? "bg-brand-50/40" : undefined)}>
                 <Link href={`/email/${row.id}`} className="block px-4 py-3 pr-14">
                   <div className="flex items-start justify-between gap-2">
-                    <span className={cn("truncate text-sm text-slate-900", unread ? "font-semibold" : "font-medium")}>
+                    <span
+                      className={cn(
+                        "truncate text-sm text-slate-900",
+                        unread ? "font-semibold" : "font-medium",
+                      )}
+                    >
                       {displayParty(row, folder)}
                     </span>
-                    <span className="shrink-0 text-xs text-slate-400">{displayDate(row, folder)}</span>
+                    <span className="shrink-0 text-xs text-slate-400">
+                      {displayDate(row, folder)}
+                    </span>
                   </div>
-                  <p className={cn("mt-0.5 truncate text-sm text-slate-700", unread ? "font-semibold" : undefined)}>
+                  <p
+                    className={cn(
+                      "mt-0.5 truncate text-sm text-slate-700",
+                      unread ? "font-semibold" : undefined,
+                    )}
+                  >
                     {row.subject || "(tanpa subjek)"}
                   </p>
                   <p className="mt-0.5 truncate text-xs text-slate-400">{row.snippet}</p>

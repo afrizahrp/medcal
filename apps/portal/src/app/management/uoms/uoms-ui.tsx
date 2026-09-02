@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -71,8 +73,7 @@ export const UOM_CATEGORY_OPTIONS: UomCategory[] = [
 
 export const uomFormPageClass = "mx-auto w-full max-w-[1000px] px-4 py-5 md:px-6";
 export const uomFormSurfaceClass = "mt-5 p-4 md:p-5";
-export const uomFormActionsClass =
-  "mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3";
+export const uomFormActionsClass = "mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3";
 
 export { PageHeader, Surface, selectClassName };
 
@@ -140,16 +141,16 @@ export function UomFilters({
   );
 }
 
-export function UomTable({ uoms }: { uoms: UomRow[] }) {
+export function UomTable({ uoms, sort }: { uoms: UomRow[]; sort: TableSort }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[640px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-3">Kode</th>
-            <th className="px-4 py-3">Nama</th>
+            <SortableTh field="code" label="Kode" sort={sort} />
+            <SortableTh field="name" label="Nama" sort={sort} />
             <th className="px-4 py-3">Simbol</th>
-            <th className="px-4 py-3">Kategori</th>
+            <SortableTh field="category" label="Kategori" sort={sort} />
             <th className="px-4 py-3">Status</th>
             <th className="px-4 py-3"></th>
           </tr>

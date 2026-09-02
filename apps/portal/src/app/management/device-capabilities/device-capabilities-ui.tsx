@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -102,14 +104,20 @@ export function DeviceCapabilityFilters({
   );
 }
 
-export function DeviceCapabilityTable({ capabilities }: { capabilities: DeviceCapabilityRow[] }) {
+export function DeviceCapabilityTable({
+  capabilities,
+  sort,
+}: {
+  capabilities: DeviceCapabilityRow[];
+  sort: TableSort;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[720px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-3">Kode</th>
-            <th className="px-4 py-3">Capability</th>
+            <SortableTh field="code" label="Kode" sort={sort} />
+            <SortableTh field="name" label="Capability" sort={sort} />
             <th className="px-4 py-3 text-right">Items</th>
             <th className="px-4 py-3">Deskripsi</th>
             <th className="px-4 py-3">Status</th>
@@ -123,7 +131,9 @@ export function DeviceCapabilityTable({ capabilities }: { capabilities: DeviceCa
               <td className="px-4 py-3">
                 <p className="font-medium text-slate-900">{row.name}</p>
               </td>
-              <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.itemCount ?? 0}</td>
+              <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                {row.itemCount ?? 0}
+              </td>
               <td className="px-4 py-3 text-sm text-slate-600">
                 {row.description ? (
                   <span className="line-clamp-2">{row.description}</span>
@@ -152,7 +162,9 @@ export function DeviceCapabilityTable({ capabilities }: { capabilities: DeviceCa
 export function DeviceCapabilityEmptyState({ onClearFilters }: { onClearFilters?: () => void }) {
   return (
     <div className="py-10 text-center">
-      <p className="text-sm text-slate-500">Belum ada Device Capability yang cocok dengan filter.</p>
+      <p className="text-sm text-slate-500">
+        Belum ada Device Capability yang cocok dengan filter.
+      </p>
       {onClearFilters ? (
         <Button type="button" variant="outline" className="mt-3" onClick={onClearFilters}>
           Reset filter

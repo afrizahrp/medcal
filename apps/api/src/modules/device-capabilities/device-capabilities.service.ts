@@ -15,7 +15,7 @@ import {
   type DeviceCapabilityListQuery,
   type DeviceCapabilityUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -105,7 +105,7 @@ export class DeviceCapabilitiesService {
       prisma.deviceCapability.findMany({
         where,
         include: { _count: { select: { items: true } } },
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),

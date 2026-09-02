@@ -11,7 +11,7 @@ import {
   type PriceListItemListQuery,
   type PriceListItemUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -40,9 +40,7 @@ const OPEN_ENDED = new Date(8640000000000000);
 
 /** Strip time — Prisma `@db.Date` columns are date-only; compare like-for-like. */
 function toDateOnly(value: Date): Date {
-  return new Date(
-    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
-  );
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
 }
 
 function windowsOverlap(
@@ -124,8 +122,7 @@ export class PriceListItemsService {
     );
     if (clash) {
       throw new ConflictException({
-        message:
-          "An active price already covers this effective period for this device type",
+        message: "An active price already covers this effective period for this device type",
         code: "PRICE_LIST_OVERLAP",
         existingId: clash.id,
       });
@@ -141,16 +138,12 @@ export class PriceListItemsService {
     }
   }
 
-  async create(
-    companyId: string,
-    input: PriceListItemCreateInput,
-  ): Promise<PriceListItemWithType> {
+  async create(companyId: string, input: PriceListItemCreateInput): Promise<PriceListItemWithType> {
     await this.assertDeviceTypeExists(input.deviceTypeId);
     this.assertPositivePrice(input.unitPrice);
 
     const effectiveFrom = toDateOnly(input.effectiveFrom);
-    const effectiveUntil =
-      input.effectiveUntil != null ? toDateOnly(input.effectiveUntil) : null;
+    const effectiveUntil = input.effectiveUntil != null ? toDateOnly(input.effectiveUntil) : null;
     if (effectiveUntil && effectiveUntil.getTime() < effectiveFrom.getTime()) {
       throw new BadRequestException({
         message: "effectiveUntil cannot be before effectiveFrom",
@@ -158,12 +151,7 @@ export class PriceListItemsService {
       });
     }
 
-    await this.assertNoActiveOverlap(
-      companyId,
-      input.deviceTypeId,
-      effectiveFrom,
-      effectiveUntil,
-    );
+    await this.assertNoActiveOverlap(companyId, input.deviceTypeId, effectiveFrom, effectiveUntil);
 
     try {
       return await prisma.priceListItem.create({
@@ -179,10 +167,7 @@ export class PriceListItemsService {
         include: { deviceType: { select: deviceTypeSelect } },
       });
     } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
-      ) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         throw new ConflictException({
           message: "A price with this effective-from date already exists for this device type",
           code: "DUPLICATE_PRICE_LIST_ITEM",
@@ -227,7 +212,7 @@ export class PriceListItemsService {
       prisma.priceListItem.findMany({
         where,
         include: { deviceType: { select: deviceTypeSelect } },
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -259,9 +244,7 @@ export class PriceListItemsService {
     if (input.unitPrice !== undefined) this.assertPositivePrice(input.unitPrice);
 
     const effectiveFrom =
-      input.effectiveFrom !== undefined
-        ? toDateOnly(input.effectiveFrom)
-        : existing.effectiveFrom;
+      input.effectiveFrom !== undefined ? toDateOnly(input.effectiveFrom) : existing.effectiveFrom;
     const effectiveUntil =
       input.effectiveUntil !== undefined
         ? input.effectiveUntil != null
@@ -302,10 +285,7 @@ export class PriceListItemsService {
         include: { deviceType: { select: deviceTypeSelect } },
       });
     } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
-      ) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         throw new ConflictException({
           message: "A price with this effective-from date already exists for this device type",
           code: "DUPLICATE_PRICE_LIST_ITEM",

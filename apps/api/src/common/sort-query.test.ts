@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveSortOrder } from "./sort-query";
+import { resolveOrderBy, resolveSortOrder, withIdTieBreaker } from "./sort-query";
 
 const ALLOWED = ["createdAt", "name", "status"] as const;
 
@@ -35,5 +35,48 @@ describe("resolveSortOrder", () => {
 
   it("respects an explicit desc sortDir", () => {
     expect(resolveSortOrder(ALLOWED, "name", "desc", "createdAt").dir).toBe("desc");
+  });
+});
+
+describe("resolveOrderBy", () => {
+  it("appends a stable id tie-breaker after the resolved field", () => {
+    expect(resolveOrderBy(ALLOWED, "name", "asc", "createdAt")).toEqual([
+      { name: "asc" },
+      { id: "desc" },
+    ]);
+  });
+
+  it("falls back to the default field for an unwhitelisted sortBy", () => {
+    expect(resolveOrderBy(ALLOWED, "password", undefined, "createdAt")).toEqual([
+      { createdAt: "desc" },
+      { id: "desc" },
+    ]);
+  });
+
+  it("drops the tie-breaker when the primary sort is already id", () => {
+    expect(resolveOrderBy([...ALLOWED, "id"] as const, "id", "asc", "createdAt")).toEqual([
+      { id: "asc" },
+    ]);
+  });
+
+  it("supports a custom tie-breaker column", () => {
+    expect(resolveOrderBy(ALLOWED, "status", "asc", "createdAt", "createdAt")).toEqual([
+      { status: "asc" },
+      { createdAt: "desc" },
+    ]);
+  });
+
+  it("omits the tie-breaker entirely when passed null", () => {
+    expect(resolveOrderBy(ALLOWED, "name", "asc", "createdAt", null)).toEqual([{ name: "asc" }]);
+  });
+});
+
+describe("withIdTieBreaker", () => {
+  it("appends id desc to a resolved field/direction pair", () => {
+    expect(withIdTieBreaker("status", "asc")).toEqual([{ status: "asc" }, { id: "desc" }]);
+  });
+
+  it("does not duplicate id when it is the primary sort", () => {
+    expect(withIdTieBreaker("id", "asc")).toEqual([{ id: "asc" }]);
   });
 });

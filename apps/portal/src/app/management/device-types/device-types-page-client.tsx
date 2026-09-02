@@ -8,6 +8,7 @@ import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
+import { useTableSort } from "@/hooks/use-table-sort";
 import { cn } from "@/lib/utils";
 import { AccessDenied } from "../../../components/access-denied";
 import {
@@ -28,8 +29,8 @@ export default function DeviceTypesPageClient() {
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
   const categoryId = params.categoryId ?? "";
-  const sortBy = params.sortBy ?? "createdAt";
-  const sortDir = (params.sortDir as "asc" | "desc" | undefined) ?? "desc";
+  const sort = useTableSort(params, setParams, "createdAt");
+  const { sortBy, sortDir } = sort;
   const page = Number(params.page) || 1;
   const pageSize = Number(params.pageSize) || 10;
   const committedSearch = params.search ?? "";
@@ -127,7 +128,7 @@ export default function DeviceTypesPageClient() {
         ) : result ? (
           <>
             <div className="mt-4">
-              <DeviceTypeTable types={result.data} />
+              <DeviceTypeTable types={result.data} sort={sort} />
             </div>
             <PaginationBar
               className="mt-4"

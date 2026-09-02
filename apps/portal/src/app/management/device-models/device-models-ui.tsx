@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -118,15 +120,15 @@ export function DeviceModelFilters({
   );
 }
 
-export function DeviceModelTable({ models }: { models: DeviceModelRow[] }) {
+export function DeviceModelTable({ models, sort }: { models: DeviceModelRow[]; sort: TableSort }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[720px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
             <th className="px-4 py-3">Device Name</th>
-            <th className="px-4 py-3">Manufacturer</th>
-            <th className="px-4 py-3">Model</th>
+            <SortableTh field="manufacturer" label="Manufacturer" sort={sort} />
+            <SortableTh field="model" label="Model" sort={sort} />
             <th className="px-4 py-3">Deskripsi</th>
             <th className="px-4 py-3">Status</th>
             <th className="px-4 py-3"></th>

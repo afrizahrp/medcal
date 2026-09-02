@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -133,40 +135,40 @@ export function CustomerFilters({
   );
 }
 
-export function CustomerTable({ customers }: { customers: CustomerRow[] }) {
+export function CustomerTable({ customers, sort }: { customers: CustomerRow[]; sort: TableSort }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[640px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-3">Nomor</th>
-            <th className="px-4 py-3">Nama</th>
+            <SortableTh field="number" label="Nomor" sort={sort} />
+            <SortableTh field="name" label="Nama" sort={sort} />
             <th className="px-4 py-3">Phone</th>
             <th className="px-4 py-3">Email</th>
-            <th className="px-4 py-3">Status</th>
+            <SortableTh field="status" label="Status" sort={sort} />
             <th className="px-4 py-3"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {customers.map((customer) => (
-              <tr key={customer.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-mono text-xs text-slate-600">{customer.number}</td>
-                <td className="px-4 py-3">
-                  <p className="font-medium text-slate-900">{customer.name}</p>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{customer.phone ?? "—"}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{customer.email ?? "—"}</td>
-                <td className="px-4 py-3">
-                  <CustomerStatusBadge status={customer.status} />
-                </td>
-                <td className="px-4 py-3">
-                  <Link href={`/customers/${customer.id}`}>
-                    <Button variant="ghost" size="sm">
-                      Edit
-                    </Button>
-                  </Link>
-                </td>
-              </tr>
+            <tr key={customer.id} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-mono text-xs text-slate-600">{customer.number}</td>
+              <td className="px-4 py-3">
+                <p className="font-medium text-slate-900">{customer.name}</p>
+              </td>
+              <td className="px-4 py-3 text-sm text-slate-600">{customer.phone ?? "—"}</td>
+              <td className="px-4 py-3 text-sm text-slate-600">{customer.email ?? "—"}</td>
+              <td className="px-4 py-3">
+                <CustomerStatusBadge status={customer.status} />
+              </td>
+              <td className="px-4 py-3">
+                <Link href={`/customers/${customer.id}`}>
+                  <Button variant="ghost" size="sm">
+                    Edit
+                  </Button>
+                </Link>
+              </td>
+            </tr>
           ))}
         </tbody>
       </table>

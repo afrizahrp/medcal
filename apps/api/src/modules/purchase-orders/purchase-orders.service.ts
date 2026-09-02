@@ -11,7 +11,7 @@ import {
   type PurchaseOrderListQuery,
   type PurchaseOrderUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { renderPurchaseOrderPdf, type PurchaseOrderPdfResult } from "./purchase-order-pdf";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -65,7 +65,10 @@ function isUniqueConstraintError(error: unknown): boolean {
 
 @Injectable()
 export class PurchaseOrdersService {
-  async create(companyId: string, input: PurchaseOrderCreateInput): Promise<PurchaseOrderWithItems> {
+  async create(
+    companyId: string,
+    input: PurchaseOrderCreateInput,
+  ): Promise<PurchaseOrderWithItems> {
     try {
       return await prisma.$transaction(async (tx) => {
         const quotation = await tx.quotation.findFirst({
@@ -188,7 +191,10 @@ export class PurchaseOrdersService {
     }
   }
 
-  async findAll(companyId: string, query: PurchaseOrderListQuery): Promise<PurchaseOrderListResult> {
+  async findAll(
+    companyId: string,
+    query: PurchaseOrderListQuery,
+  ): Promise<PurchaseOrderListResult> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
 
@@ -219,7 +225,7 @@ export class PurchaseOrdersService {
       prisma.purchaseOrder.count({ where }),
       prisma.purchaseOrder.findMany({
         where,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: purchaseOrderInclude,

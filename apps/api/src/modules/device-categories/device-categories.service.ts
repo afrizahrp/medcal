@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { MasterCodeService, prisma } from "@medcal/db";
 import type { DeviceCategory, Prisma } from "@medcal/db";
 import {
@@ -11,7 +7,7 @@ import {
   type DeviceCategoryListQuery,
   type DeviceCategoryUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -68,7 +64,7 @@ export class DeviceCategoriesService {
       prisma.deviceCategory.count({ where }),
       prisma.deviceCategory.findMany({
         where,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),

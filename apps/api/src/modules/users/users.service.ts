@@ -1,7 +1,16 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { prisma } from "@medcal/db";
 import type { MembershipRole, Prisma, User, UserMembership, UserStatus } from "@medcal/db";
 import { isAllowedRegistrationDomain } from "@medcal/shared";
+import { resolveOrderBy } from "../../common/sort-query";
+
+/** Whitelisted `sortBy` values for GET /users — see resolveOrderBy. */
+export const USER_SORTABLE_FIELDS = ["createdAt", "name", "email", "status"] as const;
 
 // Internal staff roles (everything except CUSTOMER/SUPERADMIN) may only be
 // granted to users on the approved company domain — see forensic audit
@@ -45,6 +54,8 @@ export interface UserListQuery {
   page?: number;
   pageSize?: number;
   search?: string;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
   status?: UserStatus;
   role?: MembershipRole;
 }
@@ -66,16 +77,14 @@ export class UsersService {
             ],
           }
         : {}),
-      ...(query.role
-        ? { memberships: { some: { companyId, role: query.role } } }
-        : {}),
+      ...(query.role ? { memberships: { some: { companyId, role: query.role } } } : {}),
     };
 
     const [total, users] = await Promise.all([
       prisma.user.count({ where }),
       prisma.user.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: resolveOrderBy(USER_SORTABLE_FIELDS, query.sortBy, query.sortDir, "createdAt"),
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
@@ -305,7 +314,9 @@ export class UsersService {
     });
   }
 
-  async findUsersWithoutMembership(companyId: string): Promise<Array<{ id: string; email: string; name: string | null }>> {
+  async findUsersWithoutMembership(
+    companyId: string,
+  ): Promise<Array<{ id: string; email: string; name: string | null }>> {
     const users = await prisma.user.findMany({
       where: {
         memberships: { none: { companyId } },

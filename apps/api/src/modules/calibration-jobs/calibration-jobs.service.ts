@@ -14,7 +14,7 @@ import {
   type CalibrationJobListQuery,
   type CalibrationJobRegisterDeviceInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { DevicesService, type DeviceWithRelations } from "../devices/devices.service";
 
 const calibrationJobInclude = {
@@ -144,7 +144,7 @@ export class CalibrationJobsService {
       prisma.calibrationJob.count({ where }),
       prisma.calibrationJob.findMany({
         where,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: calibrationJobInclude,

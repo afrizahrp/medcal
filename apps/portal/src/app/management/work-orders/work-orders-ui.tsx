@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import { PaginationBar, Surface, formatRelativeTime, selectClassName } from "../leads/leads-ui";
 import { ConfirmDialog, DetailField } from "../calibration-requests/calibration-requests-ui";
 import {
@@ -21,7 +23,12 @@ import {
   type MoneyValue,
   type QuotationCustomer,
 } from "../quotations/quotations-ui";
-import { deviceIdentifierFromItem, type AssignmentRole, type WorkOrderStatus, WORK_ORDER_STATUS_VALUES } from "./work-order-form-utils";
+import {
+  deviceIdentifierFromItem,
+  type AssignmentRole,
+  type WorkOrderStatus,
+  WORK_ORDER_STATUS_VALUES,
+} from "./work-order-form-utils";
 
 export type { WorkOrderStatus, AssignmentRole };
 
@@ -292,20 +299,26 @@ export function WorkOrderFilters({
   );
 }
 
-export function WorkOrderTable({ workOrders }: { workOrders: WorkOrderRow[] }) {
+export function WorkOrderTable({
+  workOrders,
+  sort,
+}: {
+  workOrders: WorkOrderRow[];
+  sort: TableSort;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[1100px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-3">Work Order</th>
+            <SortableTh field="number" label="Work Order" sort={sort} />
             <th className="px-4 py-3">Customer</th>
             <th className="px-4 py-3">Purchase Order</th>
             <th className="px-4 py-3">Quotation</th>
             <th className="px-4 py-3">Service Mode</th>
-            <th className="px-4 py-3">Status</th>
+            <SortableTh field="status" label="Status" sort={sort} />
             <th className="px-4 py-3">Scheduled Start</th>
-            <th className="px-4 py-3">Created At</th>
+            <SortableTh field="createdAt" label="Created At" sort={sort} />
             <th className="px-4 py-3"></th>
           </tr>
         </thead>
@@ -392,7 +405,9 @@ export function WorkOrderItemsTable({ items }: { items: WorkOrderItem[] }) {
                     ) : null}
                     <p className="font-mono text-xs text-slate-500">{device.identifier ?? "—"}</p>
                   </td>
-                  <td className="px-3 py-3 text-right text-sm text-slate-600">{formatQty(item.qty)}</td>
+                  <td className="px-3 py-3 text-right text-sm text-slate-600">
+                    {formatQty(item.qty)}
+                  </td>
                 </tr>
               );
             })}

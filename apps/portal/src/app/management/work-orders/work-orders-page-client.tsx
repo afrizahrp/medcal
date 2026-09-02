@@ -5,6 +5,7 @@ import { isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
+import { useTableSort } from "@/hooks/use-table-sort";
 import { cn } from "@/lib/utils";
 import { AccessDenied } from "../../../components/access-denied";
 import {
@@ -25,8 +26,8 @@ export default function WorkOrdersPageClient() {
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
   const status: WorkOrderStatus | "" = (params.status as WorkOrderStatus | undefined) ?? "";
-  const sortBy = params.sortBy ?? "createdAt";
-  const sortDir = (params.sortDir as "asc" | "desc" | undefined) ?? "desc";
+  const sort = useTableSort(params, setParams, "createdAt");
+  const { sortBy, sortDir } = sort;
   const page = Number(params.page) || 1;
   const pageSize = Number(params.pageSize) || 10;
   const committedSearch = params.search ?? "";
@@ -65,10 +66,7 @@ export default function WorkOrdersPageClient() {
     <div className="w-full px-4 py-6 md:px-6 md:py-6">
       <PageHeader
         title="Work Orders"
-        crumbs={[
-          { href: "/", label: "Dashboard" },
-          { label: "Work Orders" },
-        ]}
+        crumbs={[{ href: "/", label: "Dashboard" }, { label: "Work Orders" }]}
       />
 
       <Surface className={cn("mt-6 p-4 md:p-6", fetching && "opacity-70")}>
@@ -101,7 +99,7 @@ export default function WorkOrdersPageClient() {
         ) : result ? (
           <>
             <div className="mt-4">
-              <WorkOrderTable workOrders={result.data} />
+              <WorkOrderTable workOrders={result.data} sort={sort} />
             </div>
             <PaginationBar
               className="mt-4"

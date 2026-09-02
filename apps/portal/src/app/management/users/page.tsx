@@ -7,6 +7,10 @@ import { apiFetch, isForbidden } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SortableTh } from "@/components/ui/sortable-th";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useTableSort } from "@/hooks/use-table-sort";
+import { useUrlQueryState } from "@/hooks/use-url-query-state";
 import { AccessDenied } from "../../../components/access-denied";
 
 type UserStatus = "INVITED" | "ACTIVE" | "DISABLED";
@@ -63,27 +67,46 @@ const ROLE_LABELS: Record<MembershipRole, string> = {
   CUSTOMER_SERVICE: "Customer Service",
 };
 
+const URL_KEYS = ["search", "sortBy", "sortDir", "page"] as const;
+
 export default function UsersPage() {
+  const { params, setParams } = useUrlQueryState(URL_KEYS);
+
+  const sort = useTableSort(params, setParams, "createdAt");
+  const { sortBy, sortDir } = sort;
+  const page = Number(params.page) || 1;
+  const committedSearch = params.search ?? "";
+
   const [users, setUsers] = useState<UserListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+
+  const [searchInput, setSearchInput] = useState(committedSearch);
+  const debouncedSearch = useDebouncedValue(searchInput, 500);
+
+  useEffect(() => {
+    if (debouncedSearch !== committedSearch) {
+      setParams({ search: debouncedSearch || undefined, page: undefined });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setForbidden(false);
     try {
-      const params = new URLSearchParams();
-      params.set("page", String(page));
-      params.set("pageSize", "10");
-      if (search) params.set("search", search);
+      const qs = new URLSearchParams();
+      qs.set("page", String(page));
+      qs.set("pageSize", "10");
+      qs.set("sortBy", sortBy);
+      qs.set("sortDir", sortDir);
+      if (committedSearch) qs.set("search", committedSearch);
 
-      const result = await apiFetch<UserListResult>(`/users?${params.toString()}`);
+      const result = await apiFetch<UserListResult>(`/users?${qs.toString()}`);
       setUsers(result.data);
       setTotalPages(result.totalPages);
       setTotal(result.total);
@@ -96,7 +119,7 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, committedSearch, sortBy, sortDir]);
 
   useEffect(() => {
     load();
@@ -128,11 +151,8 @@ export default function UsersPage() {
             <Input
               type="text"
               placeholder="Cari nama atau email..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="pl-10"
             />
           </div>
@@ -155,10 +175,10 @@ export default function UsersPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                    <th className="px-4 py-3">User</th>
+                    <SortableTh field="name" label="User" sort={sort} />
                     <th className="px-4 py-3">Role</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Tanggal Dibuat</th>
+                    <SortableTh field="status" label="Status" sort={sort} />
+                    <SortableTh field="createdAt" label="Tanggal Dibuat" sort={sort} />
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
@@ -179,7 +199,9 @@ export default function UsersPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <Badge className={STATUS_COLORS[user.status]}>{STATUS_LABELS[user.status]}</Badge>
+                        <Badge className={STATUS_COLORS[user.status]}>
+                          {STATUS_LABELS[user.status]}
+                        </Badge>
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-500">
                         {new Date(user.createdAt).toLocaleDateString("id-ID")}
@@ -206,7 +228,7 @@ export default function UsersPage() {
                   variant="outline"
                   size="sm"
                   disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  onClick={() => setParams({ page: page - 1 <= 1 ? undefined : String(page - 1) })}
                 >
                   Sebelumnya
                 </Button>
@@ -214,7 +236,7 @@ export default function UsersPage() {
                   variant="outline"
                   size="sm"
                   disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
+                  onClick={() => setParams({ page: String(page + 1) })}
                 >
                   Berikutnya
                 </Button>

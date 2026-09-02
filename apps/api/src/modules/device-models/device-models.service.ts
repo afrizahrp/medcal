@@ -12,7 +12,7 @@ import {
   type DeviceModelListQuery,
   type DeviceModelUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -58,7 +58,8 @@ export class DeviceModelsService {
     });
     if (duplicate) {
       throw new ConflictException({
-        message: "A device model with this manufacturer and model already exists for this device type",
+        message:
+          "A device model with this manufacturer and model already exists for this device type",
         code: "DUPLICATE_DEVICE_MODEL",
         existingId: duplicate.id,
       });
@@ -110,7 +111,7 @@ export class DeviceModelsService {
       prisma.deviceModel.findMany({
         where,
         include: { deviceType: { select: deviceTypeSelect } },
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),

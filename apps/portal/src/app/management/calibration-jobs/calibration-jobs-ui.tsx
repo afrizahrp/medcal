@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -240,19 +242,25 @@ export function CalibrationJobFilters({
   );
 }
 
-export function CalibrationJobTable({ jobs }: { jobs: CalibrationJobRow[] }) {
+export function CalibrationJobTable({
+  jobs,
+  sort,
+}: {
+  jobs: CalibrationJobRow[];
+  sort: TableSort;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[1000px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
             <th className="px-4 py-3">Work Order</th>
-            <th className="px-4 py-3">Unit</th>
+            <SortableTh field="unitOrdinal" label="Unit" sort={sort} />
             <th className="px-4 py-3">Declared Device</th>
             <th className="px-4 py-3">Serial (observed)</th>
             <th className="px-4 py-3">Declared AKD/AKL</th>
-            <th className="px-4 py-3">Approval</th>
-            <th className="px-4 py-3">Job Status</th>
+            <SortableTh field="akdAklApprovalStatus" label="Approval" sort={sort} />
+            <SortableTh field="status" label="Job Status" sort={sort} />
             <th className="px-4 py-3"></th>
           </tr>
         </thead>

@@ -6,6 +6,7 @@ import { isForbidden } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
+import { useTableSort } from "@/hooks/use-table-sort";
 import { AccessDenied } from "../../../components/access-denied";
 import { useRequireSession, useAuthz } from "@medcal/auth/client";
 import { PaginationBar } from "../leads/leads-ui";
@@ -51,8 +52,8 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
   const statusFilter: EmailStatus | "" = (params.status as EmailStatus | undefined) ?? "";
-  const sortBy = params.sortBy ?? "createdAt";
-  const sortDir = (params.sortDir as "asc" | "desc" | undefined) ?? "desc";
+  const sort = useTableSort(params, setParams, "createdAt");
+  const { sortBy, sortDir } = sort;
   const page = Number(params.page) || 1;
   const pageSize = Number(params.pageSize) || 20;
   const committedSearch = params.search ?? "";
@@ -205,6 +206,7 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
         <div className="mt-4">
           <EmailInboxTable
             rows={result?.data ?? []}
+            sort={sort}
             folder={folder}
             loading={loading}
             fetching={fetching}

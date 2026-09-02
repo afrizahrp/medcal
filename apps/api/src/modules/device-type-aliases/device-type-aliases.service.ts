@@ -13,7 +13,7 @@ import {
   type DeviceTypeAliasListQuery,
   type DeviceTypeAliasUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -135,7 +135,7 @@ export class DeviceTypeAliasesService {
       prisma.deviceTypeAlias.findMany({
         where,
         include: { deviceType: { select: deviceTypeSelect } },
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -229,10 +229,7 @@ export class DeviceTypeAliasesService {
     return alias;
   }
 
-  async update(
-    id: string,
-    input: DeviceTypeAliasUpdateInput,
-  ): Promise<DeviceTypeAliasWithType> {
+  async update(id: string, input: DeviceTypeAliasUpdateInput): Promise<DeviceTypeAliasWithType> {
     const existing = await this.findOne(id);
 
     if (input.deviceTypeId !== undefined && input.deviceTypeId !== existing.deviceTypeId) {

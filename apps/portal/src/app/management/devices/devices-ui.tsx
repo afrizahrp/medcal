@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import Link from "next/link";
 import { Check, ChevronsUpDown, Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -64,8 +66,7 @@ export const DEVICE_STATUS_OPTIONS: DeviceStatus[] = ["ACTIVE", "INACTIVE"];
 
 export const deviceFormPageClass = "mx-auto w-full max-w-[1000px] px-4 py-5 md:px-6";
 export const deviceFormSurfaceClass = "mt-5 p-4 md:p-5";
-export const deviceFormActionsClass =
-  "mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3";
+export const deviceFormActionsClass = "mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3";
 
 export { PageHeader, Surface, selectClassName };
 
@@ -125,7 +126,9 @@ function DeviceTypeFilter({
             setOpen(false);
           }}
         >
-          <Check className={cn("mr-2 h-4 w-4", deviceTypeId === "" ? "opacity-100" : "opacity-0")} />
+          <Check
+            className={cn("mr-2 h-4 w-4", deviceTypeId === "" ? "opacity-100" : "opacity-0")}
+          />
           <span className="truncate">Semua tipe</span>
         </CommandItem>
         {deviceTypes.map((deviceType) => (
@@ -226,7 +229,7 @@ export function DeviceFilters({
   );
 }
 
-export function DeviceTable({ devices }: { devices: DeviceRow[] }) {
+export function DeviceTable({ devices, sort }: { devices: DeviceRow[]; sort: TableSort }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[980px]">
@@ -234,11 +237,11 @@ export function DeviceTable({ devices }: { devices: DeviceRow[] }) {
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
             <th className="px-4 py-3">Kode</th>
             <th className="px-4 py-3">Device Type</th>
-            <th className="px-4 py-3">Brand</th>
-            <th className="px-4 py-3">Model</th>
-            <th className="px-4 py-3">Serial Number</th>
+            <SortableTh field="brand" label="Brand" sort={sort} />
+            <SortableTh field="model" label="Model" sort={sort} />
+            <SortableTh field="serialNumber" label="Serial Number" sort={sort} />
             <th className="px-4 py-3">Customer</th>
-            <th className="px-4 py-3">Status</th>
+            <SortableTh field="status" label="Status" sort={sort} />
             <th className="px-4 py-3"></th>
           </tr>
         </thead>

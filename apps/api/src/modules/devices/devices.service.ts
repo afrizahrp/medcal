@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { MasterCodeService, prisma } from "@medcal/db";
 import type { Prisma } from "@medcal/db";
 import {
@@ -11,7 +7,7 @@ import {
   type DeviceListQuery,
   type DeviceUpdateInput,
 } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -138,7 +134,7 @@ export class DevicesService {
       prisma.device.findMany({
         where,
         include: deviceInclude,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -185,9 +181,13 @@ export class DevicesService {
         ...(input.deviceTypeId !== undefined ? { deviceTypeId: input.deviceTypeId } : {}),
         ...(input.brand !== undefined ? { brand: emptyToNull(input.brand) } : {}),
         ...(input.model !== undefined ? { model: emptyToNull(input.model) } : {}),
-        ...(input.serialNumber !== undefined ? { serialNumber: emptyToNull(input.serialNumber) } : {}),
+        ...(input.serialNumber !== undefined
+          ? { serialNumber: emptyToNull(input.serialNumber) }
+          : {}),
         ...(input.category !== undefined ? { category: emptyToNull(input.category) } : {}),
-        ...(input.locationText !== undefined ? { locationText: emptyToNull(input.locationText) } : {}),
+        ...(input.locationText !== undefined
+          ? { locationText: emptyToNull(input.locationText) }
+          : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
       },
       include: deviceInclude,
@@ -206,10 +206,7 @@ export class DevicesService {
         prisma.certificate.count({ where: { deviceId: id } }),
       ]);
 
-    if (
-      requestItems + quotationItems + purchaseOrderItems + calibrationJobs + certificates >
-      0
-    ) {
+    if (requestItems + quotationItems + purchaseOrderItems + calibrationJobs + certificates > 0) {
       throw new BadRequestException({
         message: "Cannot delete a device that is still referenced by business records",
         code: "DEVICE_IN_USE",

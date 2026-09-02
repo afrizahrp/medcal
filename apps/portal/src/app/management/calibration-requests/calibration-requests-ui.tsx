@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { SortableTh } from "@/components/ui/sortable-th";
+import type { TableSort } from "@/hooks/use-table-sort";
 import Link from "next/link";
 import { Check, ChevronsUpDown, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -188,18 +190,24 @@ export function CalibrationRequestFilters({
   );
 }
 
-export function CalibrationRequestTable({ requests }: { requests: CalibrationRequestRow[] }) {
+export function CalibrationRequestTable({
+  requests,
+  sort,
+}: {
+  requests: CalibrationRequestRow[];
+  sort: TableSort;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[700px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-3">Nomor</th>
+            <SortableTh field="number" label="Nomor" sort={sort} />
             <th className="px-4 py-3">Customer</th>
             <th className="px-4 py-3">Mode</th>
             <th className="px-4 py-3">Items</th>
-            <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3">Tanggal</th>
+            <SortableTh field="status" label="Status" sort={sort} />
+            <SortableTh field="createdAt" label="Tanggal" sort={sort} />
             <th className="px-4 py-3"></th>
           </tr>
         </thead>

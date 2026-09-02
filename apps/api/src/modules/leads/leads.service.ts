@@ -1,9 +1,15 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { prisma } from "@medcal/db";
 import type { ContactMessage, Customer, Lead, LeadStatus, Prisma } from "@medcal/db";
 import { LEAD_SORTABLE_FIELDS, type LeadConvertInput } from "@medcal/shared";
 import type { LeadListQuery } from "@medcal/shared";
-import { resolveSortOrder } from "../../common/sort-query";
+import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { CustomersService } from "../customers/customers.service";
 import { findLeadMatchCandidates } from "./lead-matching";
 import { NotificationDispatchService } from "../push-tokens/notification-dispatch.service";
@@ -91,7 +97,7 @@ export class LeadsService {
       prisma.lead.count({ where }),
       prisma.lead.findMany({
         where,
-        orderBy: { [sortField]: sortDir },
+        orderBy: withIdTieBreaker(sortField, sortDir),
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
