@@ -134,6 +134,10 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "SUPERVISOR", resource: "managementDashboard", action: "read" },
   // TECHNICIAN
   { role: "TECHNICIAN", resource: "managementDashboard", action: "read" },
+  // TECHNICIAN_MANAGER (2026-09-02): role registered only. No approval workflow
+  // or calibration-execution grants yet — mirrors TECHNICIAN's baseline so an
+  // assigned user can reach the management dashboard.
+  { role: "TECHNICIAN_MANAGER", resource: "managementDashboard", action: "read" },
   // FINANCE
   { role: "FINANCE", resource: "managementDashboard", action: "read" },
   // CUSTOMER

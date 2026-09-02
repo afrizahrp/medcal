@@ -5,6 +5,7 @@ export type MembershipRole =
   | "ADMIN"
   | "SUPERVISOR"
   | "TECHNICIAN"
+  | "TECHNICIAN_MANAGER"
   | "FINANCE"
   | "CUSTOMER"
   | "CUSTOMER_SERVICE";

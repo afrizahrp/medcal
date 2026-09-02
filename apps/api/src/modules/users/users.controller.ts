@@ -24,7 +24,16 @@ const userListQuerySchema = z.object({
   search: z.string().optional(),
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).optional(),
   role: z
-    .enum(["SUPERADMIN", "ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER", "CUSTOMER_SERVICE"])
+    .enum([
+      "SUPERADMIN",
+      "ADMIN",
+      "SUPERVISOR",
+      "TECHNICIAN",
+      "TECHNICIAN_MANAGER",
+      "FINANCE",
+      "CUSTOMER",
+      "CUSTOMER_SERVICE",
+    ])
     .optional(),
 });
 
@@ -32,12 +41,22 @@ const userStatusUpdateSchema = z.object({
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]),
 });
 
+const membershipRoleValues = [
+  "ADMIN",
+  "SUPERVISOR",
+  "TECHNICIAN",
+  "TECHNICIAN_MANAGER",
+  "FINANCE",
+  "CUSTOMER",
+  "CUSTOMER_SERVICE",
+] as const;
+
 const membershipAssignSchema = z.object({
-  role: z.enum(["ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER", "CUSTOMER_SERVICE"]),
+  role: z.enum(membershipRoleValues),
 });
 
 const membershipUpdateSchema = z.object({
-  role: z.enum(["ADMIN", "SUPERVISOR", "TECHNICIAN", "FINANCE", "CUSTOMER", "CUSTOMER_SERVICE"]),
+  role: z.enum(membershipRoleValues),
 });
 
 const membershipNotificationSettingsSchema = z.object({
