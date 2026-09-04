@@ -144,15 +144,20 @@ const PRESERVED_BASELINE: GrantRow[] = [
   // escalateIdentity: field actor raises a missing/unacceptable declaration.
   // approveIdentity: TECHNICIAN_MANAGER is the sole approver — deliberately
   // NOT granted to ADMIN/SUPERVISOR (SUPERADMIN keeps its hasPermission bypass).
-  // assignDevice: on-site device identification (match to an already-registered
-  // device only). TECHNICIAN + TECHNICIAN_MANAGER only — mirrors escalateIdentity.
+  // Identity Correction BA (2026-09-04): replaces the removed match-only
+  // assignDevice action. submitIdentityCorrection is the sole path for
+  // setting/changing a job's Device identity (first-time + correction) plus the
+  // observed serial / AKD-AKL — TECHNICIAN + TECHNICIAN_MANAGER, mirroring
+  // escalateIdentity. decideIdentityCorrection (APPROVE/REJECT) is
+  // TECHNICIAN_MANAGER-only, mirroring approveIdentity.
   { role: "TECHNICIAN", resource: "calibrationJob", action: "read" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "escalateIdentity" },
-  { role: "TECHNICIAN", resource: "calibrationJob", action: "assignDevice" },
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "submitIdentityCorrection" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "read" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "escalateIdentity" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "approveIdentity" },
-  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "assignDevice" },
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "submitIdentityCorrection" },
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "decideIdentityCorrection" },
   // FINANCE
   { role: "FINANCE", resource: "managementDashboard", action: "read" },
   // CUSTOMER

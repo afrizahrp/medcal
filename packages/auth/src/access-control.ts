@@ -103,9 +103,13 @@ const ac = createAccessControl({
   //   PENDING_REVIEW when the customer's AKD/AKL/NIE is missing/unacceptable.
   // approveIdentity: TECHNICIAN_MANAGER's per-job APPROVE/REJECT decision on
   //   that regulatory declaration (sole approver — not granted to ADMIN).
-  // assignDevice: on-site actor binds the job's physical Device by matching it
-  //   to an already-registered master row. Devices must be registered earlier
-  //   (office-side requisition/WorkOrder) — there is no register-new path here.
+  // submitIdentityCorrection: on-site actor submits an Identity Correction BA —
+  //   the sole path for setting/changing the job's Device identity (first-time
+  //   resolution AND correction) plus the observed serial / AKD-AKL. Replaces
+  //   the removed match-only assignDevice action. Also gates uploading the BA's
+  //   signature images (see the IDENTITY_CORRECTION FileOwnerPolicy).
+  // decideIdentityCorrection: TECHNICIAN_MANAGER APPROVE/REJECT of that BA (sole
+  //   approver — mirrors approveIdentity; not granted to ADMIN/SUPERVISOR).
   calibrationJob: [
     "read",
     "create",
@@ -113,7 +117,8 @@ const ac = createAccessControl({
     "complete",
     "escalateIdentity",
     "approveIdentity",
-    "assignDevice",
+    "submitIdentityCorrection",
+    "decideIdentityCorrection",
   ],
   certificate: ["read", "create", "update", "issue"],
   invoice: ["read", "create", "update", "void"],

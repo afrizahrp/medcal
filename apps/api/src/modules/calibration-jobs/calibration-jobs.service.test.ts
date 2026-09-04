@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  GoneException,
+  NotFoundException,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Prisma, prisma } from "@medcal/db";
@@ -12,6 +17,12 @@ import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import { DevicesService } from "../devices/devices.service";
 import { CalibrationJobsController } from "./calibration-jobs.controller";
 import { CalibrationJobsService } from "./calibration-jobs.service";
+import { identityCorrectionFileOwnerPolicy } from "./identity-correction-file-owner-policy";
+
+const UNAVAILABLE_SIGNATURES = {
+  TECHNICIAN: { status: "UNAVAILABLE" as const, unavailableReason: "n/a in test" },
+  CUSTOMER: { status: "UNAVAILABLE" as const, unavailableReason: "n/a in test" },
+};
 
 // Only the Better Auth session boundary is mocked; hasPermission stays real,
 // backed by the RolePermission cache primed in vitest.setup.ts.
@@ -53,6 +64,7 @@ async function cleanupSequences(companyId: string) {
           "PURCHASE_ORDER",
           "QUOTATION",
           "CALIBRATION_REQUEST",
+          "IDENTITY_CORRECTION_BA",
         ],
       },
     },
@@ -360,26 +372,87 @@ describe("CalibrationJobsService — AKD/AKL identity gate", () => {
   });
 });
 
-describe("CalibrationJobsService — physical device assignment", () => {
-  it("assigns an existing device: deviceId set, DeviceType validated", async () => {
+describe("CalibrationJobsService — Identity Correction (device identity)", () => {
+  it("submit creates a BA + one signature per role atomically (first-time resolution)", async () => {
     const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
     const device = await devicesService.create(realCompanyId, {
       customerId,
       deviceTypeId,
-      serialNumber: "SN-MATCH-1",
+      serialNumber: "SN-BAI-1",
     });
 
-    const result = await calibrationJobsService.assignDevice(realCompanyId, jobs[0]!.id, {
-      deviceId: device.id,
-    });
+    const result = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      { reason: "On-site identification", newDeviceId: device.id, signatures: UNAVAILABLE_SIGNATURES },
+    );
 
     expect(result.deviceTypeValidated).toBe(true);
-    expect(result.job.deviceId).toBe(device.id);
-    expect(result.job.device?.id).toBe(device.id);
+    expect(result.correction.number).toMatch(/^BAI\/\d{4}\//);
+    expect(result.correction.status).toBe("PENDING_REVIEW");
+    expect(result.correction.signatures).toHaveLength(2);
+    expect(result.correction.signatures.map((s) => s.signerRole).sort()).toEqual([
+      "CUSTOMER",
+      "TECHNICIAN",
+    ]);
+    // Not written through to the job until approval.
+    const job = await calibrationJobsService.findOne(realCompanyId, jobs[0]!.id);
+    expect(job.deviceId).toBeNull();
   });
 
-  it("rejects a device whose DeviceType does not match the job (hard error)", async () => {
+  it("rejects a submit that changes nothing", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+
+    await expect(
+      calibrationJobsService.submitIdentityCorrection(realCompanyId, jobs[0]!.id, tech.id, {
+        reason: "x",
+        newSerial: null,
+        signatures: UNAVAILABLE_SIGNATURES,
+      }),
+    ).rejects.toMatchObject({ response: { code: "IDENTITY_CORRECTION_NO_CHANGE" } });
+  });
+
+  it("rejects a submit when the identity gate is locked", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { status: "ACCEPTED_BY_QA" },
+    });
+
+    await expect(
+      calibrationJobsService.submitIdentityCorrection(realCompanyId, jobs[0]!.id, tech.id, {
+        reason: "x",
+        newSerial: "SN-NEW",
+        signatures: UNAVAILABLE_SIGNATURES,
+      }),
+    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_IDENTITY_GATE_LOCKED" } });
+  });
+
+  it("rejects a second pending BA for the same job", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    await calibrationJobsService.submitIdentityCorrection(realCompanyId, jobs[0]!.id, tech.id, {
+      reason: "first",
+      newSerial: "SN-A",
+      signatures: UNAVAILABLE_SIGNATURES,
+    });
+
+    await expect(
+      calibrationJobsService.submitIdentityCorrection(realCompanyId, jobs[0]!.id, tech.id, {
+        reason: "second",
+        newSerial: "SN-B",
+        signatures: UNAVAILABLE_SIGNATURES,
+      }),
+    ).rejects.toMatchObject({ response: { code: "IDENTITY_CORRECTION_ALREADY_PENDING" } });
+  });
+
+  it("rejects a device whose DeviceType does not match the job", async () => {
     const { jobs, customerId } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
     const otherDeviceTypeId = await createDeviceTypeId();
     const device = await devicesService.create(realCompanyId, {
       customerId,
@@ -387,12 +460,17 @@ describe("CalibrationJobsService — physical device assignment", () => {
     });
 
     await expect(
-      calibrationJobsService.assignDevice(realCompanyId, jobs[0]!.id, { deviceId: device.id }),
+      calibrationJobsService.submitIdentityCorrection(realCompanyId, jobs[0]!.id, tech.id, {
+        reason: "x",
+        newDeviceId: device.id,
+        signatures: UNAVAILABLE_SIGNATURES,
+      }),
     ).rejects.toMatchObject({ response: { code: "DEVICE_TYPE_MISMATCH" } });
   });
 
   it("rejects a device owned by a different customer", async () => {
     const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
     const otherCustomer = await createTestCustomer(realCompanyId);
     const device = await devicesService.create(realCompanyId, {
       customerId: otherCustomer.id,
@@ -400,67 +478,249 @@ describe("CalibrationJobsService — physical device assignment", () => {
     });
 
     await expect(
-      calibrationJobsService.assignDevice(realCompanyId, jobs[0]!.id, { deviceId: device.id }),
+      calibrationJobsService.submitIdentityCorrection(realCompanyId, jobs[0]!.id, tech.id, {
+        reason: "x",
+        newDeviceId: device.id,
+        signatures: UNAVAILABLE_SIGNATURES,
+      }),
     ).rejects.toMatchObject({ response: { code: "DEVICE_CUSTOMER_MISMATCH" } });
   });
 
-  it("rejects assigning a device to a job that already has one", async () => {
+  it("approve binds the device and writes serial + AKD/AKL through to the job", async () => {
     const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
-    const first = await devicesService.create(realCompanyId, { customerId, deviceTypeId });
-    const second = await devicesService.create(realCompanyId, { customerId, deviceTypeId });
-
-    await calibrationJobsService.assignDevice(realCompanyId, jobs[0]!.id, { deviceId: first.id });
-
-    await expect(
-      calibrationJobsService.assignDevice(realCompanyId, jobs[0]!.id, { deviceId: second.id }),
-    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_DEVICE_ALREADY_ASSIGNED" } });
-  });
-
-  it("rejects the same device on two jobs of one work order (@@unique backstop)", async () => {
-    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId, {
-      qty: 2,
-    });
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
     const device = await devicesService.create(realCompanyId, { customerId, deviceTypeId });
 
-    await calibrationJobsService.assignDevice(realCompanyId, jobs[0]!.id, { deviceId: device.id });
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      {
+        reason: "full identity",
+        newDeviceId: device.id,
+        newSerial: "SN-OBS-9",
+        newAkdAkl: "AKL 12345",
+        signatures: UNAVAILABLE_SIGNATURES,
+      },
+    );
 
-    await expect(
-      calibrationJobsService.assignDevice(realCompanyId, jobs[1]!.id, { deviceId: device.id }),
-    ).rejects.toMatchObject({ response: { code: "DEVICE_ALREADY_ASSIGNED_ON_WORK_ORDER" } });
+    const result = await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      correction.id,
+      manager.id,
+      { decision: "APPROVE" },
+    );
+
+    expect(result.correction.status).toBe("APPROVED");
+    expect(result.correction.decidedByUserId).toBe(manager.id);
+    expect(result.job.deviceId).toBe(device.id);
+    expect(result.job.technicianObservedSerial).toBe("SN-OBS-9");
+    expect(result.job.technicianObservedAkdAkl).toBe("AKL 12345");
   });
 
-  it("cross-company: cannot assign a device id from another company", async () => {
+  it("approve reopens the AKD/AKL gate when the corrected value changes a previously-APPROVED gate", async () => {
     const { jobs } = await startedWorkOrderJobs(realCompanyId);
-    const otherCompanyId = `S${randomUUID().slice(0, 2).toUpperCase()}`;
-    await prisma.company.create({
-      data: { id: otherCompanyId, name: "Foreign Dev Co", status: "ACTIVE" },
-    });
-    createdCompanyIds.push(otherCompanyId);
-    const foreignCustomer = await createTestCustomer(otherCompanyId);
-    const foreignType = await createDeviceTypeId();
-    const foreignDevice = await devicesService.create(otherCompanyId, {
-      customerId: foreignCustomer.id,
-      deviceTypeId: foreignType,
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: {
+        akdAklApprovalStatus: "APPROVED",
+        akdAklApprovedByUserId: manager.id,
+        akdAklApprovedAt: new Date(),
+        technicianObservedAkdAkl: "OLD-AKL",
+      },
     });
 
-    await expect(
-      calibrationJobsService.assignDevice(realCompanyId, jobs[0]!.id, {
-        deviceId: foreignDevice.id,
-      }),
-    ).rejects.toMatchObject({ response: { code: "DEVICE_NOT_FOUND" } });
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      { reason: "wrong NIE", newAkdAkl: "NEW-AKL", signatures: UNAVAILABLE_SIGNATURES },
+    );
+    const result = await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      correction.id,
+      manager.id,
+      { decision: "APPROVE" },
+    );
+
+    expect(result.correction.akdAklGateReopened).toBe(true);
+    expect(result.job.akdAklApprovalStatus).toBe("PENDING_REVIEW");
+    expect(result.job.akdAklApprovedByUserId).toBeNull();
+    expect(result.job.technicianObservedAkdAkl).toBe("NEW-AKL");
   });
 
-  it("cross-company: cannot assign to a job from another company", async () => {
+  it("approve does NOT reopen the gate when AKD/AKL is not part of the correction", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: {
+        akdAklApprovalStatus: "APPROVED",
+        akdAklApprovedByUserId: manager.id,
+        akdAklApprovedAt: new Date(),
+      },
+    });
+
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      { reason: "serial only", newSerial: "SN-ONLY", signatures: UNAVAILABLE_SIGNATURES },
+    );
+    const result = await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      correction.id,
+      manager.id,
+      { decision: "APPROVE" },
+    );
+
+    expect(result.correction.akdAklGateReopened).toBe(false);
+    expect(result.job.akdAklApprovalStatus).toBe("APPROVED");
+  });
+
+  it("approve does NOT reopen the gate when it was never APPROVED", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      { reason: "first NIE", newAkdAkl: "AKL-1", signatures: UNAVAILABLE_SIGNATURES },
+    );
+    const result = await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      correction.id,
+      manager.id,
+      { decision: "APPROVE" },
+    );
+
+    expect(result.correction.akdAklGateReopened).toBe(false);
+    expect(result.job.akdAklApprovalStatus).toBe("NOT_REQUIRED");
+    expect(result.job.technicianObservedAkdAkl).toBe("AKL-1");
+  });
+
+  it("rejects approve when a SIGNED signature has no uploaded image", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      {
+        reason: "signed but no image",
+        newSerial: "SN-SIGNED",
+        signatures: {
+          TECHNICIAN: { status: "SIGNED", signerName: "Tech A" },
+          CUSTOMER: { status: "SIGNED", signerName: "Cust B" },
+        },
+      },
+    );
+
+    await expect(
+      calibrationJobsService.decideIdentityCorrection(
+        realCompanyId,
+        jobs[0]!.id,
+        correction.id,
+        manager.id,
+        { decision: "APPROVE" },
+      ),
+    ).rejects.toMatchObject({
+      response: { code: "IDENTITY_CORRECTION_SIGNATURE_IMAGE_MISSING" },
+    });
+  });
+
+  it("reject makes no writes to the job and keeps the BA number", async () => {
+    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    const device = await devicesService.create(realCompanyId, { customerId, deviceTypeId });
+
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      { reason: "not sure", newDeviceId: device.id, signatures: UNAVAILABLE_SIGNATURES },
+    );
+
+    const result = await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      correction.id,
+      manager.id,
+      { decision: "REJECT", decisionNote: "identity unconfirmed" },
+    );
+
+    expect(result.correction.status).toBe("REJECTED");
+    expect(result.correction.number).toBe(correction.number);
+    expect(result.job.deviceId).toBeNull();
+  });
+
+  it("rejects deciding an already-decided BA", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      { reason: "x", newSerial: "SN-Z", signatures: UNAVAILABLE_SIGNATURES },
+    );
+    await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      correction.id,
+      manager.id,
+      { decision: "REJECT", decisionNote: "no" },
+    );
+
+    await expect(
+      calibrationJobsService.decideIdentityCorrection(
+        realCompanyId,
+        jobs[0]!.id,
+        correction.id,
+        manager.id,
+        { decision: "APPROVE" },
+      ),
+    ).rejects.toMatchObject({ response: { code: "IDENTITY_CORRECTION_ALREADY_DECIDED" } });
+  });
+
+  it("company-scoping: cannot submit against a job from another company", async () => {
     const otherCompanyId = `S${randomUUID().slice(0, 2).toUpperCase()}`;
     await prisma.company.create({
-      data: { id: otherCompanyId, name: "Foreign Job Co", status: "ACTIVE" },
+      data: { id: otherCompanyId, name: "Foreign IC Co", status: "ACTIVE" },
     });
     createdCompanyIds.push(otherCompanyId);
     const { jobs } = await startedWorkOrderJobs(otherCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
 
     await expect(
-      calibrationJobsService.assignDevice(realCompanyId, jobs[0]!.id, { deviceId: "whatever" }),
+      calibrationJobsService.submitIdentityCorrection(realCompanyId, jobs[0]!.id, tech.id, {
+        reason: "x",
+        newSerial: "SN",
+        signatures: UNAVAILABLE_SIGNATURES,
+      }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("the removed assign-device path throws a typed 410", () => {
+    expect(() => calibrationJobsService.assignDeviceRemoved()).toThrow(GoneException);
+    try {
+      calibrationJobsService.assignDeviceRemoved();
+    } catch (err) {
+      expect(err).toMatchObject({ response: { code: "ASSIGN_DEVICE_ENDPOINT_REMOVED" } });
+    }
   });
 
   it("device-candidates: scoped to the job's customer and device type", async () => {
@@ -578,19 +838,80 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     await expect(guard.canActivate(contextFor("escalateIdentity"))).resolves.toBe(true);
   });
 
-  it("allows a TECHNICIAN through the assign-device endpoint", async () => {
+  it("allows a TECHNICIAN to submit an identity correction", async () => {
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
     getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "t3@x.co" } });
 
-    await expect(guard.canActivate(contextFor("assignDevice"))).resolves.toBe(true);
+    await expect(
+      guard.canActivate(contextFor("submitIdentityCorrection")),
+    ).resolves.toBe(true);
   });
 
-  it("blocks a FINANCE user from the assign-device endpoint (403)", async () => {
+  it("blocks a TECHNICIAN from deciding an identity correction (403)", async () => {
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "t4@x.co" } });
+
+    await expect(
+      guard.canActivate(contextFor("decideIdentityCorrection")),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("allows a TECHNICIAN_MANAGER to decide an identity correction", async () => {
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "m2@x.co" } });
+
+    await expect(
+      guard.canActivate(contextFor("decideIdentityCorrection")),
+    ).resolves.toBe(true);
+  });
+
+  it("blocks a FINANCE user from submitting an identity correction (403)", async () => {
     const finance = await makeMember(realCompanyId, "FINANCE");
     getSessionMock.mockResolvedValueOnce({ user: { id: finance.id, email: "f@x.co" } });
 
-    await expect(guard.canActivate(contextFor("assignDevice"))).rejects.toBeInstanceOf(
+    await expect(guard.canActivate(contextFor("submitIdentityCorrection"))).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+});
+
+describe("identityCorrectionFileOwnerPolicy", () => {
+  it("resolves an existing signature as unlocked while PENDING_REVIEW, locked once decided", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      { reason: "policy test", newSerial: "SN-POLICY", signatures: UNAVAILABLE_SIGNATURES },
+    );
+    const signatureId = correction.signatures[0]!.id;
+
+    expect(
+      await identityCorrectionFileOwnerPolicy.resolveOwner(realCompanyId, signatureId),
+    ).toEqual({ exists: true, locked: false });
+
+    expect(
+      await identityCorrectionFileOwnerPolicy.resolveOwner("SOME-OTHER-CO", signatureId),
+    ).toEqual({ exists: false, locked: false });
+
+    await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      correction.id,
+      manager.id,
+      { decision: "REJECT", decisionNote: "no" },
+    );
+
+    expect(
+      await identityCorrectionFileOwnerPolicy.resolveOwner(realCompanyId, signatureId),
+    ).toEqual({ exists: true, locked: true });
+  });
+
+  it("uses the calibrationJob permission and submitIdentityCorrection write action", () => {
+    expect(identityCorrectionFileOwnerPolicy.ownerType).toBe("IDENTITY_CORRECTION");
+    expect(identityCorrectionFileOwnerPolicy.permissionResource).toBe("calibrationJob");
+    expect(identityCorrectionFileOwnerPolicy.writeAction).toBe("submitIdentityCorrection");
   });
 });

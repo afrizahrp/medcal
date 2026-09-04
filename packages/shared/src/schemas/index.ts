@@ -667,20 +667,119 @@ export type CalibrationJobIdentityDecisionInput = z.infer<
 >;
 
 // -----------------------------------------------------------------------------
-// Calibration Job — physical device assignment
+// Calibration Job — physical device assignment (REMOVED — see Identity Correction)
 // -----------------------------------------------------------------------------
-// Once a technician has physically identified the device on-site, the job's
-// (until now NULL) deviceId is bound — either to an existing Device master row
-// or to one registered on the spot. One RBAC action (calibrationJob:assignDevice)
-// covers both. Re-assignment once set is disallowed here (deferred to the
-// Identity Correction workflow).
+// The former match-only POST /calibration-jobs/:id/assign-device path is gone.
+// EVERY device-identity binding — first-time resolution AND correction of an
+// already-bound device — now flows through the Identity Correction BA workflow
+// (BA number + technician & customer signatures + TECHNICIAN_MANAGER approval),
+// because a KAN auditor always asks for the customer-acknowledged evidence that
+// the device identity is correct. The schema/type below are retained only so
+// the (now inert) endpoint keeps returning a typed 410 GONE until the Portal UI
+// is migrated in a follow-up task.
 
-/** POST /calibration-jobs/:id/assign-device body */
+/** @deprecated The assign-device endpoint is removed; use the Identity Correction workflow. */
 export const calibrationJobAssignDeviceSchema = z.object({
   deviceId: z.string().min(1),
 });
 
 export type CalibrationJobAssignDeviceInput = z.infer<typeof calibrationJobAssignDeviceSchema>;
+
+// -----------------------------------------------------------------------------
+// Calibration Job — Identity Correction (Berita Acara Identitas)
+// -----------------------------------------------------------------------------
+// Sole path for setting/changing CalibrationJob.deviceId, and for correcting the
+// technician-observed serial / AKD-AKL. A technician submits a BA (creating the
+// IdentityCorrection row + one signature row per role atomically); signature
+// images are then uploaded via POST /files (ownerType IDENTITY_CORRECTION,
+// ownerId = signature row id). A TECHNICIAN_MANAGER APPROVEs or REJECTs. An
+// APPROVED correction writes its new* values through to the job; if it changed
+// the AKD/AKL value and the job's AKD/AKL gate was already APPROVED, that gate
+// reopens to PENDING_REVIEW.
+
+export const IDENTITY_CORRECTION_SIGNER_ROLES = ["TECHNICIAN", "CUSTOMER"] as const;
+export type IdentityCorrectionSignerRole = (typeof IDENTITY_CORRECTION_SIGNER_ROLES)[number];
+
+export const SIGNATURE_STATUS_VALUES = ["SIGNED", "UNAVAILABLE", "REFUSED"] as const;
+export type SignatureStatusValue = (typeof SIGNATURE_STATUS_VALUES)[number];
+
+export const IDENTITY_CORRECTION_STATUS_VALUES = [
+  "PENDING_REVIEW",
+  "APPROVED",
+  "REJECTED",
+] as const;
+
+/** One signer's intent, captured atomically with the BA (image uploaded after). */
+const identityCorrectionSignatureInputSchema = z
+  .object({
+    status: z.enum(SIGNATURE_STATUS_VALUES),
+    signerName: z.string().trim().max(120).optional(),
+    unavailableReason: z.string().trim().max(500).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.status === "SIGNED" && !val.signerName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["signerName"],
+        message: "signerName is required when status is SIGNED",
+      });
+    }
+    if (val.status !== "SIGNED" && !val.unavailableReason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["unavailableReason"],
+        message: "unavailableReason is required when the signature is not SIGNED",
+      });
+    }
+  });
+
+/** POST /calibration-jobs/:id/identity-corrections body */
+export const identityCorrectionSubmitSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(2000),
+    newDeviceId: z.string().min(1).nullable().optional(),
+    newSerial: z.string().trim().max(120).nullable().optional(),
+    newAkdAkl: z.string().trim().max(120).nullable().optional(),
+    signatures: z.object({
+      TECHNICIAN: identityCorrectionSignatureInputSchema,
+      CUSTOMER: identityCorrectionSignatureInputSchema,
+    }),
+  })
+  .superRefine((val, ctx) => {
+    if (
+      val.newDeviceId === undefined &&
+      val.newSerial === undefined &&
+      val.newAkdAkl === undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["newDeviceId"],
+        message: "At least one of newDeviceId, newSerial, newAkdAkl must be provided",
+      });
+    }
+  });
+
+export type IdentityCorrectionSubmitInput = z.infer<typeof identityCorrectionSubmitSchema>;
+
+const identityCorrectionDecisionValues = ["APPROVE", "REJECT"] as const;
+
+/** POST /calibration-jobs/:id/identity-corrections/:correctionId/decision body (TECHNICIAN_MANAGER only) */
+export const identityCorrectionDecisionSchema = z
+  .object({
+    decision: z.enum(identityCorrectionDecisionValues),
+    decisionNote: z.string().trim().max(2000).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.decision === "REJECT" && !val.decisionNote) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["decisionNote"],
+        message: "A decision note is required when rejecting",
+      });
+    }
+  });
+
+export type IdentityCorrectionDecisionInput = z.infer<typeof identityCorrectionDecisionSchema>;
 
 // -----------------------------------------------------------------------------
 // Calibration Job — Portal management list

@@ -10,10 +10,11 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import {
-  calibrationJobAssignDeviceSchema,
   calibrationJobEscalateIdentitySchema,
   calibrationJobIdentityDecisionSchema,
   calibrationJobListQuerySchema,
+  identityCorrectionDecisionSchema,
+  identityCorrectionSubmitSchema,
 } from "@medcal/shared";
 import type { DeviceWithRelations } from "../devices/devices.service";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
@@ -23,8 +24,9 @@ import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   CalibrationJobsService,
   type CalibrationJobDetail,
-  type CalibrationJobDeviceAssignmentResult,
   type CalibrationJobListResult,
+  type IdentityCorrectionDetail,
+  type IdentityCorrectionSubmitResult,
 } from "./calibration-jobs.service";
 
 @Controller("calibration-jobs")
@@ -99,7 +101,7 @@ export class CalibrationJobsController {
   }
 
   @Get(":id/device-candidates")
-  @RequirePermission("calibrationJob", "assignDevice")
+  @RequirePermission("calibrationJob", "submitIdentityCorrection")
   async deviceCandidates(
     @CompanyId() companyId: string,
     @Param("id") id: string,
@@ -109,21 +111,72 @@ export class CalibrationJobsController {
     return this.service.findDeviceCandidates(companyId, id, trimmed || undefined);
   }
 
+  /**
+   * Removed. Every device-identity binding now flows through the Identity
+   * Correction BA workflow below. This route stays only to return a typed 410
+   * until the Portal UI is migrated.
+   */
   @Post(":id/assign-device")
-  @RequirePermission("calibrationJob", "assignDevice")
-  async assignDevice(
+  @RequirePermission("calibrationJob", "submitIdentityCorrection")
+  async assignDevice(): Promise<never> {
+    return this.service.assignDeviceRemoved();
+  }
+
+  @Get(":id/identity-corrections")
+  @RequirePermission("calibrationJob", "read")
+  async listIdentityCorrections(
     @CompanyId() companyId: string,
     @Param("id") id: string,
+  ): Promise<IdentityCorrectionDetail[]> {
+    return this.service.listIdentityCorrections(companyId, id);
+  }
+
+  @Get(":id/identity-corrections/:correctionId")
+  @RequirePermission("calibrationJob", "read")
+  async getIdentityCorrection(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Param("correctionId") correctionId: string,
+  ): Promise<IdentityCorrectionDetail> {
+    return this.service.getIdentityCorrection(companyId, id, correctionId);
+  }
+
+  @Post(":id/identity-corrections")
+  @RequirePermission("calibrationJob", "submitIdentityCorrection")
+  async submitIdentityCorrection(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
     @Body() rawBody: unknown,
-  ): Promise<CalibrationJobDeviceAssignmentResult> {
-    const parsed = calibrationJobAssignDeviceSchema.safeParse(rawBody);
+  ): Promise<IdentityCorrectionSubmitResult> {
+    const parsed = identityCorrectionSubmitSchema.safeParse(rawBody);
     if (!parsed.success) {
       throw new BadRequestException({
-        message: "Invalid device assignment payload",
-        code: "INVALID_CALIBRATION_JOB_ASSIGN_DEVICE",
+        message: "Invalid identity correction payload",
+        code: "INVALID_IDENTITY_CORRECTION_SUBMIT",
         issues: parsed.error.flatten(),
       });
     }
-    return this.service.assignDevice(companyId, id, parsed.data);
+    return this.service.submitIdentityCorrection(companyId, id, userId, parsed.data);
+  }
+
+  @Post(":id/identity-corrections/:correctionId/decision")
+  @RequirePermission("calibrationJob", "decideIdentityCorrection")
+  async decideIdentityCorrection(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Param("correctionId") correctionId: string,
+    @Body() rawBody: unknown,
+  ): Promise<{ job: CalibrationJobDetail; correction: IdentityCorrectionDetail }> {
+    const parsed = identityCorrectionDecisionSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid identity correction decision payload",
+        code: "INVALID_IDENTITY_CORRECTION_DECISION",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.decideIdentityCorrection(companyId, id, correctionId, userId, parsed.data);
   }
 }

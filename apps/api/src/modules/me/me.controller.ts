@@ -174,7 +174,18 @@ export class MeController {
         "calibrationJob",
         "approveIdentity",
       ),
+      // Removed action — always false now; retained for Portal build compatibility.
       calibrationJobAssignDevice: hasPermission(membership.role, "calibrationJob", "assignDevice"),
+      calibrationJobSubmitIdentityCorrection: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "submitIdentityCorrection",
+      ),
+      calibrationJobDecideIdentityCorrection: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "decideIdentityCorrection",
+      ),
       taxManage: hasPermission(membership.role, "tax", "manage"),
       priceListItemRead: hasPermission(membership.role, "priceListItem", "read"),
       priceListItemCreate: hasPermission(membership.role, "priceListItem", "create"),

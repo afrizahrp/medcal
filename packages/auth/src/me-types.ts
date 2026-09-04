@@ -84,7 +84,15 @@ export type MeCapabilities = {
   calibrationJobRead: boolean;
   calibrationJobEscalateIdentity: boolean;
   calibrationJobApproveIdentity: boolean;
+  /**
+   * @deprecated The match-only assign-device action is removed; this flag now
+   * always resolves false. Kept so the Portal build compiles until its UI is
+   * migrated to the Identity Correction workflow. Use
+   * calibrationJobSubmitIdentityCorrection instead.
+   */
   calibrationJobAssignDevice: boolean;
+  calibrationJobSubmitIdentityCorrection: boolean;
+  calibrationJobDecideIdentityCorrection: boolean;
   taxManage: boolean;
   priceListItemRead: boolean;
   priceListItemCreate: boolean;
