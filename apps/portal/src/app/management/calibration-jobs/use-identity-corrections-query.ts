@@ -1,0 +1,193 @@
+"use client";
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError, apiFetch } from "@medcal/shared";
+import { WORK_ORDERS_QUERY_KEY } from "../work-orders/use-work-orders-query";
+import { CALIBRATION_JOBS_QUERY_KEY } from "./use-calibration-jobs-query";
+import type { CalibrationJobRow } from "./calibration-jobs-ui";
+
+// ── Types (mirror IdentityCorrectionDetail from calibration-jobs.service) ──────
+
+export type IdentityCorrectionStatus = "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+export type IdentityCorrectionSignerRole = "TECHNICIAN" | "CUSTOMER";
+export type SignatureStatus = "SIGNED" | "UNAVAILABLE" | "REFUSED";
+
+export interface IdentityCorrectionSignatureFile {
+  id: string;
+  originalName: string | null;
+  mimeType: string | null;
+}
+
+export interface IdentityCorrectionSignature {
+  id: string;
+  identityCorrectionId: string;
+  signerRole: IdentityCorrectionSignerRole;
+  signerName: string | null;
+  status: SignatureStatus;
+  unavailableReason: string | null;
+  signedAt: string | null;
+  files: IdentityCorrectionSignatureFile[];
+}
+
+export interface IdentityCorrectionDeviceRef {
+  id: string;
+  code: string | null;
+  serialNumber: string | null;
+}
+
+export interface IdentityCorrection {
+  id: string;
+  companyId: string;
+  calibrationJobId: string;
+  number: string;
+  status: IdentityCorrectionStatus;
+  prevDeviceId: string | null;
+  newDeviceId: string | null;
+  prevSerial: string | null;
+  newSerial: string | null;
+  prevAkdAkl: string | null;
+  newAkdAkl: string | null;
+  reason: string;
+  submittedByUserId: string;
+  decidedByUserId: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  akdAklGateReopened: boolean;
+  createdAt: string;
+  updatedAt: string;
+  submittedBy: { id: string; name: string | null } | null;
+  decidedBy: { id: string; name: string | null } | null;
+  prevDevice: IdentityCorrectionDeviceRef | null;
+  newDevice: IdentityCorrectionDeviceRef | null;
+  signatures: IdentityCorrectionSignature[];
+}
+
+export interface IdentityCorrectionSubmitResult {
+  job: CalibrationJobRow;
+  correction: IdentityCorrection;
+  deviceTypeValidated: boolean;
+}
+
+export interface IdentityCorrectionDecisionResult {
+  job: CalibrationJobRow;
+  correction: IdentityCorrection;
+}
+
+// ── Request payloads ──────────────────────────────────────────────────────────
+
+export interface IdentityCorrectionSignatureInput {
+  status: SignatureStatus;
+  signerName?: string;
+  unavailableReason?: string;
+}
+
+export interface IdentityCorrectionSubmitInput {
+  reason: string;
+  newDeviceId?: string | null;
+  newSerial?: string | null;
+  newAkdAkl?: string | null;
+  signatures: {
+    TECHNICIAN: IdentityCorrectionSignatureInput;
+    CUSTOMER: IdentityCorrectionSignatureInput;
+  };
+}
+
+export interface IdentityCorrectionDecisionInput {
+  decision: "APPROVE" | "REJECT";
+  decisionNote?: string;
+}
+
+// ── Hooks ─────────────────────────────────────────────────────────────────────
+
+const listKey = (jobId: string) =>
+  [CALIBRATION_JOBS_QUERY_KEY, jobId, "identity-corrections"] as const;
+
+function invalidate(queryClient: ReturnType<typeof useQueryClient>, jobId: string) {
+  queryClient.invalidateQueries({ queryKey: listKey(jobId) });
+  // Approval writes deviceId / observed serial / AKD-AKL back onto the job.
+  queryClient.invalidateQueries({ queryKey: [CALIBRATION_JOBS_QUERY_KEY, jobId] });
+  queryClient.invalidateQueries({ queryKey: [WORK_ORDERS_QUERY_KEY] });
+}
+
+export function useIdentityCorrections(jobId: string | undefined) {
+  return useQuery({
+    queryKey: listKey(jobId ?? ""),
+    queryFn: () =>
+      apiFetch<IdentityCorrection[]>(`/calibration-jobs/${jobId}/identity-corrections`),
+    enabled: Boolean(jobId),
+  });
+}
+
+export function useSubmitIdentityCorrection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ jobId, input }: { jobId: string; input: IdentityCorrectionSubmitInput }) =>
+      apiFetch<IdentityCorrectionSubmitResult>(
+        `/calibration-jobs/${jobId}/identity-corrections`,
+        { method: "POST", body: JSON.stringify(input) },
+      ),
+    onSuccess: (_data, variables) => invalidate(queryClient, variables.jobId),
+  });
+}
+
+export function useDecideIdentityCorrection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      jobId,
+      correctionId,
+      input,
+    }: {
+      jobId: string;
+      correctionId: string;
+      input: IdentityCorrectionDecisionInput;
+    }) =>
+      apiFetch<IdentityCorrectionDecisionResult>(
+        `/calibration-jobs/${jobId}/identity-corrections/${correctionId}/decision`,
+        { method: "POST", body: JSON.stringify(input) },
+      ),
+    onSuccess: (_data, variables) => invalidate(queryClient, variables.jobId),
+  });
+}
+
+/**
+ * Signature image upload goes through the generic FilesModule. Raw fetch (not
+ * apiFetch) because the body is multipart/form-data — the browser sets the
+ * boundary. Mirrors useUploadCalibrationCertificate.
+ */
+export function useUploadIdentityCorrectionSignature() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      jobId,
+      signatureId,
+      file,
+    }: {
+      jobId: string;
+      signatureId: string;
+      file: File;
+    }) => {
+      const form = new FormData();
+      form.append("ownerType", "IDENTITY_CORRECTION");
+      form.append("ownerId", signatureId);
+      form.append("file", file);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/files`, {
+        method: "POST",
+        credentials: "include",
+        body: form,
+      });
+      if (!res.ok) {
+        let data: ({ code?: string; message?: string } & Record<string, unknown>) | undefined;
+        try {
+          data = (await res.json()) as typeof data;
+        } catch {
+          data = undefined;
+        }
+        throw new ApiError(res.status, data?.message ?? res.statusText, data);
+      }
+      return (await res.json()) as { id: string };
+    },
+    onSuccess: (_data, variables) => invalidate(queryClient, variables.jobId),
+  });
+}
+

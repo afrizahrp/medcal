@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@medcal/shared";
 import {
-  canAssignDevice,
   canDecideIdentity,
   canEscalateIdentity,
+  canSubmitIdentityCorrection,
   formatCalibrationJobApiError,
   isIdentityGateLocked,
+  missingSignatureImageMessage,
+  signersMissingImage,
+  summarizeCorrectionChanges,
 } from "./calibration-job-utils";
 
-const base = { status: "IN_PROGRESS", akdAklApprovalStatus: "NOT_REQUIRED", deviceId: null };
+const base = { status: "IN_PROGRESS", akdAklApprovalStatus: "NOT_REQUIRED" };
 
 describe("calibration-job identity gate helpers", () => {
   it("allows escalation from NOT_REQUIRED and REJECTED only", () => {
@@ -23,9 +26,11 @@ describe("calibration-job identity gate helpers", () => {
     expect(canDecideIdentity({ ...base, akdAklApprovalStatus: "NOT_REQUIRED" })).toBe(false);
   });
 
-  it("offers device assignment only while unidentified", () => {
-    expect(canAssignDevice({ ...base, deviceId: null })).toBe(true);
-    expect(canAssignDevice({ ...base, deviceId: "dev-1" })).toBe(false);
+  it("offers identity-correction submit whenever the gate is open", () => {
+    expect(canSubmitIdentityCorrection({ status: "IN_PROGRESS" })).toBe(true);
+    expect(canSubmitIdentityCorrection({ status: "PENDING" })).toBe(true);
+    expect(canSubmitIdentityCorrection({ status: "SUBMITTED" })).toBe(false);
+    expect(canSubmitIdentityCorrection({ status: "ACCEPTED_BY_QA" })).toBe(false);
   });
 
   it("closes every gate action once the job is past the bench", () => {
@@ -34,7 +39,7 @@ describe("calibration-job identity gate helpers", () => {
       expect(isIdentityGateLocked(job)).toBe(true);
       expect(canEscalateIdentity({ ...job, akdAklApprovalStatus: "REJECTED" })).toBe(false);
       expect(canDecideIdentity(job)).toBe(false);
-      expect(canAssignDevice(job)).toBe(false);
+      expect(canSubmitIdentityCorrection(job)).toBe(false);
     }
   });
 });
@@ -45,10 +50,74 @@ describe("formatCalibrationJobApiError", () => {
     expect(formatCalibrationJobApiError(err, "fallback")).toContain("Jenis alat");
   });
 
+  it("maps the new identity-correction codes", () => {
+    for (const code of [
+      "IDENTITY_CORRECTION_NO_CHANGE",
+      "IDENTITY_CORRECTION_ALREADY_PENDING",
+      "IDENTITY_CORRECTION_ALREADY_DECIDED",
+      "IDENTITY_CORRECTION_SIGNATURE_IMAGE_MISSING",
+    ]) {
+      const msg = formatCalibrationJobApiError(new ApiError(400, "raw", { code }), "fb");
+      expect(msg).not.toBe("fb");
+      expect(msg.length).toBeGreaterThan(5);
+    }
+  });
+
   it("falls back to the server message, then the provided fallback", () => {
     expect(
       formatCalibrationJobApiError(new ApiError(400, "srv", { message: "srv detail" }), "fb"),
     ).toBe("srv detail");
     expect(formatCalibrationJobApiError(new Error("x"), "fb")).toBe("fb");
+  });
+});
+
+describe("summarizeCorrectionChanges", () => {
+  const empty = {
+    prevDevice: null,
+    newDevice: null,
+    newDeviceId: null,
+    prevSerial: null,
+    newSerial: null,
+    prevAkdAkl: null,
+    newAkdAkl: null,
+  };
+
+  it("returns only the attributes the BA actually changed", () => {
+    expect(
+      summarizeCorrectionChanges({
+        ...empty,
+        newDeviceId: "dev-2",
+        prevDevice: { code: "DVC-000001" },
+        newDevice: { code: "DVC-000002" },
+      }),
+    ).toEqual([{ attr: "Device", prev: "DVC-000001", next: "DVC-000002" }]);
+
+    expect(
+      summarizeCorrectionChanges({ ...empty, prevSerial: null, newSerial: "SN-9" }),
+    ).toEqual([{ attr: "Serial", prev: "—", next: "SN-9" }]);
+
+    expect(summarizeCorrectionChanges(empty)).toEqual([]);
+  });
+});
+
+describe("signature image helpers", () => {
+  it("signersMissingImage names SIGNED signers without a file", () => {
+    expect(
+      signersMissingImage([
+        { signerRole: "TECHNICIAN", status: "SIGNED", files: [] },
+        { signerRole: "CUSTOMER", status: "SIGNED", files: [{ id: "f1" }] },
+        { signerRole: "TECHNICIAN", status: "UNAVAILABLE", files: [] },
+      ]),
+    ).toEqual(["Teknisi"]);
+  });
+
+  it("missingSignatureImageMessage maps signature ids to roles", () => {
+    const sigs = [
+      { id: "s1", signerRole: "TECHNICIAN" as const },
+      { id: "s2", signerRole: "CUSTOMER" as const },
+    ];
+    expect(missingSignatureImageMessage(["s2"], sigs)).toContain("Pelanggan");
+    expect(missingSignatureImageMessage(["s1", "s2"], sigs)).toContain("Teknisi dan Pelanggan");
+    expect(missingSignatureImageMessage(undefined, sigs)).toContain("salah satu");
   });
 });

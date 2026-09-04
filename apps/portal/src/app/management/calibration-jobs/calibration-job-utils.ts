@@ -37,15 +37,14 @@ export const CALIBRATION_JOB_STATUS_LABELS: Record<CalibrationJobStatus, string>
 
 /**
  * Mirrors IDENTITY_LOCKED_JOB_STATUSES in calibration-jobs.service.ts — once the
- * job has advanced past the bench, the identity gate (escalate / decide / assign)
- * is closed server-side.
+ * job has advanced past the bench, the identity gate (escalate / decide AKD-AKL /
+ * submit or decide an identity correction) is closed server-side.
  */
 const IDENTITY_LOCKED_JOB_STATUSES: readonly string[] = ["SUBMITTED", "ACCEPTED_BY_QA"];
 
 type IdentityGateJob = {
   status: string;
   akdAklApprovalStatus: string;
-  deviceId: string | null;
 };
 
 export function isIdentityGateLocked(job: Pick<IdentityGateJob, "status">): boolean {
@@ -65,9 +64,83 @@ export function canDecideIdentity(job: IdentityGateJob): boolean {
   return !isIdentityGateLocked(job) && job.akdAklApprovalStatus === "PENDING_REVIEW";
 }
 
-/** Device binding is a one-time action while the job is still unidentified. */
-export function canAssignDevice(job: IdentityGateJob): boolean {
-  return !isIdentityGateLocked(job) && job.deviceId === null;
+/**
+ * An identity correction BA can be submitted whenever the identity gate is open —
+ * for first-time device resolution AND for correcting an already-bound identity.
+ * A pending BA already existing is enforced server-side (IDENTITY_CORRECTION_ALREADY_PENDING).
+ */
+export function canSubmitIdentityCorrection(job: Pick<IdentityGateJob, "status">): boolean {
+  return !isIdentityGateLocked(job);
+}
+
+// ── Identity correction display helpers ───────────────────────────────────────
+
+type CorrectionChangeRow = { attr: "Device" | "Serial" | "AKD/AKL/NIE"; prev: string; next: string };
+
+interface CorrectionLike {
+  prevDevice: { code: string | null } | null;
+  newDevice: { code: string | null } | null;
+  newDeviceId: string | null;
+  prevSerial: string | null;
+  newSerial: string | null;
+  prevAkdAkl: string | null;
+  newAkdAkl: string | null;
+}
+
+const dash = (v: string | null | undefined) => (v && v.trim() ? v : "—");
+
+/** The attributes a BA actually changes, as before → after rows. */
+export function summarizeCorrectionChanges(c: CorrectionLike): CorrectionChangeRow[] {
+  const rows: CorrectionChangeRow[] = [];
+  if (c.newDeviceId !== null) {
+    rows.push({
+      attr: "Device",
+      prev: dash(c.prevDevice?.code),
+      next: dash(c.newDevice?.code),
+    });
+  }
+  if (c.newSerial !== null) {
+    rows.push({ attr: "Serial", prev: dash(c.prevSerial), next: dash(c.newSerial) });
+  }
+  if (c.newAkdAkl !== null) {
+    rows.push({ attr: "AKD/AKL/NIE", prev: dash(c.prevAkdAkl), next: dash(c.newAkdAkl) });
+  }
+  return rows;
+}
+
+interface SignatureLike {
+  signerRole: "TECHNICIAN" | "CUSTOMER";
+  status: "SIGNED" | "UNAVAILABLE" | "REFUSED";
+  files: { id: string }[];
+}
+
+const SIGNER_LABELS: Record<"TECHNICIAN" | "CUSTOMER", string> = {
+  TECHNICIAN: "Teknisi",
+  CUSTOMER: "Pelanggan",
+};
+
+/** Signer roles whose status is SIGNED but which still have no uploaded image. */
+export function signersMissingImage(signatures: SignatureLike[]): string[] {
+  return signatures
+    .filter((s) => s.status === "SIGNED" && s.files.length === 0)
+    .map((s) => SIGNER_LABELS[s.signerRole]);
+}
+
+/**
+ * Turns the backend's IDENTITY_CORRECTION_SIGNATURE_IMAGE_MISSING response
+ * (`signatureIds: string[]`) into a role-named message.
+ */
+export function missingSignatureImageMessage(
+  signatureIds: unknown,
+  signatures: { id: string; signerRole: "TECHNICIAN" | "CUSTOMER" }[],
+): string {
+  const ids = Array.isArray(signatureIds) ? (signatureIds as string[]) : [];
+  const roles = ids
+    .map((id) => signatures.find((s) => s.id === id)?.signerRole)
+    .filter((r): r is "TECHNICIAN" | "CUSTOMER" => Boolean(r))
+    .map((r) => SIGNER_LABELS[r]);
+  const who = roles.length ? roles.join(" dan ") : "salah satu penandatangan";
+  return `Gambar tanda tangan ${who} belum diunggah. Unggah dulu di detail BA sebelum menyetujui.`;
 }
 
 export function formatCalibrationJobApiError(err: unknown, fallback: string): string {
@@ -80,8 +153,6 @@ export function formatCalibrationJobApiError(err: unknown, fallback: string): st
         "Jenis alat untuk job ini tidak dapat ditentukan dari requisition atau purchase order. Cocokkan dengan device yang sudah terdaftar.",
       CALIBRATION_JOB_IDENTITY_GATE_LOCKED:
         "Calibration job sudah melewati tahap verifikasi identitas — aksi ini tidak lagi tersedia.",
-      CALIBRATION_JOB_DEVICE_ALREADY_ASSIGNED:
-        "Calibration job ini sudah memiliki device. Penggantian device ditangani oleh alur Identity Correction.",
       DEVICE_ALREADY_ASSIGNED_ON_WORK_ORDER:
         "Device ini sudah di-assign ke job lain pada work order yang sama.",
       DEVICE_CUSTOMER_MISMATCH: "Device milik customer yang berbeda dari work order ini.",
@@ -90,8 +161,25 @@ export function formatCalibrationJobApiError(err: unknown, fallback: string): st
       CALIBRATION_JOB_NOT_FOUND: "Calibration job tidak ditemukan.",
       INVALID_CALIBRATION_JOB_IDENTITY_ESCALATION: "Data eskalasi identitas tidak valid.",
       INVALID_CALIBRATION_JOB_IDENTITY_DECISION: "Data keputusan identitas tidak valid.",
-      INVALID_CALIBRATION_JOB_ASSIGN_DEVICE: "Data assign device tidak valid.",
-      INVALID_CALIBRATION_JOB_REGISTER_DEVICE: "Data registrasi device tidak valid.",
+      // Identity Correction (BA)
+      IDENTITY_CORRECTION_NO_CHANGE:
+        "Koreksi tidak mengubah nilai identitas job saat ini. Ubah minimal satu atribut.",
+      IDENTITY_CORRECTION_ALREADY_PENDING:
+        "Job ini sudah punya BA koreksi identitas yang menunggu review.",
+      IDENTITY_CORRECTION_ALREADY_DECIDED:
+        "BA koreksi ini sudah diputuskan dan tidak dapat diubah.",
+      IDENTITY_CORRECTION_SIGNATURE_IMAGE_MISSING:
+        "Gambar tanda tangan untuk penandatangan berstatus 'Ditandatangani' belum diunggah.",
+      IDENTITY_CORRECTION_NOT_FOUND: "BA koreksi identitas tidak ditemukan.",
+      INVALID_IDENTITY_CORRECTION_SUBMIT: "Data pengajuan koreksi identitas tidak valid.",
+      INVALID_IDENTITY_CORRECTION_DECISION: "Data keputusan koreksi identitas tidak valid.",
+      ASSIGN_DEVICE_ENDPOINT_REMOVED:
+        "Fitur assign device lama sudah diganti alur Koreksi Identitas. Muat ulang halaman.",
+      FILE_MIME_NOT_ALLOWED: "Hanya gambar PNG/JPEG atau PDF yang diperbolehkan.",
+      FILE_EXTENSION_NOT_ALLOWED: "Hanya gambar PNG/JPEG atau PDF yang diperbolehkan.",
+      FILE_CONTENT_MISMATCH: "Isi file tidak sesuai dengan tipe yang dinyatakan.",
+      FILE_TOO_LARGE: "Ukuran file melebihi batas (5 MB).",
+      FILE_OWNER_LOCKED: "BA sudah diputuskan — lampiran tidak dapat diubah.",
     };
     if (code && messages[code]) return messages[code];
     if (typeof err.data?.message === "string") return err.data.message;

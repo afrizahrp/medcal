@@ -107,10 +107,6 @@ export interface CalibrationJobDeviceCandidate {
   deviceType: CalibrationJobDeviceTypeRef | null;
 }
 
-export interface DeviceAssignmentResult {
-  job: CalibrationJobRow;
-  deviceTypeValidated: boolean;
-}
 
 // ── Derived display helpers ───────────────────────────────────────────────────
 
@@ -162,6 +158,28 @@ export function JobStatusBadge({ status }: { status: CalibrationJobStatus }) {
   return (
     <Badge className={cn(badgeBase, JOB_STATUS_BADGE_CLASS[status])}>
       {CALIBRATION_JOB_STATUS_LABELS[status]}
+    </Badge>
+  );
+}
+
+export type IdentityCorrectionStatus = "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+
+const IDENTITY_CORRECTION_BADGE_CLASS: Record<IdentityCorrectionStatus, string> = {
+  PENDING_REVIEW: "border-transparent bg-amber-500 text-white hover:bg-amber-500",
+  APPROVED: "border-transparent bg-emerald-600 text-white hover:bg-emerald-600",
+  REJECTED: "border-transparent bg-red-600 text-white hover:bg-red-600",
+};
+
+const IDENTITY_CORRECTION_STATUS_LABELS: Record<IdentityCorrectionStatus, string> = {
+  PENDING_REVIEW: "Menunggu Review",
+  APPROVED: "Disetujui",
+  REJECTED: "Ditolak",
+};
+
+export function IdentityCorrectionStatusBadge({ status }: { status: IdentityCorrectionStatus }) {
+  return (
+    <Badge className={cn(badgeBase, IDENTITY_CORRECTION_BADGE_CLASS[status])}>
+      {IDENTITY_CORRECTION_STATUS_LABELS[status]}
     </Badge>
   );
 }

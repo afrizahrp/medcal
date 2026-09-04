@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@medcal/shared";
 import type {
-  CalibrationJobAssignDeviceInput,
   CalibrationJobEscalateIdentityInput,
   CalibrationJobIdentityDecisionInput,
 } from "@medcal/shared";
@@ -12,7 +11,6 @@ import type {
   CalibrationJobDeviceCandidate,
   CalibrationJobListResponse,
   CalibrationJobRow,
-  DeviceAssignmentResult,
 } from "./calibration-jobs-ui";
 
 export const CALIBRATION_JOBS_QUERY_KEY = "calibration-jobs" as const;
@@ -49,7 +47,7 @@ function invalidateCalibrationJobQueries(
   if (id) {
     queryClient.invalidateQueries({ queryKey: [CALIBRATION_JOBS_QUERY_KEY, id] });
   }
-  // A device assignment changes the job's WorkOrder-facing state.
+  // An identity decision can change the job's WorkOrder-facing state.
   queryClient.invalidateQueries({ queryKey: [WORK_ORDERS_QUERY_KEY] });
 }
 
@@ -121,14 +119,3 @@ export function useDecideIdentity() {
   });
 }
 
-export function useAssignDevice() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: CalibrationJobAssignDeviceInput }) =>
-      apiFetch<DeviceAssignmentResult>(`/calibration-jobs/${id}/assign-device`, {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-    onSuccess: (_data, variables) => invalidateCalibrationJobQueries(queryClient, variables.id),
-  });
-}
