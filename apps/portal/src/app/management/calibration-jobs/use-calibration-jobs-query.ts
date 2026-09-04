@@ -6,7 +6,6 @@ import type {
   CalibrationJobAssignDeviceInput,
   CalibrationJobEscalateIdentityInput,
   CalibrationJobIdentityDecisionInput,
-  CalibrationJobRegisterDeviceInput,
 } from "@medcal/shared";
 import { WORK_ORDERS_QUERY_KEY } from "../work-orders/use-work-orders-query";
 import type {
@@ -127,18 +126,6 @@ export function useAssignDevice() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: CalibrationJobAssignDeviceInput }) =>
       apiFetch<DeviceAssignmentResult>(`/calibration-jobs/${id}/assign-device`, {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-    onSuccess: (_data, variables) => invalidateCalibrationJobQueries(queryClient, variables.id),
-  });
-}
-
-export function useRegisterDevice() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: CalibrationJobRegisterDeviceInput }) =>
-      apiFetch<DeviceAssignmentResult>(`/calibration-jobs/${id}/register-device`, {
         method: "POST",
         body: JSON.stringify(input),
       }),

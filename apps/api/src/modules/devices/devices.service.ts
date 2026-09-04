@@ -65,9 +65,9 @@ export class DevicesService {
    * identifier (DVC-000001), allocated in the same transaction as the insert so
    * both commit together.
    *
-   * Pass `tx` to enlist in a caller's transaction (e.g. CalibrationJob
-   * register-and-assign, which must atomically create the device and bind it to
-   * the job). When omitted, a local transaction is opened.
+   * Pass `tx` to enlist in a caller's transaction when the device creation must
+   * commit atomically with other writes. When omitted, a local transaction is
+   * opened.
    */
   async create(
     companyId: string,

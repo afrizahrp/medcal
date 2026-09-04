@@ -39,7 +39,6 @@ import {
   useDeviceCandidates,
   useDecideIdentity,
   useEscalateIdentity,
-  useRegisterDevice,
 } from "../use-calibration-jobs-query";
 
 export default function CalibrationJobDetailPage() {
@@ -50,7 +49,6 @@ export default function CalibrationJobDetailPage() {
   const escalateMutation = useEscalateIdentity();
   const decideMutation = useDecideIdentity();
   const assignMutation = useAssignDevice();
-  const registerMutation = useRegisterDevice();
 
   const [dialog, setDialog] = useState<"escalate" | "approve" | "reject" | "assign" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -96,8 +94,7 @@ export default function CalibrationJobDetailPage() {
   const pending =
     escalateMutation.isPending ||
     decideMutation.isPending ||
-    assignMutation.isPending ||
-    registerMutation.isPending;
+    assignMutation.isPending;
 
   async function run<T>(action: () => Promise<T>, okMessage: string, fallback: string) {
     setError(null);
@@ -270,7 +267,7 @@ export default function CalibrationJobDetailPage() {
           {showAssign ? (
             <Button type="button" onClick={() => setDialog("assign")}>
               <UserPlus className="h-4 w-4" />
-              Assign / Register Device
+              Assign Device
             </Button>
           ) : null}
         </div>
@@ -326,22 +323,13 @@ export default function CalibrationJobDetailPage() {
       <AssignDeviceDialog
         open={dialog === "assign"}
         job={job}
-        deviceType={deviceType}
         assignPending={assignMutation.isPending}
-        registerPending={registerMutation.isPending}
         onCancel={() => setDialog(null)}
         onAssign={(deviceId) =>
           run(
             () => assignMutation.mutateAsync({ id: job.id, input: { deviceId } }),
             "Device berhasil di-assign.",
             "Gagal assign device.",
-          )
-        }
-        onRegister={(input) =>
-          run(
-            () => registerMutation.mutateAsync({ id: job.id, input }),
-            "Device baru terdaftar dan di-assign.",
-            "Gagal mendaftarkan device.",
           )
         }
       />
@@ -457,177 +445,88 @@ function RejectDialog({
   );
 }
 
-interface RegisterInput {
-  brand?: string;
-  model?: string;
-  serialNumber?: string;
-  category?: string;
-  locationText?: string;
-}
-
 function AssignDeviceDialog({
   open,
   job,
-  deviceType,
   assignPending,
-  registerPending,
   onCancel,
   onAssign,
-  onRegister,
 }: {
   open: boolean;
   job: CalibrationJobRow;
-  deviceType: { id: string; code: string; name: string } | null;
   assignPending: boolean;
-  registerPending: boolean;
   onCancel: () => void;
   onAssign: (deviceId: string) => void;
-  onRegister: (input: RegisterInput) => void;
 }) {
-  const [mode, setMode] = useState<"match" | "register">("match");
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 400);
   const [selected, setSelected] = useState<string | null>(null);
-  const [form, setForm] = useState<RegisterInput>({});
 
   useEffect(() => {
     if (open) {
-      setMode("match");
       setSearch("");
       setSelected(null);
-      setForm({ serialNumber: job.technicianObservedSerial ?? "" });
     }
-  }, [open, job.technicianObservedSerial]);
+  }, [open]);
 
-  const candidatesQuery = useDeviceCandidates(job.id, debouncedSearch, open && mode === "match");
+  const candidatesQuery = useDeviceCandidates(job.id, debouncedSearch, open);
   const candidates = candidatesQuery.data ?? [];
-  const canRegister = deviceType !== null;
-
-  const pending = assignPending || registerPending;
 
   if (!open) return null;
 
   return (
-    <DialogShell title="Assign / Register Device" onCancel={onCancel} pending={pending} wide>
-      <div className="mt-3 flex gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant={mode === "match" ? "default" : "outline"}
-          onClick={() => setMode("match")}
-        >
-          Cocokkan device
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={mode === "register" ? "default" : "outline"}
-          onClick={() => setMode("register")}
-          disabled={!canRegister}
-        >
-          Daftar device baru
-        </Button>
-      </div>
-
-      {mode === "match" ? (
-        <div className="mt-4">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari serial / brand / model…"
-          />
-          <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
-            {candidatesQuery.isLoading ? (
-              <p className="text-sm text-slate-400">Memuat…</p>
-            ) : candidatesQuery.isError ? (
-              <p className="text-sm text-red-600">Gagal memuat kandidat device.</p>
-            ) : candidates.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                Tidak ada device yang cocok untuk customer + jenis alat ini.
-                {canRegister ? " Gunakan “Daftar device baru”." : ""}
-              </p>
-            ) : (
-              candidates.map((device: CalibrationJobDeviceCandidate) => (
-                <label
-                  key={device.id}
-                  className="flex items-center gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm"
-                >
-                  <input
-                    type="radio"
-                    name="device-candidate"
-                    checked={selected === device.id}
-                    onChange={() => setSelected(device.id)}
-                  />
-                  <span className="min-w-0">
-                    <span className="font-medium text-slate-900">
-                      {device.serialNumber ?? device.code ?? device.id}
-                    </span>
-                    <span className="ml-2 text-xs text-slate-400">
-                      {[device.brand, device.model].filter(Boolean).join(" ") || "—"}
-                    </span>
-                  </span>
-                </label>
-              ))
-            )}
-          </div>
-          <DialogActions
-            pending={pending}
-            confirmLabel="Assign"
-            disabled={!selected}
-            onCancel={onCancel}
-            onConfirm={() => selected && onAssign(selected)}
-          />
-        </div>
-      ) : (
-        <div className="mt-4 space-y-3">
-          {!canRegister ? (
-            <p className="text-sm text-amber-800">
-              Jenis alat untuk job ini tidak dapat ditentukan, jadi device baru tidak bisa
-              didaftarkan. Cocokkan dengan device yang sudah ada.
+    <DialogShell title="Assign Device" onCancel={onCancel} pending={assignPending} wide>
+      <div className="mt-4">
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Cari serial / brand / model…"
+        />
+        <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+          {candidatesQuery.isLoading ? (
+            <p className="text-sm text-slate-400">Memuat…</p>
+          ) : candidatesQuery.isError ? (
+            <p className="text-sm text-red-600">Gagal memuat kandidat device.</p>
+          ) : candidates.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              Tidak ada device yang cocok. Device harus didaftarkan lebih dulu oleh admin/kantor
+              melalui proses requisition/work order sebelum bisa di-assign ke job ini.
             </p>
-          ) : null}
-          <p className="text-xs text-slate-400">
-            Customer &amp; jenis alat diambil otomatis dari job ({deviceType?.name}).
-          </p>
-          {(["brand", "model", "serialNumber", "category", "locationText"] as const).map(
-            (field) => (
-              <label key={field} className="block text-sm font-medium text-slate-700">
-                {REGISTER_FIELD_LABELS[field]}
-                <Input
-                  value={form[field] ?? ""}
-                  onChange={(e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))}
-                  className="mt-1"
-                  disabled={!canRegister}
+          ) : (
+            candidates.map((device: CalibrationJobDeviceCandidate) => (
+              <label
+                key={device.id}
+                className="flex items-center gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm"
+              >
+                <input
+                  type="radio"
+                  name="device-candidate"
+                  checked={selected === device.id}
+                  onChange={() => setSelected(device.id)}
                 />
+                <span className="min-w-0">
+                  <span className="font-medium text-slate-900">
+                    {device.serialNumber ?? device.code ?? device.id}
+                  </span>
+                  <span className="ml-2 text-xs text-slate-400">
+                    {[device.brand, device.model].filter(Boolean).join(" ") || "—"}
+                  </span>
+                </span>
               </label>
-            ),
+            ))
           )}
-          <DialogActions
-            pending={pending}
-            confirmLabel="Register & Assign"
-            disabled={!canRegister}
-            onCancel={onCancel}
-            onConfirm={() => {
-              const trimmed: RegisterInput = {};
-              for (const [key, value] of Object.entries(form)) {
-                if (value && value.trim()) trimmed[key as keyof RegisterInput] = value.trim();
-              }
-              onRegister(trimmed);
-            }}
-          />
         </div>
-      )}
+        <DialogActions
+          pending={assignPending}
+          confirmLabel="Assign"
+          disabled={!selected}
+          onCancel={onCancel}
+          onConfirm={() => selected && onAssign(selected)}
+        />
+      </div>
     </DialogShell>
   );
 }
-
-const REGISTER_FIELD_LABELS: Record<keyof RegisterInput, string> = {
-  brand: "Brand",
-  model: "Model",
-  serialNumber: "Serial Number",
-  category: "Category",
-  locationText: "Location",
-};
 
 function DialogShell({
   title,

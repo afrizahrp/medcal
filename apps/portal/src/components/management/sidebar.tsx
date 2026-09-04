@@ -80,7 +80,7 @@ export function ManagementSidebar({
             height={expanded ? 72 : 36}
             className={
               expanded
-                ? "h-[72px] w-auto max-w-[110px] shrink-0 rounded object-contain"
+                ? "h-auto max-h-[72px] w-auto max-w-[110px] shrink-0 rounded object-contain"
                 : "h-9 w-9 shrink-0 rounded object-contain"
             }
             priority

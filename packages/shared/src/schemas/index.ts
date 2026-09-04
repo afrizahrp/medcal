@@ -682,24 +682,6 @@ export const calibrationJobAssignDeviceSchema = z.object({
 
 export type CalibrationJobAssignDeviceInput = z.infer<typeof calibrationJobAssignDeviceSchema>;
 
-/**
- * POST /calibration-jobs/:id/register-device body. Field bounds mirror
- * deviceCreateSchema so the two stay in lockstep. `customerId` and
- * `deviceTypeId` are NOT accepted here — both are derived server-side from the
- * job (customer from the WorkOrder, device type from the originating
- * CalibrationRequestItem).
- */
-export const calibrationJobRegisterDeviceSchema = z.object({
-  brand: z.string().trim().max(150).optional(),
-  model: z.string().trim().max(150).optional(),
-  serialNumber: z.string().trim().max(100).optional(),
-  category: z.string().trim().max(150).optional(),
-  locationText: z.string().trim().max(200).optional(),
-  status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
-});
-
-export type CalibrationJobRegisterDeviceInput = z.infer<typeof calibrationJobRegisterDeviceSchema>;
-
 // -----------------------------------------------------------------------------
 // Calibration Job — Portal management list
 // -----------------------------------------------------------------------------

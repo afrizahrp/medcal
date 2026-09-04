@@ -477,8 +477,10 @@ export default function PriceListItemsPageClient() {
                     return (
                       <tr key={row.id} className="hover:bg-slate-50">
                         <td className="px-4 py-3">
-                          <span className="font-medium text-slate-900">{row.deviceType.name}</span>
-                          <span className="ml-2 font-mono text-xs text-slate-400">
+                          <span className="block font-medium text-slate-900">
+                            {row.deviceType.name}
+                          </span>
+                          <span className="block font-mono text-xs text-slate-400">
                             {row.deviceType.code}
                           </span>
                         </td>

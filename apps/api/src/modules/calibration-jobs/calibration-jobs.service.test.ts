@@ -463,39 +463,6 @@ describe("CalibrationJobsService — physical device assignment", () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it("register-and-assign: creates a Device row and binds it atomically", async () => {
-    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
-    await prisma.calibrationJob.update({
-      where: { id: jobs[0]!.id },
-      data: { technicianObservedSerial: "SN-OBSERVED-9" },
-    });
-
-    const result = await calibrationJobsService.registerDevice(realCompanyId, jobs[0]!.id, {
-      brand: "Acme",
-    });
-
-    expect(result.deviceTypeValidated).toBe(true);
-    expect(result.job.deviceId).toBeTruthy();
-    const created = await prisma.device.findUniqueOrThrow({
-      where: { id: result.job.deviceId! },
-    });
-    expect(created.customerId).toBe(customerId);
-    expect(created.deviceTypeId).toBe(deviceTypeId);
-    expect(created.brand).toBe("Acme");
-    // serial prefilled from the job's technician-observed value
-    expect(created.serialNumber).toBe("SN-OBSERVED-9");
-  });
-
-  it("register-and-assign: rejects a job that already has a device", async () => {
-    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
-    const device = await devicesService.create(realCompanyId, { customerId, deviceTypeId });
-    await calibrationJobsService.assignDevice(realCompanyId, jobs[0]!.id, { deviceId: device.id });
-
-    await expect(
-      calibrationJobsService.registerDevice(realCompanyId, jobs[0]!.id, {}),
-    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_DEVICE_ALREADY_ASSIGNED" } });
-  });
-
   it("device-candidates: scoped to the job's customer and device type", async () => {
     const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
     const match = await devicesService.create(realCompanyId, {
@@ -616,13 +583,6 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "t3@x.co" } });
 
     await expect(guard.canActivate(contextFor("assignDevice"))).resolves.toBe(true);
-  });
-
-  it("allows a TECHNICIAN through the register-device endpoint", async () => {
-    const tech = await makeMember(realCompanyId, "TECHNICIAN");
-    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "t4@x.co" } });
-
-    await expect(guard.canActivate(contextFor("registerDevice"))).resolves.toBe(true);
   });
 
   it("blocks a FINANCE user from the assign-device endpoint (403)", async () => {

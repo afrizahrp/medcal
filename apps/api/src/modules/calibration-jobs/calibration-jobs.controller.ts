@@ -14,7 +14,6 @@ import {
   calibrationJobEscalateIdentitySchema,
   calibrationJobIdentityDecisionSchema,
   calibrationJobListQuerySchema,
-  calibrationJobRegisterDeviceSchema,
 } from "@medcal/shared";
 import type { DeviceWithRelations } from "../devices/devices.service";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
@@ -126,23 +125,5 @@ export class CalibrationJobsController {
       });
     }
     return this.service.assignDevice(companyId, id, parsed.data);
-  }
-
-  @Post(":id/register-device")
-  @RequirePermission("calibrationJob", "assignDevice")
-  async registerDevice(
-    @CompanyId() companyId: string,
-    @Param("id") id: string,
-    @Body() rawBody: unknown,
-  ): Promise<CalibrationJobDeviceAssignmentResult> {
-    const parsed = calibrationJobRegisterDeviceSchema.safeParse(rawBody);
-    if (!parsed.success) {
-      throw new BadRequestException({
-        message: "Invalid device registration payload",
-        code: "INVALID_CALIBRATION_JOB_REGISTER_DEVICE",
-        issues: parsed.error.flatten(),
-      });
-    }
-    return this.service.registerDevice(companyId, id, parsed.data);
   }
 }

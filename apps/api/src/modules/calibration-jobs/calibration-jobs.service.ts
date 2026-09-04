@@ -12,7 +12,6 @@ import {
   type CalibrationJobEscalateIdentityInput,
   type CalibrationJobIdentityDecisionInput,
   type CalibrationJobListQuery,
-  type CalibrationJobRegisterDeviceInput,
 } from "@medcal/shared";
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { DevicesService, type DeviceWithRelations } from "../devices/devices.service";
@@ -295,69 +294,6 @@ export class CalibrationJobsService {
 
     await this.bindDevice(id, device.id);
     return { job: await this.findOne(companyId, id), deviceTypeValidated };
-  }
-
-  /**
-   * Register a brand-new Device for the job's customer + resolved DeviceType and
-   * assign it, atomically. customerId and deviceTypeId are derived from the job,
-   * never taken from the caller.
-   */
-  async registerDevice(
-    companyId: string,
-    id: string,
-    input: CalibrationJobRegisterDeviceInput,
-  ): Promise<CalibrationJobDeviceAssignmentResult> {
-    const job = await this.findOne(companyId, id);
-    this.assertDeviceAssignable(job);
-
-    const deviceTypeId = this.resolveJobDeviceTypeId(job);
-    if (deviceTypeId === null) {
-      throw new BadRequestException({
-        message:
-          "Cannot register a device for this job: its device type could not be resolved from the requisition or purchase order. Match an existing device instead.",
-        code: "CALIBRATION_JOB_DEVICE_TYPE_UNRESOLVED",
-      });
-    }
-
-    await prisma.$transaction(async (tx) => {
-      // Re-check inside the transaction: a concurrent assignment may have landed
-      // between findOne and here.
-      const fresh = await tx.calibrationJob.findUniqueOrThrow({
-        where: { id },
-        select: { deviceId: true },
-      });
-      if (fresh.deviceId !== null) {
-        throw new ConflictException({
-          message: "This calibration job already has a device assigned.",
-          code: "CALIBRATION_JOB_DEVICE_ALREADY_ASSIGNED",
-          deviceId: fresh.deviceId,
-        });
-      }
-
-      const device = await this.devices.create(
-        companyId,
-        {
-          customerId: job.workOrder.customerId,
-          deviceTypeId,
-          brand: input.brand,
-          model: input.model,
-          // Prefill the serial from what the technician already recorded on the
-          // job, unless the caller supplied one explicitly.
-          serialNumber: input.serialNumber ?? job.technicianObservedSerial ?? undefined,
-          category: input.category,
-          locationText: input.locationText,
-          status: input.status,
-        },
-        tx,
-      );
-
-      await tx.calibrationJob.update({
-        where: { id },
-        data: { deviceId: device.id },
-      });
-    });
-
-    return { job: await this.findOne(companyId, id), deviceTypeValidated: true };
   }
 
   private async bindDevice(jobId: string, deviceId: string): Promise<void> {
