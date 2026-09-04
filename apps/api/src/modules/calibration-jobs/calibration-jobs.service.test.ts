@@ -754,16 +754,19 @@ describe("CalibrationJobsService — list", () => {
     const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
     await calibrationJobsService.escalateIdentity(realCompanyId, jobs[0]!.id, {});
 
-    const byWo = await calibrationJobsService.findAll(realCompanyId, {
-      workOrderId: workOrder.id,
-    });
+    const byWo = await calibrationJobsService.findAll(
+      realCompanyId,
+      { workOrderId: workOrder.id },
+      staffUserId,
+    );
     expect(byWo.total).toBe(2);
     expect(byWo.data.every((j) => j.workOrderId === workOrder.id)).toBe(true);
 
-    const pending = await calibrationJobsService.findAll(realCompanyId, {
-      workOrderId: workOrder.id,
-      akdAklApprovalStatus: "PENDING_REVIEW",
-    });
+    const pending = await calibrationJobsService.findAll(
+      realCompanyId,
+      { workOrderId: workOrder.id, akdAklApprovalStatus: "PENDING_REVIEW" },
+      staffUserId,
+    );
     expect(pending.total).toBe(1);
     expect(pending.data[0]!.id).toBe(jobs[0]!.id);
   });
@@ -776,10 +779,100 @@ describe("CalibrationJobsService — list", () => {
     createdCompanyIds.push(otherCompanyId);
     const { workOrder } = await startedWorkOrderJobs(otherCompanyId);
 
-    const res = await calibrationJobsService.findAll(realCompanyId, {
-      workOrderId: workOrder.id,
-    });
+    const res = await calibrationJobsService.findAll(
+      realCompanyId,
+      { workOrderId: workOrder.id },
+      staffUserId,
+    );
     expect(res.total).toBe(0);
+  });
+});
+
+describe("CalibrationJobsService — list, assignedToMe (technician scope)", () => {
+  /** The technician `startedWorkOrderJobs` assigns to the work order. */
+  async function assignedTechnicianId(workOrderId: string): Promise<string> {
+    const assignment = await prisma.workOrderAssignment.findFirst({
+      where: { workOrderId },
+      select: { technicianUserId: true },
+    });
+    return assignment!.technicianUserId;
+  }
+
+  it("returns only jobs on work orders the caller is assigned to", async () => {
+    const mine = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
+    const theirs = await startedWorkOrderJobs(realCompanyId);
+    const me = await assignedTechnicianId(mine.workOrder.id);
+
+    const res = await calibrationJobsService.findAll(realCompanyId, { assignedToMe: true }, me);
+
+    expect(res.total).toBe(2);
+    expect(res.data.every((j) => j.workOrderId === mine.workOrder.id)).toBe(true);
+    expect(res.data.some((j) => j.workOrderId === theirs.workOrder.id)).toBe(false);
+  });
+
+  it("combines with status / akdAklApprovalStatus filters", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
+    const me = await assignedTechnicianId(workOrder.id);
+    await calibrationJobsService.escalateIdentity(realCompanyId, jobs[0]!.id, {});
+
+    const pending = await calibrationJobsService.findAll(
+      realCompanyId,
+      { assignedToMe: true, akdAklApprovalStatus: "PENDING_REVIEW" },
+      me,
+    );
+    expect(pending.total).toBe(1);
+    expect(pending.data[0]!.id).toBe(jobs[0]!.id);
+
+    const inProgress = await calibrationJobsService.findAll(
+      realCompanyId,
+      { assignedToMe: true, status: "PENDING" },
+      me,
+    );
+    expect(inProgress.data.every((j) => j.status === "PENDING")).toBe(true);
+    expect(inProgress.data.every((j) => j.workOrderId === workOrder.id)).toBe(true);
+  });
+
+  it("returns an empty list (not an error) for a technician with no assignments", async () => {
+    await startedWorkOrderJobs(realCompanyId);
+    const loner = await makeMember(realCompanyId, "TECHNICIAN");
+
+    const res = await calibrationJobsService.findAll(
+      realCompanyId,
+      { assignedToMe: true },
+      loner.id,
+    );
+    expect(res.total).toBe(0);
+    expect(res.data).toEqual([]);
+  });
+
+  it("still company-scopes when assignedToMe is set", async () => {
+    const otherCompanyId = `S${randomUUID().slice(0, 2).toUpperCase()}`;
+    await prisma.company.create({
+      data: { id: otherCompanyId, name: "Foreign AssignedToMe Co", status: "ACTIVE" },
+    });
+    createdCompanyIds.push(otherCompanyId);
+    const foreign = await startedWorkOrderJobs(otherCompanyId);
+    const foreignTech = await assignedTechnicianId(foreign.workOrder.id);
+
+    // The foreign technician's id, queried against the real company, sees nothing.
+    const res = await calibrationJobsService.findAll(
+      realCompanyId,
+      { assignedToMe: true },
+      foreignTech,
+    );
+    expect(res.total).toBe(0);
+  });
+
+  it("omitting assignedToMe is unchanged — returns jobs regardless of assignment", async () => {
+    const { workOrder } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
+    const stranger = await makeMember(realCompanyId, "TECHNICIAN");
+
+    const res = await calibrationJobsService.findAll(
+      realCompanyId,
+      { workOrderId: workOrder.id },
+      stranger.id,
+    );
+    expect(res.total).toBe(2);
   });
 });
 

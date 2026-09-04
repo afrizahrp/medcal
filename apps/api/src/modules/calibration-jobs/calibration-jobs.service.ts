@@ -149,6 +149,7 @@ export class CalibrationJobsService {
   async findAll(
     companyId: string,
     query: CalibrationJobListQuery,
+    userId: string,
   ): Promise<CalibrationJobListResult> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
@@ -158,6 +159,9 @@ export class CalibrationJobsService {
       ...(query.workOrderId ? { workOrderId: query.workOrderId } : {}),
       ...(query.akdAklApprovalStatus ? { akdAklApprovalStatus: query.akdAklApprovalStatus } : {}),
       ...(query.status ? { status: query.status } : {}),
+      ...(query.assignedToMe
+        ? { workOrder: { assignments: { some: { technicianUserId: userId } } } }
+        : {}),
       ...(query.search
         ? {
             OR: [

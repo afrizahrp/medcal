@@ -41,6 +41,7 @@ export class CalibrationJobsController {
   @RequirePermission("calibrationJob", "read")
   async list(
     @CompanyId() companyId: string,
+    @UserId() userId: string,
     @Query() rawQuery: unknown,
   ): Promise<CalibrationJobListResult> {
     const parsed = calibrationJobListQuerySchema.safeParse(rawQuery);
@@ -51,7 +52,7 @@ export class CalibrationJobsController {
         issues: parsed.error.flatten(),
       });
     }
-    return this.service.findAll(companyId, parsed.data);
+    return this.service.findAll(companyId, parsed.data, userId);
   }
 
   @Get(":id")

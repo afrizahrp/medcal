@@ -805,6 +805,16 @@ export const calibrationJobListQuerySchema = baseListQuerySchema.extend({
   workOrderId: z.string().optional(),
   akdAklApprovalStatus: z.enum(AKD_AKL_APPROVAL_STATUS_VALUES).optional(),
   status: z.enum(CALIBRATION_JOB_STATUS_VALUES).optional(),
+  /**
+   * Technician-scoped filter for the tech-PWA job list. When "true", the service
+   * restricts results to jobs on WorkOrders the *requesting* user is assigned to
+   * (resolved server-side from the session user, never a client-supplied id).
+   * Omitted / "false" → current behavior, unchanged.
+   */
+  assignedToMe: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
 });
 
 export type CalibrationJobListQuery = z.infer<typeof calibrationJobListQuerySchema>;
