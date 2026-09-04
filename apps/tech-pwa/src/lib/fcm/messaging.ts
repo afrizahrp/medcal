@@ -42,16 +42,21 @@ export async function getFirebaseMessaging(): Promise<Messaging | null> {
   return messagingInstance;
 }
 
+/**
+ * <SwRegister/> (mounted app-wide in providers.tsx) already registers this SW
+ * on app start — this just waits for that registration instead of registering
+ * a second time.
+ */
 export async function registerMessagingServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
     return null;
   }
 
   try {
-    return await navigator.serviceWorker.register(SW_PATH, { scope: "/" });
+    return await navigator.serviceWorker.getRegistration(SW_PATH) ?? navigator.serviceWorker.ready;
   } catch (error) {
     console.error(
-      "[fcm] Service worker registration failed:",
+      "[fcm] Service worker registration lookup failed:",
       error instanceof Error ? error.message : "Unknown error",
     );
     return null;

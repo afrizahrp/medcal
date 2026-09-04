@@ -18,3 +18,8 @@
     color-scheme: light;
   }
 }
+
+/* Auth chrome (matches the portal app's radial canvas, in the PWA's teal brand). */
+.auth-canvas {
+  background: radial-gradient(ellipse at top, #99f6e4, #f0fdfa);
+}

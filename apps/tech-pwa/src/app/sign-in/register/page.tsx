@@ -2,30 +2,41 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "@medcal/auth/client";
-import { AuthCard } from "../../components/auth/auth-card";
+import { authClient } from "@medcal/auth/client";
+import { AuthCard } from "../../../components/auth/auth-card";
 
 const fieldClass =
   "mt-1 h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-600";
 
-export default function SignInPage() {
+export default function RegisterPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    setSubmitting(true);
     setError(null);
 
-    const { error: signInError } = await signIn.email({ email, password });
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
 
+    setSubmitting(true);
+    const { error: signUpError } = await authClient.signUp.email({
+      email,
+      password,
+      name,
+    });
     setSubmitting(false);
-    if (signInError) {
-      setError(signInError.message ?? "Sign-in failed");
+
+    if (signUpError) {
+      setError(signUpError.message ?? "Registration failed");
       return;
     }
 
@@ -35,12 +46,27 @@ export default function SignInPage() {
 
   return (
     <AuthCard
-      title="PT. Presisi Kalibrasi Medika"
-      footerLabel="Don't have an account?"
-      footerHref="/sign-in/register"
-      footerLinkText="Sign up"
+      title="Create an account"
+      footerLabel="Already have an account?"
+      footerHref="/sign-in"
+      footerLinkText="Sign in"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700" htmlFor="name">
+            Name
+          </label>
+          <input
+            id="name"
+            type="text"
+            required
+            autoComplete="name"
+            placeholder="Please input your name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            className={fieldClass}
+          />
+        </div>
         <div>
           <label className="block text-sm font-medium text-slate-700" htmlFor="email">
             Email
@@ -65,7 +91,7 @@ export default function SignInPage() {
               id="password"
               type={showPassword ? "text" : "password"}
               required
-              autoComplete="current-password"
+              autoComplete="new-password"
               placeholder="Please input your password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -80,13 +106,28 @@ export default function SignInPage() {
             </button>
           </div>
         </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700" htmlFor="confirmPassword">
+            Confirm password
+          </label>
+          <input
+            id="confirmPassword"
+            type={showPassword ? "text" : "password"}
+            required
+            autoComplete="new-password"
+            placeholder="Confirm your password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            className={fieldClass}
+          />
+        </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
           className="min-h-11 w-full rounded-lg bg-brand-700 px-3 text-base font-semibold text-white active:bg-brand-800 disabled:opacity-50"
         >
-          {submitting ? "Signing in…" : "Sign in"}
+          {submitting ? "Creating account…" : "Sign up"}
         </button>
       </form>
     </AuthCard>

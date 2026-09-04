@@ -17,7 +17,7 @@ export function GET() {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? "",
   };
 
-  const body = `/* firebase-messaging-sw.js — Tech-PWA FCM background handler */
+  const body = `/* firebase-messaging-sw.js — Tech-PWA FCM background handler + app-shell */
 importScripts('https://www.gstatic.com/firebasejs/${FIREBASE_COMPAT_VERSION}/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/${FIREBASE_COMPAT_VERSION}/firebase-messaging-compat.js');
 firebase.initializeApp(${JSON.stringify(firebaseConfig)});
@@ -37,6 +37,32 @@ messaging.onBackgroundMessage((payload) => {
     data,
   };
   return self.registration.showNotification(title, options);
+});
+
+/* App-shell: offline fallback only — no data/JS/RSC caching (never serve a stale bundle). */
+const SHELL_CACHE = "tech-pwa-shell-v1";
+const SHELL_URLS = ["/offline.html", "/icons/icon-192.png", "/short-logo.png"];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_URLS)).then(() => self.skipWaiting()),
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== SHELL_CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode !== "navigate") return;
+  event.respondWith(
+    fetch(event.request).catch(() => caches.match("/offline.html")),
+  );
 });
 `;
 

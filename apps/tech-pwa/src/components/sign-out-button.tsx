@@ -16,9 +16,9 @@ export function SignOutButton() {
         router.push("/sign-in");
         router.refresh();
       }}
-      className="text-sm text-slate-600 hover:underline"
+      className="flex min-h-11 items-center px-1 text-sm font-medium text-slate-600 active:text-slate-900"
     >
-      Sign out
+      Keluar
     </button>
   );
 }
