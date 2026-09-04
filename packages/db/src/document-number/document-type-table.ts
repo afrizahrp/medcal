@@ -12,6 +12,7 @@ export const DOCUMENT_TYPE_NUMBER_TABLE: Record<DocumentType, string> = {
   INVOICE: "Invoice",
   CERTIFICATE: "Certificate",
   CREDIT_NOTE: "CreditNote",
+  IDENTITY_CORRECTION_BA: "IdentityCorrection",
 };
 
 export function resolveDocumentNumberTable(documentType: DocumentType): string | undefined {

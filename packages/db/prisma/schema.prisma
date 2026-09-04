@@ -202,6 +202,30 @@ enum AkdAklApprovalStatus {
   REJECTED
 }
 
+/// Manager decision state for an identity correction Berita Acara. Mirrors
+/// AkdAklApprovalStatus's shape (minus NOT_REQUIRED — an IdentityCorrection
+/// row only exists once a correction is actually submitted). A row enters at
+/// PENDING_REVIEW; TECHNICIAN_MANAGER moves it to APPROVED/REJECTED.
+enum IdentityCorrectionStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+/// Signer roles on an identity correction BA (shared model + discriminator).
+enum IdentityCorrectionSignerRole {
+  TECHNICIAN
+  CUSTOMER
+}
+
+/// Captures "customer unavailable / refused" as a real state, not just a null
+/// signature. (Decision 7)
+enum SignatureStatus {
+  SIGNED
+  UNAVAILABLE
+  REFUSED
+}
+
 enum ReviewDecision {
   APPROVE
   REJECT
@@ -258,6 +282,9 @@ enum DocumentType {
   INVOICE
   CERTIFICATE
   CREDIT_NOTE
+  /// Berita Acara Identitas — identity correction (device_id / serial / AKD-AKL).
+  /// Prefix "BAI". Number allocated from IdentityCorrection.number. (Decision 9)
+  IDENTITY_CORRECTION_BA
 }
 
 enum ReminderChannel {
@@ -300,6 +327,10 @@ enum FileOwnerType {
   // Reference-equipment calibration certificate/evidence. ownerId =
   // EquipmentCalibrationRecord.id (that model is Phase 2B — not built yet).
   EQUIPMENT_CALIBRATION
+  /// Signature image on an IdentityCorrectionSignature row. ownerId =
+  /// IdentityCorrectionSignature.id. Deliberately NOT reusing SIGNATURE
+  /// (which is CustomerSignature-on-job). (Decision 10)
+  IDENTITY_CORRECTION
   OTHER
 }
 
@@ -443,6 +474,8 @@ model User {
   equipmentCalibrationsCreated  EquipmentCalibrationRecord[] @relation("EquipmentCalibrationCreatedBy")
   equipmentCalibrationsAccepted EquipmentCalibrationRecord[] @relation("EquipmentCalibrationAcceptedBy")
   calibrationJobsAkdAklApproved CalibrationJob[]             @relation("CalibrationJobAkdAklApprover")
+  identityCorrectionsSubmitted  IdentityCorrection[]         @relation("IdentityCorrectionSubmitter")
+  identityCorrectionsDecided    IdentityCorrection[]         @relation("IdentityCorrectionDecider")
 }
 
 // =============================================================================
@@ -1306,6 +1339,8 @@ model Device {
   purchaseOrderItems PurchaseOrderItem[]
   calibrationJobs    CalibrationJob[]
   certificates       Certificate[]
+  identityCorrectionsPrev IdentityCorrection[] @relation("IdentityCorrectionPrevDevice")
+  identityCorrectionsNew  IdentityCorrection[] @relation("IdentityCorrectionNewDevice")
 
   @@unique([companyId, code])
   @@index([companyId, customerId])
@@ -1831,6 +1866,7 @@ model CalibrationJob {
   signature              CustomerSignature?
   reviews                QualityReview[]
   certificate            Certificate?
+  identityCorrections    IdentityCorrection[]
 
   @@unique([workOrderId, deviceId])
   @@unique([workOrderId, purchaseOrderItemId, unitOrdinal])
@@ -1895,6 +1931,98 @@ model CustomerSignature {
 
   calibrationJob CalibrationJob @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
   fileObject     FileObject?    @relation(fields: [fileObjectId], references: [id])
+}
+
+// =============================================================================
+// Identity Correction — Berita Acara Identitas for correcting a CalibrationJob's
+// device identity (device_id / serial / AKD-AKL). Sole path for setting or
+// changing CalibrationJob.deviceId going forward. Option A: flat header with
+// prev*/new* column pairs for the 3 locked attributes. (Decisions 1-12)
+// =============================================================================
+
+model IdentityCorrection {
+  id               String                   @id @default(cuid())
+  companyId        String
+  /// Job being corrected. Required FK, NOT unique — a job may accumulate many
+  /// corrections over its life (audit). (Decision 1)
+  calibrationJobId String
+  /// BA number from DocumentNumberService (prefix "BAI"), unique per company.
+  /// Named `number` (not `baNumber`) so readMaxExistingSequence's hardcoded
+  /// "number" column applies. (Decision 9)
+  number           String
+  status           IdentityCorrectionStatus @default(PENDING_REVIEW)
+
+  // ── Corrected attributes (all nullable — one BA may touch only some) ────────
+  /// Device on the job before this correction. FK: Device is never deleted
+  /// (project policy) so referential integrity holds. (Decision 4)
+  prevDeviceId String?
+  /// Device the correction resolves the job to. FK enables DeviceType-match
+  /// validation + RI in the service layer. (Decision 4)
+  newDeviceId  String?
+  /// Plain snapshot strings, mirroring CalibrationJob.technicianObservedSerial
+  /// / technicianObservedAkdAkl. (Decision 4)
+  prevSerial   String?
+  newSerial    String?
+  prevAkdAkl   String?
+  newAkdAkl    String?
+
+  /// Why the correction is needed. Durable column — NEVER overwritten. (Decision 3)
+  reason String
+
+  /// Technician who initiated. Always known.
+  submittedByUserId String
+
+  // ── Manager decision (mirrors akdAklApprovedBy/At/note) ────────────────────
+  decidedByUserId String?
+  decidedAt       DateTime?
+  decisionNote    String?
+
+  /// True once an APPROVED correction that changed newAkdAkl has moved the
+  /// job's akdAklApprovalStatus APPROVED -> PENDING_REVIEW. Audit clarity.
+  /// (Decision 5)
+  akdAklGateReopened Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calibrationJob CalibrationJob                @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  prevDevice     Device?                       @relation("IdentityCorrectionPrevDevice", fields: [prevDeviceId], references: [id], onDelete: Restrict)
+  newDevice      Device?                       @relation("IdentityCorrectionNewDevice", fields: [newDeviceId], references: [id], onDelete: Restrict)
+  submittedBy    User                          @relation("IdentityCorrectionSubmitter", fields: [submittedByUserId], references: [id])
+  decidedBy      User?                         @relation("IdentityCorrectionDecider", fields: [decidedByUserId], references: [id])
+  signatures     IdentityCorrectionSignature[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([calibrationJobId])
+  @@index([submittedByUserId])
+  @@index([decidedByUserId])
+  @@index([prevDeviceId])
+  @@index([newDeviceId])
+}
+
+model IdentityCorrectionSignature {
+  id                   String                       @id @default(cuid())
+  companyId            String
+  /// FK, NOT unique — one TECHNICIAN row + one CUSTOMER row per correction.
+  identityCorrectionId String
+  signerRole           IdentityCorrectionSignerRole
+  signerName           String?
+  /// Signature image via FileOwnerType.IDENTITY_CORRECTION. Plain string, no
+  /// FK relation — polymorphic like FileObject.ownerId; file-owner-policy
+  /// wiring is a follow-up task. (Decision 10)
+  fileObjectId         String?
+  status               SignatureStatus              @default(SIGNED)
+  /// Set when status = UNAVAILABLE/REFUSED. (Decision 7)
+  unavailableReason    String?
+  signedAt             DateTime?
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+
+  identityCorrection IdentityCorrection @relation(fields: [identityCorrectionId], references: [id], onDelete: Cascade)
+
+  @@unique([identityCorrectionId, signerRole])
+  @@index([companyId])
 }
 
 model QualityReview {
