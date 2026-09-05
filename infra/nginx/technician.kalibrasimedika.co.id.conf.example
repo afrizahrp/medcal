@@ -1,0 +1,69 @@
+# PROPOSED Nginx server block for technician.kalibrasimedika.co.id (F5.7).
+#
+# NOT YET APPLIED. This file is a plan for the VPS operator to review and
+# install manually — it is not wired into any deploy script, and nothing in
+# this repo reloads or restarts the live Nginx instance.
+#
+# Existing Nginx routes this must NOT disturb:
+#   bipmed.co.id / www.bipmed.co.id           -> localhost:3000
+#   bumiindah.co.id / www.bumiindah.co.id     -> localhost:3100
+#   apps.bumiindah.co.id                      -> localhost:5000
+#   restweb.bumiindah.co.id                   -> localhost:7000
+#   rest.bumiindah.co.id                      -> localhost:8000
+#
+# This block only adds a NEW server_name (technician.kalibrasimedika.co.id)
+# pointing at MedCal's apps/tech-pwa container, published to 127.0.0.1:3004 by
+# docker-compose.prod.yml. It does not modify any existing server block, nor
+# api.*/apps.*/kalibrasimedika.co.id's existing ones.
+#
+# apps/tech-pwa has no WebSocket usage (confirmed by inspection — no
+# socket.io/WebSocket reference anywhere in its source) and does not receive
+# file uploads directly (camera-captured photos/evidence POST straight from
+# the browser to api.kalibrasimedika.co.id, already covered by that
+# hostname's own client_max_body_size 25m) — so neither Upgrade/Connection
+# headers nor a body-size override are needed on this hostname.
+#
+# Suggested install steps (manual, by the VPS operator, not automated here):
+#   1. docker compose --env-file .env.production -f docker-compose.prod.yml up -d tech-pwa
+#      (container must be running and healthy on 127.0.0.1:3004 BEFORE Nginx
+#      is pointed at it)
+#   2. cp this file to /etc/nginx/sites-available/technician.kalibrasimedika.co.id.conf
+#   3. ln -s /etc/nginx/sites-available/technician.kalibrasimedika.co.id.conf \
+#            /etc/nginx/sites-enabled/technician.kalibrasimedika.co.id.conf
+#   4. certbot --nginx -d technician.kalibrasimedika.co.id   (same Certbot flow
+#      already used for the existing sites; issues the cert and rewrites this
+#      block's listen 443/ssl_certificate lines automatically)
+#   5. nginx -t   (validate BEFORE reloading)
+#   6. systemctl reload nginx   (reload, not restart — does not drop existing
+#      connections to any other site on this host)
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name technician.kalibrasimedika.co.id;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name technician.kalibrasimedika.co.id;
+
+    ssl_certificate     /etc/letsencrypt/live/technician.kalibrasimedika.co.id/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/technician.kalibrasimedika.co.id/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3004;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
