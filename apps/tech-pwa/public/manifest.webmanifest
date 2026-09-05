@@ -1,6 +1,6 @@
 {
-  "name": "medcal Tech",
-  "short_name": "medcal",
+  "name": "MyJobs",
+  "short_name": "MyJobs",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

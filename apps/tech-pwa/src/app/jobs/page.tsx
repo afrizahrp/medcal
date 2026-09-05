@@ -5,7 +5,7 @@ import { AccountMenu } from "../../components/layout/account-menu";
 import { CardListSkeleton, EmptyState, ErrorState } from "../../components/ui/state-views";
 import { formatApiError } from "../../lib/api-errors";
 import { useJobsQuery } from "./use-jobs-query";
-import { JobCard } from "./jobs-ui";
+import { JobsList } from "./jobs-ui";
 
 function RefreshIcon({ spinning }: { spinning: boolean }) {
   return (
@@ -58,16 +58,14 @@ export default function JobsPage() {
       ) : null}
 
       {data && data.data.length > 0 ? (
-        <div className="flex flex-col">
-          {data.data.map((job) => (
-            <JobCard key={job.id} job={job} />
-          ))}
+        <>
+          <JobsList jobs={data.data} />
           {data.total > data.data.length ? (
-            <p className="px-4 py-3 text-center text-xs text-slate-500">
+            <p className="px-4 pb-3 text-center text-xs text-slate-500">
               Menampilkan {data.data.length} dari {data.total} job — hubungi koordinator.
             </p>
           ) : null}
-        </div>
+        </>
       ) : null}
     </Screen>
   );

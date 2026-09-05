@@ -28,7 +28,7 @@ messaging.onBackgroundMessage((payload) => {
     return Promise.resolve();
   }
   const data = payload.data || {};
-  const title = data.title || "MedCal";
+  const title = data.title || "MyJobs";
   const icon = data.icon || "/short-logo.png";
   const options = {
     body: data.body || "",
