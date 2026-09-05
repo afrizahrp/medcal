@@ -8,6 +8,11 @@ out/
 .turbo/
 coverage/
 
+# Generated / incremental build artifacts — regenerated on every build,
+# only ever produce commit noise (see 0a2c31a "update tsbuildinfo cache")
+*.tsbuildinfo
+next-env.d.ts
+
 # Local file-store root (FILES_ROOT) — stored file binaries, never committed
 .data/
 
