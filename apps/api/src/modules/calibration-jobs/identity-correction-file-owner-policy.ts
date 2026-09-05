@@ -3,16 +3,18 @@ import type { FileOwnerPolicy } from "../files/owner-policy";
 
 /**
  * The IDENTITY_CORRECTION FileOwnerPolicy registered with the generic
- * FilesModule. A signature image attaches to one IdentityCorrectionSignature
- * row (ownerId = signature id, NOT the correction id — one image per signer).
+ * FilesModule. Both signatures (TECHNICIAN and CUSTOMER) are physically on one
+ * sheet of paper — the BA is photographed once. The photo attaches to the
+ * IdentityCorrection itself (ownerId = correction id), not to either signature
+ * row.
  *
  * - Authorization reuses the `calibrationJob` permission: an Identity Correction
  *   BA is a sub-resource of the job, so no new RBAC resource is introduced.
  * - writeAction is `submitIdentityCorrection` (not the default `update`) so the
- *   TECHNICIAN who submits the BA can also upload its signature images — a
- *   TECHNICIAN has no `calibrationJob:update` grant.
- * - `locked` once the parent correction is decided (APPROVED / REJECTED): a
- *   decided BA and its signatures are frozen evidence.
+ *   TECHNICIAN who submits the BA can also upload its photo — a TECHNICIAN has
+ *   no `calibrationJob:update` grant.
+ * - `locked` once the correction is decided (APPROVED / REJECTED): a decided
+ *   BA and its evidence are frozen.
  */
 export const identityCorrectionFileOwnerPolicy: FileOwnerPolicy = {
   ownerType: "IDENTITY_CORRECTION",
@@ -25,16 +27,14 @@ export const identityCorrectionFileOwnerPolicy: FileOwnerPolicy = {
     maxBytes: 5 * 1024 * 1024,
   },
   async resolveOwner(companyId, ownerId) {
-    // ownerId = IdentityCorrectionSignature.id
-    const signature = await prisma.identityCorrectionSignature.findFirst({
+    // ownerId = IdentityCorrection.id (the BA record itself)
+    const correction = await prisma.identityCorrection.findFirst({
       where: { id: ownerId, companyId },
-      select: { identityCorrection: { select: { status: true } } },
+      select: { status: true },
     });
     return {
-      exists: Boolean(signature),
-      locked:
-        signature?.identityCorrection.status === "APPROVED" ||
-        signature?.identityCorrection.status === "REJECTED",
+      exists: Boolean(correction),
+      locked: correction?.status === "APPROVED" || correction?.status === "REJECTED",
     };
   },
 };

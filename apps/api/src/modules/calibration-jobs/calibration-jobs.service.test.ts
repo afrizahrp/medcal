@@ -641,6 +641,47 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
     });
   });
 
+  it("approves once the BA sheet's photo is uploaded — one photo covers both signed signers", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      {
+        reason: "signed with photo",
+        newSerial: "SN-SIGNED-PHOTO",
+        signatures: {
+          TECHNICIAN: { status: "SIGNED", signerName: "Tech A" },
+          CUSTOMER: { status: "SIGNED", signerName: "Cust B" },
+        },
+      },
+    );
+
+    // One photo, owned by the correction — not by either signature.
+    await prisma.fileObject.create({
+      data: {
+        companyId: realCompanyId,
+        ownerType: "IDENTITY_CORRECTION",
+        ownerId: correction.id,
+        storageKey: `test/${randomUUID()}`,
+        mimeType: "image/png",
+      },
+    });
+
+    const result = await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      correction.id,
+      manager.id,
+      { decision: "APPROVE" },
+    );
+
+    expect(result.correction.status).toBe("APPROVED");
+  });
+
   it("reject makes no writes to the job and keeps the BA number", async () => {
     const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
@@ -969,7 +1010,7 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
 });
 
 describe("identityCorrectionFileOwnerPolicy", () => {
-  it("resolves an existing signature as unlocked while PENDING_REVIEW, locked once decided", async () => {
+  it("resolves an existing correction as unlocked while PENDING_REVIEW, locked once decided", async () => {
     const { jobs } = await startedWorkOrderJobs(realCompanyId);
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
     const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
@@ -979,14 +1020,13 @@ describe("identityCorrectionFileOwnerPolicy", () => {
       tech.id,
       { reason: "policy test", newSerial: "SN-POLICY", signatures: UNAVAILABLE_SIGNATURES },
     );
-    const signatureId = correction.signatures[0]!.id;
 
     expect(
-      await identityCorrectionFileOwnerPolicy.resolveOwner(realCompanyId, signatureId),
+      await identityCorrectionFileOwnerPolicy.resolveOwner(realCompanyId, correction.id),
     ).toEqual({ exists: true, locked: false });
 
     expect(
-      await identityCorrectionFileOwnerPolicy.resolveOwner("SOME-OTHER-CO", signatureId),
+      await identityCorrectionFileOwnerPolicy.resolveOwner("SOME-OTHER-CO", correction.id),
     ).toEqual({ exists: false, locked: false });
 
     await calibrationJobsService.decideIdentityCorrection(
@@ -998,7 +1038,7 @@ describe("identityCorrectionFileOwnerPolicy", () => {
     );
 
     expect(
-      await identityCorrectionFileOwnerPolicy.resolveOwner(realCompanyId, signatureId),
+      await identityCorrectionFileOwnerPolicy.resolveOwner(realCompanyId, correction.id),
     ).toEqual({ exists: true, locked: true });
   });
 

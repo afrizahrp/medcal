@@ -26,7 +26,6 @@ export interface IdentityCorrectionSignature {
   status: SignatureStatus;
   unavailableReason: string | null;
   signedAt: string | null;
-  files: IdentityCorrectionSignatureFile[];
 }
 
 export interface IdentityCorrectionDeviceRef {
@@ -60,6 +59,8 @@ export interface IdentityCorrection {
   prevDevice: IdentityCorrectionDeviceRef | null;
   newDevice: IdentityCorrectionDeviceRef | null;
   signatures: IdentityCorrectionSignature[];
+  /** Photo of the signed BA sheet — one per correction, not per signer. */
+  files: IdentityCorrectionSignatureFile[];
 }
 
 export interface IdentityCorrectionSubmitResult {
@@ -151,25 +152,27 @@ export function useDecideIdentityCorrection() {
 }
 
 /**
- * Signature image upload goes through the generic FilesModule. Raw fetch (not
+ * BA sheet photo upload goes through the generic FilesModule. Raw fetch (not
  * apiFetch) because the body is multipart/form-data — the browser sets the
- * boundary. Mirrors useUploadCalibrationCertificate.
+ * boundary. Mirrors useUploadCalibrationCertificate. One photo per
+ * correction (both signatures live on the same physical sheet) — ownerId is
+ * the correction id, not either signature's id.
  */
 export function useUploadIdentityCorrectionSignature() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
       jobId,
-      signatureId,
+      correctionId,
       file,
     }: {
       jobId: string;
-      signatureId: string;
+      correctionId: string;
       file: File;
     }) => {
       const form = new FormData();
       form.append("ownerType", "IDENTITY_CORRECTION");
-      form.append("ownerId", signatureId);
+      form.append("ownerId", correctionId);
       form.append("file", file);
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/files`, {
         method: "POST",

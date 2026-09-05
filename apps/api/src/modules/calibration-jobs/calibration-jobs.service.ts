@@ -65,25 +65,21 @@ type IdentityCorrectionRow = Prisma.IdentityCorrectionGetPayload<{
   include: typeof identityCorrectionInclude;
 }>;
 
-type IdentityCorrectionSignatureRow = IdentityCorrectionRow["signatures"][number];
-
 export interface IdentityCorrectionSignatureFile {
   id: string;
   originalName: string | null;
   mimeType: string | null;
 }
 
-export type IdentityCorrectionSignatureWithFiles = IdentityCorrectionSignatureRow & {
+export type IdentityCorrectionDetail = IdentityCorrectionRow & {
   /**
-   * Signature images, resolved via the polymorphic FileObject relation
-   * (ownerType = IDENTITY_CORRECTION, ownerId = signature id) — the
+   * Photo of the signed BA sheet — one per correction, resolved via the
+   * polymorphic FileObject relation (ownerType = IDENTITY_CORRECTION,
+   * ownerId = correction id). Both signatures live on the same physical
+   * sheet, so the photo is not per-signer; the
    * IdentityCorrectionSignature.fileObjectId column is intentionally unused.
    */
   files: IdentityCorrectionSignatureFile[];
-};
-
-export type IdentityCorrectionDetail = Omit<IdentityCorrectionRow, "signatures"> & {
-  signatures: IdentityCorrectionSignatureWithFiles[];
 };
 
 /**
@@ -419,7 +415,7 @@ export class CalibrationJobsService {
       orderBy: { createdAt: "desc" },
       include: identityCorrectionInclude,
     });
-    return Promise.all(rows.map((row) => this.attachSignatureFiles(companyId, row)));
+    return Promise.all(rows.map((row) => this.attachCorrectionFiles(companyId, row)));
   }
 
   async getIdentityCorrection(
@@ -437,29 +433,18 @@ export class CalibrationJobsService {
         code: "IDENTITY_CORRECTION_NOT_FOUND",
       });
     }
-    return this.attachSignatureFiles(companyId, row);
+    return this.attachCorrectionFiles(companyId, row);
   }
 
-  private async attachSignatureFiles(
+  private async attachCorrectionFiles(
     companyId: string,
     row: IdentityCorrectionRow,
   ): Promise<IdentityCorrectionDetail> {
-    const signatureIds = row.signatures.map((s) => s.id);
-    const files = signatureIds.length
-      ? await prisma.fileObject.findMany({
-          where: { companyId, ownerType: "IDENTITY_CORRECTION", ownerId: { in: signatureIds } },
-          select: { id: true, ownerId: true, originalName: true, mimeType: true },
-        })
-      : [];
-    return {
-      ...row,
-      signatures: row.signatures.map((signature) => ({
-        ...signature,
-        files: files
-          .filter((f) => f.ownerId === signature.id)
-          .map((f) => ({ id: f.id, originalName: f.originalName, mimeType: f.mimeType })),
-      })),
-    };
+    const files = await prisma.fileObject.findMany({
+      where: { companyId, ownerType: "IDENTITY_CORRECTION", ownerId: row.id },
+      select: { id: true, originalName: true, mimeType: true },
+    });
+    return { ...row, files };
   }
 
   /**
@@ -567,7 +552,7 @@ export class CalibrationJobsService {
 
     return {
       job,
-      correction: await this.attachSignatureFiles(companyId, created),
+      correction: await this.attachCorrectionFiles(companyId, created),
       deviceTypeValidated,
     };
   }
@@ -618,22 +603,19 @@ export class CalibrationJobsService {
       };
     }
 
-    // APPROVE — every SIGNED signature must have its image uploaded first.
-    const signedIds = correction.signatures
-      .filter((s) => s.status === "SIGNED")
-      .map((s) => s.id);
-    if (signedIds.length) {
-      const withImages = await prisma.fileObject.findMany({
-        where: { companyId, ownerType: "IDENTITY_CORRECTION", ownerId: { in: signedIds } },
-        select: { ownerId: true },
+    // APPROVE — if any signer actually signed, the BA sheet's photo must be on file.
+    // Both signatures share one physical sheet, so this checks once per correction,
+    // not once per signer.
+    const hasSignedSigner = correction.signatures.some((s) => s.status === "SIGNED");
+    if (hasSignedSigner) {
+      const hasImage = await prisma.fileObject.findFirst({
+        where: { companyId, ownerType: "IDENTITY_CORRECTION", ownerId: correctionId },
+        select: { id: true },
       });
-      const haveImage = new Set(withImages.map((f) => f.ownerId));
-      const missing = signedIds.filter((id) => !haveImage.has(id));
-      if (missing.length) {
+      if (!hasImage) {
         throw new BadRequestException({
-          message: "A signature image is missing for a signer marked SIGNED",
+          message: "The signed BA sheet's photo has not been uploaded",
           code: "IDENTITY_CORRECTION_SIGNATURE_IMAGE_MISSING",
-          signatureIds: missing,
         });
       }
     }

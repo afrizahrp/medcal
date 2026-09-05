@@ -4,10 +4,9 @@ import {
   canDecideIdentity,
   canEscalateIdentity,
   canSubmitIdentityCorrection,
+  correctionMissingImage,
   formatCalibrationJobApiError,
   isIdentityGateLocked,
-  missingSignatureImageMessage,
-  signersMissingImage,
   summarizeCorrectionChanges,
 } from "./calibration-job-utils";
 
@@ -100,24 +99,31 @@ describe("summarizeCorrectionChanges", () => {
   });
 });
 
-describe("signature image helpers", () => {
-  it("signersMissingImage names SIGNED signers without a file", () => {
+describe("correction photo helpers", () => {
+  it("correctionMissingImage is true when a signer signed but the correction has no photo", () => {
     expect(
-      signersMissingImage([
-        { signerRole: "TECHNICIAN", status: "SIGNED", files: [] },
-        { signerRole: "CUSTOMER", status: "SIGNED", files: [{ id: "f1" }] },
-        { signerRole: "TECHNICIAN", status: "UNAVAILABLE", files: [] },
-      ]),
-    ).toEqual(["Teknisi"]);
+      correctionMissingImage({
+        files: [],
+        signatures: [{ status: "SIGNED" }, { status: "UNAVAILABLE" }],
+      }),
+    ).toBe(true);
   });
 
-  it("missingSignatureImageMessage maps signature ids to roles", () => {
-    const sigs = [
-      { id: "s1", signerRole: "TECHNICIAN" as const },
-      { id: "s2", signerRole: "CUSTOMER" as const },
-    ];
-    expect(missingSignatureImageMessage(["s2"], sigs)).toContain("Pelanggan");
-    expect(missingSignatureImageMessage(["s1", "s2"], sigs)).toContain("Teknisi dan Pelanggan");
-    expect(missingSignatureImageMessage(undefined, sigs)).toContain("salah satu");
+  it("correctionMissingImage is false once the correction has a photo", () => {
+    expect(
+      correctionMissingImage({
+        files: [{ id: "f1" }],
+        signatures: [{ status: "SIGNED" }, { status: "SIGNED" }],
+      }),
+    ).toBe(false);
+  });
+
+  it("correctionMissingImage is false when no signer actually signed", () => {
+    expect(
+      correctionMissingImage({
+        files: [],
+        signatures: [{ status: "UNAVAILABLE" }, { status: "REFUSED" }],
+      }),
+    ).toBe(false);
   });
 });

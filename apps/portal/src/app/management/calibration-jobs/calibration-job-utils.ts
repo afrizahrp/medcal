@@ -108,40 +108,22 @@ export function summarizeCorrectionChanges(c: CorrectionLike): CorrectionChangeR
   return rows;
 }
 
-interface SignatureLike {
-  signerRole: "TECHNICIAN" | "CUSTOMER";
-  status: "SIGNED" | "UNAVAILABLE" | "REFUSED";
+interface CorrectionPhotoLike {
   files: { id: string }[];
-}
-
-const SIGNER_LABELS: Record<"TECHNICIAN" | "CUSTOMER", string> = {
-  TECHNICIAN: "Teknisi",
-  CUSTOMER: "Pelanggan",
-};
-
-/** Signer roles whose status is SIGNED but which still have no uploaded image. */
-export function signersMissingImage(signatures: SignatureLike[]): string[] {
-  return signatures
-    .filter((s) => s.status === "SIGNED" && s.files.length === 0)
-    .map((s) => SIGNER_LABELS[s.signerRole]);
+  signatures: { status: "SIGNED" | "UNAVAILABLE" | "REFUSED" }[];
 }
 
 /**
- * Turns the backend's IDENTITY_CORRECTION_SIGNATURE_IMAGE_MISSING response
- * (`signatureIds: string[]`) into a role-named message.
+ * Both signatures live on one physical sheet — the BA is photographed once,
+ * not once per signer. True when at least one signer actually signed but the
+ * correction has no photo on file yet.
  */
-export function missingSignatureImageMessage(
-  signatureIds: unknown,
-  signatures: { id: string; signerRole: "TECHNICIAN" | "CUSTOMER" }[],
-): string {
-  const ids = Array.isArray(signatureIds) ? (signatureIds as string[]) : [];
-  const roles = ids
-    .map((id) => signatures.find((s) => s.id === id)?.signerRole)
-    .filter((r): r is "TECHNICIAN" | "CUSTOMER" => Boolean(r))
-    .map((r) => SIGNER_LABELS[r]);
-  const who = roles.length ? roles.join(" dan ") : "salah satu penandatangan";
-  return `Gambar tanda tangan ${who} belum diunggah. Unggah dulu di detail BA sebelum menyetujui.`;
+export function correctionMissingImage(correction: CorrectionPhotoLike): boolean {
+  return correction.signatures.some((s) => s.status === "SIGNED") && correction.files.length === 0;
 }
+
+export const MISSING_CORRECTION_IMAGE_MESSAGE =
+  "Foto BA (lembar tanda tangan) belum diunggah. Unggah dulu di detail BA sebelum menyetujui.";
 
 export function formatCalibrationJobApiError(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
@@ -168,8 +150,7 @@ export function formatCalibrationJobApiError(err: unknown, fallback: string): st
         "Job ini sudah punya BA koreksi identitas yang menunggu review.",
       IDENTITY_CORRECTION_ALREADY_DECIDED:
         "BA koreksi ini sudah diputuskan dan tidak dapat diubah.",
-      IDENTITY_CORRECTION_SIGNATURE_IMAGE_MISSING:
-        "Gambar tanda tangan untuk penandatangan berstatus 'Ditandatangani' belum diunggah.",
+      IDENTITY_CORRECTION_SIGNATURE_IMAGE_MISSING: MISSING_CORRECTION_IMAGE_MESSAGE,
       IDENTITY_CORRECTION_NOT_FOUND: "BA koreksi identitas tidak ditemukan.",
       INVALID_IDENTITY_CORRECTION_SUBMIT: "Data pengajuan koreksi identitas tidak valid.",
       INVALID_IDENTITY_CORRECTION_DECISION: "Data keputusan koreksi identitas tidak valid.",

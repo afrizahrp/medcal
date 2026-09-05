@@ -32,10 +32,10 @@ import {
   canDecideIdentity,
   canEscalateIdentity,
   canSubmitIdentityCorrection,
+  correctionMissingImage,
   formatCalibrationJobApiError,
   isIdentityGateLocked,
-  missingSignatureImageMessage,
-  signersMissingImage,
+  MISSING_CORRECTION_IMAGE_MESSAGE,
   summarizeCorrectionChanges,
 } from "../calibration-job-utils";
 import {
@@ -150,25 +150,23 @@ export default function CalibrationJobDetailPage() {
       };
       const res = await submitCorrection.mutateAsync({ jobId: job.id, input });
 
-      const failedUploads: string[] = [];
-      for (const role of SIGNER_ROLES) {
-        const sig = form.signatures[role];
-        if (sig.status !== "SIGNED" || !sig.file) continue;
-        const row = res.correction.signatures.find((s) => s.signerRole === role);
-        if (!row) continue;
+      let uploadFailed = false;
+      if (form.file) {
         try {
-          await uploadSignature.mutateAsync({ jobId: job.id, signatureId: row.id, file: sig.file });
+          await uploadSignature.mutateAsync({
+            jobId: job.id,
+            correctionId: res.correction.id,
+            file: form.file,
+          });
         } catch {
-          failedUploads.push(SIGNER_LABEL[role]);
+          uploadFailed = true;
         }
       }
 
       setDialog(null);
       setSuccess(
         `BA ${res.correction.number} dibuat.` +
-          (failedUploads.length
-            ? ` Gambar tanda tangan ${failedUploads.join(" dan ")} gagal diunggah — unggah ulang di detail BA.`
-            : ""),
+          (uploadFailed ? " Foto BA gagal diunggah — unggah ulang di detail BA." : ""),
       );
       await Promise.all([query.refetch(), corrections.refetch()]);
     } catch (err) {
@@ -193,27 +191,20 @@ export default function CalibrationJobDetailPage() {
       setSuccess(decision === "APPROVE" ? "BA koreksi disetujui." : "BA koreksi ditolak.");
       await Promise.all([query.refetch(), corrections.refetch()]);
     } catch (err) {
-      if (
-        err instanceof ApiError &&
-        err.data?.code === "IDENTITY_CORRECTION_SIGNATURE_IMAGE_MISSING"
-      ) {
-        setError(missingSignatureImageMessage(err.data.signatureIds, correction.signatures));
-      } else {
-        setError(formatCalibrationJobApiError(err, "Gagal memproses keputusan BA."));
-      }
+      setError(formatCalibrationJobApiError(err, "Gagal memproses keputusan BA."));
     }
   }
 
-  async function handleUploadSignatureImage(signatureId: string, file: File) {
+  async function handleUploadCorrectionImage(correctionId: string, file: File) {
     if (!job) return;
     setError(null);
     setSuccess(null);
     try {
-      await uploadSignature.mutateAsync({ jobId: job.id, signatureId, file });
-      setSuccess("Gambar tanda tangan diunggah.");
+      await uploadSignature.mutateAsync({ jobId: job.id, correctionId, file });
+      setSuccess("Foto BA diunggah.");
       await corrections.refetch();
     } catch (err) {
-      setError(formatCalibrationJobApiError(err, "Gagal mengunggah gambar tanda tangan."));
+      setError(formatCalibrationJobApiError(err, "Gagal mengunggah foto BA."));
     }
   }
 
@@ -383,7 +374,7 @@ export default function CalibrationJobDetailPage() {
                   uploadPending={uploadSignature.isPending}
                   decidePending={decideCorrection.isPending}
                   onDecide={handleDecideCorrection}
-                  onUploadImage={handleUploadSignatureImage}
+                  onUploadImage={handleUploadCorrectionImage}
                 />
               ))}
             </ul>
@@ -522,12 +513,12 @@ function CorrectionCard({
     decision: "APPROVE" | "REJECT",
     note?: string,
   ) => void | Promise<void>;
-  onUploadImage: (signatureId: string, file: File) => void | Promise<void>;
+  onUploadImage: (correctionId: string, file: File) => void | Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const changes = summarizeCorrectionChanges(correction);
-  const missing = signersMissingImage(correction.signatures);
+  const missingImage = correctionMissingImage(correction);
   const isPending = correction.status === "PENDING_REVIEW";
 
   return (
@@ -591,17 +582,16 @@ function CorrectionCard({
             {SIGNER_ROLES.map((role) => {
               const sig = correction.signatures.find((s) => s.signerRole === role);
               if (!sig) return null;
-              return (
-                <SignatureBlock
-                  key={role}
-                  signature={sig}
-                  editable={isPending && canUpload}
-                  uploadPending={uploadPending}
-                  onUploadImage={onUploadImage}
-                />
-              );
+              return <SignatureBlock key={role} signature={sig} />;
             })}
           </div>
+
+          <CorrectionPhotoBlock
+            correction={correction}
+            editable={isPending && canUpload}
+            uploadPending={uploadPending}
+            onUploadImage={onUploadImage}
+          />
 
           {correction.status !== "PENDING_REVIEW" ? (
             <div className="grid gap-3 border-t border-slate-200 pt-3 sm:grid-cols-2">
@@ -629,10 +619,8 @@ function CorrectionCard({
 
           {isPending && canDecide ? (
             <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-3">
-              {missing.length ? (
-                <p className="mr-auto text-xs text-amber-600">
-                  Gambar tanda tangan {missing.join(" dan ")} belum diunggah.
-                </p>
+              {missingImage ? (
+                <p className="mr-auto text-xs text-amber-600">{MISSING_CORRECTION_IMAGE_MESSAGE}</p>
               ) : null}
               <Button
                 type="button"
@@ -671,21 +659,8 @@ function CorrectionCard({
   );
 }
 
-function SignatureBlock({
-  signature,
-  editable,
-  uploadPending,
-  onUploadImage,
-}: {
-  signature: IdentityCorrectionSignature;
-  editable: boolean;
-  uploadPending: boolean;
-  onUploadImage: (signatureId: string, file: File) => void | Promise<void>;
-}) {
-  const fileRef = useRef<HTMLInputElement>(null);
+function SignatureBlock({ signature }: { signature: IdentityCorrectionSignature }) {
   const roleLabel = SIGNER_LABEL[signature.signerRole];
-  const image = signature.files.find((f) => (f.mimeType ?? "").startsWith("image/"));
-  const pdf = signature.files.find((f) => (f.mimeType ?? "") === "application/pdf");
 
   return (
     <div className="rounded-md border border-slate-200 bg-white p-3">
@@ -699,20 +674,49 @@ function SignatureBlock({
           {signature.unavailableReason}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * One photo per correction — both signatures are on the same physical sheet,
+ * so the upload/preview lives here, not inside either SignatureBlock.
+ */
+function CorrectionPhotoBlock({
+  correction,
+  editable,
+  uploadPending,
+  onUploadImage,
+}: {
+  correction: IdentityCorrection;
+  editable: boolean;
+  uploadPending: boolean;
+  onUploadImage: (correctionId: string, file: File) => void | Promise<void>;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const image = correction.files.find((f) => (f.mimeType ?? "").startsWith("image/"));
+  const pdf = correction.files.find((f) => (f.mimeType ?? "") === "application/pdf");
+  const anySigned = correction.signatures.some((s) => s.status === "SIGNED");
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Foto BA</p>
 
       {image ? (
         <div className="mt-2">
-          <SignatureImage fileId={image.id} alt={`Tanda tangan ${roleLabel}`} />
+          <SignatureImage fileId={image.id} alt="Foto BA (lembar tanda tangan)" />
         </div>
       ) : pdf ? (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
           <FileText className="h-3.5 w-3.5" /> {pdf.originalName ?? "Lampiran PDF"}
         </p>
-      ) : signature.status === "SIGNED" ? (
-        <p className="mt-2 text-xs text-amber-600">Gambar tanda tangan belum diunggah.</p>
-      ) : null}
+      ) : anySigned ? (
+        <p className="mt-2 text-xs text-amber-600">Foto BA belum diunggah.</p>
+      ) : (
+        <p className="mt-2 text-xs text-slate-500">Tidak ada tanda tangan — foto tidak diperlukan.</p>
+      )}
 
-      {editable && signature.status === "SIGNED" && signature.files.length === 0 ? (
+      {editable && correction.files.length === 0 ? (
         <>
           <input
             ref={fileRef}
@@ -722,7 +726,7 @@ function SignatureBlock({
             onChange={(e) => {
               const file = e.target.files?.[0];
               e.target.value = "";
-              if (file) void onUploadImage(signature.id, file);
+              if (file) void onUploadImage(correction.id, file);
             }}
           />
           <Button
@@ -734,7 +738,7 @@ function SignatureBlock({
             onClick={() => fileRef.current?.click()}
           >
             <Upload className="h-3.5 w-3.5" />
-            {uploadPending ? "Mengunggah…" : "Unggah gambar tanda tangan"}
+            {uploadPending ? "Mengunggah…" : "Unggah foto BA"}
           </Button>
         </>
       ) : null}
@@ -860,7 +864,6 @@ interface SignatureFormValue {
   status: SignatureStatus;
   signerName: string;
   unavailableReason: string;
-  file: File | null;
 }
 
 interface SubmitCorrectionForm {
@@ -870,10 +873,12 @@ interface SubmitCorrectionForm {
   serial: string;
   akdAkl: string;
   signatures: Record<SignerRole, SignatureFormValue>;
+  /** Photo of the signed BA sheet — one per correction, not per signer. */
+  file: File | null;
 }
 
 function emptySignature(): SignatureFormValue {
-  return { status: "SIGNED", signerName: "", unavailableReason: "", file: null };
+  return { status: "SIGNED", signerName: "", unavailableReason: "" };
 }
 
 function toSignatureInput(v: SignatureFormValue) {
@@ -912,6 +917,7 @@ function SubmitCorrectionDialog({
     TECHNICIAN: emptySignature(),
     CUSTOMER: emptySignature(),
   });
+  const [file, setFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -922,6 +928,7 @@ function SubmitCorrectionDialog({
       setSerial(job.technicianObservedSerial ?? "");
       setAkdAkl(job.technicianObservedAkdAkl ?? "");
       setSignatures({ TECHNICIAN: emptySignature(), CUSTOMER: emptySignature() });
+      setFile(null);
     }
   }, [open, job.technicianObservedSerial, job.technicianObservedAkdAkl]);
 
@@ -1080,20 +1087,6 @@ function SubmitCorrectionDialog({
                       maxLength={120}
                       placeholder="Nama penandatangan"
                     />
-                    <input
-                      type="file"
-                      accept={IMAGE_ACCEPT}
-                      onChange={(e) => setSig(role, { file: e.target.files?.[0] ?? null })}
-                      className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border file:border-slate-200 file:bg-slate-50 file:px-3 file:py-1.5 file:text-sm"
-                    />
-                    {sig.file ? (
-                      <p className="text-xs text-slate-500">{sig.file.name}</p>
-                    ) : (
-                      <p className="text-xs text-amber-600">
-                        Tanpa gambar sekarang, BA tetap dibuat — unggah nanti di detail sebelum
-                        disetujui.
-                      </p>
-                    )}
                   </div>
                 ) : (
                   <textarea
@@ -1109,6 +1102,23 @@ function SubmitCorrectionDialog({
             );
           })}
         </div>
+
+        <div className="space-y-2 border-t border-slate-100 pt-4">
+          <p className="text-sm font-medium text-slate-700">Foto BA (lembar tanda tangan)</p>
+          <input
+            type="file"
+            accept={IMAGE_ACCEPT}
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border file:border-slate-200 file:bg-slate-50 file:px-3 file:py-1.5 file:text-sm"
+          />
+          {file ? (
+            <p className="text-xs text-slate-500">{file.name}</p>
+          ) : (
+            <p className="text-xs text-amber-600">
+              Tanpa foto sekarang, BA tetap dibuat — unggah nanti di detail sebelum disetujui.
+            </p>
+          )}
+        </div>
       </div>
 
       <DialogActions
@@ -1117,7 +1127,7 @@ function SubmitCorrectionDialog({
         disabled={!canConfirm}
         onCancel={onCancel}
         onConfirm={() =>
-          onSubmit({ reason, attrs, deviceId, serial, akdAkl, signatures })
+          onSubmit({ reason, attrs, deviceId, serial, akdAkl, signatures, file })
         }
       />
     </DialogShell>
