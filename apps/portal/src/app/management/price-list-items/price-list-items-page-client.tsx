@@ -11,9 +11,11 @@ import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { usePaginationSync } from "@/hooks/use-pagination-sync";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
 import { useTableSort } from "@/hooks/use-table-sort";
 import { SortableTh } from "@/components/ui/sortable-th";
+import { ViewAdjustedBanner } from "@/components/ui/view-adjusted-banner";
 import { cn } from "@/lib/utils";
 import { AccessDenied } from "../../../components/access-denied";
 import { PageHeader } from "../../../components/management/page-header";
@@ -214,6 +216,12 @@ export default function PriceListItemsPageClient() {
   const createMutation = useCreatePriceListItem();
   const updateMutation = useUpdatePriceListItem();
   const deleteMutation = useDeletePriceListItem();
+
+  const { didClamp, dismiss } = usePaginationSync({
+    page,
+    totalPages: query.data?.totalPages,
+    onClamp: (lastPage) => setParams({ page: lastPage <= 1 ? undefined : String(lastPage) }),
+  });
 
   if (!capabilities?.priceListItemRead) return <AccessDenied />;
 

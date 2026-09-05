@@ -7,8 +7,10 @@ import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { usePaginationSync } from "@/hooks/use-pagination-sync";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
 import { cn } from "@/lib/utils";
+import { ViewAdjustedBanner } from "@/components/ui/view-adjusted-banner";
 import { AccessDenied } from "../../../components/access-denied";
 import { useDeviceTypes } from "../device-types/use-device-types-query";
 import {
@@ -104,6 +106,12 @@ export default function EquipmentRequirementsPageClient() {
   const result = query.data;
   const groups = result?.data ?? [];
   const isSearching = committedSearch.trim().length > 0;
+
+  const { didClamp, dismiss } = usePaginationSync({
+    page,
+    totalPages: result?.totalPages,
+    onClamp: (lastPage) => setParams({ page: lastPage <= 1 ? undefined : String(lastPage) }),
+  });
 
   const expandedIds = useMemo(() => {
     if (isSearching) return new Set(groups.map((g) => g.deviceType.id));
@@ -247,6 +255,8 @@ export default function EquipmentRequirementsPageClient() {
       ) : null}
 
       <Surface className={cn("mt-4 p-4 md:p-6", fetching && "opacity-70")}>
+        {didClamp ? <ViewAdjustedBanner className="mb-3" onDismiss={dismiss} /> : null}
+
         <EquipmentRequirementSearchBar value={searchInput} onChange={setSearchInput} />
 
         {result ? (
@@ -259,6 +269,8 @@ export default function EquipmentRequirementsPageClient() {
 
         {loading ? (
           <p className="mt-6 text-sm text-slate-400">Memuat…</p>
+        ) : didClamp && groups.length === 0 ? (
+          <p className="mt-6 text-sm text-slate-400">Menyesuaikan halaman…</p>
         ) : groups.length === 0 ? (
           <EquipmentRequirementEmptyState
             hasSearch={isSearching}
