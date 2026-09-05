@@ -394,7 +394,14 @@ function ChildRows({
           </td>
         ))}
       </tr>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+        accessibility={{
+          container: typeof document !== "undefined" ? document.body : undefined,
+        }}
+      >
         <SortableContext
           items={group.capabilities.map((c) => c.capability.id)}
           strategy={verticalListSortingStrategy}
