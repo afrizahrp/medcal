@@ -1212,6 +1212,20 @@ describe("CalibrationJobsService — list, assignedToMe (technician scope)", () 
     expect(res.data.some((j) => j.workOrderId === theirs.workOrder.id)).toBe(false);
   });
 
+  it("includes workOrder.customer.name for technician list grouping", async () => {
+    const { workOrder, customerId } = await startedWorkOrderJobs(realCompanyId, { qty: 1 });
+    const me = await assignedTechnicianId(workOrder.id);
+    const customer = await prisma.customer.findUniqueOrThrow({
+      where: { id: customerId },
+      select: { name: true },
+    });
+
+    const res = await calibrationJobsService.findAll(realCompanyId, { assignedToMe: true }, me);
+
+    expect(res.data[0]!.workOrder.customerId).toBe(customerId);
+    expect(res.data[0]!.workOrder.customer).toEqual({ id: customerId, name: customer.name });
+  });
+
   it("combines with status / akdAklApprovalStatus filters", async () => {
     const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
     const me = await assignedTechnicianId(workOrder.id);

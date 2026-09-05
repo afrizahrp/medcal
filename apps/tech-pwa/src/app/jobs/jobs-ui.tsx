@@ -11,7 +11,8 @@ import {
 } from "../../lib/calibration/types";
 import {
   declaredDeviceName,
-  groupJobsByWorkOrder,
+  groupJobsByCustomer,
+  type CustomerJobGroup,
   type WorkOrderJobGroup,
 } from "../../lib/calibration/job-display";
 
@@ -32,8 +33,6 @@ const JOB_STATUS_BADGE_CLASS: Record<CalibrationJobStatus, string> = {
   ACCEPTED_BY_QA: "bg-emerald-600",
 };
 
-// Soft tint for the per-unit ordinal chip — lets a technician scan a work
-// order's progress at a glance without reading every status badge.
 const ORDINAL_CLASS: Record<CalibrationJobStatus, string> = {
   PENDING: "bg-slate-100 text-slate-500",
   IN_PROGRESS: "bg-amber-100 text-amber-700",
@@ -72,6 +71,32 @@ function ChevronRight() {
   );
 }
 
+function QueueCardLink({
+  href,
+  title,
+  secondary,
+  progress,
+}: {
+  href: string;
+  title: string;
+  secondary: string;
+  progress: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-16 items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm active:bg-slate-50"
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-base font-semibold text-slate-900">{title}</p>
+        <p className="mt-0.5 text-sm text-slate-600">{secondary}</p>
+        <p className="mt-0.5 text-xs text-slate-500">{progress}</p>
+      </div>
+      <ChevronRight />
+    </Link>
+  );
+}
+
 function UnitRow({ job }: { job: TechCalibrationJob }) {
   // "Tidak Diperlukan" is the absence of a requirement, not a state the
   // technician acts on — keep the row uncluttered and surface the AKD/AKL
@@ -81,7 +106,7 @@ function UnitRow({ job }: { job: TechCalibrationJob }) {
   return (
     <Link
       href={`/jobs/${job.id}`}
-      className="flex min-h-16 items-center gap-3 px-3 py-3 active:bg-slate-50"
+      className="flex min-h-16 items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm active:bg-slate-50"
     >
       <span
         className={[
@@ -93,47 +118,115 @@ function UnitRow({ job }: { job: TechCalibrationJob }) {
         {job.unitOrdinal}
       </span>
       <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-slate-500">
+          Unit {job.unitOrdinal} dari {job.unitTotal}
+        </p>
         <p className="truncate text-sm font-semibold text-slate-900">{declaredDeviceName(job)}</p>
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <JobStatusBadge status={job.status} />
           {showAkdAkl ? <AkdAklStatusBadge status={job.akdAklApprovalStatus} /> : null}
         </div>
+        {job.deviceId == null ? (
+          <p className="mt-1 text-xs text-slate-500">Belum diidentifikasi</p>
+        ) : null}
       </div>
       <ChevronRight />
     </Link>
   );
 }
 
-function WorkOrderGroup({ group }: { group: WorkOrderJobGroup }) {
-  const total = group.jobs.length;
-  const progress =
-    group.doneCount > 0 ? `${group.doneCount}/${total} selesai` : `${total} unit`;
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <header className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
-        <span className="truncate text-sm font-semibold tracking-wide text-slate-700">
-          {group.workOrderNumber}
-        </span>
-        <span className="shrink-0 text-xs font-medium text-slate-500">{progress}</span>
-      </header>
-      <div className="divide-y divide-slate-100">
-        {group.jobs.map((job) => (
-          <UnitRow key={job.id} job={job} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export function JobsList({ jobs }: { jobs: TechCalibrationJob[] }) {
-  const groups = groupJobsByWorkOrder(jobs);
-
+function CustomerList({ customers }: { customers: CustomerJobGroup[] }) {
   return (
     <div className="flex flex-col gap-3 p-3">
-      {groups.map((group) => (
-        <WorkOrderGroup key={group.workOrderId} group={group} />
+      {customers.map((customer) => (
+        <QueueCardLink
+          key={customer.customerId}
+          href={`/jobs?customerId=${encodeURIComponent(customer.customerId)}`}
+          title={customer.customerName}
+          secondary={`${customer.spkCount} SPK · ${customer.deviceCount} perangkat`}
+          progress={`${customer.doneCount} selesai · ${customer.openCount} belum selesai`}
+        />
       ))}
     </div>
   );
+}
+
+function SpkList({ customer }: { customer: CustomerJobGroup }) {
+  return (
+    <div className="flex flex-col gap-3 p-3">
+      <p className="px-1 text-sm text-slate-600">
+        {customer.spkCount} SPK · {customer.deviceCount} perangkat
+      </p>
+      {customer.workOrders.map((spk) => (
+        <QueueCardLink
+          key={spk.workOrderId}
+          href={`/jobs?customerId=${encodeURIComponent(customer.customerId)}&workOrderId=${encodeURIComponent(spk.workOrderId)}`}
+          title={spk.workOrderNumber}
+          secondary={`${spk.jobs.length} perangkat`}
+          progress={`${spk.doneCount} selesai · ${spk.openCount} belum selesai`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function DeviceList({
+  customer,
+  spk,
+}: {
+  customer: CustomerJobGroup;
+  spk: WorkOrderJobGroup;
+}) {
+  return (
+    <div className="flex flex-col gap-3 p-3">
+      <div className="px-1">
+        <p className="text-sm text-slate-600">{customer.customerName}</p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          {spk.jobs.length} perangkat · {spk.doneCount} selesai · {spk.openCount} belum selesai
+        </p>
+      </div>
+      {spk.jobs.map((job) => (
+        <UnitRow key={job.id} job={job} />
+      ))}
+    </div>
+  );
+}
+
+export function JobsHierarchy({
+  jobs,
+  customerId,
+  workOrderId,
+}: {
+  jobs: TechCalibrationJob[];
+  customerId: string | null;
+  workOrderId: string | null;
+}) {
+  const customers = groupJobsByCustomer(jobs);
+
+  if (customerId) {
+    const customer = customers.find((c) => c.customerId === customerId);
+    if (!customer) {
+      return (
+        <div className="px-4 py-12 text-center text-sm text-slate-600">
+          Pelanggan tidak ditemukan di daftar job Anda.
+        </div>
+      );
+    }
+
+    if (workOrderId) {
+      const spk = customer.workOrders.find((w) => w.workOrderId === workOrderId);
+      if (!spk) {
+        return (
+          <div className="px-4 py-12 text-center text-sm text-slate-600">
+            SPK tidak ditemukan untuk pelanggan ini.
+          </div>
+        );
+      }
+      return <DeviceList customer={customer} spk={spk} />;
+    }
+
+    return <SpkList customer={customer} />;
+  }
+
+  return <CustomerList customers={customers} />;
 }

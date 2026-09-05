@@ -1,11 +1,15 @@
 "use client";
 
+import { Suspense, type ReactNode } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Screen } from "../../components/layout/screen";
 import { AccountMenu } from "../../components/layout/account-menu";
 import { CardListSkeleton, EmptyState, ErrorState } from "../../components/ui/state-views";
 import { formatApiError } from "../../lib/api-errors";
+import { groupJobsByCustomer } from "../../lib/calibration/job-display";
 import { useJobsQuery } from "./use-jobs-query";
-import { JobsList } from "./jobs-ui";
+import { JobsHierarchy } from "./jobs-ui";
 
 function RefreshIcon({ spinning }: { spinning: boolean }) {
   return (
@@ -26,13 +30,57 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
   );
 }
 
-export default function JobsPage() {
+function BackLink({ href }: { href: string }) {
+  return (
+    <Link
+      href={href}
+      aria-label="Kembali"
+      className="flex h-11 w-11 items-center justify-center rounded-full text-slate-700 active:bg-slate-100"
+    >
+      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+        <path
+          d="M15 18l-6-6 6-6"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </Link>
+  );
+}
+
+function JobsPageContent() {
+  const searchParams = useSearchParams();
+  const customerId = searchParams.get("customerId");
+  const workOrderId = searchParams.get("workOrderId");
   const { data, error, isPending, isError, isFetching, refetch } = useJobsQuery();
+
+  const customers = data ? groupJobsByCustomer(data.data) : [];
+  const activeCustomer = customerId
+    ? customers.find((c) => c.customerId === customerId)
+    : undefined;
+  const activeSpk =
+    activeCustomer && workOrderId
+      ? activeCustomer.workOrders.find((w) => w.workOrderId === workOrderId)
+      : undefined;
+
+  let title = "Job Saya";
+  let leftSlot: ReactNode = <AccountMenu />;
+  if (customerId && workOrderId) {
+    title = activeSpk?.workOrderNumber ?? "SPK";
+    leftSlot = <BackLink href={`/jobs?customerId=${encodeURIComponent(customerId)}`} />;
+  } else if (customerId) {
+    title = activeCustomer?.customerName ?? "Pelanggan";
+    leftSlot = <BackLink href="/jobs" />;
+  }
+
+  const incompleteFetch = Boolean(data && data.data.length < data.total);
 
   return (
     <Screen
-      title="Job Saya"
-      leftSlot={<AccountMenu />}
+      title={title}
+      leftSlot={leftSlot}
       rightSlot={
         <button
           type="button"
@@ -47,7 +95,10 @@ export default function JobsPage() {
       {isPending ? <CardListSkeleton /> : null}
 
       {isError && !isPending ? (
-        <ErrorState message={formatApiError(error, "Gagal memuat daftar job.")} onRetry={() => void refetch()} />
+        <ErrorState
+          message={formatApiError(error, "Gagal memuat daftar job.")}
+          onRetry={() => void refetch()}
+        />
       ) : null}
 
       {data && data.data.length === 0 ? (
@@ -59,14 +110,29 @@ export default function JobsPage() {
 
       {data && data.data.length > 0 ? (
         <>
-          <JobsList jobs={data.data} />
-          {data.total > data.data.length ? (
-            <p className="px-4 pb-3 text-center text-xs text-slate-500">
-              Menampilkan {data.data.length} dari {data.total} job — hubungi koordinator.
+          {incompleteFetch ? (
+            <p className="px-4 pt-3 text-center text-xs text-amber-700">
+              Data job belum lengkap ({data.data.length} dari {data.total}). Ringkasan di bawah
+              mungkin tidak akurat — muat ulang atau hubungi koordinator.
             </p>
           ) : null}
+          <JobsHierarchy jobs={data.data} customerId={customerId} workOrderId={workOrderId} />
         </>
       ) : null}
     </Screen>
+  );
+}
+
+export default function JobsPage() {
+  return (
+    <Suspense
+      fallback={
+        <Screen title="Job Saya" leftSlot={<AccountMenu />}>
+          <CardListSkeleton />
+        </Screen>
+      }
+    >
+      <JobsPageContent />
+    </Suspense>
   );
 }

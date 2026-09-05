@@ -69,7 +69,13 @@ export interface CalibrationJobRow {
   submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  workOrder: { id: string; number: string; status: string; customerId: string };
+  workOrder: {
+    id: string;
+    number: string;
+    status: string;
+    customerId: string;
+    customer: { id: string; name: string };
+  };
   device: {
     id: string;
     code: string | null;

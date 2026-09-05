@@ -30,7 +30,15 @@ import {
 } from "./job-reference-equipment";
 
 const calibrationJobInclude = {
-  workOrder: { select: { id: true, number: true, status: true, customerId: true } },
+  workOrder: {
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      customerId: true,
+      customer: { select: { id: true, name: true } },
+    },
+  },
   device: {
     select: { id: true, code: true, serialNumber: true, deviceTypeId: true, customerId: true },
   },

@@ -36,7 +36,13 @@ export interface TechCalibrationJob {
   status: CalibrationJobStatus;
   startedAt: string | null;
   createdAt: string;
-  workOrder: { id: string; number: string };
+  workOrder: {
+    id: string;
+    number: string;
+    status?: string;
+    customerId: string;
+    customer: { id: string; name: string };
+  };
   device: { id: string; code: string | null; serialNumber: string | null } | null;
   calibrationRequestItem: { customerDeviceName: string | null; akdAkl: string | null } | null;
   akdAklApprovedBy: { id: string; name: string | null } | null;
