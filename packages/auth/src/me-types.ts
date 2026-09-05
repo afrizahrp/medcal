@@ -93,6 +93,8 @@ export type MeCapabilities = {
   calibrationJobAssignDevice: boolean;
   calibrationJobSubmitIdentityCorrection: boolean;
   calibrationJobDecideIdentityCorrection: boolean;
+  calibrationJobRecordReferenceEquipmentUsed: boolean;
+  calibrationJobOverrideReferenceEquipmentValidity: boolean;
   taxManage: boolean;
   priceListItemRead: boolean;
   priceListItemCreate: boolean;

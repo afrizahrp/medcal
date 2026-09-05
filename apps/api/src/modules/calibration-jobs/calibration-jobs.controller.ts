@@ -6,18 +6,22 @@ import {
   Inject,
   Param,
   Post,
+  Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
+import type { MembershipRole } from "@medcal/db";
 import {
   calibrationJobEscalateIdentitySchema,
   calibrationJobIdentityDecisionSchema,
   calibrationJobListQuerySchema,
   identityCorrectionDecisionSchema,
   identityCorrectionSubmitSchema,
+  jobReferenceEquipmentReplaceSchema,
 } from "@medcal/shared";
 import type { DeviceWithRelations } from "../devices/devices.service";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
+import { MembershipRoleParam } from "../../common/decorators/membership-role.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { UserId } from "../../common/decorators/user-id.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
@@ -28,6 +32,10 @@ import {
   type IdentityCorrectionDetail,
   type IdentityCorrectionSubmitResult,
 } from "./calibration-jobs.service";
+import type {
+  JobReferenceEquipmentCandidate,
+  JobReferenceEquipmentUsedDetail,
+} from "./job-reference-equipment";
 
 @Controller("calibration-jobs")
 @UseGuards(CompanyRoleGuard)
@@ -179,5 +187,43 @@ export class CalibrationJobsController {
       });
     }
     return this.service.decideIdentityCorrection(companyId, id, correctionId, userId, parsed.data);
+  }
+
+  @Get(":id/reference-equipment-candidates")
+  @RequirePermission("calibrationJob", "read")
+  async referenceEquipmentCandidates(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<JobReferenceEquipmentCandidate[]> {
+    return this.service.getReferenceEquipmentCandidates(companyId, id);
+  }
+
+  @Get(":id/reference-equipment-used")
+  @RequirePermission("calibrationJob", "read")
+  async listReferenceEquipmentUsed(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<JobReferenceEquipmentUsedDetail[]> {
+    return this.service.listReferenceEquipmentUsed(companyId, id);
+  }
+
+  @Put(":id/reference-equipment-used")
+  @RequirePermission("calibrationJob", "recordReferenceEquipmentUsed")
+  async replaceReferenceEquipmentUsed(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @MembershipRoleParam() role: MembershipRole,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<JobReferenceEquipmentUsedDetail[]> {
+    const parsed = jobReferenceEquipmentReplaceSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid reference equipment selection",
+        code: "INVALID_JOB_REFERENCE_EQUIPMENT",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.replaceReferenceEquipmentUsed(companyId, id, userId, role, parsed.data);
   }
 }

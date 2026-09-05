@@ -761,6 +761,23 @@ export const identityCorrectionSubmitSchema = z
 
 export type IdentityCorrectionSubmitInput = z.infer<typeof identityCorrectionSubmitSchema>;
 
+/** Force-accept an invalid/expired calibration certificate (TECHNICIAN_MANAGER only). */
+export const jobReferenceEquipmentOverrideSchema = z.object({
+  reason: z.string().trim().min(1).max(2000),
+});
+
+export const jobReferenceEquipmentItemSchema = z.object({
+  equipmentId: z.string().min(1),
+  override: jobReferenceEquipmentOverrideSchema.optional(),
+});
+
+/** PUT /calibration-jobs/:id/reference-equipment-used body — full-set replace. */
+export const jobReferenceEquipmentReplaceSchema = z.object({
+  items: z.array(jobReferenceEquipmentItemSchema).max(50),
+});
+
+export type JobReferenceEquipmentReplaceInput = z.infer<typeof jobReferenceEquipmentReplaceSchema>;
+
 const identityCorrectionDecisionValues = ["APPROVE", "REJECT"] as const;
 
 /** POST /calibration-jobs/:id/identity-corrections/:correctionId/decision body (TECHNICIAN_MANAGER only) */

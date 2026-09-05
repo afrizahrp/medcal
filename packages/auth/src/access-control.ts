@@ -110,6 +110,14 @@ const ac = createAccessControl({
   //   signature images (see the IDENTITY_CORRECTION FileOwnerPolicy).
   // decideIdentityCorrection: TECHNICIAN_MANAGER APPROVE/REJECT of that BA (sole
   //   approver — mirrors approveIdentity; not granted to ADMIN/SUPERVISOR).
+  // recordReferenceEquipmentUsed: on-site actor records which Equipment unit(s)
+  //   (already confirmed onto the job's WorkOrder) were used for this job —
+  //   granted like submitIdentityCorrection (TECHNICIAN + TECHNICIAN_MANAGER).
+  // overrideReferenceEquipmentValidity: force-accept an expired/unaccepted
+  //   calibration certificate when recording. Not a separate route — checked
+  //   inline in the service, since both roles share the same replace endpoint
+  //   and only some items in one request may need the override.
+  //   TECHNICIAN_MANAGER only.
   calibrationJob: [
     "read",
     "create",
@@ -119,6 +127,8 @@ const ac = createAccessControl({
     "approveIdentity",
     "submitIdentityCorrection",
     "decideIdentityCorrection",
+    "recordReferenceEquipmentUsed",
+    "overrideReferenceEquipmentValidity",
   ],
   certificate: ["read", "create", "update", "issue"],
   invoice: ["read", "create", "update", "void"],

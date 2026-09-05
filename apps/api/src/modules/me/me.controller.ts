@@ -186,6 +186,16 @@ export class MeController {
         "calibrationJob",
         "decideIdentityCorrection",
       ),
+      calibrationJobRecordReferenceEquipmentUsed: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "recordReferenceEquipmentUsed",
+      ),
+      calibrationJobOverrideReferenceEquipmentValidity: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "overrideReferenceEquipmentValidity",
+      ),
       taxManage: hasPermission(membership.role, "tax", "manage"),
       priceListItemRead: hasPermission(membership.role, "priceListItem", "read"),
       priceListItemCreate: hasPermission(membership.role, "priceListItem", "create"),

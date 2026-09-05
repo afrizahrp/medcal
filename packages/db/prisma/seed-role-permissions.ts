@@ -158,6 +158,18 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "approveIdentity" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "submitIdentityCorrection" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "decideIdentityCorrection" },
+  // JobReferenceEquipmentUsed (2026-09-05): recordReferenceEquipmentUsed is the
+  // on-site actor recording which confirmed WorkOrderEquipment unit(s) were used
+  // — TECHNICIAN + TECHNICIAN_MANAGER, mirroring submitIdentityCorrection.
+  // overrideReferenceEquipmentValidity (force-accept an expired/unaccepted
+  // certificate) is TECHNICIAN_MANAGER-only, checked inline in the service.
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "recordReferenceEquipmentUsed" },
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "recordReferenceEquipmentUsed" },
+  {
+    role: "TECHNICIAN_MANAGER",
+    resource: "calibrationJob",
+    action: "overrideReferenceEquipmentValidity",
+  },
   // FINANCE
   { role: "FINANCE", resource: "managementDashboard", action: "read" },
   // CUSTOMER

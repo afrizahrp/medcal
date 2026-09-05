@@ -5,8 +5,9 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { hasPermission } from "@medcal/auth";
 import { DocumentNumberService, Prisma, prisma } from "@medcal/db";
-import type { AkdAklApprovalStatus } from "@medcal/db";
+import type { AkdAklApprovalStatus, MembershipRole } from "@medcal/db";
 import {
   CALIBRATION_JOB_SORTABLE_FIELDS,
   type CalibrationJobEscalateIdentityInput,
@@ -14,9 +15,19 @@ import {
   type CalibrationJobListQuery,
   type IdentityCorrectionDecisionInput,
   type IdentityCorrectionSubmitInput,
+  type JobReferenceEquipmentReplaceInput,
 } from "@medcal/shared";
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { DevicesService, type DeviceWithRelations } from "../devices/devices.service";
+import {
+  buildReferenceEquipmentCandidates,
+  jobReferenceEquipmentSourceInclude,
+  jobReferenceEquipmentUsedInclude,
+  validateJobReferenceEquipmentSelection,
+  type JobReferenceEquipmentCandidate,
+  type JobReferenceEquipmentSource,
+  type JobReferenceEquipmentUsedDetail,
+} from "./job-reference-equipment";
 
 const calibrationJobInclude = {
   workOrder: { select: { id: true, number: true, status: true, customerId: true } },
@@ -104,6 +115,10 @@ const AKD_AKL_TRANSITIONS: Record<AkdAklApprovalStatus, readonly AkdAklApprovalS
 
 // Once execution has advanced past the bench, the identity gate is moot.
 const IDENTITY_LOCKED_JOB_STATUSES = new Set<string>(["SUBMITTED", "ACCEPTED_BY_QA"]);
+
+// Same boundary as IDENTITY_LOCKED_JOB_STATUSES — once execution is past the
+// bench, which reference equipment was used is also final.
+const REFERENCE_EQUIPMENT_LOCKED_JOB_STATUSES = new Set<string>(["SUBMITTED", "ACCEPTED_BY_QA"]);
 
 function assertAkdAklTransition(from: AkdAklApprovalStatus, to: AkdAklApprovalStatus): void {
   if (!AKD_AKL_TRANSITIONS[from].includes(to)) {
@@ -663,5 +678,95 @@ export class CalibrationJobsService {
       job: await this.findOne(companyId, jobId),
       correction: await this.getIdentityCorrection(companyId, jobId, correctionId),
     };
+  }
+
+  private async loadReferenceEquipmentSource(
+    companyId: string,
+    jobId: string,
+  ): Promise<JobReferenceEquipmentSource> {
+    const job = await prisma.calibrationJob.findFirst({
+      where: { id: jobId, companyId },
+      include: jobReferenceEquipmentSourceInclude,
+    });
+    if (!job) {
+      throw new NotFoundException({
+        message: "Calibration job not found",
+        code: "CALIBRATION_JOB_NOT_FOUND",
+      });
+    }
+    return job;
+  }
+
+  /** Precomputed picker candidates — sourced from the job's WorkOrder's already-confirmed equipment. */
+  async getReferenceEquipmentCandidates(
+    companyId: string,
+    jobId: string,
+  ): Promise<JobReferenceEquipmentCandidate[]> {
+    const job = await this.loadReferenceEquipmentSource(companyId, jobId);
+    return buildReferenceEquipmentCandidates(job, job.startedAt ?? new Date());
+  }
+
+  async listReferenceEquipmentUsed(
+    companyId: string,
+    jobId: string,
+  ): Promise<JobReferenceEquipmentUsedDetail[]> {
+    await this.findOne(companyId, jobId);
+    return prisma.jobReferenceEquipmentUsed.findMany({
+      where: { calibrationJobId: jobId },
+      include: jobReferenceEquipmentUsedInclude,
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  /** Full-set replace of the reference equipment used on this job. */
+  async replaceReferenceEquipmentUsed(
+    companyId: string,
+    jobId: string,
+    userId: string,
+    role: MembershipRole,
+    input: JobReferenceEquipmentReplaceInput,
+  ): Promise<JobReferenceEquipmentUsedDetail[]> {
+    const job = await this.loadReferenceEquipmentSource(companyId, jobId);
+    if (job.startedAt === null) {
+      throw new BadRequestException({
+        message: "Record reference equipment only after the job has started",
+        code: "CALIBRATION_JOB_NOT_STARTED",
+      });
+    }
+    if (REFERENCE_EQUIPMENT_LOCKED_JOB_STATUSES.has(job.status)) {
+      throw new BadRequestException({
+        message: "Calibration job has advanced past the reference-equipment recording stage",
+        code: "CALIBRATION_JOB_REFERENCE_EQUIPMENT_LOCKED",
+        status: job.status,
+      });
+    }
+
+    const canOverride = hasPermission(role, "calibrationJob", "overrideReferenceEquipmentValidity");
+    const rows = await validateJobReferenceEquipmentSelection(
+      job,
+      input.items,
+      job.startedAt,
+      canOverride,
+    );
+
+    await prisma.$transaction(async (tx) => {
+      await tx.jobReferenceEquipmentUsed.deleteMany({ where: { calibrationJobId: jobId } });
+      if (rows.length > 0) {
+        await tx.jobReferenceEquipmentUsed.createMany({
+          data: rows.map((row) => ({
+            companyId,
+            calibrationJobId: jobId,
+            equipmentId: row.equipmentId,
+            equipmentCalibrationRecordId: row.equipmentCalibrationRecordId,
+            validityOverridden: row.validityOverridden,
+            overrideReason: row.overrideReason,
+            overriddenByUserId: row.validityOverridden ? userId : null,
+            overriddenAt: row.validityOverridden ? new Date() : null,
+          })),
+        });
+      }
+    });
+
+    return this.listReferenceEquipmentUsed(companyId, jobId);
   }
 }
