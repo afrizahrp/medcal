@@ -7,7 +7,11 @@ import { StickyActionBar } from "../../../components/layout/sticky-action-bar";
 import { Button, LinkButton } from "../../../components/ui/button";
 import { LoadingState, ErrorState } from "../../../components/ui/state-views";
 import { formatApiError } from "../../../lib/api-errors";
-import { isIdentityGateLocked, canEscalateIdentity } from "../../../lib/calibration/identity-gate";
+import {
+  isIdentityGateLocked,
+  canEscalateIdentity,
+  canSubmitIdentityCorrection,
+} from "../../../lib/calibration/identity-gate";
 import { useCorrectionsQuery, useJobQuery } from "./use-job-query";
 import {
   ApprovalStatusSection,
@@ -77,14 +81,20 @@ export default function JobDetailPage() {
               )
             ) : null}
             {showSubmitCorrection ? (
-              <div>
-                <Button variant="secondary" fullWidth disabled>
+              canSubmitIdentityCorrection(job) ? (
+                <LinkButton href={`/jobs/${id}/identity-correction`} variant="secondary" fullWidth>
                   Ajukan Koreksi Identitas
-                </Button>
-                <p className="mt-1 text-center text-xs text-slate-500">
-                  Segera hadir. Untuk sementara, ajukan koreksi identitas melalui koordinator / Portal.
-                </p>
-              </div>
+                </LinkButton>
+              ) : (
+                <div>
+                  <Button variant="secondary" fullWidth disabled>
+                    Ajukan Koreksi Identitas
+                  </Button>
+                  <p className="mt-1 text-center text-xs text-slate-500">
+                    Job sudah melewati tahap verifikasi identitas.
+                  </p>
+                </div>
+              )
             ) : null}
           </StickyActionBar>
         ) : undefined

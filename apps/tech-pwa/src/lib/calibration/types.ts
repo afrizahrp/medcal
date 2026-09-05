@@ -90,3 +90,34 @@ export interface TechIdentityCorrection {
   /** Photo of the signed BA sheet — one per correction, not per signer. */
   files: { id: string; originalName: string | null; mimeType: string | null }[];
 }
+
+export interface IdentityCorrectionSignatureInput {
+  status: SignatureStatus;
+  signerName?: string;
+  unavailableReason?: string;
+}
+
+export interface IdentityCorrectionSubmitInput {
+  reason: string;
+  newDeviceId?: string;
+  newSerial?: string;
+  newAkdAkl?: string;
+  signatures: {
+    TECHNICIAN: IdentityCorrectionSignatureInput;
+    CUSTOMER: IdentityCorrectionSignatureInput;
+  };
+}
+
+export interface IdentityCorrectionSubmitResult {
+  job: TechCalibrationJob;
+  correction: TechIdentityCorrection;
+  deviceTypeValidated: boolean;
+}
+
+export interface CalibrationJobDeviceCandidate {
+  id: string;
+  code: string | null;
+  brand: string | null;
+  model: string | null;
+  serialNumber: string | null;
+}

@@ -1,16 +1,20 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Screen } from "../../../../../components/layout/screen";
 import { Section, SectionRow } from "../../../../../components/ui/section";
 import { Badge } from "../../../../../components/ui/badge";
+import { Button } from "../../../../../components/ui/button";
+import { ErrorBanner } from "../../../../../components/feedback/error-banner";
 import { LoadingState, ErrorState, EmptyState } from "../../../../../components/ui/state-views";
 import { SignatureImage } from "../../../../../components/ui/signature-image";
 import { formatApiError } from "../../../../../lib/api-errors";
+import { canSubmitIdentityCorrection } from "../../../../../lib/calibration/identity-gate";
 import { IDENTITY_CORRECTION_STATUS_LABELS } from "../../../../../lib/calibration/types";
 import type { TechIdentityCorrection, IdentityCorrectionSignerRole, SignatureStatus } from "../../../../../lib/calibration/types";
 import { summarizeCorrectionChanges } from "../../../../../lib/calibration/job-display";
-import { useCorrectionQuery } from "../../use-job-query";
+import { useCorrectionQuery, useJobQuery, useUploadIdentityCorrectionPhoto } from "../../use-job-query";
 
 const CORRECTION_BADGE_CLASS: Record<TechIdentityCorrection["status"], string> = {
   PENDING_REVIEW: "bg-amber-500",
@@ -38,6 +42,19 @@ export default function CorrectionDetailPage() {
   const { id: jobId, correctionId } = params;
 
   const query = useCorrectionQuery(jobId, correctionId);
+  const jobQuery = useJobQuery(jobId);
+  const uploadMutation = useUploadIdentityCorrectionPhoto(jobId);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  async function handleUpload(file: File) {
+    setUploadError(null);
+    try {
+      await uploadMutation.mutateAsync({ correctionId, file });
+    } catch (err) {
+      setUploadError(formatApiError(err, "Gagal mengunggah foto BA."));
+    }
+  }
 
   if (query.isPending) {
     return (
@@ -121,6 +138,10 @@ export default function CorrectionDetailPage() {
           const image = correction.files.find((f) => (f.mimeType ?? "").startsWith("image/"));
           const pdf = correction.files.find((f) => (f.mimeType ?? "") === "application/pdf");
           const anySigned = correction.signatures.some((s) => s.status === "SIGNED");
+          const editable =
+            correction.status === "PENDING_REVIEW" &&
+            correction.files.length === 0 &&
+            Boolean(jobQuery.data && canSubmitIdentityCorrection(jobQuery.data));
 
           if (image) {
             return (
@@ -132,11 +153,39 @@ export default function CorrectionDetailPage() {
           if (pdf) {
             return <p className="text-sm text-slate-600">{pdf.originalName ?? "Lampiran PDF"}</p>;
           }
-          if (anySigned) {
-            return <p className="text-sm text-amber-600">Foto BA belum diunggah.</p>;
-          }
+
           return (
-            <p className="text-sm text-slate-500">Tidak ada tanda tangan — foto tidak diperlukan.</p>
+            <div className="flex flex-col gap-2">
+              {anySigned ? (
+                <p className="text-sm text-amber-600">Foto BA belum diunggah.</p>
+              ) : (
+                <p className="text-sm text-slate-500">Tidak ada tanda tangan — foto tidak diperlukan.</p>
+              )}
+              {editable ? (
+                <>
+                  {uploadError ? <ErrorBanner message={uploadError} /> : null}
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) void handleUpload(file);
+                    }}
+                  />
+                  <Button
+                    variant="secondary"
+                    disabled={uploadMutation.isPending}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    {uploadMutation.isPending ? "Mengunggah…" : "Unggah foto BA"}
+                  </Button>
+                </>
+              ) : null}
+            </div>
           );
         })()}
       </Section>

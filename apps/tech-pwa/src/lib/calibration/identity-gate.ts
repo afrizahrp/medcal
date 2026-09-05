@@ -20,3 +20,12 @@ export function canEscalateIdentity(job: {
     (job.akdAklApprovalStatus === "NOT_REQUIRED" || job.akdAklApprovalStatus === "REJECTED")
   );
 }
+
+/**
+ * An identity correction BA can be submitted whenever the identity gate is open —
+ * for first-time device resolution AND for correcting an already-bound identity.
+ * A pending BA already existing is enforced server-side (IDENTITY_CORRECTION_ALREADY_PENDING).
+ */
+export function canSubmitIdentityCorrection(job: { status: CalibrationJobStatus }): boolean {
+  return !isIdentityGateLocked(job);
+}
