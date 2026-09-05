@@ -111,14 +111,34 @@ export default function CorrectionDetailPage() {
               {sig.unavailableReason ? (
                 <p className="text-xs text-slate-500">Alasan: {sig.unavailableReason}</p>
               ) : null}
-              {sig.status === "SIGNED" && sig.files[0] ? (
-                <div className="mt-2">
-                  <SignatureImage fileId={sig.files[0].id} alt={`Tanda tangan ${SIGNER_LABELS[sig.signerRole]}`} />
-                </div>
-              ) : null}
             </div>
           ))}
         </div>
+      </Section>
+
+      <Section title="Foto BA">
+        {(() => {
+          const image = correction.files.find((f) => (f.mimeType ?? "").startsWith("image/"));
+          const pdf = correction.files.find((f) => (f.mimeType ?? "") === "application/pdf");
+          const anySigned = correction.signatures.some((s) => s.status === "SIGNED");
+
+          if (image) {
+            return (
+              <div>
+                <SignatureImage fileId={image.id} alt="Foto BA (lembar tanda tangan)" />
+              </div>
+            );
+          }
+          if (pdf) {
+            return <p className="text-sm text-slate-600">{pdf.originalName ?? "Lampiran PDF"}</p>;
+          }
+          if (anySigned) {
+            return <p className="text-sm text-amber-600">Foto BA belum diunggah.</p>;
+          }
+          return (
+            <p className="text-sm text-slate-500">Tidak ada tanda tangan — foto tidak diperlukan.</p>
+          );
+        })()}
       </Section>
 
       {correction.decidedAt ? (

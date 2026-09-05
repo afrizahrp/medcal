@@ -66,7 +66,6 @@ export interface TechIdentityCorrectionSignature {
   status: SignatureStatus;
   unavailableReason: string | null;
   signedAt: string | null;
-  files: { id: string; originalName: string | null; mimeType: string | null }[];
 }
 
 export interface TechIdentityCorrection {
@@ -88,4 +87,6 @@ export interface TechIdentityCorrection {
   submittedBy: { id: string; name: string | null } | null;
   decidedBy: { id: string; name: string | null } | null;
   signatures: TechIdentityCorrectionSignature[];
+  /** Photo of the signed BA sheet — one per correction, not per signer. */
+  files: { id: string; originalName: string | null; mimeType: string | null }[];
 }
