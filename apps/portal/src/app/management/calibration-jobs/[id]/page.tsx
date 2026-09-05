@@ -16,6 +16,7 @@ import {
   ConfirmDialog,
   DetailField,
   IdentityCorrectionStatusBadge,
+  JobReferenceEquipmentValidityBadge,
   JobStatusBadge,
   PageHeader,
   Surface,
@@ -23,6 +24,7 @@ import {
   declaredDeviceName,
   formPageClass,
   formSurfaceClass,
+  formatDate,
   formatDateTime,
   resolvedDeviceType,
   type CalibrationJobDeviceCandidate,
@@ -54,6 +56,10 @@ import {
   type IdentityCorrectionSubmitInput,
   type SignatureStatus,
 } from "../use-identity-corrections-query";
+import {
+  useReferenceEquipmentUsed,
+  type ReferenceEquipmentUsed,
+} from "../use-reference-equipment-used-query";
 
 const SIGNER_ROLES = ["TECHNICIAN", "CUSTOMER"] as const;
 type SignerRole = (typeof SIGNER_ROLES)[number];
@@ -71,6 +77,7 @@ export default function CalibrationJobDetailPage() {
 
   const query = useCalibrationJob(params.id);
   const corrections = useIdentityCorrections(params.id);
+  const refEquipment = useReferenceEquipmentUsed(params.id);
   const escalateMutation = useEscalateIdentity();
   const decideMutation = useDecideIdentity();
   const submitCorrection = useSubmitIdentityCorrection();
@@ -329,6 +336,25 @@ export default function CalibrationJobDetailPage() {
         </div>
 
         <div className="mt-5 border-t border-slate-100 pt-5">
+          <h3 className="text-sm font-semibold text-slate-900">Alat Referensi yang Digunakan</h3>
+          {refEquipment.isLoading ? (
+            <p className="mt-3 text-sm text-slate-400">Memuat…</p>
+          ) : refEquipment.isError ? (
+            <p className="mt-3 text-sm text-red-600">Gagal memuat daftar alat referensi.</p>
+          ) : (refEquipment.data ?? []).length === 0 ? (
+            <p className="mt-2 text-sm text-slate-500">
+              Belum ada alat referensi yang dicatat untuk job ini.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {(refEquipment.data ?? []).map((unit) => (
+                <ReferenceEquipmentCard key={unit.id} unit={unit} />
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="mt-5 border-t border-slate-100 pt-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-slate-900">
               Identity Corrections (Berita Acara)
@@ -489,6 +515,63 @@ export default function CalibrationJobDetailPage() {
         onSubmit={handleSubmitCorrection}
       />
     </div>
+  );
+}
+
+// ── Reference equipment used (read-only) ─────────────────────────────────────
+
+function ReferenceEquipmentCard({ unit }: { unit: ReferenceEquipmentUsed }) {
+  const { equipment, equipmentCalibrationRecord: record, validityOverridden } = unit;
+  const brandModel = [equipment.brand, equipment.model].filter(Boolean).join(" ");
+
+  return (
+    <li
+      className={
+        validityOverridden
+          ? "rounded-lg border border-amber-300 bg-amber-50/60 p-3"
+          : "rounded-lg border border-slate-200 p-3"
+      }
+    >
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+        <div className="min-w-0">
+          <span className="font-mono text-sm font-medium text-slate-800">{equipment.code}</span>
+          {brandModel ? <span className="ml-2 text-sm text-slate-600">{brandModel}</span> : null}
+          {equipment.serialNumber ? (
+            <span className="ml-2 font-mono text-xs text-slate-400">
+              SN {equipment.serialNumber}
+            </span>
+          ) : null}
+          <p className="mt-0.5 text-xs text-slate-500">{equipment.equipmentType.name}</p>
+        </div>
+        <JobReferenceEquipmentValidityBadge overridden={validityOverridden} />
+      </div>
+
+      <p className={`mt-1.5 text-xs ${validityOverridden ? "text-amber-700" : "text-slate-500"}`}>
+        {record ? (
+          <>
+            Sertifikat {record.certificateNumber ?? "—"} · berlaku s/d{" "}
+            {formatDate(record.validUntil)}
+          </>
+        ) : (
+          "Tidak ada sertifikat kalibrasi yang berlaku"
+        )}
+      </p>
+
+      {validityOverridden ? (
+        <div className="mt-2 rounded-md border border-amber-300 bg-amber-100 px-3 py-2 text-xs text-amber-800">
+          <p className="flex items-center gap-1.5 font-semibold">
+            <ShieldAlert className="h-3.5 w-3.5" />
+            Validitas kalibrasi di-override
+          </p>
+          <p className="mt-1">
+            Oleh: {unit.overriddenBy?.name ?? "—"} · {formatDateTime(unit.overriddenAt)}
+          </p>
+          {unit.overrideReason ? (
+            <p className="mt-1 whitespace-pre-wrap">Alasan: {unit.overrideReason}</p>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
   );
 }
 

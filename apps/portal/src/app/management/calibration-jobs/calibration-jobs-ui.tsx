@@ -11,7 +11,12 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "../../../components/management/page-header";
 import { PaginationBar, Surface, selectClassName } from "../leads/leads-ui";
 import { ConfirmDialog, DetailField } from "../calibration-requests/calibration-requests-ui";
-import { formPageClass, formSurfaceClass, formatDateTime } from "../quotations/quotations-ui";
+import {
+  formPageClass,
+  formSurfaceClass,
+  formatDate,
+  formatDateTime,
+} from "../quotations/quotations-ui";
 import {
   AKD_AKL_APPROVAL_STATUS_LABELS,
   AKD_AKL_APPROVAL_STATUS_VALUES,
@@ -30,6 +35,7 @@ export {
   DetailField,
   formPageClass,
   formSurfaceClass,
+  formatDate,
   formatDateTime,
 };
 
@@ -180,6 +186,27 @@ export function IdentityCorrectionStatusBadge({ status }: { status: IdentityCorr
   return (
     <Badge className={cn(badgeBase, IDENTITY_CORRECTION_BADGE_CLASS[status])}>
       {IDENTITY_CORRECTION_STATUS_LABELS[status]}
+    </Badge>
+  );
+}
+
+/**
+ * Reference-equipment validity, as recorded on the job. The used-equipment
+ * endpoint persists only `validityOverridden` (not the specific failing
+ * status), so this badge has two states — see the amber row treatment in the
+ * job detail page for the override detail (who / when / why).
+ */
+export function JobReferenceEquipmentValidityBadge({ overridden }: { overridden: boolean }) {
+  return (
+    <Badge
+      className={cn(
+        badgeBase,
+        overridden
+          ? "border-transparent bg-amber-500 text-white hover:bg-amber-500"
+          : "border-transparent bg-emerald-600 text-white hover:bg-emerald-600",
+      )}
+    >
+      {overridden ? "Validitas di-override" : "Valid"}
     </Badge>
   );
 }
