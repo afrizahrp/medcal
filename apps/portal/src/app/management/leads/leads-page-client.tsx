@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { isForbidden } from "@medcal/shared";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { usePaginationSync } from "@/hooks/use-pagination-sync";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
+import { ViewAdjustedBanner } from "@/components/ui/view-adjusted-banner";
 import { AccessDenied } from "../../../components/access-denied";
 import {
   type ContactStatus,
@@ -82,6 +84,12 @@ export default function LeadsPageClient() {
   const forbidden = isForbidden(messagesQuery.error);
   const error = messagesQuery.isError && !forbidden ? "Gagal memuat daftar pesan." : null;
   const totalPages = result ? Math.max(1, result.totalPages) : 1;
+
+  const { didClamp, dismiss } = usePaginationSync({
+    page,
+    totalPages: result?.totalPages,
+    onClamp: (lastPage) => setParams({ page: String(lastPage) }),
+  });
 
   async function resolve(
     messageId: string,
@@ -183,6 +191,8 @@ export default function LeadsPageClient() {
       )}
 
       {resolveError && <p className="mt-4 text-sm text-red-600">{resolveError}</p>}
+
+      {didClamp ? <ViewAdjustedBanner className="mt-4" onDismiss={dismiss} /> : null}
 
       <Surface className="mt-6 hidden p-6 md:block">
         <MessageFilters {...filterProps} variant="desktop" />

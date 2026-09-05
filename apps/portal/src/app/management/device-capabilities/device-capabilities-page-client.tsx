@@ -7,9 +7,11 @@ import { isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { usePaginationSync } from "@/hooks/use-pagination-sync";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
 import { useTableSort } from "@/hooks/use-table-sort";
 import { cn } from "@/lib/utils";
+import { ViewAdjustedBanner } from "@/components/ui/view-adjusted-banner";
 import { AccessDenied } from "../../../components/access-denied";
 import {
   PageHeader,
@@ -54,6 +56,12 @@ export default function DeviceCapabilitiesPageClient() {
     pageSize,
   });
 
+  const { didClamp, dismiss } = usePaginationSync({
+    page,
+    totalPages: query.data?.totalPages,
+    onClamp: (lastPage) => setParams({ page: lastPage <= 1 ? undefined : String(lastPage) }),
+  });
+
   if (!capabilities?.deviceCapabilityRead) {
     return <AccessDenied />;
   }
@@ -88,6 +96,8 @@ export default function DeviceCapabilitiesPageClient() {
       </div>
 
       <Surface className={cn("mt-6 p-4 md:p-6", fetching && "opacity-70")}>
+        {didClamp ? <ViewAdjustedBanner className="mb-4" onDismiss={dismiss} /> : null}
+
         <DeviceCapabilityFilters
           searchInput={searchInput}
           onSearchChange={setSearchInput}
@@ -101,6 +111,8 @@ export default function DeviceCapabilitiesPageClient() {
 
         {loading ? (
           <p className="mt-6 text-sm text-slate-400">Memuat…</p>
+        ) : didClamp && result && result.data.length === 0 ? (
+          <p className="mt-6 text-sm text-slate-400">Menyesuaikan halaman…</p>
         ) : result && result.data.length === 0 ? (
           <DeviceCapabilityEmptyState
             onClearFilters={

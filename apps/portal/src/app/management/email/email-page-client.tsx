@@ -5,8 +5,10 @@ import Link from "next/link";
 import { isForbidden } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { usePaginationSync } from "@/hooks/use-pagination-sync";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
 import { useTableSort } from "@/hooks/use-table-sort";
+import { ViewAdjustedBanner } from "@/components/ui/view-adjusted-banner";
 import { AccessDenied } from "../../../components/access-denied";
 import { useRequireSession, useAuthz } from "@medcal/auth/client";
 import { PaginationBar } from "../leads/leads-ui";
@@ -89,6 +91,12 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
   const forbidden = isForbidden(emailsQuery.error);
   const error = emailsQuery.isError && !forbidden ? "Gagal memuat daftar email." : null;
   const totalPages = result ? Math.max(1, result.totalPages) : 1;
+
+  const { didClamp, dismiss } = usePaginationSync({
+    page,
+    totalPages: result?.totalPages,
+    onClamp: (lastPage) => setParams({ page: String(lastPage) }),
+  });
 
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -194,6 +202,7 @@ export function EmailFolderPageClient({ folder }: { folder: EmailFolder }) {
       ) : null}
       {syncError ? <p className="mt-3 text-sm text-red-600">{syncError}</p> : null}
       {rowActionError ? <p className="mt-3 text-sm text-red-600">{rowActionError}</p> : null}
+      {didClamp ? <ViewAdjustedBanner className="mt-3" onDismiss={dismiss} /> : null}
 
       <Surface className="mt-6 p-4 md:p-6">
         <EmailFilters
