@@ -454,28 +454,29 @@ model User {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  memberships                   UserMembership[]
-  customerLinks                 CustomerUserLink[]
-  fcmTokens                     FCMToken[]
-  assignedLeads                 Lead[]                       @relation("LeadAssignee")
-  confirmedMatches              ContactMessage[]             @relation("MatchConfirmer")
-  workOrderAssignments          WorkOrderAssignment[]
-  qualityReviews                QualityReview[]              @relation("Reviewer")
-  sessions                      Session[]
-  accounts                      Account[]
-  emailWhitelistCreated         EmailWhitelist[]             @relation("EmailWhitelistCreator")
-  emailWhitelistRevoked         EmailWhitelist[]             @relation("EmailWhitelistRevoker")
-  menusCreated                  Menu[]                       @relation("MenuCreatedBy")
-  menusUpdated                  Menu[]                       @relation("MenuUpdatedBy")
-  sentEmails                    Email[]                      @relation("EmailSender")
-  rolePermissionsCreated        RolePermission[]             @relation("RolePermissionCreatedBy")
-  rolePermissionsUpdated        RolePermission[]             @relation("RolePermissionUpdatedBy")
-  uploadedFiles                 FileObject[]                 @relation("FileUploadedBy")
-  equipmentCalibrationsCreated  EquipmentCalibrationRecord[] @relation("EquipmentCalibrationCreatedBy")
-  equipmentCalibrationsAccepted EquipmentCalibrationRecord[] @relation("EquipmentCalibrationAcceptedBy")
-  calibrationJobsAkdAklApproved CalibrationJob[]             @relation("CalibrationJobAkdAklApprover")
-  identityCorrectionsSubmitted  IdentityCorrection[]         @relation("IdentityCorrectionSubmitter")
-  identityCorrectionsDecided    IdentityCorrection[]         @relation("IdentityCorrectionDecider")
+  memberships                           UserMembership[]
+  customerLinks                         CustomerUserLink[]
+  fcmTokens                             FCMToken[]
+  assignedLeads                         Lead[]                       @relation("LeadAssignee")
+  confirmedMatches                      ContactMessage[]             @relation("MatchConfirmer")
+  workOrderAssignments                  WorkOrderAssignment[]
+  qualityReviews                        QualityReview[]              @relation("Reviewer")
+  sessions                              Session[]
+  accounts                              Account[]
+  emailWhitelistCreated                 EmailWhitelist[]             @relation("EmailWhitelistCreator")
+  emailWhitelistRevoked                 EmailWhitelist[]             @relation("EmailWhitelistRevoker")
+  menusCreated                          Menu[]                       @relation("MenuCreatedBy")
+  menusUpdated                          Menu[]                       @relation("MenuUpdatedBy")
+  sentEmails                            Email[]                      @relation("EmailSender")
+  rolePermissionsCreated                RolePermission[]             @relation("RolePermissionCreatedBy")
+  rolePermissionsUpdated                RolePermission[]             @relation("RolePermissionUpdatedBy")
+  uploadedFiles                         FileObject[]                 @relation("FileUploadedBy")
+  equipmentCalibrationsCreated          EquipmentCalibrationRecord[] @relation("EquipmentCalibrationCreatedBy")
+  equipmentCalibrationsAccepted         EquipmentCalibrationRecord[] @relation("EquipmentCalibrationAcceptedBy")
+  calibrationJobsAkdAklApproved         CalibrationJob[]             @relation("CalibrationJobAkdAklApprover")
+  identityCorrectionsSubmitted          IdentityCorrection[]         @relation("IdentityCorrectionSubmitter")
+  identityCorrectionsDecided            IdentityCorrection[]         @relation("IdentityCorrectionDecider")
+  jobReferenceEquipmentUsagesOverridden JobReferenceEquipmentUsed[]  @relation("JobReferenceEquipmentOverrider")
 }
 
 // =============================================================================
@@ -1099,6 +1100,7 @@ model Equipment {
 
   calibrationRecords  EquipmentCalibrationRecord[]
   workOrderSelections WorkOrderEquipment[]
+  jobReferenceUsages  JobReferenceEquipmentUsed[]
 
   @@unique([companyId, code])
   @@index([companyId, isActive])
@@ -1149,6 +1151,8 @@ model EquipmentCalibrationRecord {
   equipment  Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
   acceptedBy User?     @relation("EquipmentCalibrationAcceptedBy", fields: [acceptedByUserId], references: [id])
   createdBy  User?     @relation("EquipmentCalibrationCreatedBy", fields: [createdByUserId], references: [id])
+
+  jobReferenceUsages JobReferenceEquipmentUsed[]
 
   @@index([equipmentId, calibrationDate])
   @@index([equipmentId, validUntil])
@@ -1335,10 +1339,10 @@ model Device {
   customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
   deviceType DeviceType @relation(fields: [deviceTypeId], references: [id])
 
-  quotationItems     QuotationItem[]
-  purchaseOrderItems PurchaseOrderItem[]
-  calibrationJobs    CalibrationJob[]
-  certificates       Certificate[]
+  quotationItems          QuotationItem[]
+  purchaseOrderItems      PurchaseOrderItem[]
+  calibrationJobs         CalibrationJob[]
+  certificates            Certificate[]
   identityCorrectionsPrev IdentityCorrection[] @relation("IdentityCorrectionPrevDevice")
   identityCorrectionsNew  IdentityCorrection[] @relation("IdentityCorrectionNewDevice")
 
@@ -1906,18 +1910,31 @@ model JobEvidence {
 }
 
 model JobReferenceEquipmentUsed {
-  id               String   @id @default(cuid())
-  calibrationJobId String
-  equipmentName    String
-  brand            String?
-  model            String?
-  serialNumber     String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                           String  @id @default(cuid())
+  companyId                    String
+  calibrationJobId             String
+  equipmentId                  String
+  equipmentCalibrationRecordId String?
+  notes                        String?
 
-  calibrationJob CalibrationJob @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  // ── Validity override (TECHNICIAN_MANAGER force-accept path) ───────────────
+  validityOverridden Boolean   @default(false)
+  overrideReason     String?
+  overriddenByUserId String?
+  overriddenAt       DateTime?
 
-  @@index([calibrationJobId])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calibrationJob             CalibrationJob              @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  equipment                  Equipment                   @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  equipmentCalibrationRecord EquipmentCalibrationRecord? @relation(fields: [equipmentCalibrationRecordId], references: [id], onDelete: Restrict)
+  overriddenBy               User?                       @relation("JobReferenceEquipmentOverrider", fields: [overriddenByUserId], references: [id])
+
+  @@unique([calibrationJobId, equipmentId])
+  @@index([companyId, equipmentId])
+  @@index([equipmentCalibrationRecordId])
+  @@index([overriddenByUserId])
 }
 
 model CustomerSignature {
