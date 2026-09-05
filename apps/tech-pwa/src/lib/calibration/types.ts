@@ -34,6 +34,7 @@ export interface TechCalibrationJob {
   akdAklApprovedAt: string | null;
   akdAklDecisionNote: string | null;
   status: CalibrationJobStatus;
+  startedAt: string | null;
   createdAt: string;
   workOrder: { id: string; number: string };
   device: { id: string; code: string | null; serialNumber: string | null } | null;

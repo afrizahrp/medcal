@@ -1,4 +1,8 @@
 import { ApiError } from "@medcal/shared";
+import {
+  REFERENCE_EQUIPMENT_VALIDITY_LABELS,
+  type JobEquipmentValidityStatus,
+} from "./calibration/reference-equipment";
 
 /**
  * Error-message mapping for the tech-pwa read + escalate + identity-correction
@@ -28,6 +32,18 @@ const MESSAGES: Record<string, string> = {
   FILE_CONTENT_MISMATCH: "Isi file tidak sesuai dengan tipe yang dinyatakan.",
   FILE_TOO_LARGE: "Ukuran foto melebihi batas (5 MB).",
   FILE_OWNER_LOCKED: "BA ini sudah tidak dapat menerima foto baru.",
+  // Reference equipment used (PUT /calibration-jobs/:id/reference-equipment-used)
+  CALIBRATION_JOB_NOT_STARTED:
+    "Job belum dimulai — alat referensi baru dapat dicatat setelah kalibrasi berjalan.",
+  CALIBRATION_JOB_REFERENCE_EQUIPMENT_LOCKED:
+    "Job sudah dikirim — daftar alat referensi tidak dapat diubah lagi.",
+  EQUIPMENT_NOT_CONFIRMED_ON_WORK_ORDER:
+    "Alat ini tidak ada pada daftar work order job. Muat ulang halaman.",
+  EQUIPMENT_INACTIVE: "Alat referensi ini berstatus nonaktif dan tidak dapat dipakai.",
+  EQUIPMENT_TYPE_NOT_REQUIRED_FOR_DEVICE:
+    "Jenis alat ini tidak diperlukan untuk jenis perangkat pada job ini.",
+  DUPLICATE_JOB_REFERENCE_EQUIPMENT: "Ada alat yang terpilih lebih dari sekali.",
+  INVALID_JOB_REFERENCE_EQUIPMENT: "Data pilihan alat referensi tidak valid.",
 };
 
 export function isOffline(): boolean {
@@ -45,4 +61,24 @@ export function formatApiError(err: unknown, fallback: string): string {
     return err.message;
   }
   return fallback;
+}
+
+/**
+ * Reference-equipment submit errors. EQUIPMENT_CALIBRATION_INVALID carries the
+ * failing validity sub-status in err.data.validityStatus — surface it the way
+ * the API reports it. Everything else defers to formatApiError.
+ */
+export function formatReferenceEquipmentError(err: unknown, fallback: string): string {
+  if (
+    !isOffline() &&
+    err instanceof ApiError &&
+    err.data?.code === "EQUIPMENT_CALIBRATION_INVALID"
+  ) {
+    const status = err.data.validityStatus as JobEquipmentValidityStatus | undefined;
+    const label = status ? REFERENCE_EQUIPMENT_VALIDITY_LABELS[status] : undefined;
+    return label
+      ? `Kalibrasi alat tidak valid (${label}). Perlu persetujuan manajer teknis.`
+      : "Kalibrasi alat tidak valid. Perlu persetujuan manajer teknis.";
+  }
+  return formatApiError(err, fallback);
 }

@@ -4,7 +4,9 @@ import { Badge } from "../../../components/ui/badge";
 import { JobStatusBadge, AkdAklStatusBadge } from "../jobs-ui";
 import type { TechCalibrationJob, TechIdentityCorrection } from "../../../lib/calibration/types";
 import { IDENTITY_CORRECTION_STATUS_LABELS } from "../../../lib/calibration/types";
+import type { TechReferenceEquipmentUsed } from "../../../lib/calibration/reference-equipment";
 import { declaredAkdAkl, declaredDeviceName } from "../../../lib/calibration/job-display";
+import { RecordedReferenceEquipmentList } from "./reference-equipment/reference-equipment-ui";
 
 const CORRECTION_BADGE_CLASS: Record<TechIdentityCorrection["status"], string> = {
   PENDING_REVIEW: "bg-amber-500",
@@ -82,6 +84,38 @@ export function ApprovalStatusSection({ job }: { job: TechCalibrationJob }) {
             <p className="mt-1 text-sm text-slate-600">{job.akdAklDecisionNote}</p>
           ) : null}
         </div>
+      ) : null}
+    </Section>
+  );
+}
+
+export function ReferenceEquipmentSection({
+  jobId,
+  used,
+  canRecord,
+  gateOpen,
+  lockedReason,
+}: {
+  jobId: string;
+  used: TechReferenceEquipmentUsed[];
+  canRecord: boolean;
+  gateOpen: boolean;
+  lockedReason: string | null;
+}) {
+  return (
+    <Section title="Alat Referensi Digunakan">
+      <RecordedReferenceEquipmentList used={used} />
+      {canRecord ? (
+        gateOpen ? (
+          <Link
+            href={`/jobs/${jobId}/reference-equipment`}
+            className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 active:text-brand-800"
+          >
+            Catat alat referensi
+          </Link>
+        ) : lockedReason ? (
+          <p className="mt-2 text-xs text-slate-500">{lockedReason}</p>
+        ) : null
       ) : null}
     </Section>
   );

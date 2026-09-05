@@ -12,7 +12,12 @@ import {
   canEscalateIdentity,
   canSubmitIdentityCorrection,
 } from "../../../lib/calibration/identity-gate";
+import {
+  canRecordReferenceEquipment,
+  isReferenceEquipmentLocked,
+} from "../../../lib/calibration/reference-equipment";
 import { useCorrectionsQuery, useJobQuery } from "./use-job-query";
+import { useReferenceEquipmentUsed } from "./use-reference-equipment-query";
 import {
   ApprovalStatusSection,
   AssignedDeviceSection,
@@ -20,6 +25,7 @@ import {
   DeclaredIdentitySection,
   JobHeaderBlock,
   ObservedIdentitySection,
+  ReferenceEquipmentSection,
 } from "./job-detail-ui";
 
 export default function JobDetailPage() {
@@ -29,6 +35,7 @@ export default function JobDetailPage() {
 
   const jobQuery = useJobQuery(id);
   const correctionsQuery = useCorrectionsQuery(id);
+  const referenceEquipmentQuery = useReferenceEquipmentUsed(id);
 
   if (jobQuery.isPending) {
     return (
@@ -54,6 +61,15 @@ export default function JobDetailPage() {
   const canEscalate = canEscalateIdentity(job);
   const showEscalate = Boolean(capabilities?.calibrationJobEscalateIdentity);
   const showSubmitCorrection = Boolean(capabilities?.calibrationJobSubmitIdentityCorrection);
+  const showRecordReferenceEquipment = Boolean(
+    capabilities?.calibrationJobRecordReferenceEquipmentUsed,
+  );
+  const referenceEquipmentLockedReason =
+    job.startedAt === null
+      ? "Job belum dimulai — alat referensi dicatat setelah kalibrasi berjalan."
+      : isReferenceEquipmentLocked(job)
+        ? "Job sudah dikirim — daftar alat referensi terkunci."
+        : null;
 
   return (
     <Screen
@@ -105,6 +121,22 @@ export default function JobDetailPage() {
       <ObservedIdentitySection job={job} />
       <AssignedDeviceSection job={job} />
       <ApprovalStatusSection job={job} />
+      {referenceEquipmentQuery.isPending ? (
+        <LoadingState label="Memuat alat referensi…" />
+      ) : referenceEquipmentQuery.isError ? (
+        <ErrorState
+          message={formatApiError(referenceEquipmentQuery.error, "Gagal memuat alat referensi.")}
+          onRetry={() => void referenceEquipmentQuery.refetch()}
+        />
+      ) : (
+        <ReferenceEquipmentSection
+          jobId={id}
+          used={referenceEquipmentQuery.data ?? []}
+          canRecord={showRecordReferenceEquipment}
+          gateOpen={canRecordReferenceEquipment(job)}
+          lockedReason={referenceEquipmentLockedReason}
+        />
+      )}
       {correctionsQuery.isPending ? (
         <LoadingState label="Memuat koreksi identitas…" />
       ) : correctionsQuery.isError ? (
