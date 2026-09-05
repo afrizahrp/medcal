@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "medcal Tech PWA",
+  title: "MyJobs",
   description: "Technician field PWA",
   manifest: "/manifest.webmanifest",
   icons: { apple: "/icons/apple-touch-icon.png" },
