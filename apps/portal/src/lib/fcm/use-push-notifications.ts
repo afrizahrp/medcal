@@ -3,8 +3,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { isFirebaseWebConfigured } from "./config";
 import { getNotificationPermissionState, requestNotificationPermission } from "./permission";
-import { isMessagingSupported, obtainFcmToken } from "./messaging";
+import { isMessagingSupported, obtainFcmToken, getLastFcmTokenErrorKind, type FcmTokenErrorKind } from "./messaging";
 import { syncPushTokenIfNeeded } from "./register";
+
+const FCM_TOKEN_ERROR_MESSAGES: Record<FcmTokenErrorKind, string> = {
+  "permission-blocked":
+    "Izin notifikasi diblokir browser. Periksa pengaturan notifikasi untuk situs ini di browser/perangkat Anda, lalu coba lagi.",
+  "stale-subscription":
+    "Langganan push lama tidak cocok dengan konfigurasi saat ini. Coba hapus data situs ini di browser (Clear site data), muat ulang, lalu aktifkan kembali.",
+  "subscription-failed":
+    "Gagal mengaktifkan notifikasi. Coba nonaktifkan sementara ad-blocker/VPN, pastikan bukan mode Incognito, lalu muat ulang dan coba lagi. Jika masih gagal, ini bisa jadi masalah konfigurasi di server — hubungi admin/IT.",
+};
+
+function describeFcmTokenFailure(): string {
+  const kind = getLastFcmTokenErrorKind();
+  return kind ? FCM_TOKEN_ERROR_MESSAGES[kind] : FCM_TOKEN_ERROR_MESSAGES["subscription-failed"];
+}
 
 export type PushNotificationStatus =
   | "idle"
@@ -50,7 +64,7 @@ export function usePushNotifications(options: { authenticated: boolean; userId?:
         if (!token) {
           if (!cancelled) {
             setStatus("error");
-            setErrorMessage("Could not obtain FCM token");
+            setErrorMessage(describeFcmTokenFailure());
           }
           return;
         }
@@ -110,7 +124,7 @@ export function usePushNotifications(options: { authenticated: boolean; userId?:
     const token = await obtainFcmToken();
     if (!token) {
       setStatus("error");
-      setErrorMessage("Could not obtain FCM token");
+      setErrorMessage(describeFcmTokenFailure());
       return;
     }
 

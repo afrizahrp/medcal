@@ -14,6 +14,22 @@ const SW_ACTIVATION_TIMEOUT_MS = 30_000;
 
 let messagingInstance: Messaging | null = null;
 
+export type FcmTokenErrorKind = "permission-blocked" | "stale-subscription" | "subscription-failed";
+
+let lastFcmTokenErrorKind: FcmTokenErrorKind | null = null;
+
+export function getLastFcmTokenErrorKind(): FcmTokenErrorKind | null {
+  return lastFcmTokenErrorKind;
+}
+
+function classifyFcmTokenError(error: unknown): FcmTokenErrorKind {
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError") return "permission-blocked";
+    if (error.name === "InvalidStateError") return "stale-subscription";
+  }
+  return "subscription-failed";
+}
+
 function getOrInitApp(): FirebaseApp | null {
   const config = getFirebaseWebConfig();
   if (!config) return null;
@@ -159,6 +175,7 @@ export function detectDeviceType(): string {
 }
 
 export async function obtainFcmToken(): Promise<string | null> {
+  lastFcmTokenErrorKind = null;
   const vapidKey = getFirebaseVapidKey();
   if (!vapidKey) {
     console.error("[fcm] NEXT_PUBLIC_FIREBASE_VAPID_KEY is not configured");
@@ -196,6 +213,7 @@ export async function obtainFcmToken(): Promise<string | null> {
     }
     return token;
   } catch (error) {
+    lastFcmTokenErrorKind = classifyFcmTokenError(error);
     console.error(
       "[fcm] getToken() failed:",
       error instanceof Error ? error.message : "Unknown error",

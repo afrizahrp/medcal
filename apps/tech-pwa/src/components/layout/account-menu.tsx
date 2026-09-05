@@ -17,7 +17,7 @@ function MenuIcon() {
 
 function PushStatusItem() {
   const { user, isAuthenticated } = useAuth();
-  const { status, enable } = usePushNotifications({ authenticated: isAuthenticated, userId: user?.id });
+  const { status, errorMessage, enable } = usePushNotifications({ authenticated: isAuthenticated, userId: user?.id });
 
   if (status === "unconfigured" || status === "unsupported" || status === "idle") return null;
   if (status === "enabled") {
@@ -52,6 +52,11 @@ function PushStatusItem() {
       >
         Aktifkan notifikasi
       </button>
+      {status === "error" && errorMessage ? (
+        <p className="px-2 pb-1 text-xs text-red-600" role="status">
+          {errorMessage}
+        </p>
+      ) : null}
     </div>
   );
 }
