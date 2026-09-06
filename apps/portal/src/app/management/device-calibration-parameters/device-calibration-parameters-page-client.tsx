@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
@@ -26,7 +27,24 @@ import {
   useReorderDeviceCalibrationParameters,
 } from "./use-device-calibration-parameters-query";
 
-const URL_KEYS = ["search", "isActive", "expanded", "page", "pageSize"] as const;
+const URL_KEYS = ["search", "isActive", "page", "pageSize"] as const;
+
+/**
+ * Mirror the manual expand/collapse set into the URL (`?expanded=`) so a reload
+ * or shared link keeps the same rows open. Done via `history.replaceState` — a
+ * pure view-state param that must never round-trip through the RSC router:
+ * `router.replace()` to a bare pathname (collapsing the last open row) does not
+ * reliably re-render `useSearchParams()` in the App Router, which is why React
+ * state — not the URL — is the source of truth here.
+ */
+function syncExpandedToUrl(ids: Set<string>): void {
+  if (typeof window === "undefined") return;
+  const next = new URLSearchParams(window.location.search);
+  if (ids.size) next.set("expanded", [...ids].join(","));
+  else next.delete("expanded");
+  const qs = next.toString();
+  window.history.replaceState(null, "", qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
+}
 
 export default function DeviceCalibrationParametersPageClient() {
   const { capabilities } = useAuthz();
@@ -72,9 +90,11 @@ export default function DeviceCalibrationParametersPageClient() {
       ? "Gagal menyimpan urutan baru — urutan dikembalikan seperti semula. Coba lagi."
       : null;
 
-  const manuallyExpanded = useMemo(
-    () => new Set((params.expanded ?? "").split(",").filter(Boolean)),
-    [params.expanded],
+  // Expand/collapse is view-only state kept in React (not the URL) — see
+  // `syncExpandedToUrl`. Seeded once from the URL so links / reloads restore it.
+  const initialExpandedParam = useSearchParams().get("expanded");
+  const [manuallyExpanded, setManuallyExpanded] = useState<Set<string>>(
+    () => new Set(initialExpandedParam?.split(",").filter(Boolean) ?? []),
   );
 
   const result = query.data;
@@ -98,7 +118,8 @@ export default function DeviceCalibrationParametersPageClient() {
     const next = new Set(manuallyExpanded);
     if (next.has(deviceTypeId)) next.delete(deviceTypeId);
     else next.add(deviceTypeId);
-    setParams({ expanded: next.size ? [...next].join(",") : undefined });
+    setManuallyExpanded(next);
+    syncExpandedToUrl(next);
   }
 
   if (!capabilities?.deviceCalibrationParameterRead) {
