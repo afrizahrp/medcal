@@ -1,13 +1,33 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Download, FileText, Plus, Trash2, Upload } from "lucide-react";
+import { format } from "date-fns";
+import {
+  CalendarIcon,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  FileText,
+  Plus,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { ApiError } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "../calibration-requests/calibration-requests-ui";
+import {
+  fmtDateOnly,
+  fmtTimestampDay,
+  isCalibrationValidityWindowOk,
+  parseDateOnly,
+  toDateInputValue,
+  toDateOnlyString,
+} from "./equipment-calibration-record-date-utils";
 import { Surface, selectClassName } from "./equipment-units-ui";
 import {
   downloadCalibrationCertificate,
@@ -21,10 +41,6 @@ import {
   type CalibrationValidity,
   type EquipmentCalibrationRecordRow,
 } from "./use-equipment-calibration-records-query";
-
-const fmtDate = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-const toDateInput = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
 
 function apiErr(e: unknown): string {
   if (e instanceof ApiError) {
@@ -58,7 +74,7 @@ function ValidityBanner({ validity }: { validity: CalibrationValidity }) {
     <div className={cn("flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm", map.cls)}>
       <span className="font-semibold">{map.label}</span>
       {validity.status === "VALID" && validity.validUntil ? (
-        <span>· berlaku s/d {fmtDate(validity.validUntil)}</span>
+        <span>· berlaku s/d {fmtDateOnly(validity.validUntil)}</span>
       ) : null}
       <span className="ml-auto text-xs opacity-70">Dihitung dari record kalibrasi CONFIRMED</span>
     </div>
@@ -93,9 +109,9 @@ const emptyForm: FormValue = {
 
 function formFromRow(r: EquipmentCalibrationRecordRow): FormValue {
   return {
-    calibrationDate: toDateInput(r.calibrationDate),
-    validFrom: toDateInput(r.validFrom),
-    validUntil: toDateInput(r.validUntil),
+    calibrationDate: toDateInputValue(r.calibrationDate),
+    validFrom: toDateInputValue(r.validFrom),
+    validUntil: toDateInputValue(r.validUntil),
     certificateNumber: r.certificateNumber ?? "",
     provider: r.provider ?? "",
     result: r.result ?? "",
@@ -108,6 +124,80 @@ function formFromRow(r: EquipmentCalibrationRecordRow): FormValue {
 const sectionTitle = "text-xs font-semibold uppercase tracking-wide text-slate-500";
 const label = "block text-xs font-medium text-slate-600";
 const grid2 = "grid gap-3 sm:grid-cols-2";
+
+/**
+ * Portal standard date picker (Popover + Calendar) — same composition as
+ * Price List / PO / Quotation. Displays dd/MM/yyyy; value stays YYYY-MM-DD.
+ */
+function DateField({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  allowClear = false,
+  disabled,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+  allowClear?: boolean;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = parseDateOnly(value);
+  return (
+    <Popover open={open} onOpenChange={(next) => !disabled && setOpen(next)}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          aria-label={ariaLabel}
+          className={cn(
+            "mt-1 h-9 w-full justify-start font-normal",
+            !selected && "text-slate-400",
+          )}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+          <span className="truncate">
+            {selected ? format(selected, "dd/MM/yyyy") : placeholder}
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={selected}
+          onSelect={(date) => {
+            onChange(toDateOnlyString(date));
+            setOpen(false);
+          }}
+          captionLayout="dropdown"
+          startMonth={new Date(2020, 0)}
+          endMonth={new Date(2035, 11)}
+          autoFocus
+        />
+        {allowClear && selected ? (
+          <div className="border-t border-slate-100 p-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              Hapus tanggal
+            </Button>
+          </div>
+        ) : null}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function CalibrationRecordForm({
   value,
@@ -125,18 +215,34 @@ function CalibrationRecordForm({
         <div className={grid2}>
           <div>
             <label className={label}>Tanggal kalibrasi *</label>
-            <Input type="date" value={value.calibrationDate} disabled={disabled}
-              onChange={(e) => onChange("calibrationDate", e.target.value)} className="mt-1 h-9" />
+            <DateField
+              value={value.calibrationDate}
+              disabled={disabled}
+              onChange={(next) => onChange("calibrationDate", next)}
+              placeholder="Pilih tanggal…"
+              ariaLabel="Tanggal kalibrasi"
+            />
           </div>
           <div>
             <label className={label}>Berlaku dari</label>
-            <Input type="date" value={value.validFrom} disabled={disabled}
-              onChange={(e) => onChange("validFrom", e.target.value)} className="mt-1 h-9" />
+            <DateField
+              value={value.validFrom}
+              disabled={disabled}
+              onChange={(next) => onChange("validFrom", next)}
+              placeholder="Pilih tanggal…"
+              ariaLabel="Berlaku dari"
+              allowClear
+            />
           </div>
           <div>
             <label className={label}>Berlaku s/d *</label>
-            <Input type="date" value={value.validUntil} disabled={disabled}
-              onChange={(e) => onChange("validUntil", e.target.value)} className="mt-1 h-9" />
+            <DateField
+              value={value.validUntil}
+              disabled={disabled}
+              onChange={(next) => onChange("validUntil", next)}
+              placeholder="Pilih tanggal…"
+              ariaLabel="Berlaku s/d"
+            />
           </div>
           <div>
             <label className={label}>No. sertifikat</label>
@@ -333,6 +439,10 @@ function RecordDetail({
       setError("Tanggal kalibrasi dan tanggal berakhir wajib diisi.");
       return;
     }
+    if (!isCalibrationValidityWindowOk(form.calibrationDate, form.validFrom, form.validUntil)) {
+      setError("Tanggal mulai berlaku harus sebelum/sama dengan tanggal berakhir.");
+      return;
+    }
     try {
       await update.mutateAsync({ id: record.id, input: toUpdatePayload(form) });
       setSuccess("Tersimpan.");
@@ -372,7 +482,7 @@ function RecordDetail({
       {record.acceptedForUse && record.acceptedBy ? (
         <p className="text-xs text-slate-500">
           Diterima oleh {record.acceptedBy.name ?? record.acceptedBy.email}
-          {record.acceptedAt ? ` · ${fmtDate(record.acceptedAt)}` : ""}
+          {record.acceptedAt ? ` · ${fmtTimestampDay(record.acceptedAt)}` : ""}
         </p>
       ) : null}
 
@@ -468,6 +578,10 @@ export function EquipmentCalibrationRecordsPanel({
       setError("Tanggal kalibrasi dan tanggal berakhir wajib diisi.");
       return;
     }
+    if (!isCalibrationValidityWindowOk(form.calibrationDate, form.validFrom, form.validUntil)) {
+      setError("Tanggal mulai berlaku harus sebelum/sama dengan tanggal berakhir.");
+      return;
+    }
     try {
       await create.mutateAsync(toCreatePayload(form));
       setForm(emptyForm);
@@ -538,10 +652,10 @@ export function EquipmentCalibrationRecordsPanel({
                         <td className="px-3 py-2">
                           <span className="flex items-center gap-1.5">
                             {open ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
-                            {fmtDate(rec.calibrationDate)}
+                            {fmtDateOnly(rec.calibrationDate)}
                           </span>
                         </td>
-                        <td className="px-3 py-2">{fmtDate(rec.validUntil)}</td>
+                        <td className="px-3 py-2">{fmtDateOnly(rec.validUntil)}</td>
                         <td className="px-3 py-2 text-slate-600">{rec.certificateNumber ?? "—"}</td>
                         <td className="px-3 py-2 text-slate-600">{rec.result ?? "—"}</td>
                         <td className="px-3 py-2">{rec.acceptedForUse ? "Ya" : "Tidak"}</td>
