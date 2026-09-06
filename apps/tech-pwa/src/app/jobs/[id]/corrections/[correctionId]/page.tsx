@@ -157,7 +157,7 @@ export default function CorrectionDetailPage() {
           return (
             <div className="flex flex-col gap-2">
               {anySigned ? (
-                <p className="text-sm text-amber-600">Foto BA belum diunggah.</p>
+                <p className="text-sm text-amber-600">Foto Berita Acara belum diupload.</p>
               ) : (
                 <p className="text-sm text-slate-500">Tidak ada tanda tangan — foto tidak diperlukan.</p>
               )}
