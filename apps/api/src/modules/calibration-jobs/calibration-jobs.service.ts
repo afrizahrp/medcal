@@ -120,13 +120,22 @@ export type IdentityCorrectionDetail = IdentityCorrectionRow & {
  * AKD/AKL/NIE regulatory gate). Mirrors the ALLOWED_TRANSITIONS pattern used
  * for WorkOrder status in work-orders.service.ts.
  *
- * - NOT_REQUIRED → PENDING_REVIEW: a technician escalates a missing declaration.
+ * - NOT_REQUIRED → PENDING_REVIEW: a technician escalates a missing declaration,
+ *   OR an approved Identity Correction BA makes technicianObservedAkdAkl differ
+ *   from customerDeclaredAkdAkl (auto, in decideIdentityCorrection — the locked
+ *   Q2 decision).
  * - PENDING_REVIEW → APPROVED / REJECTED: the TECHNICIAN_MANAGER decides.
  * - REJECTED → PENDING_REVIEW: re-escalation (e.g. the customer later supplies
  *   the AKL).
- * - APPROVED → PENDING_REVIEW: an APPROVED Identity Correction BA that changed
- *   the AKD/AKL value reopens the gate (guarded in decideIdentityCorrection, not
- *   reachable from escalateIdentity — that still asserts the transition).
+ * - APPROVED → PENDING_REVIEW: an approved Identity Correction BA that leaves the
+ *   observed AKD/AKL still mismatching the declaration reopens the gate (guarded
+ *   in decideIdentityCorrection, not reachable from escalateIdentity — that still
+ *   asserts the transition).
+ *
+ * PENDING_REVIEW → NOT_REQUIRED is not in the table: it happens only as a
+ * system unwind in decideIdentityCorrection when a later correction resolves the
+ * mismatch before a manager has decided, and is applied without going through
+ * assertAkdAklTransition.
  */
 const AKD_AKL_TRANSITIONS: Record<AkdAklApprovalStatus, readonly AkdAklApprovalStatus[]> = {
   NOT_REQUIRED: ["PENDING_REVIEW"],
@@ -152,6 +161,18 @@ function assertAkdAklTransition(from: AkdAklApprovalStatus, to: AkdAklApprovalSt
     });
   }
 }
+
+/**
+ * Fields cleared whenever the system (not a manager decision) moves the AKD/AKL
+ * gate — a stale approver stamp or decision note must never linger on the new
+ * status. Shared by both the mismatch-open and mismatch-resolved paths in
+ * decideIdentityCorrection.
+ */
+const AKD_AKL_GATE_STAMP_RESET = {
+  akdAklApprovedByUserId: null,
+  akdAklApprovedAt: null,
+  akdAklDecisionNote: null,
+} satisfies Prisma.CalibrationJobUncheckedUpdateInput;
 
 /**
  * List row = the job detail payload plus computed state:
@@ -856,10 +877,35 @@ export class CalibrationJobsService {
       await this.validateDeviceForJob(job, correction.newDeviceId);
     }
 
-    const reopenAkdAklGate =
-      correction.newAkdAkl !== null && job.akdAklApprovalStatus === "APPROVED";
-    if (reopenAkdAklGate) {
-      assertAkdAklTransition("APPROVED", "PENDING_REVIEW");
+    // Locked design decision (Q2): the AKD/AKL regulatory gate is driven by
+    // whether the technician-observed izin-edar number matches the customer's
+    // declaration — a discrepancy is itself what a TECHNICIAN_MANAGER must
+    // review, with no separate manual "escalate" action required. We only
+    // re-evaluate the gate when this correction actually changed the AKD/AKL
+    // value: an unrelated serial/device-only correction never disturbs it, and
+    // any pre-existing stale mismatch is left to a deliberate backfill decision.
+    const akdAklCorrected = correction.newAkdAkl !== null;
+    const updatedObservedAkdAkl = akdAklCorrected
+      ? correction.newAkdAkl
+      : job.technicianObservedAkdAkl;
+    const akdAklMismatch =
+      akdAklCorrected &&
+      updatedObservedAkdAkl !== null &&
+      updatedObservedAkdAkl !== job.customerDeclaredAkdAkl;
+
+    // Forward: an unreviewed discrepancy opens the gate. Subsumes the old
+    // "reopen a previously-APPROVED gate" edge — NOT_REQUIRED / APPROVED /
+    // REJECTED → PENDING_REVIEW are all permitted by AKD_AKL_TRANSITIONS.
+    const openAkdAklGate = akdAklMismatch && job.akdAklApprovalStatus !== "PENDING_REVIEW";
+    // Reverse (judgment call — flagged for confirmation, see report): a
+    // correction that resolves the discrepancy while the gate is still
+    // PENDING_REVIEW and undecided removes the reason for review, so unwind it
+    // to NOT_REQUIRED. A gate a manager already decided (APPROVED / REJECTED)
+    // is left untouched.
+    const clearAkdAklGate =
+      akdAklCorrected && !akdAklMismatch && job.akdAklApprovalStatus === "PENDING_REVIEW";
+    if (openAkdAklGate) {
+      assertAkdAklTransition(job.akdAklApprovalStatus, "PENDING_REVIEW");
     }
 
     await prisma.$transaction(async (tx) => {
@@ -870,10 +916,12 @@ export class CalibrationJobsService {
       const jobData: Prisma.CalibrationJobUncheckedUpdateInput = {};
       if (correction.newSerial !== null) jobData.technicianObservedSerial = correction.newSerial;
       if (correction.newAkdAkl !== null) jobData.technicianObservedAkdAkl = correction.newAkdAkl;
-      if (reopenAkdAklGate) {
+      if (openAkdAklGate) {
         jobData.akdAklApprovalStatus = "PENDING_REVIEW";
-        jobData.akdAklApprovedByUserId = null;
-        jobData.akdAklApprovedAt = null;
+        Object.assign(jobData, AKD_AKL_GATE_STAMP_RESET);
+      } else if (clearAkdAklGate) {
+        jobData.akdAklApprovalStatus = "NOT_REQUIRED";
+        Object.assign(jobData, AKD_AKL_GATE_STAMP_RESET);
       }
       if (Object.keys(jobData).length > 0) {
         await tx.calibrationJob.update({ where: { id: jobId }, data: jobData });
@@ -886,7 +934,7 @@ export class CalibrationJobsService {
           decidedByUserId: userId,
           decidedAt,
           decisionNote: input.decisionNote ?? null,
-          akdAklGateReopened: reopenAkdAklGate,
+          akdAklGateReopened: openAkdAklGate,
         },
       });
     });

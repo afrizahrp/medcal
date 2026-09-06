@@ -690,16 +690,78 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
     expect(result.job.akdAklApprovalStatus).toBe("APPROVED");
   });
 
-  it("approve does NOT reopen the gate when it was never APPROVED", async () => {
+  it("approve opens the gate from NOT_REQUIRED when the corrected value mismatches the customer declaration", async () => {
     const { jobs } = await startedWorkOrderJobs(realCompanyId);
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
     const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { customerDeclaredAkdAkl: "AKL-DECLARED" },
+    });
 
     const { correction } = await calibrationJobsService.submitIdentityCorrection(
       realCompanyId,
       jobs[0]!.id,
       tech.id,
-      { reason: "first NIE", newAkdAkl: "AKL-1", signatures: UNAVAILABLE_SIGNATURES },
+      { reason: "first NIE", newAkdAkl: "AKL-OBSERVED", signatures: UNAVAILABLE_SIGNATURES },
+    );
+    const result = await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      correction.id,
+      manager.id,
+      { decision: "APPROVE" },
+    );
+
+    expect(result.correction.akdAklGateReopened).toBe(true);
+    expect(result.job.akdAklApprovalStatus).toBe("PENDING_REVIEW");
+    expect(result.job.technicianObservedAkdAkl).toBe("AKL-OBSERVED");
+  });
+
+  it("approve opens the gate (Q2) — job starts NOT_REQUIRED, correction sets observed ≠ declared", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { customerDeclaredAkdAkl: "AKL-2022-02-BM" },
+    });
+    expect(jobs[0]!.akdAklApprovalStatus).toBe("NOT_REQUIRED");
+
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      { reason: "label reads different NIE", newAkdAkl: "AKL91849201", signatures: UNAVAILABLE_SIGNATURES },
+    );
+    const result = await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      correction.id,
+      manager.id,
+      { decision: "APPROVE" },
+    );
+
+    expect(result.job.akdAklApprovalStatus).toBe("PENDING_REVIEW");
+    expect(result.job.technicianObservedAkdAkl).toBe("AKL91849201");
+    expect(result.job.akdAklApprovedByUserId).toBeNull();
+    expect(result.correction.akdAklGateReopened).toBe(true);
+  });
+
+  it("approve does NOT open the gate when the corrected value equals the customer declaration", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { customerDeclaredAkdAkl: "AKL-MATCHES" },
+    });
+
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      { reason: "confirming declared NIE", newAkdAkl: "AKL-MATCHES", signatures: UNAVAILABLE_SIGNATURES },
     );
     const result = await calibrationJobsService.decideIdentityCorrection(
       realCompanyId,
@@ -711,7 +773,39 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
 
     expect(result.correction.akdAklGateReopened).toBe(false);
     expect(result.job.akdAklApprovalStatus).toBe("NOT_REQUIRED");
-    expect(result.job.technicianObservedAkdAkl).toBe("AKL-1");
+    expect(result.job.technicianObservedAkdAkl).toBe("AKL-MATCHES");
+  });
+
+  it("approve unwinds a PENDING_REVIEW gate to NOT_REQUIRED when a later correction resolves the mismatch", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: {
+        akdAklApprovalStatus: "PENDING_REVIEW",
+        customerDeclaredAkdAkl: "AKL-DECLARED",
+        technicianObservedAkdAkl: "AKL-WRONG",
+      },
+    });
+
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      { reason: "re-read label; matches declaration", newAkdAkl: "AKL-DECLARED", signatures: UNAVAILABLE_SIGNATURES },
+    );
+    const result = await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      correction.id,
+      manager.id,
+      { decision: "APPROVE" },
+    );
+
+    expect(result.correction.akdAklGateReopened).toBe(false);
+    expect(result.job.akdAklApprovalStatus).toBe("NOT_REQUIRED");
+    expect(result.job.technicianObservedAkdAkl).toBe("AKL-DECLARED");
   });
 
   it("rejects approve when a SIGNED signature has no uploaded image", async () => {
