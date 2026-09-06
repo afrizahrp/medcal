@@ -18,24 +18,43 @@ export interface EscalateIdentityInput {
 const jobKey = (id: string) => ["job", id] as const;
 const correctionsKey = (id: string) => ["job", id, "corrections"] as const;
 
-export function useJobQuery(id: string) {
+/**
+ * Opt-in live refresh — poll every 6s + refetch on focus, mirroring
+ * apps/portal's list/detail hooks (use-calibration-jobs-query.ts,
+ * use-identity-corrections-query.ts). Opt-in because the Identity Correction
+ * wizard reuses useJobQuery in its layout and must NOT poll while the
+ * technician is filling signatures/photos. refetchIntervalInBackground is left
+ * at its default (false) so polling pauses while the PWA is backgrounded.
+ */
+export interface LiveQueryOptions {
+  poll?: boolean;
+}
+const LIVE_REFRESH = { refetchInterval: 6000, refetchOnWindowFocus: true } as const;
+
+export function useJobQuery(id: string, options?: LiveQueryOptions) {
   return useQuery({
     queryKey: jobKey(id),
     queryFn: () => apiFetch<TechCalibrationJob>(`/calibration-jobs/${id}`),
     enabled: Boolean(id),
+    ...(options?.poll ? LIVE_REFRESH : {}),
   });
 }
 
-export function useCorrectionsQuery(id: string) {
+export function useCorrectionsQuery(id: string, options?: LiveQueryOptions) {
   return useQuery({
     queryKey: correctionsKey(id),
     queryFn: () => apiFetch<TechIdentityCorrection[]>(`/calibration-jobs/${id}/identity-corrections`),
     enabled: Boolean(id),
+    ...(options?.poll ? LIVE_REFRESH : {}),
   });
 }
 
-export function useCorrectionQuery(jobId: string, correctionId: string) {
-  const corrections = useCorrectionsQuery(jobId);
+export function useCorrectionQuery(
+  jobId: string,
+  correctionId: string,
+  options?: LiveQueryOptions,
+) {
+  const corrections = useCorrectionsQuery(jobId, options);
   const correction = corrections.data?.find((c) => c.id === correctionId) ?? null;
   return { ...corrections, correction };
 }

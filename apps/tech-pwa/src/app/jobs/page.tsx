@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Screen } from "../../components/layout/screen";
@@ -54,7 +54,10 @@ function JobsPageContent() {
   const searchParams = useSearchParams();
   const customerId = searchParams.get("customerId");
   const workOrderId = searchParams.get("workOrderId");
-  const { data, error, isPending, isError, isFetching, refetch } = useJobsQuery();
+  const { data, error, isPending, isError, refetch } = useJobsQuery();
+  // Spin the refresh icon only for a user-initiated reload — the 6s background
+  // poll runs silently (no per-tick flicker).
+  const [manualRefreshing, setManualRefreshing] = useState(false);
 
   const customers = data ? groupJobsByCustomer(data.data) : [];
   const activeCustomer = customerId
@@ -84,11 +87,14 @@ function JobsPageContent() {
       rightSlot={
         <button
           type="button"
-          onClick={() => void refetch()}
+          onClick={() => {
+            setManualRefreshing(true);
+            void refetch().finally(() => setManualRefreshing(false));
+          }}
           aria-label="Muat ulang"
           className="flex h-11 w-11 items-center justify-center rounded-full text-slate-700 active:bg-slate-100"
         >
-          <RefreshIcon spinning={isFetching} />
+          <RefreshIcon spinning={manualRefreshing} />
         </button>
       }
     >

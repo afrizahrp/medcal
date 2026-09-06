@@ -42,8 +42,12 @@ export function useJobsQuery() {
   return useQuery({
     queryKey: ["jobs", "assigned"],
     queryFn: fetchAllAssignedJobs,
-    // Override the app default (refetchOnWindowFocus: false) — refresh when the
-    // installed app is brought back to the foreground.
+    // Live-refresh — mirrors apps/portal's list hooks (use-calibration-jobs-query.ts):
+    // poll every 6s and refetch on focus so status changes made in Portal
+    // (e.g. an Identity Correction decision) surface without a manual reload.
+    // refetchIntervalInBackground is left at its default (false), so polling
+    // pauses while the PWA is backgrounded.
+    refetchInterval: 6000,
     refetchOnWindowFocus: true,
   });
 }

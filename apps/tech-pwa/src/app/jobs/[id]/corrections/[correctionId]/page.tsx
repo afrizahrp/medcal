@@ -41,8 +41,10 @@ export default function CorrectionDetailPage() {
   const params = useParams<{ id: string; correctionId: string }>();
   const { id: jobId, correctionId } = params;
 
-  const query = useCorrectionQuery(jobId, correctionId);
-  const jobQuery = useJobQuery(jobId);
+  // Live refresh so "MENUNGGU REVIEW" flips to DISETUJUI / DITOLAK without a
+  // manual reload once the manager decides in Portal.
+  const query = useCorrectionQuery(jobId, correctionId, { poll: true });
+  const jobQuery = useJobQuery(jobId, { poll: true });
   const uploadMutation = useUploadIdentityCorrectionPhoto(jobId);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);

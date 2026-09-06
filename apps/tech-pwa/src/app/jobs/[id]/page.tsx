@@ -35,8 +35,10 @@ export default function JobDetailPage() {
   const router = useRouter();
   const { capabilities } = useAuthz();
 
-  const jobQuery = useJobQuery(id);
-  const correctionsQuery = useCorrectionsQuery(id);
+  // Live refresh so a Portal-side decision (AKD/AKL gate, Identity Correction)
+  // surfaces here within ~6s. The wizard layout uses useJobQuery without polling.
+  const jobQuery = useJobQuery(id, { poll: true });
+  const correctionsQuery = useCorrectionsQuery(id, { poll: true });
   const referenceEquipmentQuery = useReferenceEquipmentUsed(id);
 
   if (jobQuery.isPending) {
