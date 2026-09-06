@@ -10,6 +10,8 @@ import { DocumentNumberService, Prisma, prisma } from "@medcal/db";
 import type { AkdAklApprovalStatus, MembershipRole } from "@medcal/db";
 import {
   CALIBRATION_JOB_SORTABLE_FIELDS,
+  jobNeedsAction,
+  type CalibrationJobActionSignals,
   type CalibrationJobEscalateIdentityInput,
   type CalibrationJobIdentityDecisionInput,
   type CalibrationJobListQuery,
@@ -152,14 +154,18 @@ function assertAkdAklTransition(from: AkdAklApprovalStatus, to: AkdAklApprovalSt
 }
 
 /**
- * List row = the job detail payload plus a computed boolean:
- * `needsReferenceEquipmentReview` drives the "Perlu Persetujuan Alat" badge on
- * the Calibration Jobs list and the Work Order items table. It is a computed
- * state (Reference Equipment has no "pending" record) — see
- * jobNeedsReferenceEquipmentReview.
+ * List row = the job detail payload plus computed state:
+ *  - `needsReferenceEquipmentReview` drives the "Perlu Persetujuan Alat" badge on
+ *    the Work Order items table (kept for that consumer).
+ *  - `actionSignals` is the extensible per-job signal map (Identity Correction
+ *    pending, Reference Equipment needs approval, …future phases) — the
+ *    Calibration Jobs list groups by SPK and shows an aggregate count of child
+ *    jobs with ≥1 signal. Both are computed state; see
+ *    jobNeedsReferenceEquipmentReview and toListRow.
  */
 export type CalibrationJobListRow = CalibrationJobDetail & {
   needsReferenceEquipmentReview: boolean;
+  actionSignals: CalibrationJobActionSignals;
 };
 
 export interface CalibrationJobListResult {
@@ -168,6 +174,25 @@ export interface CalibrationJobListResult {
   pageSize: number;
   total: number;
   totalPages: number;
+}
+
+/** One SPK (WorkOrder) group in the grouped Calibration Jobs list. */
+export interface CalibrationJobWorkOrderGroup {
+  workOrder: CalibrationJobDetail["workOrder"];
+  jobCount: number;
+  /** Child jobs with ≥1 active action signal — computed server-side (jobNeedsAction). */
+  actionNeededCount: number;
+  jobs: CalibrationJobListRow[];
+}
+
+export interface CalibrationJobGroupedResult {
+  data: CalibrationJobWorkOrderGroup[];
+  /** Pagination is at the WorkOrder (parent) level — see the task report. */
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  totalJobs: number;
 }
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -187,16 +212,12 @@ export interface IdentityCorrectionSubmitResult {
 export class CalibrationJobsService {
   private readonly devices = new DevicesService();
 
-  /** Portal management list. Company-scoped; filters mirror the WorkOrder list. */
-  async findAll(
+  private buildListWhere(
     companyId: string,
     query: CalibrationJobListQuery,
     userId: string,
-  ): Promise<CalibrationJobListResult> {
-    const page = query.page ?? 1;
-    const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
-
-    const where: Prisma.CalibrationJobWhereInput = {
+  ): Prisma.CalibrationJobWhereInput {
+    return {
       companyId,
       ...(query.workOrderId ? { workOrderId: query.workOrderId } : {}),
       ...(query.akdAklApprovalStatus ? { akdAklApprovalStatus: query.akdAklApprovalStatus } : {}),
@@ -215,6 +236,33 @@ export class CalibrationJobsService {
           }
         : {}),
     };
+  }
+
+  /** Detail payload → list row: attach the computed reference-equipment flag + the action-signal map. */
+  private toListRow(
+    row: CalibrationJobDetail,
+    reviewFlags: Map<string, boolean>,
+  ): CalibrationJobListRow {
+    const referenceEquipmentNeedsApproval = reviewFlags.get(row.id) ?? false;
+    return {
+      ...row,
+      needsReferenceEquipmentReview: referenceEquipmentNeedsApproval,
+      actionSignals: {
+        identityCorrectionPending: row.identityCorrections[0]?.status === "PENDING_REVIEW",
+        referenceEquipmentNeedsApproval,
+      },
+    };
+  }
+
+  /** Portal management list (flat). Company-scoped; filters mirror the WorkOrder list. */
+  async findAll(
+    companyId: string,
+    query: CalibrationJobListQuery,
+    userId: string,
+  ): Promise<CalibrationJobListResult> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
+    const where = this.buildListWhere(companyId, query, userId);
 
     const { field: sortField, dir: sortDir } = resolveSortOrder(
       CALIBRATION_JOB_SORTABLE_FIELDS,
@@ -235,12 +283,75 @@ export class CalibrationJobsService {
     ]);
 
     const reviewFlags = await this.referenceEquipmentReviewFlags(rows.map((row) => row.id));
-    const data: CalibrationJobListRow[] = rows.map((row) => ({
-      ...row,
-      needsReferenceEquipmentReview: reviewFlags.get(row.id) ?? false,
-    }));
+    const data = rows.map((row) => this.toListRow(row, reviewFlags));
 
     return { data, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+  }
+
+  /**
+   * Calibration Jobs list restructured as SPK (WorkOrder) groups — one parent
+   * row per WorkOrder, its per-unit jobs as children. Pagination is at the
+   * WorkOrder level: every matching job is fetched, grouped, then the groups are
+   * sliced. Groups are ordered by their WorkOrder number (desc — newest SPK
+   * first); jobs within a group by unitOrdinal. `actionNeededCount` per group is
+   * the count of child jobs with ≥1 active action signal (jobNeedsAction).
+   */
+  async findAllGroupedByWorkOrder(
+    companyId: string,
+    query: CalibrationJobListQuery,
+    userId: string,
+  ): Promise<CalibrationJobGroupedResult> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
+    const where = this.buildListWhere(companyId, query, userId);
+
+    const rows = await prisma.calibrationJob.findMany({
+      where,
+      orderBy: [
+        { workOrder: { number: "desc" } },
+        { workOrderId: "desc" },
+        { unitOrdinal: "asc" },
+        { id: "asc" },
+      ],
+      include: calibrationJobInclude,
+    });
+
+    // Group in encounter order (already WO-number desc, unitOrdinal asc).
+    const groupOrder: string[] = [];
+    const byWorkOrder = new Map<string, CalibrationJobDetail[]>();
+    for (const row of rows) {
+      let bucket = byWorkOrder.get(row.workOrderId);
+      if (!bucket) {
+        bucket = [];
+        byWorkOrder.set(row.workOrderId, bucket);
+        groupOrder.push(row.workOrderId);
+      }
+      bucket.push(row);
+    }
+
+    const total = groupOrder.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const pagedWorkOrderIds = groupOrder.slice(
+      (page - 1) * pageSize,
+      (page - 1) * pageSize + pageSize,
+    );
+
+    const pagedJobIds = pagedWorkOrderIds.flatMap((woId) =>
+      (byWorkOrder.get(woId) ?? []).map((job) => job.id),
+    );
+    const reviewFlags = await this.referenceEquipmentReviewFlags(pagedJobIds);
+
+    const data: CalibrationJobWorkOrderGroup[] = pagedWorkOrderIds.map((woId) => {
+      const jobs = (byWorkOrder.get(woId) ?? []).map((job) => this.toListRow(job, reviewFlags));
+      return {
+        workOrder: jobs[0]!.workOrder,
+        jobCount: jobs.length,
+        actionNeededCount: jobs.filter((job) => jobNeedsAction(job.actionSignals)).length,
+        jobs,
+      };
+    });
+
+    return { data, page, pageSize, total, totalPages, totalJobs: rows.length };
   }
 
   /**
@@ -289,6 +400,13 @@ export class CalibrationJobsService {
       });
     }
     return job;
+  }
+
+  /** Detail endpoint payload — the job plus the same computed state list rows carry. */
+  async findOneRow(companyId: string, id: string): Promise<CalibrationJobListRow> {
+    const job = await this.findOne(companyId, id);
+    const reviewFlags = await this.referenceEquipmentReviewFlags([id]);
+    return this.toListRow(job, reviewFlags);
   }
 
   /**

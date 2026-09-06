@@ -9,6 +9,7 @@ import type {
 import { WORK_ORDERS_QUERY_KEY } from "../work-orders/use-work-orders-query";
 import type {
   CalibrationJobDeviceCandidate,
+  CalibrationJobGroupedResponse,
   CalibrationJobListResponse,
   CalibrationJobRow,
 } from "./calibration-jobs-ui";
@@ -72,6 +73,34 @@ export function useCalibrationJobs(params: CalibrationJobsQueryParams, enabled =
     enabled,
     // Near-real-time visibility of pending Identity Correction BAs raised from
     // the field — poll while the tab is focused, and refetch on focus.
+    refetchInterval: 6000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * SPK (WorkOrder)-grouped Calibration Jobs list. Same query params as
+ * `useCalibrationJobs`; `page`/`pageSize` paginate WorkOrders, not jobs. Polled
+ * on the same 6s cadence so aggregate action counts clear without a refresh.
+ */
+export function useCalibrationJobGroups(params: CalibrationJobsQueryParams, enabled = true) {
+  return useQuery({
+    queryKey: [
+      CALIBRATION_JOBS_QUERY_KEY,
+      "grouped",
+      params.search,
+      params.workOrderId,
+      params.akdAklApprovalStatus,
+      params.status,
+      params.page,
+      params.pageSize,
+    ],
+    queryFn: () =>
+      apiFetch<CalibrationJobGroupedResponse>(
+        `/calibration-jobs/grouped?${buildSearchParams(params).toString()}`,
+      ),
+    placeholderData: (previous) => previous,
+    enabled,
     refetchInterval: 6000,
     refetchOnWindowFocus: true,
   });

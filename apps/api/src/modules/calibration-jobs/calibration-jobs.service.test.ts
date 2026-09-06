@@ -1348,6 +1348,23 @@ describe("CalibrationJobsService — Reference Equipment Used", () => {
 
       expect((await listRow(workOrder.id, jobs[0]!.id)).needsReferenceEquipmentReview).toBe(false);
     });
+
+    it("feeds the grouped list's actionSignals + actionNeededCount", async () => {
+      const { workOrder, jobs } = await onSiteJobWithConfirmedEquipment({
+        validUntil: new Date("2020-01-01T00:00:00.000Z"),
+      });
+
+      const res = await calibrationJobsService.findAllGroupedByWorkOrder(
+        realCompanyId,
+        { workOrderId: workOrder.id },
+        staffUserId,
+      );
+      const group = res.data[0]!;
+      expect(group.actionNeededCount).toBe(1);
+      expect(
+        group.jobs.find((j) => j.id === jobs[0]!.id)!.actionSignals.referenceEquipmentNeedsApproval,
+      ).toBe(true);
+    });
   });
 });
 
@@ -1408,6 +1425,87 @@ describe("CalibrationJobsService — list", () => {
       staffUserId,
     );
     expect(res.total).toBe(0);
+  });
+
+  it("exposes actionSignals on every row (both false by default)", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId);
+    const res = await calibrationJobsService.findAll(
+      realCompanyId,
+      { workOrderId: workOrder.id },
+      staffUserId,
+    );
+    const row = res.data.find((j) => j.id === jobs[0]!.id)!;
+    expect(row.actionSignals).toEqual({
+      identityCorrectionPending: false,
+      referenceEquipmentNeedsApproval: false,
+    });
+  });
+});
+
+describe("CalibrationJobsService — findAllGroupedByWorkOrder (SPK grouping)", () => {
+  it("groups jobs under their WorkOrder and paginates by WorkOrder", async () => {
+    const a = await startedWorkOrderJobs(realCompanyId, { qty: 3 });
+    const b = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
+
+    const all = await calibrationJobsService.findAllGroupedByWorkOrder(
+      realCompanyId,
+      {},
+      staffUserId,
+    );
+    const groupA = all.data.find((g) => g.workOrder.id === a.workOrder.id)!;
+    const groupB = all.data.find((g) => g.workOrder.id === b.workOrder.id)!;
+    expect(groupA.jobCount).toBe(3);
+    expect(groupA.jobs).toHaveLength(3);
+    expect(groupB.jobCount).toBe(2);
+    expect(groupA.jobs.every((j) => j.workOrderId === a.workOrder.id)).toBe(true);
+
+    const firstPage = await calibrationJobsService.findAllGroupedByWorkOrder(
+      realCompanyId,
+      { pageSize: 1 },
+      staffUserId,
+    );
+    expect(firstPage.data).toHaveLength(1);
+    expect(firstPage.pageSize).toBe(1);
+    expect(firstPage.total).toBe(all.total); // total = WorkOrder count, not job count
+    expect(firstPage.totalPages).toBe(all.total);
+  });
+
+  it("aggregates actionNeededCount from child jobs' action signals", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 3 });
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    await calibrationJobsService.submitIdentityCorrection(realCompanyId, jobs[0]!.id, tech.id, {
+      reason: "wrong serial on the sheet",
+      newSerial: "SN-GROUPED-1",
+      signatures: UNAVAILABLE_SIGNATURES,
+    });
+
+    const res = await calibrationJobsService.findAllGroupedByWorkOrder(
+      realCompanyId,
+      { workOrderId: workOrder.id },
+      staffUserId,
+    );
+    const group = res.data[0]!;
+    expect(group.actionNeededCount).toBe(1);
+    const flagged = group.jobs.find((j) => j.id === jobs[0]!.id)!;
+    expect(flagged.actionSignals.identityCorrectionPending).toBe(true);
+    expect(group.jobs.filter((j) => j.actionSignals.identityCorrectionPending)).toHaveLength(1);
+  });
+
+  it("company-scopes the grouped list", async () => {
+    const otherCompanyId = `S${randomUUID().slice(0, 2).toUpperCase()}`;
+    await prisma.company.create({
+      data: { id: otherCompanyId, name: "Foreign Grouped Co", status: "ACTIVE" },
+    });
+    createdCompanyIds.push(otherCompanyId);
+    const { workOrder } = await startedWorkOrderJobs(otherCompanyId);
+
+    const res = await calibrationJobsService.findAllGroupedByWorkOrder(
+      realCompanyId,
+      { workOrderId: workOrder.id },
+      staffUserId,
+    );
+    expect(res.total).toBe(0);
+    expect(res.data).toEqual([]);
   });
 });
 

@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { SortableTh } from "@/components/ui/sortable-th";
-import type { TableSort } from "@/hooks/use-table-sort";
-import { Search } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Search } from "lucide-react";
+import { actionBadgeLabel, type CalibrationJobActionSignals } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -112,6 +111,11 @@ export interface CalibrationJobRow {
    * overridden by a TECHNICIAN_MANAGER. Drives the "Perlu Persetujuan Alat" badge.
    */
   needsReferenceEquipmentReview: boolean;
+  /**
+   * Extensible per-job "needs action" signal map (Identity Correction pending,
+   * Reference Equipment needs approval, …future phases). Computed server-side.
+   */
+  actionSignals: CalibrationJobActionSignals;
 }
 
 export interface CalibrationJobListResponse {
@@ -120,6 +124,24 @@ export interface CalibrationJobListResponse {
   pageSize: number;
   total: number;
   totalPages: number;
+}
+
+/** One SPK (WorkOrder) group — mirror of CalibrationJobWorkOrderGroup. */
+export interface CalibrationJobWorkOrderGroup {
+  workOrder: CalibrationJobRow["workOrder"];
+  jobCount: number;
+  /** Child jobs with ≥1 active action signal — computed server-side. */
+  actionNeededCount: number;
+  jobs: CalibrationJobRow[];
+}
+
+export interface CalibrationJobGroupedResponse {
+  data: CalibrationJobWorkOrderGroup[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  totalJobs: number;
 }
 
 export interface CalibrationJobDeviceCandidate {
@@ -168,7 +190,8 @@ const JOB_STATUS_BADGE_CLASS: Record<CalibrationJobStatus, string> = {
   ACCEPTED_BY_QA: "border-transparent bg-emerald-600 text-white hover:bg-emerald-600",
 };
 
-const badgeBase = "rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide";
+const badgeBase =
+  "whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide";
 
 export function AkdAklStatusBadge({ status }: { status: AkdAklApprovalStatus }) {
   return (
@@ -318,79 +341,242 @@ export function CalibrationJobFilters({
   );
 }
 
-export function CalibrationJobTable({
-  jobs,
-  sort,
+/**
+ * Parent (SPK) aggregate: "N perlu tindakan" when ≥1 child job carries any
+ * action signal. `count` is computed server-side (CalibrationJobWorkOrderGroup
+ * .actionNeededCount) — the label is signal-list-agnostic (see actionBadgeLabel
+ * in @medcal/shared), so adding a fourth/fifth signal never touches this.
+ */
+export function ActionNeededBadge({ count }: { count: number }) {
+  const label = actionBadgeLabel(count);
+  if (!label) return null;
+  return (
+    <Badge className={cn(badgeBase, "border-transparent bg-red-600 text-white hover:bg-red-600")}>
+      {label}
+    </Badge>
+  );
+}
+
+const JOB_CHILD_HEADER = [
+  "Unit",
+  "Declared Device",
+  "Serial (observed)",
+  "Declared AKD/AKL",
+  "Approval",
+  "Identity Correction",
+  "Alat Referensi",
+  "Job Status",
+  "",
+] as const;
+
+/**
+ * Inline "needs action" hint for a child job cell — quiet by design (icon +
+ * colored text, no filled pill). The filled badge is reserved for the parent
+ * SPK aggregate, which is what MT scans; child cells are detail seen only after
+ * expanding.
+ */
+function ChildActionHint({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-medium text-red-600">
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      {label}
+    </span>
+  );
+}
+
+function JobChildRow({ row }: { row: CalibrationJobRow }) {
+  return (
+    <tr className="border-b border-slate-100 text-sm last:border-0 hover:bg-slate-50">
+      <td className="py-2.5 pl-10 pr-4 text-slate-500">
+        {row.unitOrdinal} / {row.unitTotal}
+      </td>
+      <td className="px-4 py-2.5">
+        <p className="text-slate-900">{declaredDeviceName(row)}</p>
+        {resolvedDeviceType(row) ? (
+          <p className="text-xs text-slate-400">{resolvedDeviceType(row)!.name}</p>
+        ) : null}
+      </td>
+      <td className="px-4 py-2.5 font-mono text-xs text-slate-600">
+        {row.technicianObservedSerial ?? row.device?.serialNumber ?? "—"}
+      </td>
+      <td className="px-4 py-2.5 text-slate-600">{declaredAkdAkl(row)}</td>
+      <td className="px-4 py-2.5">
+        <AkdAklStatusBadge status={row.akdAklApprovalStatus} />
+      </td>
+      <td className="px-4 py-2.5">
+        {row.actionSignals.identityCorrectionPending ? (
+          <ChildActionHint label="Menunggu review" />
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        )}
+      </td>
+      <td className="px-4 py-2.5">
+        {row.actionSignals.referenceEquipmentNeedsApproval ? (
+          <ChildActionHint label="Perlu persetujuan" />
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        )}
+      </td>
+      <td className="px-4 py-2.5">
+        <JobStatusBadge status={row.status} />
+      </td>
+      <td className="px-4 py-2.5 text-right">
+        <Link href={`/calibration-jobs/${row.id}`}>
+          <Button variant="ghost" size="sm">
+            View
+          </Button>
+        </Link>
+      </td>
+    </tr>
+  );
+}
+
+/**
+ * Bucket the page's SPK groups by customer, preserving each customer's
+ * first-appearance order and the server's SPK order within it. A customer whose
+ * SPKs straddle a page boundary gets its header repeated on each page — an
+ * accepted trade-off of SPK-level pagination.
+ */
+function groupByCustomer(groups: CalibrationJobWorkOrderGroup[]): {
+  customer: CalibrationJobRow["workOrder"]["customer"];
+  groups: CalibrationJobWorkOrderGroup[];
+}[] {
+  const order: string[] = [];
+  const byCustomer = new Map<
+    string,
+    { customer: CalibrationJobRow["workOrder"]["customer"]; groups: CalibrationJobWorkOrderGroup[] }
+  >();
+  for (const group of groups) {
+    const { customer } = group.workOrder;
+    let bucket = byCustomer.get(customer.id);
+    if (!bucket) {
+      bucket = { customer, groups: [] };
+      byCustomer.set(customer.id, bucket);
+      order.push(customer.id);
+    }
+    bucket.groups.push(group);
+  }
+  return order.map((id) => byCustomer.get(id)!);
+}
+
+function SpkGroupBody({
+  group,
+  expanded,
+  onToggle,
 }: {
-  jobs: CalibrationJobRow[];
-  sort: TableSort;
+  group: CalibrationJobWorkOrderGroup;
+  expanded: boolean;
+  onToggle: (workOrderId: string) => void;
 }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[1140px]">
+    <tbody className="border-b border-slate-200 last:border-0">
+      <tr
+        className="cursor-pointer bg-white hover:bg-slate-50"
+        onClick={() => onToggle(group.workOrder.id)}
+      >
+        <td className="py-3 pl-6 pr-4" colSpan={9}>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {expanded ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+            )}
+            <span className="font-mono text-sm font-medium text-slate-900">
+              {group.workOrder.number}
+            </span>
+            <span className="text-xs text-slate-400">{group.jobCount} perangkat</span>
+            <ActionNeededBadge count={group.actionNeededCount} />
+          </div>
+        </td>
+      </tr>
+      {expanded ? (
+        <>
+          <tr className="bg-slate-50/70 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+            {JOB_CHILD_HEADER.map((label, i) => (
+              <td key={label || i} className={cn("px-4 py-1.5", i === 0 && "pl-10")}>
+                {label}
+              </td>
+            ))}
+          </tr>
+          {group.jobs.map((row) => (
+            <JobChildRow key={row.id} row={row} />
+          ))}
+        </>
+      ) : null}
+    </tbody>
+  );
+}
+
+/**
+ * SPK (WorkOrder)-grouped Calibration Jobs list, under a static (non-collapsible)
+ * customer grouping header. Parent SPK row = one WorkOrder (collapsed by
+ * default); child rows = its per-unit jobs. Collapse state and search
+ * auto-expand are driven by the page client.
+ */
+export function CalibrationJobGroupTable({
+  groups,
+  expandedIds,
+  onToggle,
+}: {
+  groups: CalibrationJobWorkOrderGroup[];
+  expandedIds: Set<string>;
+  onToggle: (workOrderId: string) => void;
+}) {
+  const customerGroups = groupByCustomer(groups);
+  return (
+    <div className="overflow-x-auto rounded-md border border-slate-200">
+      <table className="w-full min-w-[1080px] border-collapse">
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-3">Work Order</th>
-            <SortableTh field="unitOrdinal" label="Unit" sort={sort} />
-            <th className="px-4 py-3">Declared Device</th>
-            <th className="px-4 py-3">Serial (observed)</th>
-            <th className="px-4 py-3">Declared AKD/AKL</th>
-            <SortableTh field="akdAklApprovalStatus" label="Approval" sort={sort} />
-            <th className="px-4 py-3">Identity Correction</th>
-            <th className="px-4 py-3">Alat Referensi</th>
-            <SortableTh field="status" label="Job Status" sort={sort} />
-            <th className="px-4 py-3"></th>
+          <tr className="border-b border-slate-200 bg-slate-100 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <th className="px-4 py-2.5" colSpan={9}>
+              Pelanggan / Work Order (SPK)
+            </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
-          {jobs.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 font-mono text-xs text-slate-600">{row.workOrder.number}</td>
-              <td className="px-4 py-3 text-sm text-slate-500">
-                {row.unitOrdinal} / {row.unitTotal}
-              </td>
-              <td className="px-4 py-3">
-                <p className="text-sm text-slate-900">{declaredDeviceName(row)}</p>
-                {resolvedDeviceType(row) ? (
-                  <p className="text-xs text-slate-400">{resolvedDeviceType(row)!.name}</p>
-                ) : null}
-              </td>
-              <td className="px-4 py-3 font-mono text-xs text-slate-600">
-                {row.technicianObservedSerial ?? row.device?.serialNumber ?? "—"}
-              </td>
-              <td className="px-4 py-3 text-sm text-slate-600">{declaredAkdAkl(row)}</td>
-              <td className="px-4 py-3">
-                <AkdAklStatusBadge status={row.akdAklApprovalStatus} />
-              </td>
-              <td className="px-4 py-3">
-                {row.identityCorrections[0]?.status === "PENDING_REVIEW" ? (
-                  <IdentityCorrectionStatusBadge status="PENDING_REVIEW" />
-                ) : (
-                  <span className="text-xs text-slate-400">—</span>
-                )}
-              </td>
-              <td className="px-4 py-3">
-                {row.needsReferenceEquipmentReview ? (
-                  <ReferenceEquipmentReviewBadge />
-                ) : (
-                  <span className="text-xs text-slate-400">—</span>
-                )}
-              </td>
-              <td className="px-4 py-3">
-                <JobStatusBadge status={row.status} />
-              </td>
-              <td className="px-4 py-3">
-                <Link href={`/calibration-jobs/${row.id}`}>
-                  <Button variant="ghost" size="sm">
-                    View
-                  </Button>
-                </Link>
-              </td>
-            </tr>
-          ))}
-        </tbody>
+        {customerGroups.map(({ customer, groups: spkGroups }) => (
+          <CustomerSection
+            key={customer.id}
+            customer={customer}
+            spkGroups={spkGroups}
+            expandedIds={expandedIds}
+            onToggle={onToggle}
+          />
+        ))}
       </table>
     </div>
+  );
+}
+
+function CustomerSection({
+  customer,
+  spkGroups,
+  expandedIds,
+  onToggle,
+}: {
+  customer: CalibrationJobRow["workOrder"]["customer"];
+  spkGroups: CalibrationJobWorkOrderGroup[];
+  expandedIds: Set<string>;
+  onToggle: (workOrderId: string) => void;
+}) {
+  return (
+    <>
+      <tbody>
+        <tr className="border-b border-slate-200 bg-slate-200/60">
+          <td className="px-4 py-2" colSpan={9}>
+            <span className="text-sm font-semibold text-slate-800">{customer.name}</span>
+            <span className="ml-2 text-xs font-normal text-slate-400">{spkGroups.length} SPK</span>
+          </td>
+        </tr>
+      </tbody>
+      {spkGroups.map((group) => (
+        <SpkGroupBody
+          key={group.workOrder.id}
+          group={group}
+          expanded={expandedIds.has(group.workOrder.id)}
+          onToggle={onToggle}
+        />
+      ))}
+    </>
   );
 }
 

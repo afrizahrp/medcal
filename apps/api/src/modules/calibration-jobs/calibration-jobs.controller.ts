@@ -28,7 +28,9 @@ import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   CalibrationJobsService,
   type CalibrationJobDetail,
+  type CalibrationJobGroupedResult,
   type CalibrationJobListResult,
+  type CalibrationJobListRow,
   type IdentityCorrectionDetail,
   type IdentityCorrectionSubmitResult,
 } from "./calibration-jobs.service";
@@ -63,13 +65,36 @@ export class CalibrationJobsController {
     return this.service.findAll(companyId, parsed.data, userId);
   }
 
+  /**
+   * SPK (WorkOrder)-grouped list for the Portal Calibration Jobs page. Same
+   * query params as the flat list; pagination is at the WorkOrder level.
+   * Declared before `:id` so "grouped" is not captured as an id.
+   */
+  @Get("grouped")
+  @RequirePermission("calibrationJob", "read")
+  async listGrouped(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Query() rawQuery: unknown,
+  ): Promise<CalibrationJobGroupedResult> {
+    const parsed = calibrationJobListQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid calibration job list query",
+        code: "INVALID_CALIBRATION_JOB_QUERY",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.findAllGroupedByWorkOrder(companyId, parsed.data, userId);
+  }
+
   @Get(":id")
   @RequirePermission("calibrationJob", "read")
   async findOne(
     @CompanyId() companyId: string,
     @Param("id") id: string,
-  ): Promise<CalibrationJobDetail> {
-    return this.service.findOne(companyId, id);
+  ): Promise<CalibrationJobListRow> {
+    return this.service.findOneRow(companyId, id);
   }
 
   @Post(":id/start")
