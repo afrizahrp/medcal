@@ -15,7 +15,7 @@ export default function IdentityCorrectionStep1Page() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const router = useRouter();
-  const { job, state, update } = useWizard();
+  const { job, state, update, requestExit } = useWizard();
 
   const [deviceSearch, setDeviceSearch] = useState("");
   const debouncedSearch = useDebouncedValue(deviceSearch, 400);
@@ -37,8 +37,9 @@ export default function IdentityCorrectionStep1Page() {
     <Screen
       title="Koreksi Identitas (1/5)"
       showBack
-      showHome={false}
-      onBack={() => router.replace(`/jobs/${id}`)}
+      showHome
+      onHome={requestExit}
+      onBack={() => router.replace("/jobs")}
       footer={
         <StickyActionBar>
           <Button

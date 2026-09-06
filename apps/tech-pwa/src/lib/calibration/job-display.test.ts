@@ -48,6 +48,7 @@ function job(
     device: null,
     calibrationRequestItem: null,
     akdAklApprovedBy: null,
+    identityCorrections: [],
     ...rest,
   };
 }

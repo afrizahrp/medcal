@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 function BackIcon() {
@@ -36,6 +35,7 @@ export function AppHeader({
   showBack = false,
   onBack,
   showHome,
+  onHome,
   leftSlot,
   rightSlot,
 }: {
@@ -45,15 +45,36 @@ export function AppHeader({
   onBack?: () => void;
   /**
    * Show a "Beranda" shortcut to the Job Saya list. Defaults to on for any
-   * screen with a back button; pass `false` to hide it (e.g. mid-wizard, where
-   * leaving must go through the exit-confirm).
+   * screen with a back button. Pass `false` to hide it.
    */
   showHome?: boolean;
+  /**
+   * Custom handler for the Beranda button — e.g. mid-wizard, to route through
+   * the exit-confirm dialog instead of navigating away. When omitted the
+   * button does a hard navigation to `/jobs` (reliable from the query-param
+   * drill-down views, and gives a fresh load).
+   */
+  onHome?: () => void;
   leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
 }) {
   const router = useRouter();
-  const homeVisible = showHome ?? showBack;
+  const homeVisible = (showHome ?? showBack) || Boolean(onHome);
+
+  function goHome() {
+    if (onHome) {
+      onHome();
+      return;
+    }
+    // Hard navigation — a client-side push to `/jobs` from a `/jobs?customerId=…`
+    // drill-down does not reliably reset the list, and "Beranda" wanting fresh
+    // data is a feature, not a cost.
+    if (typeof window !== "undefined") {
+      window.location.assign("/jobs");
+    } else {
+      router.push("/jobs");
+    }
+  }
 
   return (
     <header className="sticky top-0 z-20 flex min-h-11 items-center gap-1 border-b border-slate-200 bg-white px-2 pt-safe-t">
@@ -73,13 +94,14 @@ export function AppHeader({
       <h1 className="flex-1 truncate text-base font-semibold text-slate-900">{title}</h1>
       <div className="flex min-h-11 min-w-11 items-center justify-end gap-1">
         {homeVisible ? (
-          <Link
-            href="/jobs"
+          <button
+            type="button"
+            onClick={goHome}
             aria-label="Beranda (Job Saya)"
             className="flex h-11 w-11 items-center justify-center rounded-full text-slate-700 active:bg-slate-100"
           >
             <HomeIcon />
-          </Link>
+          </button>
         ) : null}
         {rightSlot}
       </div>

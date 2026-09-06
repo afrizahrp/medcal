@@ -8,6 +8,8 @@ import type {
 import {
   AKD_AKL_APPROVAL_STATUS_LABELS,
   CALIBRATION_JOB_STATUS_LABELS,
+  IDENTITY_CORRECTION_STATUS_LABELS,
+  type IdentityCorrectionStatus,
 } from "../../lib/calibration/types";
 import {
   declaredDeviceName,
@@ -32,6 +34,20 @@ const JOB_STATUS_BADGE_CLASS: Record<CalibrationJobStatus, string> = {
   REWORK: "bg-orange-500",
   ACCEPTED_BY_QA: "bg-emerald-600",
 };
+
+const IDENTITY_CORRECTION_BADGE_CLASS: Record<IdentityCorrectionStatus, string> = {
+  PENDING_REVIEW: "bg-amber-500",
+  APPROVED: "bg-emerald-600",
+  REJECTED: "bg-red-600",
+};
+
+export function IdentityCorrectionBadge({ status }: { status: IdentityCorrectionStatus }) {
+  return (
+    <Badge className={[badgeBase, IDENTITY_CORRECTION_BADGE_CLASS[status]].join(" ")}>
+      BA {IDENTITY_CORRECTION_STATUS_LABELS[status]}
+    </Badge>
+  );
+}
 
 const ORDINAL_CLASS: Record<CalibrationJobStatus, string> = {
   PENDING: "bg-slate-100 text-slate-500",
@@ -102,6 +118,9 @@ function UnitRow({ job }: { job: TechCalibrationJob }) {
   // technician acts on — keep the row uncluttered and surface the AKD/AKL
   // badge only when it carries a decision. (Full status stays on the detail page.)
   const showAkdAkl = job.akdAklApprovalStatus !== "NOT_REQUIRED";
+  // Most-recent Identity Correction BA — the technician's cue on whether the
+  // office has reviewed the identity they submitted.
+  const latestCorrection = job.identityCorrections[0] ?? null;
 
   return (
     <Link
@@ -124,6 +143,7 @@ function UnitRow({ job }: { job: TechCalibrationJob }) {
         <p className="truncate text-sm font-semibold text-slate-900">{declaredDeviceName(job)}</p>
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <JobStatusBadge status={job.status} />
+          {latestCorrection ? <IdentityCorrectionBadge status={latestCorrection.status} /> : null}
           {showAkdAkl ? <AkdAklStatusBadge status={job.akdAklApprovalStatus} /> : null}
         </div>
         {job.deviceId == null ? (

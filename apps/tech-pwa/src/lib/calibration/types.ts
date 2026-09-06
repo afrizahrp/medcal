@@ -46,6 +46,13 @@ export interface TechCalibrationJob {
   device: { id: string; code: string | null; serialNumber: string | null } | null;
   calibrationRequestItem: { customerDeviceName: string | null; akdAkl: string | null } | null;
   akdAklApprovedBy: { id: string; name: string | null } | null;
+  /** Most-recent Identity Correction BA on this job (any status), or []. */
+  identityCorrections: {
+    id: string;
+    number: string;
+    status: IdentityCorrectionStatus;
+    createdAt: string;
+  }[];
 }
 
 export interface TechJobListResponse {

@@ -12,13 +12,15 @@ import { useJobQuery } from "../use-job-query";
 import { consumeWizardEntryIntent } from "./wizard-nav";
 import { initialWizardState, type WizardState } from "./wizard-state";
 
-/** Where an abandoned / stale wizard entry lands — Job Saya home. */
+/** Where the wizard exits to — Job Saya home. */
 const EXIT_HOME = "/jobs";
 
 interface WizardContextValue {
   job: TechCalibrationJob;
   state: WizardState;
   update: (patch: Partial<WizardState>) => void;
+  /** Open the "keluar dari koreksi identitas?" confirm (header Beranda button). */
+  requestExit: () => void;
 }
 
 const WizardContext = createContext<WizardContextValue | null>(null);
@@ -65,11 +67,10 @@ export default function IdentityCorrectionLayout({ children }: { children: React
   // Physical / OS back button guard. Wizard steps navigate with router.replace
   // (no popstate), so a browser "back" is always the hardware button or the
   // edge-swipe gesture — which would otherwise drop the whole wizard (reason,
-  // signatures, photo) in one accidental press. Trap it: re-push a same-URL
-  // history entry so the page does not actually move, then ask to confirm.
-  // The in-app header back arrow uses router.replace and never reaches here.
-  // Not armed on a stale entry (being bounced away) or once submission has
-  // navigated out of this layout (unmount removes the listener).
+  // signatures, photo) in one accidental press. Trap it: re-pin the current
+  // step's URL so the page does not move, then ask to confirm. The in-app
+  // header back arrow / Beranda button never reach here (they call router
+  // methods, not history.back).
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
   const guardArmed =
@@ -81,14 +82,17 @@ export default function IdentityCorrectionLayout({ children }: { children: React
     if (!guardArmed) return;
     window.history.pushState(null, "", window.location.href);
     const onPopState = () => {
-      // Re-pin the current step's URL so the page doesn't visibly move, then
-      // ask before discarding the wizard.
       window.history.pushState(null, "", pathnameRef.current);
       setExitConfirmOpen(true);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [guardArmed, pathname]);
+
+  const exitToHome = () => {
+    setExitConfirmOpen(false);
+    router.replace(EXIT_HOME);
+  };
 
   if (jobQuery.isPending || (jobQuery.data && !state)) {
     return (
@@ -116,8 +120,8 @@ export default function IdentityCorrectionLayout({ children }: { children: React
       <Screen title="Koreksi Identitas" showBack showHome={false}>
         <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
           <p className="text-sm font-medium text-slate-700">Aksi tidak tersedia.</p>
-          <Button variant="secondary" onClick={() => router.replace(`/jobs/${id}`)}>
-            Kembali
+          <Button variant="secondary" onClick={() => router.replace(EXIT_HOME)}>
+            Kembali ke Job Saya
           </Button>
         </div>
       </Screen>
@@ -136,16 +140,12 @@ export default function IdentityCorrectionLayout({ children }: { children: React
     setState((prev) => (prev ? { ...prev, ...patch } : prev));
 
   return (
-    <WizardContext.Provider value={{ job, state, update }}>
+    <WizardContext.Provider
+      value={{ job, state, update, requestExit: () => setExitConfirmOpen(true) }}
+    >
       {children}
       {exitConfirmOpen ? (
-        <ExitConfirmDialog
-          onCancel={() => setExitConfirmOpen(false)}
-          onConfirm={() => {
-            setExitConfirmOpen(false);
-            router.replace(`/jobs/${id}`);
-          }}
-        />
+        <ExitConfirmDialog onCancel={() => setExitConfirmOpen(false)} onConfirm={exitToHome} />
       ) : null}
     </WizardContext.Provider>
   );
@@ -177,7 +177,7 @@ function ExitConfirmDialog({
             Batal
           </Button>
           <Button fullWidth onClick={onConfirm}>
-            Ya, keluar
+            Ya, keluar ke Job Saya
           </Button>
         </div>
       </div>

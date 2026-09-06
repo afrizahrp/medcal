@@ -32,7 +32,7 @@ export default function IdentityCorrectionReviewPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const router = useRouter();
-  const { job, state } = useWizard();
+  const { job, state, requestExit } = useWizard();
   const submitCorrection = useSubmitIdentityCorrection(id);
   const uploadPhoto = useUploadIdentityCorrectionPhoto(id);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -96,7 +96,8 @@ export default function IdentityCorrectionReviewPage() {
     <Screen
       title="Koreksi Identitas (5/5)"
       showBack
-      showHome={false}
+      showHome
+      onHome={requestExit}
       onBack={() => router.replace(`/jobs/${id}/identity-correction/photo`)}
       footer={
         <StickyActionBar>

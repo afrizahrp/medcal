@@ -38,7 +38,7 @@ export function SignatureStepScreen({
   guardRedirectHref: string;
 }) {
   const router = useRouter();
-  const { state, update } = useWizard();
+  const { state, update, requestExit } = useWizard();
   const sig = state.signatures[role];
 
   useEffect(() => {
@@ -55,7 +55,8 @@ export function SignatureStepScreen({
     <Screen
       title={`Koreksi Identitas (${stepLabel})`}
       showBack
-      showHome={false}
+      showHome
+      onHome={requestExit}
       onBack={() => router.replace(backHref)}
       footer={
         <StickyActionBar>

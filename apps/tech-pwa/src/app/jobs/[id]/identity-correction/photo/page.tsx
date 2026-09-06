@@ -12,7 +12,7 @@ export default function IdentityCorrectionPhotoPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const router = useRouter();
-  const { state, update } = useWizard();
+  const { state, update, requestExit } = useWizard();
   const fileRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -43,7 +43,8 @@ export default function IdentityCorrectionPhotoPage() {
     <Screen
       title="Koreksi Identitas (4/5)"
       showBack
-      showHome={false}
+      showHome
+      onHome={requestExit}
       onBack={() => router.replace(`/jobs/${id}/identity-correction/signature-customer`)}
       footer={
         <StickyActionBar>

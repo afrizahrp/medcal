@@ -5,6 +5,7 @@ export function Screen({
   showBack = false,
   onBack,
   showHome,
+  onHome,
   leftSlot,
   rightSlot,
   footer,
@@ -16,6 +17,8 @@ export function Screen({
   onBack?: () => void;
   /** Show the "Beranda" shortcut. Defaults to on when `showBack` is set. */
   showHome?: boolean;
+  /** Custom Beranda handler — overrides the default hard nav to `/jobs`. */
+  onHome?: () => void;
   leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
   footer?: React.ReactNode;
@@ -28,6 +31,7 @@ export function Screen({
         showBack={showBack}
         onBack={onBack}
         showHome={showHome}
+        onHome={onHome}
         leftSlot={leftSlot}
         rightSlot={rightSlot}
       />
