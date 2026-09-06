@@ -23,6 +23,10 @@ import {
   type MoneyValue,
   type QuotationCustomer,
 } from "../quotations/quotations-ui";
+import {
+  IdentityCorrectionStatusBadge,
+  type IdentityCorrectionStatus,
+} from "../calibration-jobs/calibration-jobs-ui";
 import { fmtDateOnly } from "@/lib/date-utils";
 import {
   deviceIdentifierFromItem,
@@ -75,6 +79,22 @@ export interface WorkOrderItem {
       serialNumber: string | null;
     } | null;
   };
+}
+
+export interface WorkOrderIdentityCorrectionRef {
+  id: string;
+  number: string;
+  status: IdentityCorrectionStatus;
+  createdAt: string;
+}
+
+export interface WorkOrderCalibrationJob {
+  id: string;
+  purchaseOrderItemId: string | null;
+  unitOrdinal: number;
+  unitTotal: number;
+  /** Most-recent Identity Correction BA on this job (any status), or []. */
+  identityCorrections: WorkOrderIdentityCorrectionRef[];
 }
 
 export interface WorkOrderEquipmentTypeRef {
@@ -168,6 +188,7 @@ export interface WorkOrderRow {
   createdAt: string;
   updatedAt: string;
   items: WorkOrderItem[];
+  jobs: WorkOrderCalibrationJob[];
   equipment: WorkOrderEquipmentRow[];
   deliveryNote: WorkOrderDeliveryNote | null;
   customer: QuotationCustomer;
@@ -379,7 +400,31 @@ export function WorkOrderEmptyState({ onClearFilters }: { onClearFilters?: () =>
   );
 }
 
-export function WorkOrderItemsTable({ items }: { items: WorkOrderItem[] }) {
+/**
+ * The most-recent Identity Correction BA across every calibration job fanned
+ * out from one Work Order item (matched by purchaseOrderItemId), plus how many
+ * of the item's units currently carry one.
+ */
+export function latestIdentityCorrectionForItem(
+  jobs: WorkOrderCalibrationJob[],
+  purchaseOrderItemId: string,
+): { correction: WorkOrderIdentityCorrectionRef; unitsWithCorrection: number } | null {
+  const corrections = jobs
+    .filter((job) => job.purchaseOrderItemId === purchaseOrderItemId)
+    .map((job) => job.identityCorrections[0])
+    .filter((c): c is WorkOrderIdentityCorrectionRef => Boolean(c))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  if (corrections.length === 0) return null;
+  return { correction: corrections[0], unitsWithCorrection: corrections.length };
+}
+
+export function WorkOrderItemsTable({
+  items,
+  jobs,
+}: {
+  items: WorkOrderItem[];
+  jobs: WorkOrderCalibrationJob[];
+}) {
   return (
     <section className="space-y-3">
       <h2 className="text-base font-semibold text-slate-900">Work Order Items ({items.length})</h2>
@@ -389,12 +434,14 @@ export function WorkOrderItemsTable({ items }: { items: WorkOrderItem[] }) {
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
               <th className="px-3 py-2">Item</th>
               <th className="px-3 py-2">Device</th>
+              <th className="px-3 py-2">Identity Correction</th>
               <th className="px-3 py-2 text-right">Qty</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {items.map((item) => {
               const device = deviceIdentifierFromItem(item);
+              const identity = latestIdentityCorrectionForItem(jobs, item.purchaseOrderItemId);
               return (
                 <tr key={item.id}>
                   <td className="px-3 py-3">
@@ -405,6 +452,22 @@ export function WorkOrderItemsTable({ items }: { items: WorkOrderItem[] }) {
                       <p className="text-sm text-slate-700">{device.deviceTypeName}</p>
                     ) : null}
                     <p className="font-mono text-xs text-slate-500">{device.identifier ?? "—"}</p>
+                  </td>
+                  <td className="px-3 py-3">
+                    {identity ? (
+                      <div className="flex flex-col items-start gap-1">
+                        <span title={identity.correction.number}>
+                          <IdentityCorrectionStatusBadge status={identity.correction.status} />
+                        </span>
+                        {identity.unitsWithCorrection > 1 ? (
+                          <span className="text-xs text-slate-400">
+                            {identity.unitsWithCorrection} unit
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-right text-sm text-slate-600">
                     {formatQty(item.qty)}

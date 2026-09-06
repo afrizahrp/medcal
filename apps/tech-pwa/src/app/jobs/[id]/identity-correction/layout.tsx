@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { Screen } from "../../../../components/layout/screen";
 import { Button } from "../../../../components/ui/button";
 import { LoadingState, ErrorState } from "../../../../components/ui/state-views";
@@ -9,7 +9,11 @@ import { formatApiError } from "../../../../lib/api-errors";
 import { canSubmitIdentityCorrection } from "../../../../lib/calibration/identity-gate";
 import type { TechCalibrationJob } from "../../../../lib/calibration/types";
 import { useJobQuery } from "../use-job-query";
+import { consumeWizardEntryIntent } from "./wizard-nav";
 import { initialWizardState, type WizardState } from "./wizard-state";
+
+/** Where an abandoned / stale wizard entry lands — Job Saya home. */
+const EXIT_HOME = "/jobs";
 
 interface WizardContextValue {
   job: TechCalibrationJob;
@@ -30,8 +34,26 @@ export default function IdentityCorrectionLayout({ children }: { children: React
   const params = useParams<{ id: string }>();
   const id = params.id;
   const router = useRouter();
+  const pathname = usePathname();
   const jobQuery = useJobQuery(id);
   const [state, setState] = useState<WizardState | undefined>(undefined);
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+
+  // Bounce any entry that isn't a deliberate "Ajukan Koreksi Identitas" tap:
+  // a physical Back into a stale wizard URL after submitting, or a mid-wizard
+  // refresh. Ref-guarded so React StrictMode's double-invoke can't double-
+  // consume the one-shot intent.
+  const intentCheckedRef = useRef(false);
+  const [staleEntry, setStaleEntry] = useState(false);
+  useEffect(() => {
+    if (intentCheckedRef.current) return;
+    intentCheckedRef.current = true;
+    if (!consumeWizardEntryIntent(id)) {
+      setStaleEntry(true);
+      router.replace(EXIT_HOME);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (jobQuery.data && !state) {
@@ -39,6 +61,34 @@ export default function IdentityCorrectionLayout({ children }: { children: React
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobQuery.data]);
+
+  // Physical / OS back button guard. Wizard steps navigate with router.replace
+  // (no popstate), so a browser "back" is always the hardware button or the
+  // edge-swipe gesture — which would otherwise drop the whole wizard (reason,
+  // signatures, photo) in one accidental press. Trap it: re-push a same-URL
+  // history entry so the page does not actually move, then ask to confirm.
+  // The in-app header back arrow uses router.replace and never reaches here.
+  // Not armed on a stale entry (being bounced away) or once submission has
+  // navigated out of this layout (unmount removes the listener).
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
+  const guardArmed =
+    !staleEntry &&
+    Boolean(jobQuery.data && canSubmitIdentityCorrection(jobQuery.data)) &&
+    Boolean(state);
+
+  useEffect(() => {
+    if (!guardArmed) return;
+    window.history.pushState(null, "", window.location.href);
+    const onPopState = () => {
+      // Re-pin the current step's URL so the page doesn't visibly move, then
+      // ask before discarding the wizard.
+      window.history.pushState(null, "", pathnameRef.current);
+      setExitConfirmOpen(true);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [guardArmed, pathname]);
 
   if (jobQuery.isPending || (jobQuery.data && !state)) {
     return (
@@ -66,7 +116,7 @@ export default function IdentityCorrectionLayout({ children }: { children: React
       <Screen title="Koreksi Identitas" showBack>
         <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
           <p className="text-sm font-medium text-slate-700">Aksi tidak tersedia.</p>
-          <Button variant="secondary" onClick={() => router.back()}>
+          <Button variant="secondary" onClick={() => router.replace(`/jobs/${id}`)}>
             Kembali
           </Button>
         </div>
@@ -85,5 +135,52 @@ export default function IdentityCorrectionLayout({ children }: { children: React
   const update = (patch: Partial<WizardState>) =>
     setState((prev) => (prev ? { ...prev, ...patch } : prev));
 
-  return <WizardContext.Provider value={{ job, state, update }}>{children}</WizardContext.Provider>;
+  return (
+    <WizardContext.Provider value={{ job, state, update }}>
+      {children}
+      {exitConfirmOpen ? (
+        <ExitConfirmDialog
+          onCancel={() => setExitConfirmOpen(false)}
+          onConfirm={() => {
+            setExitConfirmOpen(false);
+            router.replace(`/jobs/${id}`);
+          }}
+        />
+      ) : null}
+    </WizardContext.Provider>
+  );
+}
+
+function ExitConfirmDialog({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="exit-wizard-title"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
+    >
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+        <h2 id="exit-wizard-title" className="text-base font-semibold text-slate-900">
+          Keluar dari koreksi identitas?
+        </h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Data yang sudah diisi (tanda tangan, foto) akan hilang.
+        </p>
+        <div className="mt-5 flex flex-col gap-2">
+          <Button variant="secondary" fullWidth onClick={onCancel}>
+            Batal
+          </Button>
+          <Button fullWidth onClick={onConfirm}>
+            Ya, keluar
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }

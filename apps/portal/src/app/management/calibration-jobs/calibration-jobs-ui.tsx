@@ -99,6 +99,13 @@ export interface CalibrationJobRow {
     } | null;
   } | null;
   akdAklApprovedBy: { id: string; name: string | null } | null;
+  /** Most-recent Identity Correction BA on this job (any status), or []. */
+  identityCorrections: {
+    id: string;
+    number: string;
+    status: IdentityCorrectionStatus;
+    createdAt: string;
+  }[];
 }
 
 export interface CalibrationJobListResponse {
@@ -311,6 +318,7 @@ export function CalibrationJobTable({
             <th className="px-4 py-3">Serial (observed)</th>
             <th className="px-4 py-3">Declared AKD/AKL</th>
             <SortableTh field="akdAklApprovalStatus" label="Approval" sort={sort} />
+            <th className="px-4 py-3">Identity Correction</th>
             <SortableTh field="status" label="Job Status" sort={sort} />
             <th className="px-4 py-3"></th>
           </tr>
@@ -334,6 +342,13 @@ export function CalibrationJobTable({
               <td className="px-4 py-3 text-sm text-slate-600">{declaredAkdAkl(row)}</td>
               <td className="px-4 py-3">
                 <AkdAklStatusBadge status={row.akdAklApprovalStatus} />
+              </td>
+              <td className="px-4 py-3">
+                {row.identityCorrections[0]?.status === "PENDING_REVIEW" ? (
+                  <IdentityCorrectionStatusBadge status="PENDING_REVIEW" />
+                ) : (
+                  <span className="text-xs text-slate-400">—</span>
+                )}
               </td>
               <td className="px-4 py-3">
                 <JobStatusBadge status={row.status} />

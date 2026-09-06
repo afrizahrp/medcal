@@ -96,6 +96,7 @@ export default function IdentityCorrectionReviewPage() {
     <Screen
       title="Koreksi Identitas (5/5)"
       showBack
+      onBack={() => router.replace(`/jobs/${id}/identity-correction/photo`)}
       footer={
         <StickyActionBar>
           <Button fullWidth disabled={pending} onClick={() => void handleSubmit()}>

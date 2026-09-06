@@ -43,12 +43,13 @@ export default function IdentityCorrectionPhotoPage() {
     <Screen
       title="Koreksi Identitas (4/5)"
       showBack
+      onBack={() => router.replace(`/jobs/${id}/identity-correction/signature-customer`)}
       footer={
         <StickyActionBar>
           <Button
             fullWidth
             disabled={!photoStepValid(state)}
-            onClick={() => router.push(`/jobs/${id}/identity-correction/review`)}
+            onClick={() => router.replace(`/jobs/${id}/identity-correction/review`)}
           >
             Lanjut
           </Button>

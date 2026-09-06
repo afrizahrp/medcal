@@ -116,6 +116,9 @@ export function useIdentityCorrections(jobId: string | undefined) {
     queryFn: () =>
       apiFetch<IdentityCorrection[]>(`/calibration-jobs/${jobId}/identity-corrections`),
     enabled: Boolean(jobId),
+    // Keep the reviewer's view current against decisions made in another tab.
+    refetchInterval: 6000,
+    refetchOnWindowFocus: true,
   });
 }
 

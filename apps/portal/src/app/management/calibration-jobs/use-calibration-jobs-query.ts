@@ -70,6 +70,10 @@ export function useCalibrationJobs(params: CalibrationJobsQueryParams, enabled =
       ),
     placeholderData: (previous) => previous,
     enabled,
+    // Near-real-time visibility of pending Identity Correction BAs raised from
+    // the field — poll while the tab is focused, and refetch on focus.
+    refetchInterval: 6000,
+    refetchOnWindowFocus: true,
   });
 }
 

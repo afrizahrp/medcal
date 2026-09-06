@@ -37,12 +37,13 @@ export default function IdentityCorrectionStep1Page() {
     <Screen
       title="Koreksi Identitas (1/5)"
       showBack
+      onBack={() => router.replace(`/jobs/${id}`)}
       footer={
         <StickyActionBar>
           <Button
             fullWidth
             disabled={!canContinue}
-            onClick={() => router.push(`/jobs/${id}/identity-correction/signature-technician`)}
+            onClick={() => router.replace(`/jobs/${id}/identity-correction/signature-technician`)}
           >
             Lanjut
           </Button>

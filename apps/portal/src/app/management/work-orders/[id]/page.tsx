@@ -305,7 +305,7 @@ export default function WorkOrderDetailPage() {
         </dl>
 
         <div className="mt-5 border-t border-slate-100 pt-5">
-          <WorkOrderItemsTable items={workOrder.items} />
+          <WorkOrderItemsTable items={workOrder.items} jobs={workOrder.jobs} />
         </div>
 
         <WorkOrderEquipmentSection

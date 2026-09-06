@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useAuthz } from "@medcal/auth/client";
 import { Screen } from "../../../components/layout/screen";
 import { StickyActionBar } from "../../../components/layout/sticky-action-bar";
@@ -16,6 +16,7 @@ import {
   canRecordReferenceEquipment,
   isReferenceEquipmentLocked,
 } from "../../../lib/calibration/reference-equipment";
+import { markWizardEntryIntent } from "./identity-correction/wizard-nav";
 import { useCorrectionsQuery, useJobQuery } from "./use-job-query";
 import { useReferenceEquipmentUsed } from "./use-reference-equipment-query";
 import {
@@ -31,6 +32,7 @@ import {
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const router = useRouter();
   const { capabilities } = useAuthz();
 
   const jobQuery = useJobQuery(id);
@@ -98,9 +100,16 @@ export default function JobDetailPage() {
             ) : null}
             {showSubmitCorrection ? (
               canSubmitIdentityCorrection(job) ? (
-                <LinkButton href={`/jobs/${id}/identity-correction`} variant="secondary" fullWidth>
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={() => {
+                    markWizardEntryIntent(id);
+                    router.replace(`/jobs/${id}/identity-correction`);
+                  }}
+                >
                   Ajukan Koreksi Identitas
-                </LinkButton>
+                </Button>
               ) : (
                 <div>
                   <Button variant="secondary" fullWidth disabled>

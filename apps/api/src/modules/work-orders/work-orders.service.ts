@@ -63,6 +63,23 @@ const workOrderInclude = {
     },
     orderBy: { createdAt: "asc" as const },
   },
+  // Per-unit calibration jobs, with each job's most-recent Identity Correction
+  // BA (any status). Powers the "Identity Correction" indicator on the Work
+  // Order items table — matched to a WorkOrderItem by purchaseOrderItemId.
+  jobs: {
+    select: {
+      id: true,
+      purchaseOrderItemId: true,
+      unitOrdinal: true,
+      unitTotal: true,
+      identityCorrections: {
+        select: { id: true, number: true, status: true, createdAt: true },
+        orderBy: { createdAt: "desc" as const },
+        take: 1,
+      },
+    },
+    orderBy: { unitOrdinal: "asc" as const },
+  },
   customer: { include: { contacts: true } },
   purchaseOrder: {
     select: {

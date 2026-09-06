@@ -24,6 +24,7 @@ export function SignatureStepScreen({
   roleLabel,
   stepLabel,
   nextHref,
+  backHref,
   guardValid,
   guardRedirectHref,
 }: {
@@ -31,6 +32,8 @@ export function SignatureStepScreen({
   roleLabel: string;
   stepLabel: string;
   nextHref: string;
+  /** Previous wizard step — the header back button replaces to here. */
+  backHref: string;
   guardValid: boolean;
   guardRedirectHref: string;
 }) {
@@ -52,9 +55,10 @@ export function SignatureStepScreen({
     <Screen
       title={`Koreksi Identitas (${stepLabel})`}
       showBack
+      onBack={() => router.replace(backHref)}
       footer={
         <StickyActionBar>
-          <Button fullWidth disabled={!signatureValid(sig)} onClick={() => router.push(nextHref)}>
+          <Button fullWidth disabled={!signatureValid(sig)} onClick={() => router.replace(nextHref)}>
             Lanjut
           </Button>
         </StickyActionBar>

@@ -1173,6 +1173,27 @@ describe("CalibrationJobsService — list", () => {
     expect(pending.data[0]!.id).toBe(jobs[0]!.id);
   });
 
+  it("surfaces the most-recent Identity Correction on each row", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    await calibrationJobsService.submitIdentityCorrection(realCompanyId, jobs[0]!.id, tech.id, {
+      reason: "wrong serial on the sheet",
+      newSerial: "SN-CORRECTED",
+      signatures: UNAVAILABLE_SIGNATURES,
+    });
+
+    const res = await calibrationJobsService.findAll(
+      realCompanyId,
+      { workOrderId: workOrder.id },
+      staffUserId,
+    );
+    const withCorrection = res.data.find((j) => j.id === jobs[0]!.id);
+    const without = res.data.find((j) => j.id === jobs[1]!.id);
+    expect(withCorrection!.identityCorrections).toHaveLength(1);
+    expect(withCorrection!.identityCorrections[0]!.status).toBe("PENDING_REVIEW");
+    expect(without!.identityCorrections).toEqual([]);
+  });
+
   it("company-scopes the list", async () => {
     const otherCompanyId = `S${randomUUID().slice(0, 2).toUpperCase()}`;
     await prisma.company.create({

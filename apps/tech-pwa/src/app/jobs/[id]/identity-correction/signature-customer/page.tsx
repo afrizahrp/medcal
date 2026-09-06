@@ -16,6 +16,7 @@ export default function SignatureCustomerPage() {
       roleLabel="Pelanggan"
       stepLabel="3/5"
       nextHref={`/jobs/${id}/identity-correction/photo`}
+      backHref={`/jobs/${id}/identity-correction/signature-technician`}
       guardValid={step1Valid(state) && signatureValid(state.signatures.TECHNICIAN)}
       guardRedirectHref={`/jobs/${id}/identity-correction/signature-technician`}
     />

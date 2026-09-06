@@ -16,6 +16,7 @@ export default function SignatureTechnicianPage() {
       roleLabel="Teknisi"
       stepLabel="2/5"
       nextHref={`/jobs/${id}/identity-correction/signature-customer`}
+      backHref={`/jobs/${id}/identity-correction`}
       guardValid={step1Valid(state)}
       guardRedirectHref={`/jobs/${id}/identity-correction`}
     />

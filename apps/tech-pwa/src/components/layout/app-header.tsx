@@ -19,11 +19,14 @@ function BackIcon() {
 export function AppHeader({
   title,
   showBack = false,
+  onBack,
   leftSlot,
   rightSlot,
 }: {
   title: string;
   showBack?: boolean;
+  /** Custom back handler — overrides the default `router.back()`. */
+  onBack?: () => void;
   leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
 }) {
@@ -36,7 +39,7 @@ export function AppHeader({
           (showBack ? (
             <button
               type="button"
-              onClick={() => router.back()}
+              onClick={() => (onBack ? onBack() : router.back())}
               aria-label="Kembali"
               className="flex h-11 w-11 items-center justify-center rounded-full text-slate-700 active:bg-slate-100"
             >

@@ -66,6 +66,14 @@ const calibrationJobInclude = {
     },
   },
   akdAklApprovedBy: { select: { id: true, name: true } },
+  // Most-recent Identity Correction BA (any status) — drives the portal list
+  // badge and the Work Order item indicator. `take: 1` keeps the payload flat;
+  // at most one PENDING_REVIEW can exist per job (enforced on submit).
+  identityCorrections: {
+    select: { id: true, number: true, status: true, createdAt: true },
+    orderBy: { createdAt: "desc" as const },
+    take: 1,
+  },
 } as const;
 
 export type CalibrationJobDetail = Prisma.CalibrationJobGetPayload<{

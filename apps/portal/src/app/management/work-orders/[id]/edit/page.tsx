@@ -184,7 +184,7 @@ export default function EditWorkOrderPage() {
           <WorkOrderFormFields value={form} onChange={setForm} showServiceMode={false} />
 
           <div className="mt-6 border-t border-slate-100 pt-6">
-            <WorkOrderItemsTable items={workOrder.items} />
+            <WorkOrderItemsTable items={workOrder.items} jobs={workOrder.jobs} />
           </div>
 
           <div className={formActionsClass}>

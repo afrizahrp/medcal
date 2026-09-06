@@ -67,7 +67,9 @@ export default function CalibrationJobsPageClient() {
 
   const result = query.data;
   const loading = query.isLoading;
-  const fetching = query.isFetching && !loading;
+  // Dim only during a filter/page transition (stale placeholder shown), not on
+  // the background poll — otherwise the table pulses every refetch interval.
+  const fetching = query.isFetching && query.isPlaceholderData;
   const forbidden = isForbidden(query.error);
   const error = query.isError && !forbidden ? "Gagal memuat daftar calibration job." : null;
   const totalPages = result ? Math.max(1, result.totalPages) : 1;

@@ -98,6 +98,10 @@ export function useWorkOrder(id: string | undefined) {
     queryKey: [WORK_ORDERS_QUERY_KEY, id],
     queryFn: () => apiFetch<WorkOrderRow>(`/work-orders/${id}`),
     enabled: Boolean(id),
+    // Near-real-time reflection of field activity (Identity Correction BA
+    // status on the items table) — poll while focused, and refetch on focus.
+    refetchInterval: 6000,
+    refetchOnWindowFocus: true,
   });
 }
 
