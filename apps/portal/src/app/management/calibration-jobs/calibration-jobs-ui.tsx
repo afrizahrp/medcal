@@ -106,6 +106,12 @@ export interface CalibrationJobRow {
     status: IdentityCorrectionStatus;
     createdAt: string;
   }[];
+  /**
+   * Computed server-side: at least one confirmed reference-equipment unit for
+   * this job is currently invalid (expired / no certificate) and not yet
+   * overridden by a TECHNICIAN_MANAGER. Drives the "Perlu Persetujuan Alat" badge.
+   */
+  needsReferenceEquipmentReview: boolean;
 }
 
 export interface CalibrationJobListResponse {
@@ -125,7 +131,6 @@ export interface CalibrationJobDeviceCandidate {
   deviceTypeId: string;
   deviceType: CalibrationJobDeviceTypeRef | null;
 }
-
 
 // ── Derived display helpers ───────────────────────────────────────────────────
 
@@ -224,6 +229,19 @@ export function JobReferenceEquipmentValidityBadge({ overridden }: { overridden:
   );
 }
 
+/**
+ * "Perlu Persetujuan Alat" — a job has ≥1 confirmed reference-equipment unit
+ * with an invalid/expired certificate that a TECHNICIAN_MANAGER has not yet
+ * overridden. Shared by the Calibration Jobs list and the Work Order items table.
+ */
+export function ReferenceEquipmentReviewBadge() {
+  return (
+    <Badge className={cn(badgeBase, "border-transparent bg-red-600 text-white hover:bg-red-600")}>
+      Perlu Persetujuan Alat
+    </Badge>
+  );
+}
+
 // ── List: filters / table / empty state ───────────────────────────────────────
 
 export function CalibrationJobFilters({
@@ -309,7 +327,7 @@ export function CalibrationJobTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1000px]">
+      <table className="w-full min-w-[1140px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
             <th className="px-4 py-3">Work Order</th>
@@ -319,6 +337,7 @@ export function CalibrationJobTable({
             <th className="px-4 py-3">Declared AKD/AKL</th>
             <SortableTh field="akdAklApprovalStatus" label="Approval" sort={sort} />
             <th className="px-4 py-3">Identity Correction</th>
+            <th className="px-4 py-3">Alat Referensi</th>
             <SortableTh field="status" label="Job Status" sort={sort} />
             <th className="px-4 py-3"></th>
           </tr>
@@ -346,6 +365,13 @@ export function CalibrationJobTable({
               <td className="px-4 py-3">
                 {row.identityCorrections[0]?.status === "PENDING_REVIEW" ? (
                   <IdentityCorrectionStatusBadge status="PENDING_REVIEW" />
+                ) : (
+                  <span className="text-xs text-slate-400">—</span>
+                )}
+              </td>
+              <td className="px-4 py-3">
+                {row.needsReferenceEquipmentReview ? (
+                  <ReferenceEquipmentReviewBadge />
                 ) : (
                   <span className="text-xs text-slate-400">—</span>
                 )}

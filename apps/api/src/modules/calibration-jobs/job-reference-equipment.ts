@@ -75,7 +75,13 @@ export const jobReferenceEquipmentUsedInclude = {
     },
   },
   equipmentCalibrationRecord: {
-    select: { id: true, calibrationDate: true, validFrom: true, validUntil: true, certificateNumber: true },
+    select: {
+      id: true,
+      calibrationDate: true,
+      validFrom: true,
+      validUntil: true,
+      certificateNumber: true,
+    },
   },
   overriddenBy: { select: { id: true, name: true } },
 } as const;
@@ -149,25 +155,149 @@ export interface JobReferenceEquipmentCandidate {
   requiredForDeviceType: boolean;
 }
 
-/** Precomputed candidates for the picker — sourced solely from the job's WorkOrder's confirmed equipment. */
+/**
+ * Precomputed candidates for the picker — sourced solely from the job's
+ * WorkOrder's confirmed equipment, then narrowed to the EquipmentTypes wired to
+ * the job's DeviceType (DeviceTypeEquipmentRequirement). Units of an unwired
+ * type are dropped rather than shown-but-unselectable: the save-time rule
+ * (EQUIPMENT_TYPE_NOT_REQUIRED_FOR_DEVICE) rejects them unconditionally, so
+ * offering them in the picker only invites a dead-end selection. When the job's
+ * DeviceType cannot be resolved the narrowing is skipped (every confirmed unit
+ * is offered), matching the save-time rule's own fallback.
+ */
 export async function buildReferenceEquipmentCandidates(
   job: JobReferenceEquipmentSource,
   asOf: Date,
 ): Promise<JobReferenceEquipmentCandidate[]> {
   const requiredTypeIds = await requiredEquipmentTypeIds(job);
 
-  return job.workOrder.equipment.map(({ equipment: unit }) => ({
-    equipmentId: unit.id,
-    code: unit.code,
-    brand: unit.brand,
-    model: unit.model,
-    serialNumber: unit.serialNumber,
-    equipmentTypeId: unit.equipmentTypeId,
-    equipmentTypeName: unit.equipmentType.name,
-    isActive: unit.isActive,
-    validity: resolveJobEquipmentValidity(unit.calibrationRecords, asOf),
-    requiredForDeviceType: requiredTypeIds?.has(unit.equipmentTypeId) ?? false,
-  }));
+  return job.workOrder.equipment
+    .filter(({ equipment: unit }) => !requiredTypeIds || requiredTypeIds.has(unit.equipmentTypeId))
+    .map(({ equipment: unit }) => ({
+      equipmentId: unit.id,
+      code: unit.code,
+      brand: unit.brand,
+      model: unit.model,
+      serialNumber: unit.serialNumber,
+      equipmentTypeId: unit.equipmentTypeId,
+      equipmentTypeName: unit.equipmentType.name,
+      isActive: unit.isActive,
+      validity: resolveJobEquipmentValidity(unit.calibrationRecords, asOf),
+      requiredForDeviceType: requiredTypeIds?.has(unit.equipmentTypeId) ?? false,
+    }));
+}
+
+// ── "Needs reference-equipment review" flag (Calibration Jobs list + WO items) ──
+
+/**
+ * Lightweight per-job shape for the computed "needs reference-equipment review"
+ * boolean — no names/brands/serials, just isActive + type + calibration records
+ * for each confirmed WorkOrderEquipment unit, plus the job's recorded overrides
+ * and the DeviceType pointers. Deliberately narrower than
+ * jobReferenceEquipmentSourceInclude so a page of these stays cheap.
+ */
+export const jobReferenceEquipmentReviewInclude = {
+  calibrationRequestItem: { select: { deviceTypeId: true } },
+  purchaseOrderItem: {
+    select: {
+      quotationItem: { select: { requestItem: { select: { deviceTypeId: true } } } },
+    },
+  },
+  workOrder: {
+    select: {
+      equipment: {
+        select: {
+          equipmentId: true,
+          equipment: {
+            select: {
+              isActive: true,
+              equipmentTypeId: true,
+              calibrationRecords: {
+                select: {
+                  id: true,
+                  status: true,
+                  calibrationDate: true,
+                  validFrom: true,
+                  validUntil: true,
+                  acceptedForUse: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  referenceEquipmentUsed: { select: { equipmentId: true, validityOverridden: true } },
+} as const;
+
+export type JobReferenceEquipmentReviewSource = Prisma.CalibrationJobGetPayload<{
+  include: typeof jobReferenceEquipmentReviewInclude;
+}>;
+
+/** Same DeviceType resolution order as resolveDeviceTypeId, for the review shape. */
+export function reviewSourceDeviceTypeId(job: JobReferenceEquipmentReviewSource): string | null {
+  return (
+    job.calibrationRequestItem?.deviceTypeId ??
+    job.purchaseOrderItem?.quotationItem?.requestItem?.deviceTypeId ??
+    null
+  );
+}
+
+/**
+ * equipmentTypeId sets required per DeviceType (DeviceTypeEquipmentRequirement),
+ * batched for a page of jobs. Membership only — ordering is irrelevant to the
+ * review check — so this reads the join table directly rather than through
+ * resolveRequiredEquipmentTypes (which dedupes across DeviceTypes and would
+ * collapse the per-DeviceType grouping this needs).
+ */
+export async function requiredEquipmentTypeIdsByDeviceType(
+  deviceTypeIds: string[],
+): Promise<Map<string, Set<string>>> {
+  const byDeviceType = new Map<string, Set<string>>();
+  const distinct = [...new Set(deviceTypeIds)];
+  if (distinct.length === 0) return byDeviceType;
+
+  const rows = await prisma.deviceTypeEquipmentRequirement.findMany({
+    where: { deviceTypeId: { in: distinct } },
+    select: { deviceTypeId: true, equipmentTypeId: true },
+  });
+  for (const row of rows) {
+    let set = byDeviceType.get(row.deviceTypeId);
+    if (!set) {
+      set = new Set<string>();
+      byDeviceType.set(row.deviceTypeId, set);
+    }
+    set.add(row.equipmentTypeId);
+  }
+  return byDeviceType;
+}
+
+/**
+ * Whether a job still needs TECHNICIAN_MANAGER attention on reference equipment:
+ * at least one confirmed, active WorkOrderEquipment unit whose type is required
+ * for the job's DeviceType is currently not VALID (per resolveJobEquipmentValidity
+ * — the exact check the record/override endpoint enforces) AND is not yet in the
+ * job's recorded set with a validity override. `requiredTypeIds === null` means
+ * the job's DeviceType could not be resolved — every confirmed unit then counts,
+ * matching validateJobReferenceEquipmentSelection's own fallback.
+ */
+export function jobNeedsReferenceEquipmentReview(
+  job: JobReferenceEquipmentReviewSource,
+  requiredTypeIds: Set<string> | null,
+  asOf: Date,
+): boolean {
+  const overridden = new Set(
+    job.referenceEquipmentUsed
+      .filter((row) => row.validityOverridden)
+      .map((row) => row.equipmentId),
+  );
+  return job.workOrder.equipment.some(({ equipmentId, equipment: unit }) => {
+    if (!unit.isActive) return false;
+    if (requiredTypeIds && !requiredTypeIds.has(unit.equipmentTypeId)) return false;
+    if (overridden.has(equipmentId)) return false;
+    return resolveJobEquipmentValidity(unit.calibrationRecords, asOf).status !== "VALID";
+  });
 }
 
 export interface ValidatedJobReferenceEquipmentRow {

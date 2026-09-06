@@ -8,10 +8,7 @@ import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
-import {
-  formPageClass,
-  formSurfaceClass,
-} from "../../quotations/quotations-ui";
+import { formPageClass, formSurfaceClass } from "../../quotations/quotations-ui";
 import {
   ConfirmDialog,
   DetailField,
@@ -32,6 +29,7 @@ import {
   workOrderActions,
   type AssignmentRole,
 } from "../work-order-form-utils";
+import { useWorkOrderCalibrationJobs } from "../../calibration-jobs/use-calibration-jobs-query";
 import { WorkOrderEquipmentSection } from "../work-order-equipment-section";
 import { WorkOrderDeliveryNoteSection } from "../work-order-delivery-note-section";
 import { fmtDateOnly } from "@/lib/date-utils";
@@ -51,6 +49,7 @@ export default function WorkOrderDetailPage() {
   const { capabilities } = useAuthz();
 
   const query = useWorkOrder(params.id);
+  const calibrationJobs = useWorkOrderCalibrationJobs(params.id);
   const assignMutation = useAssignWorkOrder();
   const startMutation = useStartWorkOrder();
   const doneMutation = useDoneWorkOrder();
@@ -102,6 +101,12 @@ export default function WorkOrderDetailPage() {
 
   const actions = workOrderActions(workOrder.status);
 
+  const referenceEquipmentReviewPoiIds = new Set(
+    (calibrationJobs.data?.data ?? [])
+      .filter((job) => job.needsReferenceEquipmentReview && job.purchaseOrderItemId)
+      .map((job) => job.purchaseOrderItemId as string),
+  );
+
   async function runAction(action: "start" | "done" | "cancel") {
     setError(null);
     setSuccess(null);
@@ -131,7 +136,9 @@ export default function WorkOrderDetailPage() {
     }
   }
 
-  async function submitAssign(technicians: Array<{ technicianUserId: string; roleOnJob: AssignmentRole }>) {
+  async function submitAssign(
+    technicians: Array<{ technicianUserId: string; roleOnJob: AssignmentRole }>,
+  ) {
     setError(null);
     setSuccess(null);
     try {
@@ -275,7 +282,9 @@ export default function WorkOrderDetailPage() {
           ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <DetailField label="Scheduled Start">{fmtDateOnly(workOrder.scheduledStart)}</DetailField>
+            <DetailField label="Scheduled Start">
+              {fmtDateOnly(workOrder.scheduledStart)}
+            </DetailField>
             <DetailField label="Scheduled End">{fmtDateOnly(workOrder.scheduledEnd)}</DetailField>
           </div>
 
@@ -305,7 +314,13 @@ export default function WorkOrderDetailPage() {
         </dl>
 
         <div className="mt-5 border-t border-slate-100 pt-5">
-          <WorkOrderItemsTable items={workOrder.items} jobs={workOrder.jobs} />
+          <WorkOrderItemsTable
+            items={workOrder.items}
+            jobs={workOrder.jobs}
+            referenceEquipmentReviewPoiIds={
+              calibrationJobs.data ? referenceEquipmentReviewPoiIds : undefined
+            }
+          />
         </div>
 
         <WorkOrderEquipmentSection
@@ -444,9 +459,7 @@ function AssignDialog({
     () =>
       users.filter(
         (user) =>
-          user.status === "ACTIVE" &&
-          user.membership &&
-          user.membership.role !== "CUSTOMER",
+          user.status === "ACTIVE" && user.membership && user.membership.role !== "CUSTOMER",
       ),
     [users],
   );

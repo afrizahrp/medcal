@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, FileText, ShieldAlert, Upload, X } from "lucide-react";
+import { ArrowLeft, Check, FileText, Save, ShieldAlert, Upload, X } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
@@ -33,11 +33,16 @@ import {
 import {
   canDecideIdentity,
   canEscalateIdentity,
+  canRecordReferenceEquipment,
   canSubmitIdentityCorrection,
   correctionMissingImage,
   formatCalibrationJobApiError,
+  formatReferenceEquipmentError,
   isIdentityGateLocked,
+  isReferenceEquipmentUsable,
   MISSING_CORRECTION_IMAGE_MESSAGE,
+  REFERENCE_EQUIPMENT_VALIDITY_BADGE_CLASS,
+  REFERENCE_EQUIPMENT_VALIDITY_LABELS,
   summarizeCorrectionChanges,
 } from "../calibration-job-utils";
 import {
@@ -57,7 +62,11 @@ import {
   type SignatureStatus,
 } from "../use-identity-corrections-query";
 import {
+  useReferenceEquipmentCandidates,
   useReferenceEquipmentUsed,
+  useReplaceReferenceEquipmentUsed,
+  type JobReferenceEquipmentReplaceItem,
+  type ReferenceEquipmentCandidate,
   type ReferenceEquipmentUsed,
 } from "../use-reference-equipment-used-query";
 
@@ -78,6 +87,11 @@ export default function CalibrationJobDetailPage() {
   const query = useCalibrationJob(params.id);
   const corrections = useIdentityCorrections(params.id);
   const refEquipment = useReferenceEquipmentUsed(params.id);
+  const refCandidates = useReferenceEquipmentCandidates(
+    params.id,
+    Boolean(capabilities?.calibrationJobRecordReferenceEquipmentUsed),
+  );
+  const replaceRefEquipment = useReplaceReferenceEquipmentUsed(params.id);
   const escalateMutation = useEscalateIdentity();
   const decideMutation = useDecideIdentity();
   const submitCorrection = useSubmitIdentityCorrection();
@@ -89,6 +103,12 @@ export default function CalibrationJobDetailPage() {
   >(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // Inline feedback for the reference-equipment section — the shared top-of-page
+  // banner is off-screen when the manager is working down in that section.
+  const [refEquipmentNotice, setRefEquipmentNotice] = useState<{
+    ok: boolean;
+    text: string;
+  } | null>(null);
 
   const job = query.data;
 
@@ -202,6 +222,28 @@ export default function CalibrationJobDetailPage() {
     }
   }
 
+  async function handleReplaceReferenceEquipment(items: JobReferenceEquipmentReplaceItem[]) {
+    if (!job) return;
+    setError(null);
+    setSuccess(null);
+    setRefEquipmentNotice(null);
+    try {
+      const saved = await replaceRefEquipment.mutateAsync(items);
+      await Promise.all([query.refetch(), refEquipment.refetch(), refCandidates.refetch()]);
+      const overrides = saved.filter((row) => row.validityOverridden).length;
+      const msg =
+        `Tersimpan — ${saved.length} alat referensi dicatat` +
+        (overrides > 0 ? `, ${overrides} dengan override validitas.` : ".") +
+        " Badge di daftar Calibration Jobs & Work Order menyusul dalam beberapa detik.";
+      setSuccess("Daftar alat referensi disimpan.");
+      setRefEquipmentNotice({ ok: true, text: msg });
+    } catch (err) {
+      const text = formatReferenceEquipmentError(err, "Gagal menyimpan alat referensi.");
+      setError(text);
+      setRefEquipmentNotice({ ok: false, text });
+    }
+  }
+
   async function handleUploadCorrectionImage(correctionId: string, file: File) {
     if (!job) return;
     setError(null);
@@ -224,6 +266,10 @@ export default function CalibrationJobDetailPage() {
     canSubmitIdentityCorrection(job) &&
     Boolean(capabilities?.calibrationJobSubmitIdentityCorrection);
   const canDecideCorrection = Boolean(capabilities?.calibrationJobDecideIdentityCorrection);
+  const canRecordRefEquipment = Boolean(capabilities?.calibrationJobRecordReferenceEquipmentUsed);
+  const canOverrideRefEquipment = Boolean(
+    capabilities?.calibrationJobOverrideReferenceEquipmentValidity,
+  );
   const correctionRows = corrections.data ?? [];
   const hasPendingCorrection = correctionRows.some((c) => c.status === "PENDING_REVIEW");
   const gateReopenedBy = correctionRows.find(
@@ -337,21 +383,16 @@ export default function CalibrationJobDetailPage() {
 
         <div className="mt-5 border-t border-slate-100 pt-5">
           <h3 className="text-sm font-semibold text-slate-900">Alat Referensi yang Digunakan</h3>
-          {refEquipment.isLoading ? (
-            <p className="mt-3 text-sm text-slate-400">Memuat…</p>
-          ) : refEquipment.isError ? (
-            <p className="mt-3 text-sm text-red-600">Gagal memuat daftar alat referensi.</p>
-          ) : (refEquipment.data ?? []).length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">
-              Belum ada alat referensi yang dicatat untuk job ini.
-            </p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {(refEquipment.data ?? []).map((unit) => (
-                <ReferenceEquipmentCard key={unit.id} unit={unit} />
-              ))}
-            </ul>
-          )}
+          <ReferenceEquipmentSection
+            job={job}
+            used={refEquipment}
+            candidates={refCandidates}
+            canRecord={canRecordRefEquipment}
+            canOverride={canOverrideRefEquipment}
+            submitting={replaceRefEquipment.isPending}
+            notice={refEquipmentNotice}
+            onSubmit={handleReplaceReferenceEquipment}
+          />
         </div>
 
         <div className="mt-5 border-t border-slate-100 pt-5">
@@ -518,7 +559,340 @@ export default function CalibrationJobDetailPage() {
   );
 }
 
-// ── Reference equipment used (read-only) ─────────────────────────────────────
+// ── Reference equipment used ─────────────────────────────────────────────────
+
+interface RefEquipmentQueryLike<T> {
+  isLoading: boolean;
+  isError: boolean;
+  data: T | undefined;
+}
+
+/**
+ * Thin Portal client over the same candidates + full-set-replace API tech-pwa
+ * uses. TECHNICIAN_MANAGER (typically at a desk with Portal open) reviews and
+ * overrides reference equipment here without switching to a phone. All
+ * validity / lock / override rules are enforced server-side — this only mirrors
+ * them for gating the UI.
+ */
+function ReferenceEquipmentSection({
+  job,
+  used,
+  candidates,
+  canRecord,
+  canOverride,
+  submitting,
+  notice,
+  onSubmit,
+}: {
+  job: CalibrationJobRow;
+  used: RefEquipmentQueryLike<ReferenceEquipmentUsed[]>;
+  candidates: RefEquipmentQueryLike<ReferenceEquipmentCandidate[]>;
+  canRecord: boolean;
+  canOverride: boolean;
+  submitting: boolean;
+  notice: { ok: boolean; text: string } | null;
+  onSubmit: (items: JobReferenceEquipmentReplaceItem[]) => void | Promise<void>;
+}) {
+  const loading = used.isLoading || (canRecord && candidates.isLoading);
+  if (loading) {
+    return <p className="mt-3 text-sm text-slate-400">Memuat…</p>;
+  }
+  if (used.isError || (canRecord && candidates.isError)) {
+    return <p className="mt-3 text-sm text-red-600">Gagal memuat daftar alat referensi.</p>;
+  }
+
+  const usedRows = used.data ?? [];
+
+  const readOnlyList =
+    usedRows.length === 0 ? (
+      <p className="mt-2 text-sm text-slate-500">
+        Belum ada alat referensi yang dicatat untuk job ini.
+      </p>
+    ) : (
+      <ul className="mt-3 space-y-2">
+        {usedRows.map((unit) => (
+          <ReferenceEquipmentCard key={unit.id} unit={unit} />
+        ))}
+      </ul>
+    );
+
+  // Users without the record capability (office / admin / supervisor) only ever
+  // see the recorded set.
+  if (!canRecord) return readOnlyList;
+
+  const gateOpen = canRecordReferenceEquipment(job);
+  const hasRecordedOverride = usedRows.some((u) => u.validityOverridden);
+  // Full-set replace + the API's FORBIDDEN-on-override rule mean anyone without
+  // override permission cannot re-save a set that already contains an override.
+  const lockedByOverride = hasRecordedOverride && !canOverride;
+
+  if (!gateOpen || lockedByOverride) {
+    const notice = !gateOpen
+      ? job.startedAt === null
+        ? "Job belum dimulai — alat referensi baru dapat dicatat setelah kalibrasi berjalan."
+        : "Job sudah dikirim — daftar alat referensi tidak dapat diubah lagi."
+      : "Daftar alat referensi berisi alat yang disetujui manajer teknis. Hanya manajer teknis yang dapat mengubahnya.";
+    return (
+      <div className="mt-3 space-y-3">
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">{notice}</p>
+        {readOnlyList}
+      </div>
+    );
+  }
+
+  const candidateRows = candidates.data ?? [];
+  if (candidateRows.length === 0) {
+    return (
+      <p className="mt-2 text-sm text-slate-500">
+        Belum ada alat referensi yang dikonfirmasi pada work order job ini. Hubungi kantor.
+      </p>
+    );
+  }
+
+  return (
+    <ReferenceEquipmentEditor
+      key={usedRows.map((u) => `${u.equipmentId}:${u.validityOverridden}`).join("|")}
+      candidates={candidateRows}
+      used={usedRows}
+      canOverride={canOverride}
+      submitting={submitting}
+      notice={notice}
+      onSubmit={onSubmit}
+    />
+  );
+}
+
+interface SelRow {
+  checked: boolean;
+  reason: string;
+}
+
+function ReferenceEquipmentEditor({
+  candidates,
+  used,
+  canOverride,
+  submitting,
+  notice,
+  onSubmit,
+}: {
+  candidates: ReferenceEquipmentCandidate[];
+  used: ReferenceEquipmentUsed[];
+  canOverride: boolean;
+  submitting: boolean;
+  notice: { ok: boolean; text: string } | null;
+  onSubmit: (items: JobReferenceEquipmentReplaceItem[]) => void | Promise<void>;
+}) {
+  const sorted = useMemo(
+    () =>
+      [...candidates].sort(
+        (a, b) => Number(b.requiredForDeviceType) - Number(a.requiredForDeviceType),
+      ),
+    [candidates],
+  );
+
+  const recordedByEquipmentId = useMemo(() => new Map(used.map((u) => [u.equipmentId, u])), [used]);
+
+  const [selection, setSelection] = useState<Record<string, SelRow>>(() => {
+    const usedByEquipmentId = new Map(used.map((u) => [u.equipmentId, u]));
+    const next: Record<string, SelRow> = {};
+    for (const c of candidates) {
+      const rec = usedByEquipmentId.get(c.equipmentId);
+      next[c.equipmentId] = { checked: Boolean(rec), reason: rec?.overrideReason ?? "" };
+    }
+    return next;
+  });
+
+  const toggle = (equipmentId: string, checked: boolean) =>
+    setSelection((prev) => ({ ...prev, [equipmentId]: { ...prev[equipmentId], checked } }));
+  const setReason = (equipmentId: string, reason: string) =>
+    setSelection((prev) => ({ ...prev, [equipmentId]: { ...prev[equipmentId], reason } }));
+
+  const missingOverrideReason = sorted.some((c) => {
+    const row = selection[c.equipmentId];
+    if (!row?.checked || isReferenceEquipmentUsable(c.validity.status)) return false;
+    return row.reason.trim().length === 0;
+  });
+
+  function handleSubmit() {
+    const items: JobReferenceEquipmentReplaceItem[] = sorted
+      .filter((c) => selection[c.equipmentId]?.checked)
+      .map((c) =>
+        isReferenceEquipmentUsable(c.validity.status)
+          ? { equipmentId: c.equipmentId }
+          : {
+              equipmentId: c.equipmentId,
+              override: { reason: selection[c.equipmentId].reason.trim() },
+            },
+      );
+    void onSubmit(items);
+  }
+
+  return (
+    <div className="mt-3 space-y-3">
+      <p className="text-sm text-slate-600">
+        Pilih alat referensi yang digunakan untuk kalibrasi job ini. Daftar ini menggantikan seluruh
+        catatan sebelumnya.
+      </p>
+      <ul className="space-y-2">
+        {sorted.map((c) => (
+          <CandidateRow
+            key={c.equipmentId}
+            candidate={c}
+            row={selection[c.equipmentId] ?? { checked: false, reason: "" }}
+            recorded={recordedByEquipmentId.get(c.equipmentId) ?? null}
+            canOverride={canOverride}
+            onToggle={(checked) => toggle(c.equipmentId, checked)}
+            onReason={(reason) => setReason(c.equipmentId, reason)}
+          />
+        ))}
+      </ul>
+      {notice ? (
+        <p
+          className={`rounded-md px-3 py-2 text-sm ${
+            notice.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"
+          }`}
+        >
+          {notice.text}
+        </p>
+      ) : null}
+      <div className="flex items-center justify-end gap-3">
+        {missingOverrideReason ? (
+          <span className="text-xs text-amber-700">
+            Isi alasan override untuk setiap alat tidak valid yang dicentang.
+          </span>
+        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          disabled={submitting || missingOverrideReason}
+          onClick={handleSubmit}
+        >
+          <Save className="h-3.5 w-3.5" />
+          {submitting ? "Menyimpan…" : "Simpan alat referensi"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CandidateValidityBadge({
+  status,
+}: {
+  status: ReferenceEquipmentCandidate["validity"]["status"];
+}) {
+  return (
+    <span
+      className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${REFERENCE_EQUIPMENT_VALIDITY_BADGE_CLASS[status]}`}
+    >
+      {REFERENCE_EQUIPMENT_VALIDITY_LABELS[status]}
+    </span>
+  );
+}
+
+function CandidateRow({
+  candidate: c,
+  row,
+  recorded,
+  canOverride,
+  onToggle,
+  onReason,
+}: {
+  candidate: ReferenceEquipmentCandidate;
+  row: SelRow;
+  recorded: ReferenceEquipmentUsed | null;
+  canOverride: boolean;
+  onToggle: (checked: boolean) => void;
+  onReason: (reason: string) => void;
+}) {
+  const usable = isReferenceEquipmentUsable(c.validity.status);
+  const inactive = !c.isActive;
+  const needsOverride = !usable && !inactive;
+  const blockedForNonManager = needsOverride && !canOverride;
+  const checkboxDisabled = inactive || blockedForNonManager;
+  const brandModel = [c.brand, c.model].filter(Boolean).join(" ");
+
+  return (
+    <li
+      className={
+        needsOverride && row.checked
+          ? "rounded-lg border border-amber-300 bg-amber-50/60 p-3"
+          : "rounded-lg border border-slate-200 p-3"
+      }
+    >
+      <label className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 shrink-0"
+          checked={row.checked}
+          disabled={checkboxDisabled}
+          onChange={(e) => onToggle(e.target.checked)}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-mono text-sm font-medium text-slate-900">{c.code}</span>
+            {brandModel ? <span className="text-sm text-slate-600">{brandModel}</span> : null}
+          </span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            {c.equipmentTypeName}
+            {c.serialNumber ? ` · SN ${c.serialNumber}` : ""}
+          </span>
+          <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <CandidateValidityBadge status={c.validity.status} />
+            {inactive ? (
+              <span className="rounded-md bg-slate-400 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">
+                Nonaktif
+              </span>
+            ) : null}
+            <span className="text-xs text-slate-400">
+              {c.requiredForDeviceType
+                ? "Wajib untuk jenis alat ini"
+                : "Tidak wajib untuk jenis alat ini"}
+            </span>
+          </span>
+          {blockedForNonManager ? (
+            <span className="mt-1 block text-xs text-amber-700">
+              Hanya manajer teknis yang dapat menyetujui penggunaan alat dengan kalibrasi tidak
+              valid.
+            </span>
+          ) : null}
+        </span>
+      </label>
+
+      {needsOverride && canOverride && row.checked ? (
+        <div className="mt-2 pl-7">
+          <label
+            htmlFor={`override-${c.equipmentId}`}
+            className="block text-xs font-medium text-amber-800"
+          >
+            Alasan override (wajib)
+          </label>
+          <textarea
+            id={`override-${c.equipmentId}`}
+            maxLength={2000}
+            rows={2}
+            value={row.reason}
+            onChange={(e) => onReason(e.target.value)}
+            className="mt-1 w-full rounded-md border border-amber-300 px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </div>
+      ) : null}
+
+      {recorded?.validityOverridden ? (
+        <p className="mt-2 pl-7 text-xs text-amber-700">
+          <ShieldAlert className="mr-1 inline h-3.5 w-3.5" />
+          Override tercatat
+          {recorded.overriddenBy?.name ? ` oleh ${recorded.overriddenBy.name}` : ""}
+          {recorded.overriddenAt ? ` · ${formatDateTime(recorded.overriddenAt)}` : ""}
+        </p>
+      ) : recorded ? (
+        <p className="mt-2 pl-7 text-xs text-emerald-700">
+          <Check className="mr-1 inline h-3.5 w-3.5" />
+          Tercatat sebagai alat referensi job ini.
+        </p>
+      ) : null}
+    </li>
+  );
+}
 
 function ReferenceEquipmentCard({ unit }: { unit: ReferenceEquipmentUsed }) {
   const { equipment, equipmentCalibrationRecord: record, validityOverridden } = unit;
@@ -614,15 +988,16 @@ function CorrectionCard({
         <span className="font-mono text-sm font-medium text-slate-800">{correction.number}</span>
         <IdentityCorrectionStatusBadge status={correction.status} />
         <span className="text-xs text-slate-500">
-          {changes.length
-            ? changes.map((c) => c.attr).join(", ")
-            : "—"}
+          {changes.length ? changes.map((c) => c.attr).join(", ") : "—"}
         </span>
         <span className="ml-auto flex items-center gap-2 text-xs text-slate-400">
           {SIGNER_ROLES.map((role) => {
             const sig = correction.signatures.find((s) => s.signerRole === role);
             return (
-              <span key={role} title={`${SIGNER_LABEL[role]}: ${sig ? SIGNATURE_STATUS_LABEL[sig.status] : "—"}`}>
+              <span
+                key={role}
+                title={`${SIGNER_LABEL[role]}: ${sig ? SIGNATURE_STATUS_LABEL[sig.status] : "—"}`}
+              >
                 {SIGNER_LABEL[role][0]}
                 {sig?.status === "SIGNED" ? "✓" : sig?.status === "REFUSED" ? "✕" : "–"}
               </span>
@@ -678,9 +1053,7 @@ function CorrectionCard({
 
           {correction.status !== "PENDING_REVIEW" ? (
             <div className="grid gap-3 border-t border-slate-200 pt-3 sm:grid-cols-2">
-              <DetailField label="Diputuskan oleh">
-                {correction.decidedBy?.name ?? "—"}
-              </DetailField>
+              <DetailField label="Diputuskan oleh">{correction.decidedBy?.name ?? "—"}</DetailField>
               <DetailField label="Diputuskan pada">
                 {formatDateTime(correction.decidedAt)}
               </DetailField>
@@ -796,7 +1169,9 @@ function CorrectionPhotoBlock({
       ) : anySigned ? (
         <p className="mt-2 text-xs text-amber-600">Foto BA belum diunggah.</p>
       ) : (
-        <p className="mt-2 text-xs text-slate-500">Tidak ada tanda tangan — foto tidak diperlukan.</p>
+        <p className="mt-2 text-xs text-slate-500">
+          Tidak ada tanda tangan — foto tidak diperlukan.
+        </p>
       )}
 
       {editable && correction.files.length === 0 ? (
@@ -1209,9 +1584,7 @@ function SubmitCorrectionDialog({
         confirmLabel="Ajukan BA"
         disabled={!canConfirm}
         onCancel={onCancel}
-        onConfirm={() =>
-          onSubmit({ reason, attrs, deviceId, serial, akdAkl, signatures, file })
-        }
+        onConfirm={() => onSubmit({ reason, attrs, deviceId, serial, akdAkl, signatures, file })}
       />
     </DialogShell>
   );

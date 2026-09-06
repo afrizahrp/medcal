@@ -21,8 +21,12 @@ import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { DevicesService, type DeviceWithRelations } from "../devices/devices.service";
 import {
   buildReferenceEquipmentCandidates,
+  jobNeedsReferenceEquipmentReview,
+  jobReferenceEquipmentReviewInclude,
   jobReferenceEquipmentSourceInclude,
   jobReferenceEquipmentUsedInclude,
+  requiredEquipmentTypeIdsByDeviceType,
+  reviewSourceDeviceTypeId,
   validateJobReferenceEquipmentSelection,
   type JobReferenceEquipmentCandidate,
   type JobReferenceEquipmentSource,
@@ -147,8 +151,19 @@ function assertAkdAklTransition(from: AkdAklApprovalStatus, to: AkdAklApprovalSt
   }
 }
 
+/**
+ * List row = the job detail payload plus a computed boolean:
+ * `needsReferenceEquipmentReview` drives the "Perlu Persetujuan Alat" badge on
+ * the Calibration Jobs list and the Work Order items table. It is a computed
+ * state (Reference Equipment has no "pending" record) — see
+ * jobNeedsReferenceEquipmentReview.
+ */
+export type CalibrationJobListRow = CalibrationJobDetail & {
+  needsReferenceEquipmentReview: boolean;
+};
+
 export interface CalibrationJobListResult {
-  data: CalibrationJobDetail[];
+  data: CalibrationJobListRow[];
   page: number;
   pageSize: number;
   total: number;
@@ -208,7 +223,7 @@ export class CalibrationJobsService {
       "createdAt",
     );
 
-    const [total, data] = await Promise.all([
+    const [total, rows] = await Promise.all([
       prisma.calibrationJob.count({ where }),
       prisma.calibrationJob.findMany({
         where,
@@ -219,7 +234,47 @@ export class CalibrationJobsService {
       }),
     ]);
 
+    const reviewFlags = await this.referenceEquipmentReviewFlags(rows.map((row) => row.id));
+    const data: CalibrationJobListRow[] = rows.map((row) => ({
+      ...row,
+      needsReferenceEquipmentReview: reviewFlags.get(row.id) ?? false,
+    }));
+
     return { data, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+  }
+
+  /**
+   * Batched "needs reference-equipment review" computation for a page of jobs.
+   * One extra findMany (lightweight review shape) + one requirement lookup,
+   * regardless of page size — the check itself reuses resolveJobEquipmentValidity.
+   */
+  private async referenceEquipmentReviewFlags(jobIds: string[]): Promise<Map<string, boolean>> {
+    if (jobIds.length === 0) return new Map();
+
+    const sources = await prisma.calibrationJob.findMany({
+      where: { id: { in: jobIds } },
+      include: jobReferenceEquipmentReviewInclude,
+    });
+
+    const requiredByDeviceType = await requiredEquipmentTypeIdsByDeviceType(
+      sources
+        .map(reviewSourceDeviceTypeId)
+        .filter((deviceTypeId): deviceTypeId is string => deviceTypeId !== null),
+    );
+
+    const now = new Date();
+    const flags = new Map<string, boolean>();
+    for (const source of sources) {
+      const deviceTypeId = reviewSourceDeviceTypeId(source);
+      const requiredTypeIds = deviceTypeId
+        ? (requiredByDeviceType.get(deviceTypeId) ?? new Set<string>())
+        : null;
+      flags.set(
+        source.id,
+        jobNeedsReferenceEquipmentReview(source, requiredTypeIds, source.startedAt ?? now),
+      );
+    }
+    return flags;
   }
 
   async findOne(companyId: string, id: string): Promise<CalibrationJobDetail> {
@@ -541,11 +596,9 @@ export class CalibrationJobsService {
     const deviceChanges =
       input.newDeviceId !== undefined && (input.newDeviceId ?? null) !== job.deviceId;
     const serialChanges =
-      input.newSerial !== undefined &&
-      (input.newSerial ?? null) !== job.technicianObservedSerial;
+      input.newSerial !== undefined && (input.newSerial ?? null) !== job.technicianObservedSerial;
     const akdAklChanges =
-      input.newAkdAkl !== undefined &&
-      (input.newAkdAkl ?? null) !== job.technicianObservedAkdAkl;
+      input.newAkdAkl !== undefined && (input.newAkdAkl ?? null) !== job.technicianObservedAkdAkl;
 
     if (!deviceChanges && !serialChanges && !akdAklChanges) {
       throw new BadRequestException({

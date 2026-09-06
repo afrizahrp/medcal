@@ -25,6 +25,7 @@ import {
 } from "../quotations/quotations-ui";
 import {
   IdentityCorrectionStatusBadge,
+  ReferenceEquipmentReviewBadge,
   type IdentityCorrectionStatus,
 } from "../calibration-jobs/calibration-jobs-ui";
 import { fmtDateOnly } from "@/lib/date-utils";
@@ -421,20 +422,29 @@ export function latestIdentityCorrectionForItem(
 export function WorkOrderItemsTable({
   items,
   jobs,
+  referenceEquipmentReviewPoiIds,
 }: {
   items: WorkOrderItem[];
   jobs: WorkOrderCalibrationJob[];
+  /**
+   * purchaseOrderItemIds with ≥1 calibration job that needs reference-equipment
+   * review. Computed from the calibration-jobs list (polled) on the WO detail
+   * page — the WO payload itself does not carry this state. Undefined while that
+   * query is still loading.
+   */
+  referenceEquipmentReviewPoiIds?: Set<string>;
 }) {
   return (
     <section className="space-y-3">
       <h2 className="text-base font-semibold text-slate-900">Work Order Items ({items.length})</h2>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px]">
+        <table className="w-full min-w-[720px]">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
               <th className="px-3 py-2">Item</th>
               <th className="px-3 py-2">Device</th>
               <th className="px-3 py-2">Identity Correction</th>
+              <th className="px-3 py-2">Alat Referensi</th>
               <th className="px-3 py-2 text-right">Qty</th>
             </tr>
           </thead>
@@ -442,6 +452,9 @@ export function WorkOrderItemsTable({
             {items.map((item) => {
               const device = deviceIdentifierFromItem(item);
               const identity = latestIdentityCorrectionForItem(jobs, item.purchaseOrderItemId);
+              const needsRefEquipmentReview = Boolean(
+                referenceEquipmentReviewPoiIds?.has(item.purchaseOrderItemId),
+              );
               return (
                 <tr key={item.id}>
                   <td className="px-3 py-3">
@@ -465,6 +478,13 @@ export function WorkOrderItemsTable({
                           </span>
                         ) : null}
                       </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-3">
+                    {needsRefEquipmentReview ? (
+                      <ReferenceEquipmentReviewBadge />
                     ) : (
                       <span className="text-xs text-slate-400">—</span>
                     )}

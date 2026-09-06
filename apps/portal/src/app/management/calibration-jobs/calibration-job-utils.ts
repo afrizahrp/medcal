@@ -1,4 +1,5 @@
 import { ApiError } from "@medcal/shared";
+import type { JobEquipmentValidityStatus } from "./use-reference-equipment-used-query";
 
 export type AkdAklApprovalStatus = "NOT_REQUIRED" | "PENDING_REVIEW" | "APPROVED" | "REJECTED";
 
@@ -75,7 +76,11 @@ export function canSubmitIdentityCorrection(job: Pick<IdentityGateJob, "status">
 
 // ── Identity correction display helpers ───────────────────────────────────────
 
-type CorrectionChangeRow = { attr: "Device" | "Serial" | "AKD/AKL/NIE"; prev: string; next: string };
+type CorrectionChangeRow = {
+  attr: "Device" | "Serial" | "AKD/AKL/NIE";
+  prev: string;
+  next: string;
+};
 
 interface CorrectionLike {
   prevDevice: { code: string | null } | null;
@@ -161,10 +166,76 @@ export function formatCalibrationJobApiError(err: unknown, fallback: string): st
       FILE_CONTENT_MISMATCH: "Isi file tidak sesuai dengan tipe yang dinyatakan.",
       FILE_TOO_LARGE: "Ukuran file melebihi batas (5 MB).",
       FILE_OWNER_LOCKED: "BA sudah diputuskan — lampiran tidak dapat diubah.",
+      // Reference equipment used (PUT /calibration-jobs/:id/reference-equipment-used)
+      CALIBRATION_JOB_NOT_STARTED:
+        "Job belum dimulai — alat referensi baru dapat dicatat setelah kalibrasi berjalan.",
+      CALIBRATION_JOB_REFERENCE_EQUIPMENT_LOCKED:
+        "Job sudah dikirim — daftar alat referensi tidak dapat diubah lagi.",
+      EQUIPMENT_NOT_CONFIRMED_ON_WORK_ORDER:
+        "Alat ini tidak ada pada daftar work order job. Muat ulang halaman.",
+      EQUIPMENT_INACTIVE: "Alat referensi ini berstatus nonaktif dan tidak dapat dipakai.",
+      EQUIPMENT_TYPE_NOT_REQUIRED_FOR_DEVICE:
+        "Jenis alat ini tidak diperlukan untuk jenis perangkat pada job ini.",
+      DUPLICATE_JOB_REFERENCE_EQUIPMENT: "Ada alat yang terpilih lebih dari sekali.",
+      INVALID_JOB_REFERENCE_EQUIPMENT: "Data pilihan alat referensi tidak valid.",
     };
     if (code && messages[code]) return messages[code];
     if (typeof err.data?.message === "string") return err.data.message;
     return err.message;
   }
   return fallback;
+}
+
+// ── Reference equipment used ─────────────────────────────────────────────────
+
+/**
+ * Mirrors REFERENCE_EQUIPMENT_LOCKED_JOB_STATUSES in calibration-jobs.service.ts —
+ * once execution is past the bench, which reference equipment was used is final.
+ */
+const REFERENCE_EQUIPMENT_LOCKED_JOB_STATUSES: readonly string[] = ["SUBMITTED", "ACCEPTED_BY_QA"];
+
+/** Recording is possible once the job has started and before it is submitted. */
+export function canRecordReferenceEquipment(job: {
+  status: string;
+  startedAt: string | null;
+}): boolean {
+  return job.startedAt !== null && !REFERENCE_EQUIPMENT_LOCKED_JOB_STATUSES.includes(job.status);
+}
+
+export const REFERENCE_EQUIPMENT_VALIDITY_LABELS: Record<JobEquipmentValidityStatus, string> = {
+  VALID: "Valid",
+  EXPIRED: "Kalibrasi kedaluwarsa",
+  NOT_YET_VALID: "Belum berlaku",
+  NO_RECORD: "Tanpa sertifikat",
+  NOT_ACCEPTED_FOR_USE: "Tidak diterima untuk pemakaian",
+};
+
+export const REFERENCE_EQUIPMENT_VALIDITY_BADGE_CLASS: Record<JobEquipmentValidityStatus, string> =
+  {
+    VALID: "border-transparent bg-emerald-600 text-white hover:bg-emerald-600",
+    EXPIRED: "border-transparent bg-red-600 text-white hover:bg-red-600",
+    NOT_YET_VALID: "border-transparent bg-amber-500 text-white hover:bg-amber-500",
+    NO_RECORD: "border-transparent bg-slate-500 text-white hover:bg-slate-500",
+    NOT_ACCEPTED_FOR_USE: "border-transparent bg-orange-500 text-white hover:bg-orange-500",
+  };
+
+/** Only VALID can be submitted without a TECHNICIAN_MANAGER override. */
+export function isReferenceEquipmentUsable(status: JobEquipmentValidityStatus): boolean {
+  return status === "VALID";
+}
+
+/**
+ * Reference-equipment submit errors. EQUIPMENT_CALIBRATION_INVALID carries the
+ * failing validity sub-status in err.data.validityStatus — surface it. Everything
+ * else defers to formatCalibrationJobApiError.
+ */
+export function formatReferenceEquipmentError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.data?.code === "EQUIPMENT_CALIBRATION_INVALID") {
+    const status = err.data.validityStatus as JobEquipmentValidityStatus | undefined;
+    const label = status ? REFERENCE_EQUIPMENT_VALIDITY_LABELS[status] : undefined;
+    return label
+      ? `Kalibrasi alat tidak valid (${label}). Perlu persetujuan manajer teknis.`
+      : "Kalibrasi alat tidak valid. Perlu persetujuan manajer teknis.";
+  }
+  return formatCalibrationJobApiError(err, fallback);
 }

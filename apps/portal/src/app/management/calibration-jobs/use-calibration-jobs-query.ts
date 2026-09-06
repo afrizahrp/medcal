@@ -85,6 +85,27 @@ export function useCalibrationJob(id: string | undefined) {
   });
 }
 
+/**
+ * All calibration jobs for one Work Order, for the Work Order detail page's
+ * per-item indicators (currently the "Perlu Persetujuan Alat" reference-equipment
+ * badge — a computed state the WO payload itself does not carry). Polled on the
+ * same 6s cadence as the Calibration Jobs list so the badge clears without a
+ * manual refresh after a manager overrides. pageSize 100 is the schema max — a
+ * single WO with >100 fanned-out units is not a real case.
+ */
+export function useWorkOrderCalibrationJobs(workOrderId: string | undefined) {
+  return useQuery({
+    queryKey: [CALIBRATION_JOBS_QUERY_KEY, "by-work-order", workOrderId ?? ""],
+    queryFn: () =>
+      apiFetch<CalibrationJobListResponse>(
+        `/calibration-jobs?workOrderId=${encodeURIComponent(workOrderId ?? "")}&pageSize=100`,
+      ),
+    enabled: Boolean(workOrderId),
+    refetchInterval: 6000,
+    refetchOnWindowFocus: true,
+  });
+}
+
 export function useDeviceCandidates(id: string | undefined, search: string, enabled: boolean) {
   const trimmed = search.trim();
   return useQuery({
@@ -122,4 +143,3 @@ export function useDecideIdentity() {
     onSuccess: (_data, variables) => invalidateCalibrationJobQueries(queryClient, variables.id),
   });
 }
-

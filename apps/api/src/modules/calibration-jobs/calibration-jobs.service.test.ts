@@ -415,9 +415,9 @@ describe("CalibrationJobsService — start (Mulai Kalibrasi)", () => {
     const { jobs } = await startedWorkOrderJobs(realCompanyId);
     await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
 
-    await expect(
-      calibrationJobsService.start(realCompanyId, jobs[0]!.id),
-    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_ALREADY_STARTED" } });
+    await expect(calibrationJobsService.start(realCompanyId, jobs[0]!.id)).rejects.toMatchObject({
+      response: { code: "CALIBRATION_JOB_ALREADY_STARTED" },
+    });
   });
 
   it("rejects starting a job that has advanced past PENDING", async () => {
@@ -427,9 +427,9 @@ describe("CalibrationJobsService — start (Mulai Kalibrasi)", () => {
       data: { status: "SUBMITTED" },
     });
 
-    await expect(
-      calibrationJobsService.start(realCompanyId, jobs[0]!.id),
-    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_ALREADY_STARTED" } });
+    await expect(calibrationJobsService.start(realCompanyId, jobs[0]!.id)).rejects.toMatchObject({
+      response: { code: "CALIBRATION_JOB_ALREADY_STARTED" },
+    });
   });
 
   it("unblocks reference-equipment recording (CALIBRATION_JOB_NOT_STARTED gate)", async () => {
@@ -467,9 +467,9 @@ describe("CalibrationJobsService — start (Mulai Kalibrasi)", () => {
     createdCompanyIds.push(otherCompanyId);
     const { jobs } = await startedWorkOrderJobs(otherCompanyId);
 
-    await expect(
-      calibrationJobsService.start(realCompanyId, jobs[0]!.id),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(calibrationJobsService.start(realCompanyId, jobs[0]!.id)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
 
@@ -487,7 +487,11 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
       realCompanyId,
       jobs[0]!.id,
       tech.id,
-      { reason: "On-site identification", newDeviceId: device.id, signatures: UNAVAILABLE_SIGNATURES },
+      {
+        reason: "On-site identification",
+        newDeviceId: device.id,
+        signatures: UNAVAILABLE_SIGNATURES,
+      },
     );
 
     expect(result.deviceTypeValidated).toBe(true);
@@ -904,7 +908,10 @@ describe("CalibrationJobsService — Reference Equipment Used", () => {
     return type;
   }
 
-  async function createEquipmentUnit(equipmentTypeId: string, overrides: { isActive?: boolean } = {}) {
+  async function createEquipmentUnit(
+    equipmentTypeId: string,
+    overrides: { isActive?: boolean } = {},
+  ) {
     const unit = await prisma.equipment.create({
       data: {
         companyId: realCompanyId,
@@ -975,7 +982,10 @@ describe("CalibrationJobsService — Reference Equipment Used", () => {
       beforeStart: async ({ workOrderId, deviceTypeId }) => {
         await requireEquipmentType(deviceTypeId, equipmentType.id);
         await workOrdersService.replaceEquipment(realCompanyId, workOrderId, {
-          equipment: units.map((unit) => ({ equipmentId: unit.id, equipmentTypeId: equipmentType.id })),
+          equipment: units.map((unit) => ({
+            equipmentId: unit.id,
+            equipmentTypeId: equipmentType.id,
+          })),
         });
         await workOrdersService.confirmEquipment(realCompanyId, workOrderId);
       },
@@ -1132,7 +1142,11 @@ describe("CalibrationJobsService — Reference Equipment Used", () => {
       jobs[0]!.id,
       manager.id,
       "TECHNICIAN_MANAGER",
-      { items: [{ equipmentId: unit.id, override: { reason: "Certificate expired, unit visually OK" } }] },
+      {
+        items: [
+          { equipmentId: unit.id, override: { reason: "Certificate expired, unit visually OK" } },
+        ],
+      },
     );
 
     expect(result).toHaveLength(1);
@@ -1189,7 +1203,10 @@ describe("CalibrationJobsService — Reference Equipment Used", () => {
 
   it("rejects recording once the job has advanced past SUBMITTED", async () => {
     const { jobs, unit } = await onSiteJobWithConfirmedEquipment();
-    await prisma.calibrationJob.update({ where: { id: jobs[0]!.id }, data: { status: "SUBMITTED" } });
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { status: "SUBMITTED" },
+    });
 
     await expect(
       calibrationJobsService.replaceReferenceEquipmentUsed(
@@ -1237,6 +1254,100 @@ describe("CalibrationJobsService — Reference Equipment Used", () => {
     expect(byId.get(units[0]!.id)?.validity.status).toBe("VALID");
     expect(byId.get(units[1]!.id)?.validity.status).toBe("EXPIRED");
     expect(candidates.every((c) => c.requiredForDeviceType)).toBe(true);
+  });
+
+  it("candidate listing excludes a confirmed unit whose type is not wired to the job's device type", async () => {
+    const { jobs, units } = await onSiteJobWithEquipmentUnits([{}]);
+
+    // A unit confirmed on the WorkOrder but of a type never wired to the
+    // DeviceType (no DeviceTypeEquipmentRequirement) — the save-time rule
+    // rejects it, so the picker must not offer it.
+    const strayType = await createEquipmentType("Thermometer 12 channel");
+    const strayUnit = await createEquipmentUnit(strayType.id);
+    await createCalibrationRecord(strayUnit.id);
+    await prisma.workOrderEquipment.create({
+      data: {
+        companyId: realCompanyId,
+        workOrderId: jobs[0]!.workOrderId,
+        equipmentId: strayUnit.id,
+        equipmentTypeId: strayType.id,
+        sortOrder: 999,
+      },
+    });
+
+    const candidates = await calibrationJobsService.getReferenceEquipmentCandidates(
+      realCompanyId,
+      jobs[0]!.id,
+    );
+
+    expect(candidates.map((c) => c.equipmentId)).toEqual([units[0]!.id]);
+  });
+
+  describe("needsReferenceEquipmentReview (list flag)", () => {
+    async function listRow(workOrderId: string, jobId: string) {
+      const res = await calibrationJobsService.findAll(realCompanyId, { workOrderId }, staffUserId);
+      return res.data.find((row) => row.id === jobId)!;
+    }
+
+    it("is false when every required unit's calibration is valid", async () => {
+      const { workOrder, jobs } = await onSiteJobWithConfirmedEquipment();
+      expect((await listRow(workOrder.id, jobs[0]!.id)).needsReferenceEquipmentReview).toBe(false);
+    });
+
+    it("is true when a required unit is expired and not yet overridden", async () => {
+      const { workOrder, jobs } = await onSiteJobWithConfirmedEquipment({
+        validUntil: new Date("2020-01-01T00:00:00.000Z"),
+      });
+      expect((await listRow(workOrder.id, jobs[0]!.id)).needsReferenceEquipmentReview).toBe(true);
+    });
+
+    it("is true when a required unit has no calibration record", async () => {
+      const { workOrder, jobs } = await onSiteJobWithEquipmentUnits([
+        { skipCalibrationRecord: true },
+      ]);
+      expect((await listRow(workOrder.id, jobs[0]!.id)).needsReferenceEquipmentReview).toBe(true);
+    });
+
+    it("clears once a TECHNICIAN_MANAGER records the unit with an override", async () => {
+      const { workOrder, jobs, unit } = await onSiteJobWithConfirmedEquipment({
+        validUntil: new Date("2020-01-01T00:00:00.000Z"),
+      });
+      const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+
+      expect((await listRow(workOrder.id, jobs[0]!.id)).needsReferenceEquipmentReview).toBe(true);
+
+      await calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+        manager.id,
+        "TECHNICIAN_MANAGER",
+        {
+          items: [{ equipmentId: unit.id, override: { reason: "Cert expired, unit visually OK" } }],
+        },
+      );
+
+      expect((await listRow(workOrder.id, jobs[0]!.id)).needsReferenceEquipmentReview).toBe(false);
+    });
+
+    it("ignores an expired unit whose type is not required for the job's device type", async () => {
+      const { workOrder, jobs } = await onSiteJobWithEquipmentUnits([{}]);
+      const strayType = await createEquipmentType("Uncalibrated stray type");
+      const strayUnit = await createEquipmentUnit(strayType.id);
+      await createCalibrationRecord(strayUnit.id, {
+        validUntil: new Date("2020-01-01T00:00:00.000Z"),
+      });
+      await prisma.workOrderEquipment.create({
+        data: {
+          companyId: realCompanyId,
+          workOrderId: workOrder.id,
+          equipmentId: strayUnit.id,
+          equipmentTypeId: strayType.id,
+          sortOrder: 998,
+        },
+      });
+
+      expect((await listRow(workOrder.id, jobs[0]!.id)).needsReferenceEquipmentReview).toBe(false);
+    });
   });
 });
 
@@ -1468,9 +1579,7 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     const finance = await makeMember(realCompanyId, "FINANCE");
     getSessionMock.mockResolvedValueOnce({ user: { id: finance.id, email: "start-f@x.co" } });
 
-    await expect(guard.canActivate(contextFor("start"))).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(guard.canActivate(contextFor("start"))).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("allows a TECHNICIAN to escalate", async () => {
@@ -1484,27 +1593,23 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
     getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "t3@x.co" } });
 
-    await expect(
-      guard.canActivate(contextFor("submitIdentityCorrection")),
-    ).resolves.toBe(true);
+    await expect(guard.canActivate(contextFor("submitIdentityCorrection"))).resolves.toBe(true);
   });
 
   it("blocks a TECHNICIAN from deciding an identity correction (403)", async () => {
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
     getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "t4@x.co" } });
 
-    await expect(
-      guard.canActivate(contextFor("decideIdentityCorrection")),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(guard.canActivate(contextFor("decideIdentityCorrection"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it("allows a TECHNICIAN_MANAGER to decide an identity correction", async () => {
     const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
     getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "m2@x.co" } });
 
-    await expect(
-      guard.canActivate(contextFor("decideIdentityCorrection")),
-    ).resolves.toBe(true);
+    await expect(guard.canActivate(contextFor("decideIdentityCorrection"))).resolves.toBe(true);
   });
 
   it("blocks a FINANCE user from submitting an identity correction (403)", async () => {
@@ -1520,18 +1625,18 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
     getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "req-t@x.co" } });
 
-    await expect(
-      guard.canActivate(contextFor("replaceReferenceEquipmentUsed")),
-    ).resolves.toBe(true);
+    await expect(guard.canActivate(contextFor("replaceReferenceEquipmentUsed"))).resolves.toBe(
+      true,
+    );
   });
 
   it("allows a TECHNICIAN_MANAGER to record reference equipment used", async () => {
     const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
     getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "req-m@x.co" } });
 
-    await expect(
-      guard.canActivate(contextFor("replaceReferenceEquipmentUsed")),
-    ).resolves.toBe(true);
+    await expect(guard.canActivate(contextFor("replaceReferenceEquipmentUsed"))).resolves.toBe(
+      true,
+    );
   });
 
   it("blocks a FINANCE user from recording reference equipment used (403)", async () => {
