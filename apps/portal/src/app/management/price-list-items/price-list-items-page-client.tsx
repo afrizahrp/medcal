@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { format } from "date-fns";
-import { CalendarIcon, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { ApiError, formatIdr, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { fmtDateOnly, todayDateOnly } from "@/lib/date-utils";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePaginationSync } from "@/hooks/use-pagination-sync";
 import { useUrlQueryState } from "@/hooks/use-url-query-state";
@@ -40,93 +39,6 @@ const URL_KEYS = [
   "pageSize",
 ] as const;
 
-/** Parse a `yyyy-mm-dd[...]` API date string as a local calendar day (no TZ shift). */
-function parseDateOnly(value: string | null | undefined): Date | undefined {
-  if (!value) return undefined;
-  const [y, m, d] = value.slice(0, 10).split("-").map(Number);
-  if (!y || !m || !d) return undefined;
-  return new Date(y, m - 1, d);
-}
-
-/** Presentation only — dd/mm/yyyy. The wire/DB format stays ISO date-only. */
-function fmtDate(value: string | null | undefined): string {
-  const dt = parseDateOnly(value);
-  return dt ? format(dt, "dd/MM/yyyy") : "—";
-}
-
-/** `Date` (from the calendar) → the `yyyy-MM-dd` string the API/create flow uses. */
-function toDateOnlyString(date: Date | undefined): string {
-  return date ? format(date, "yyyy-MM-dd") : "";
-}
-
-/**
- * The Portal's standard date picker (Popover + Calendar), same composition as
- * the Purchase Order / Quotation forms. Displays the selected day as dd/mm/yyyy.
- */
-function DateField({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-  allowClear = false,
-}: {
-  value: string;
-  onChange: (next: string) => void;
-  placeholder: string;
-  ariaLabel: string;
-  allowClear?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = parseDateOnly(value);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          aria-label={ariaLabel}
-          className={cn("h-8 w-[140px] justify-start font-normal", !selected && "text-slate-400")}
-        >
-          <CalendarIcon className="mr-2 h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">
-            {selected ? format(selected, "dd/MM/yyyy") : placeholder}
-          </span>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={selected}
-          onSelect={(date) => {
-            onChange(toDateOnlyString(date));
-            setOpen(false);
-          }}
-          captionLayout="dropdown"
-          startMonth={new Date(2020, 0)}
-          endMonth={new Date(2035, 11)}
-          autoFocus
-        />
-        {allowClear && selected ? (
-          <div className="border-t border-slate-100 p-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="w-full"
-              onClick={() => {
-                onChange("");
-                setOpen(false);
-              }}
-            >
-              Hapus tanggal
-            </Button>
-          </div>
-        ) : null}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 function formatError(err: unknown): string {
   if (err instanceof ApiError) {
     const code = err.data?.code;
@@ -154,7 +66,7 @@ interface DraftFields {
 const EMPTY_DRAFT: DraftFields = {
   deviceTypeId: "",
   unitPrice: "",
-  effectiveFrom: new Date().toISOString().slice(0, 10),
+  effectiveFrom: todayDateOnly(),
   effectiveUntil: "",
   notes: "",
 };
@@ -252,8 +164,8 @@ export default function PriceListItemsPageClient() {
       await createMutation.mutateAsync({
         deviceTypeId: draft.deviceTypeId,
         unitPrice: price,
-        effectiveFrom: new Date(draft.effectiveFrom),
-        effectiveUntil: draft.effectiveUntil ? new Date(draft.effectiveUntil) : null,
+        effectiveFrom: draft.effectiveFrom,
+        effectiveUntil: draft.effectiveUntil || null,
         notes: draft.notes.trim() || null,
       });
       setDraft({ ...EMPTY_DRAFT });
@@ -288,8 +200,8 @@ export default function PriceListItemsPageClient() {
         id,
         input: {
           unitPrice: price,
-          effectiveFrom: new Date(editFrom),
-          effectiveUntil: editUntil ? new Date(editUntil) : null,
+          effectiveFrom: editFrom,
+          effectiveUntil: editUntil || null,
         },
       });
       setEditingId(null);
@@ -374,8 +286,7 @@ export default function PriceListItemsPageClient() {
               <DateField
                 value={draft.effectiveFrom}
                 onChange={(next) => setDraft((d) => ({ ...d, effectiveFrom: next }))}
-                placeholder="Pilih tanggal…"
-                ariaLabel="Berlaku dari"
+                aria-label="Berlaku dari"
               />
             </div>
             <div>
@@ -385,9 +296,8 @@ export default function PriceListItemsPageClient() {
               <DateField
                 value={draft.effectiveUntil}
                 onChange={(next) => setDraft((d) => ({ ...d, effectiveUntil: next }))}
-                placeholder="Tanpa batas"
-                ariaLabel="Berlaku sampai"
-                allowClear
+                placeholder="dd/mm/yyyy (opsional)"
+                aria-label="Berlaku sampai"
               />
             </div>
             <div className="sm:col-span-2">
@@ -512,18 +422,18 @@ export default function PriceListItemsPageClient() {
                           {editing ? (
                             <div className="flex flex-wrap items-center gap-1.5">
                               <DateField
+                                className="w-[150px]"
                                 value={editFrom}
                                 onChange={setEditFrom}
-                                placeholder="Mulai"
-                                ariaLabel="Berlaku dari"
+                                aria-label="Berlaku dari"
                               />
                               <span className="text-slate-400">—</span>
                               <DateField
+                                className="w-[150px]"
                                 value={editUntil}
                                 onChange={setEditUntil}
-                                placeholder="Tanpa batas"
-                                ariaLabel="Berlaku sampai"
-                                allowClear
+                                placeholder="dd/mm/yyyy (opsional)"
+                                aria-label="Berlaku sampai"
                               />
                               {editRangeInvalid ? (
                                 <span className="w-full text-xs text-red-600">
@@ -533,7 +443,7 @@ export default function PriceListItemsPageClient() {
                             </div>
                           ) : (
                             <>
-                              {fmtDate(row.effectiveFrom)} — {fmtDate(row.effectiveUntil)}
+                              {fmtDateOnly(row.effectiveFrom)} — {fmtDateOnly(row.effectiveUntil)}
                             </>
                           )}
                         </td>

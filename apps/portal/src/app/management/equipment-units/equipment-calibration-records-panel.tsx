@@ -1,9 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { format } from "date-fns";
 import {
-  CalendarIcon,
   ChevronDown,
   ChevronRight,
   Download,
@@ -13,21 +11,22 @@ import {
   Upload,
 } from "lucide-react";
 import { ApiError } from "@medcal/shared";
+import type {
+  EquipmentCalibrationRecordCreateBody,
+  EquipmentCalibrationRecordUpdateBody,
+} from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "../calibration-requests/calibration-requests-ui";
 import {
   fmtDateOnly,
   fmtTimestampDay,
   isCalibrationValidityWindowOk,
-  parseDateOnly,
   toDateInputValue,
-  toDateOnlyString,
-} from "./equipment-calibration-record-date-utils";
+} from "@/lib/date-utils";
 import { Surface, selectClassName } from "./equipment-units-ui";
 import {
   downloadCalibrationCertificate,
@@ -125,80 +124,6 @@ const sectionTitle = "text-xs font-semibold uppercase tracking-wide text-slate-5
 const label = "block text-xs font-medium text-slate-600";
 const grid2 = "grid gap-3 sm:grid-cols-2";
 
-/**
- * Portal standard date picker (Popover + Calendar) — same composition as
- * Price List / PO / Quotation. Displays dd/MM/yyyy; value stays YYYY-MM-DD.
- */
-function DateField({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-  allowClear = false,
-  disabled,
-}: {
-  value: string;
-  onChange: (next: string) => void;
-  placeholder: string;
-  ariaLabel: string;
-  allowClear?: boolean;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = parseDateOnly(value);
-  return (
-    <Popover open={open} onOpenChange={(next) => !disabled && setOpen(next)}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={disabled}
-          aria-label={ariaLabel}
-          className={cn(
-            "mt-1 h-9 w-full justify-start font-normal",
-            !selected && "text-slate-400",
-          )}
-        >
-          <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-          <span className="truncate">
-            {selected ? format(selected, "dd/MM/yyyy") : placeholder}
-          </span>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={selected}
-          onSelect={(date) => {
-            onChange(toDateOnlyString(date));
-            setOpen(false);
-          }}
-          captionLayout="dropdown"
-          startMonth={new Date(2020, 0)}
-          endMonth={new Date(2035, 11)}
-          autoFocus
-        />
-        {allowClear && selected ? (
-          <div className="border-t border-slate-100 p-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="w-full"
-              onClick={() => {
-                onChange("");
-                setOpen(false);
-              }}
-            >
-              Hapus tanggal
-            </Button>
-          </div>
-        ) : null}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 function CalibrationRecordForm({
   value,
   onChange,
@@ -216,32 +141,31 @@ function CalibrationRecordForm({
           <div>
             <label className={label}>Tanggal kalibrasi *</label>
             <DateField
+              className="mt-1"
               value={value.calibrationDate}
               disabled={disabled}
               onChange={(next) => onChange("calibrationDate", next)}
-              placeholder="Pilih tanggal…"
-              ariaLabel="Tanggal kalibrasi"
+              aria-label="Tanggal kalibrasi"
             />
           </div>
           <div>
             <label className={label}>Berlaku dari</label>
             <DateField
+              className="mt-1"
               value={value.validFrom}
               disabled={disabled}
               onChange={(next) => onChange("validFrom", next)}
-              placeholder="Pilih tanggal…"
-              ariaLabel="Berlaku dari"
-              allowClear
+              aria-label="Berlaku dari"
             />
           </div>
           <div>
             <label className={label}>Berlaku s/d *</label>
             <DateField
+              className="mt-1"
               value={value.validUntil}
               disabled={disabled}
               onChange={(next) => onChange("validUntil", next)}
-              placeholder="Pilih tanggal…"
-              ariaLabel="Berlaku s/d"
+              aria-label="Berlaku s/d"
             />
           </div>
           <div>
@@ -286,7 +210,7 @@ function CalibrationRecordForm({
   );
 }
 
-function toCreatePayload(f: FormValue) {
+function toCreatePayload(f: FormValue): EquipmentCalibrationRecordCreateBody {
   return {
     calibrationDate: f.calibrationDate,
     ...(f.validFrom ? { validFrom: f.validFrom } : {}),
@@ -297,10 +221,10 @@ function toCreatePayload(f: FormValue) {
     ...(f.remarks.trim() ? { remarks: f.remarks.trim() } : {}),
     acceptedForUse: f.acceptedForUse,
     ...(f.acceptanceNotes.trim() ? { acceptanceNotes: f.acceptanceNotes.trim() } : {}),
-  } as never;
+  };
 }
 
-function toUpdatePayload(f: FormValue) {
+function toUpdatePayload(f: FormValue): EquipmentCalibrationRecordUpdateBody {
   return {
     calibrationDate: f.calibrationDate,
     validFrom: f.validFrom ? f.validFrom : null,
@@ -311,7 +235,7 @@ function toUpdatePayload(f: FormValue) {
     remarks: f.remarks.trim() ? f.remarks.trim() : null,
     acceptedForUse: f.acceptedForUse,
     acceptanceNotes: f.acceptanceNotes.trim() ? f.acceptanceNotes.trim() : null,
-  } as never;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -455,7 +379,7 @@ function RecordDetail({
     setError(null);
     try {
       if (dirty) await update.mutateAsync({ id: record.id, input: toUpdatePayload(form) });
-      await update.mutateAsync({ id: record.id, input: { status: "CONFIRMED" } as never });
+      await update.mutateAsync({ id: record.id, input: { status: "CONFIRMED" } });
       setConfirmOpen(false);
     } catch (err) {
       setError(apiErr(err));

@@ -1,5 +1,5 @@
 import { ApiError } from "@medcal/shared";
-import type { WorkOrderAssignInput, WorkOrderCreateInput, WorkOrderUpdateInput } from "@medcal/shared";
+import type { WorkOrderAssignInput, WorkOrderCreateBody, WorkOrderUpdateBody } from "@medcal/shared";
 
 export type WorkOrderStatus = "PLANNED" | "ASSIGNED" | "IN_PROGRESS" | "DONE" | "CANCELLED";
 export type AssignmentRole = "LEAD" | "ASSIST";
@@ -88,19 +88,20 @@ export function parseOptionalCoord(value: string): number | null {
   return Number.isFinite(n) ? n : Number.NaN;
 }
 
-export function toDatetimeLocalValue(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+/**
+ * WorkOrder schedule fields (`scheduledStart`/`scheduledEnd`) are date-only in
+ * business meaning — see the migration report. On reload, an API instant string
+ * (`2026-09-01T00:00:00.000Z`) becomes the `YYYY-MM-DD` the form and the shared
+ * DateField use; any time-of-day on legacy rows is dropped.
+ */
+export function toScheduleDateValue(iso: string | null | undefined): string {
+  return iso ? iso.slice(0, 10) : "";
 }
 
-export function fromDatetimeLocalValue(value: string): Date | null {
+/** `YYYY-MM-DD` form value → the `YYYY-MM-DD` wire string (`null` when empty). */
+export function fromScheduleDateValue(value: string): string | null {
   const trimmed = value.trim();
-  if (!trimmed) return null;
-  const date = new Date(trimmed);
-  return Number.isNaN(date.getTime()) ? null : date;
+  return trimmed ? trimmed : null;
 }
 
 export function buildWorkOrderCreatePayload(input: {
@@ -111,15 +112,15 @@ export function buildWorkOrderCreatePayload(input: {
   locationNotes: string;
   scheduledStart: string;
   scheduledEnd: string;
-}): WorkOrderCreateInput {
+}): WorkOrderCreateBody {
   return {
     purchaseOrderId: input.purchaseOrderId,
     addressText: emptyToNull(input.addressText),
     geoLat: parseOptionalCoord(input.geoLat),
     geoLng: parseOptionalCoord(input.geoLng),
     locationNotes: emptyToNull(input.locationNotes),
-    scheduledStart: fromDatetimeLocalValue(input.scheduledStart),
-    scheduledEnd: fromDatetimeLocalValue(input.scheduledEnd),
+    scheduledStart: fromScheduleDateValue(input.scheduledStart),
+    scheduledEnd: fromScheduleDateValue(input.scheduledEnd),
   };
 }
 
@@ -130,15 +131,15 @@ export function buildWorkOrderUpdatePayload(input: {
   locationNotes: string;
   scheduledStart: string;
   scheduledEnd: string;
-}): WorkOrderUpdateInput {
+}): WorkOrderUpdateBody {
   // serviceMode is immutable after create (it determines SPK vs WOL) — not sent.
   return {
     addressText: emptyToNull(input.addressText),
     geoLat: parseOptionalCoord(input.geoLat),
     geoLng: parseOptionalCoord(input.geoLng),
     locationNotes: emptyToNull(input.locationNotes),
-    scheduledStart: fromDatetimeLocalValue(input.scheduledStart),
-    scheduledEnd: fromDatetimeLocalValue(input.scheduledEnd),
+    scheduledStart: fromScheduleDateValue(input.scheduledStart),
+    scheduledEnd: fromScheduleDateValue(input.scheduledEnd),
   };
 }
 
@@ -169,10 +170,9 @@ export function validateWorkOrderOperationalForm(input: {
   if (input.geoLng.trim() && !Number.isFinite(parseOptionalCoord(input.geoLng))) {
     return "Longitude tidak valid.";
   }
-  const start = fromDatetimeLocalValue(input.scheduledStart);
-  const end = fromDatetimeLocalValue(input.scheduledEnd);
-  if (input.scheduledStart.trim() && !start) return "Jadwal mulai tidak valid.";
-  if (input.scheduledEnd.trim() && !end) return "Jadwal selesai tidak valid.";
+  // Date-only `YYYY-MM-DD` strings compare lexicographically.
+  const start = fromScheduleDateValue(input.scheduledStart);
+  const end = fromScheduleDateValue(input.scheduledEnd);
   if (start && end && end < start) return "Jadwal selesai tidak boleh sebelum jadwal mulai.";
   return null;
 }

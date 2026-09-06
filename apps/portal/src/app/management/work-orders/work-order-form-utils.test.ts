@@ -10,6 +10,8 @@ import {
   formatWorkOrderApiError,
   isActiveWorkOrderStatus,
   isWorkOrderTerminal,
+  toScheduleDateValue,
+  validateWorkOrderOperationalForm,
   workOrderActions,
   WORK_ORDER_STATUS_VALUES,
 } from "./work-order-form-utils";
@@ -124,8 +126,8 @@ describe("buildWorkOrderCreatePayload", () => {
       geoLat: "-6.2",
       geoLng: "106.8",
       locationNotes: "  Gate B  ",
-      scheduledStart: "2026-09-01T08:00",
-      scheduledEnd: "2026-09-01T17:00",
+      scheduledStart: "2026-09-01",
+      scheduledEnd: "2026-09-02",
     });
     expect(Object.keys(payload).sort()).toEqual(
       [
@@ -140,6 +142,12 @@ describe("buildWorkOrderCreatePayload", () => {
     );
     expect(payload.purchaseOrderId).toBe("po-1");
     expect(payload.addressText).toBe("Lab PKM");
+    // Date-only YYYY-MM-DD wire strings, never Date objects.
+    expect(payload).toMatchObject({
+      scheduledStart: "2026-09-01",
+      scheduledEnd: "2026-09-02",
+    });
+    expect(payload.scheduledStart).not.toBeInstanceOf(Date);
     expect(payload).not.toHaveProperty("companyId");
     expect(payload).not.toHaveProperty("customerId");
     expect(payload).not.toHaveProperty("quotationId");
@@ -169,6 +177,37 @@ describe("buildWorkOrderUpdatePayload", () => {
     expect(payload).not.toHaveProperty("customerId");
     expect(payload).not.toHaveProperty("number");
     expect(payload).not.toHaveProperty("items");
+  });
+});
+
+describe("schedule dates (date-only)", () => {
+  it("drops any time-of-day from a reloaded API instant", () => {
+    expect(toScheduleDateValue("2026-09-01T00:00:00.000Z")).toBe("2026-09-01");
+    expect(toScheduleDateValue("2026-09-01T14:30:00.000Z")).toBe("2026-09-01");
+    expect(toScheduleDateValue(null)).toBe("");
+  });
+
+  it("rejects an end date before the start date", () => {
+    const base = {
+      addressText: "",
+      geoLat: "",
+      geoLng: "",
+      locationNotes: "",
+    };
+    expect(
+      validateWorkOrderOperationalForm({
+        ...base,
+        scheduledStart: "2026-09-10",
+        scheduledEnd: "2026-09-01",
+      }),
+    ).toBe("Jadwal selesai tidak boleh sebelum jadwal mulai.");
+    expect(
+      validateWorkOrderOperationalForm({
+        ...base,
+        scheduledStart: "2026-09-01",
+        scheduledEnd: "2026-09-10",
+      }),
+    ).toBeNull();
   });
 });
 

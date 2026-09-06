@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiFetchBlob } from "@medcal/shared";
-import type { PurchaseOrderCreateInput, PurchaseOrderUpdateInput } from "@medcal/shared";
+import type { PurchaseOrderCreateBody, PurchaseOrderUpdateBody } from "@medcal/shared";
 import { QUOTATIONS_QUERY_KEY } from "../quotations/use-quotations-query";
 import type {
   PurchaseOrderListResponse,
@@ -80,7 +80,7 @@ export function usePurchaseOrder(id: string | undefined) {
 export function useCreatePurchaseOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: PurchaseOrderCreateInput) =>
+    mutationFn: (input: PurchaseOrderCreateBody) =>
       apiFetch<PurchaseOrderRow>("/purchase-orders", {
         method: "POST",
         body: JSON.stringify(input),
@@ -95,7 +95,7 @@ export function useCreatePurchaseOrder() {
 export function useUpdatePurchaseOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: PurchaseOrderUpdateInput }) =>
+    mutationFn: ({ id, input }: { id: string; input: PurchaseOrderUpdateBody }) =>
       apiFetch<PurchaseOrderRow>(`/purchase-orders/${id}`, {
         method: "PATCH",
         body: JSON.stringify(input),

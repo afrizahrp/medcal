@@ -1,12 +1,7 @@
 "use client";
 
-import { format } from "date-fns";
-import { id as localeId } from "date-fns/locale";
-import { CalendarIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DateField } from "@/components/ui/date-field";
 import { cn } from "@/lib/utils";
 import {
   SOURCE_LABELS,
@@ -23,7 +18,8 @@ import {
 
 export type QuotationFormValue = {
   source: QuotationSource;
-  validUntil: Date | undefined;
+  /** `YYYY-MM-DD`, or `""` when unset. */
+  validUntil: string;
   taxCode: string;
   headerDiscountAmount: string;
   items: QuotationFormItem[];
@@ -32,16 +28,12 @@ export type QuotationFormValue = {
 export function QuotationFormFields({
   value,
   onChange,
-  dateOpen,
-  onDateOpenChange,
   taxes,
   taxesLoading,
   readOnlyItems = false,
 }: {
   value: QuotationFormValue;
   onChange: (next: QuotationFormValue) => void;
-  dateOpen: boolean;
-  onDateOpenChange: (open: boolean) => void;
   taxes: TaxOption[];
   taxesLoading?: boolean;
   /**
@@ -82,58 +74,12 @@ export function QuotationFormFields({
               ))}
             </select>
           </div>
-          <div className="min-w-0">
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Valid Until</label>
-            <Popover open={dateOpen} onOpenChange={onDateOpenChange}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={cn(
-                    "h-9 w-full justify-start font-normal",
-                    !value.validUntil && "text-slate-400",
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                  <span className="truncate">
-                    {value.validUntil
-                      ? format(value.validUntil, "PPP", { locale: localeId })
-                      : "Pilih tanggal…"}
-                  </span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={value.validUntil}
-                  onSelect={(date) => {
-                    onChange({ ...value, validUntil: date });
-                    onDateOpenChange(false);
-                  }}
-                  captionLayout="dropdown"
-                  startMonth={new Date(2020, 0)}
-                  endMonth={new Date(2030, 11)}
-                  autoFocus
-                />
-                {value.validUntil ? (
-                  <div className="border-t border-slate-100 p-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => {
-                        onChange({ ...value, validUntil: undefined });
-                        onDateOpenChange(false);
-                      }}
-                    >
-                      Hapus tanggal
-                    </Button>
-                  </div>
-                ) : null}
-              </PopoverContent>
-            </Popover>
-          </div>
+          <DateField
+            label="Valid Until"
+            value={value.validUntil}
+            onChange={(validUntil) => onChange({ ...value, validUntil })}
+            aria-label="Valid Until"
+          />
           <div className="min-w-0">
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Tax</label>
             <select

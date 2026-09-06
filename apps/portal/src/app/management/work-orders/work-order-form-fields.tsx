@@ -1,6 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { cn } from "@/lib/utils";
 import {
   SERVICE_MODE_LABELS,
@@ -15,7 +16,9 @@ export type WorkOrderFormValue = {
   geoLat: string;
   geoLng: string;
   locationNotes: string;
+  /** Date-only `YYYY-MM-DD`, or `""` when unset. */
   scheduledStart: string;
+  /** Date-only `YYYY-MM-DD`, or `""` when unset. */
   scheduledEnd: string;
 };
 
@@ -84,24 +87,18 @@ export function WorkOrderFormFields({
             aria-label="Longitude"
           />
         </div>
-        <div className="min-w-0">
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Scheduled Start</label>
-          <Input
-            type="datetime-local"
-            value={value.scheduledStart}
-            onChange={(e) => onChange({ ...value, scheduledStart: e.target.value })}
-            aria-label="Scheduled Start"
-          />
-        </div>
-        <div className="min-w-0">
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Scheduled End</label>
-          <Input
-            type="datetime-local"
-            value={value.scheduledEnd}
-            onChange={(e) => onChange({ ...value, scheduledEnd: e.target.value })}
-            aria-label="Scheduled End"
-          />
-        </div>
+        <DateField
+          label="Scheduled Start"
+          value={value.scheduledStart}
+          onChange={(scheduledStart) => onChange({ ...value, scheduledStart })}
+          aria-label="Scheduled Start"
+        />
+        <DateField
+          label="Scheduled End"
+          value={value.scheduledEnd}
+          onChange={(scheduledEnd) => onChange({ ...value, scheduledEnd })}
+          aria-label="Scheduled End"
+        />
         <div className="min-w-0 md:col-span-2">
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Location Notes</label>
           <textarea

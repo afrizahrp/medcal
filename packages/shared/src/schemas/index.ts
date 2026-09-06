@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+/**
+ * A calendar date crossing the API boundary.
+ *
+ * Clients send a `YYYY-MM-DD` string (what the portal's date field produces and
+ * what Prisma `@db.Date` stores); server-side callers (service unit tests,
+ * internal reuse) may pass a `Date`. Because the accepted input is
+ * `string | Date`, `z.input<Schema>` carries `string` — so client payload
+ * builders type-check without a cast — while `z.output` / `z.infer` stays `Date`
+ * for the service layer. Runtime coercion is `new Date(value)`, identical to the
+ * `z.coerce.date()` this replaces for every value a client or test actually
+ * sends. Prefer this over `z.coerce.date()` for request-body date fields.
+ */
+export const wireDate = z.union([z.string(), z.date()]).pipe(z.coerce.date());
+
 /** Public edge → Nest ContactMessage create payload (thin validation) */
 export const contactMessageCreateSchema = z.object({
   getFrom: z.enum(["CONTACTFORM", "WHATSAPP", "CHAT_AI", "CHAT_PERSON", "EMAIL"]),
@@ -348,12 +362,15 @@ export const calibrationRequestCreateSchema = z.object({
   leadId: z.string().min(1).optional(),
   serviceMode: z.enum(serviceModeValues),
   /** The date expected/requested by the customer for calibration service. */
-  expectedDate: z.coerce.date().optional(),
+  expectedDate: wireDate.optional(),
   notes: z.string().max(2000).optional(),
   items: z.array(calibrationRequestItemInputSchema).min(1),
 });
 
+/** Post-parse shape (service layer): `expectedDate` is a `Date`. */
 export type CalibrationRequestCreateInput = z.infer<typeof calibrationRequestCreateSchema>;
+/** Request-body shape (client): `expectedDate` is a `YYYY-MM-DD` string. */
+export type CalibrationRequestCreateBody = z.input<typeof calibrationRequestCreateSchema>;
 
 /** GET /calibration-requests query params */
 export const calibrationRequestListQuerySchema = baseListQuerySchema.extend({
@@ -372,12 +389,15 @@ export const calibrationRequestUpdateSchema = z.object({
   leadId: z.string().min(1).nullable().optional(),
   serviceMode: z.enum(serviceModeValues).optional(),
   /** The date expected/requested by the customer for calibration service. */
-  expectedDate: z.coerce.date().nullable().optional(),
+  expectedDate: wireDate.nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
   items: z.array(calibrationRequestItemInputSchema).min(1).optional(),
 });
 
+/** Post-parse shape (service layer): `expectedDate` is a `Date`. */
 export type CalibrationRequestUpdateInput = z.infer<typeof calibrationRequestUpdateSchema>;
+/** Request-body shape (client): `expectedDate` is a `YYYY-MM-DD` string. */
+export type CalibrationRequestUpdateBody = z.input<typeof calibrationRequestUpdateSchema>;
 
 // =============================================================================
 // Quotation (CalibrationRequest → Quotation)
@@ -428,13 +448,16 @@ const quotationCreateItemSchema = z.object({
 export const quotationCreateSchema = z.object({
   requestId: z.string().min(1),
   source: z.enum(quotationSourceValues).optional(),
-  validUntil: z.coerce.date().optional(),
+  validUntil: wireDate.optional(),
   taxCode: z.string().min(1).max(50),
   headerDiscountAmount: quotationDecimalSchema.nonnegative().optional(),
   items: z.array(quotationCreateItemSchema).min(1).optional(),
 });
 
+/** Post-parse shape (service layer): `validUntil` is a `Date`. */
 export type QuotationCreateInput = z.infer<typeof quotationCreateSchema>;
+/** Request-body shape (client): `validUntil` is a `YYYY-MM-DD` string. */
+export type QuotationCreateBody = z.input<typeof quotationCreateSchema>;
 
 /**
  * POST /quotations/preview body — read-only. Returns the same Price List tariff
@@ -463,13 +486,16 @@ export const QUOTATION_SORTABLE_FIELDS = ["createdAt", "number", "status"] as co
 /** PATCH /quotations/:id body (only allowed while DRAFT) */
 export const quotationUpdateSchema = z.object({
   source: z.enum(quotationSourceValues).optional(),
-  validUntil: z.coerce.date().nullable().optional(),
+  validUntil: wireDate.nullable().optional(),
   taxCode: z.string().min(1).max(50).optional(),
   headerDiscountAmount: quotationDecimalSchema.nonnegative().optional(),
   items: z.array(quotationItemInputSchema).min(1).optional(),
 });
 
+/** Post-parse shape (service layer): `validUntil` is a `Date`. */
 export type QuotationUpdateInput = z.infer<typeof quotationUpdateSchema>;
+/** Request-body shape (client): `validUntil` is a `YYYY-MM-DD` string. */
+export type QuotationUpdateBody = z.input<typeof quotationUpdateSchema>;
 
 // =============================================================================
 // PurchaseOrder (APPROVED Quotation → PurchaseOrder)
@@ -481,11 +507,14 @@ const purchaseOrderStatusValues = ["DRAFT", "APPROVED", "CANCELLED"] as const;
 export const purchaseOrderCreateSchema = z.object({
   quotationId: z.string().min(1),
   customerPoNumber: z.string().trim().min(1).max(100),
-  customerPoDate: z.coerce.date(),
+  customerPoDate: wireDate,
   notes: z.string().max(2000).nullable().optional(),
 });
 
+/** Post-parse shape (service layer): `customerPoDate` is a `Date`. */
 export type PurchaseOrderCreateInput = z.infer<typeof purchaseOrderCreateSchema>;
+/** Request-body shape (client): `customerPoDate` is a `YYYY-MM-DD` string. */
+export type PurchaseOrderCreateBody = z.input<typeof purchaseOrderCreateSchema>;
 
 /** GET /purchase-orders query params */
 export const purchaseOrderListQuerySchema = baseListQuerySchema.extend({
@@ -502,11 +531,14 @@ export const PURCHASE_ORDER_SORTABLE_FIELDS = ["createdAt", "number", "status"] 
 /** PATCH /purchase-orders/:id body (only allowed while DRAFT) */
 export const purchaseOrderUpdateSchema = z.object({
   customerPoNumber: z.string().trim().min(1).max(100).optional(),
-  customerPoDate: z.coerce.date().optional(),
+  customerPoDate: wireDate.optional(),
   notes: z.string().max(2000).nullable().optional(),
 });
 
+/** Post-parse shape (service layer): `customerPoDate` is a `Date`. */
 export type PurchaseOrderUpdateInput = z.infer<typeof purchaseOrderUpdateSchema>;
+/** Request-body shape (client): `customerPoDate` is a `YYYY-MM-DD` string. */
+export type PurchaseOrderUpdateBody = z.input<typeof purchaseOrderUpdateSchema>;
 
 // =============================================================================
 // WorkOrder (APPROVED PurchaseOrder → WorkOrder)
@@ -518,7 +550,7 @@ const assignmentRoleValues = ["LEAD", "ASSIST"] as const;
 
 const workOrderNullableString = z.string().max(2000).nullable().optional();
 const workOrderNullableCoord = z.coerce.number().finite().nullable().optional();
-const workOrderNullableDate = z.coerce.date().nullable().optional();
+const workOrderNullableDate = wireDate.nullable().optional();
 
 /**
  * One reference-equipment unit selected for an ON_SITE work order
@@ -575,7 +607,10 @@ export const workOrderCreateSchema = z.object({
   equipment: z.array(workOrderEquipmentItemSchema).max(200).optional(),
 });
 
+/** Post-parse shape (service layer): `scheduled*` are `Date`. */
 export type WorkOrderCreateInput = z.infer<typeof workOrderCreateSchema>;
+/** Request-body shape (client): `scheduled*` are `YYYY-MM-DD` strings. */
+export type WorkOrderCreateBody = z.input<typeof workOrderCreateSchema>;
 
 /** GET /work-orders query params */
 export const workOrderListQuerySchema = baseListQuerySchema.extend({
@@ -604,7 +639,10 @@ export const workOrderUpdateSchema = z.object({
   scheduledEnd: workOrderNullableDate,
 });
 
+/** Post-parse shape (service layer): `scheduled*` are `Date`. */
 export type WorkOrderUpdateInput = z.infer<typeof workOrderUpdateSchema>;
+/** Request-body shape (client): `scheduled*` are `YYYY-MM-DD` strings. */
+export type WorkOrderUpdateBody = z.input<typeof workOrderUpdateSchema>;
 
 /** POST /work-orders/:id/assign body */
 export const workOrderAssignSchema = z.object({
@@ -949,12 +987,15 @@ export const priceListItemCreateSchema = z.object({
   deviceTypeId: z.string().min(1),
   unitPrice: priceDecimalSchema.positive(),
   currency: z.string().min(1).max(8).optional(),
-  effectiveFrom: z.coerce.date(),
-  effectiveUntil: z.coerce.date().nullable().optional(),
+  effectiveFrom: wireDate,
+  effectiveUntil: wireDate.nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
 });
 
+/** Post-parse shape (service layer): `effective*` are `Date`. */
 export type PriceListItemCreateInput = z.infer<typeof priceListItemCreateSchema>;
+/** Request-body shape (client): `effective*` are `YYYY-MM-DD` strings. */
+export type PriceListItemCreateBody = z.input<typeof priceListItemCreateSchema>;
 
 /** GET /price-list-items query params */
 export const priceListItemListQuerySchema = baseListQuerySchema.extend({
@@ -988,13 +1029,16 @@ export const PRICE_LIST_ITEM_SORTABLE_FIELDS = [
 export const priceListItemUpdateSchema = z.object({
   unitPrice: priceDecimalSchema.positive().optional(),
   currency: z.string().min(1).max(8).optional(),
-  effectiveFrom: z.coerce.date().optional(),
-  effectiveUntil: z.coerce.date().nullable().optional(),
+  effectiveFrom: wireDate.optional(),
+  effectiveUntil: wireDate.nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
   isActive: z.boolean().optional(),
 });
 
+/** Post-parse shape (service layer): `effective*` are `Date`. */
 export type PriceListItemUpdateInput = z.infer<typeof priceListItemUpdateSchema>;
+/** Request-body shape (client): `effective*` are `YYYY-MM-DD` strings. */
+export type PriceListItemUpdateBody = z.input<typeof priceListItemUpdateSchema>;
 
 // =============================================================================
 // DeviceCategory & DeviceType Master Data
@@ -1483,9 +1527,9 @@ const optionalCalibrationTextNullable = z.string().trim().max(500).nullable().op
 /** POST /equipment/:equipmentId/calibration-records body */
 export const equipmentCalibrationRecordCreateSchema = z
   .object({
-    calibrationDate: z.coerce.date(),
-    validFrom: z.coerce.date().nullable().optional(),
-    validUntil: z.coerce.date(),
+    calibrationDate: wireDate,
+    validFrom: wireDate.nullable().optional(),
+    validUntil: wireDate,
     certificateNumber: z.string().trim().max(120).optional(),
     provider: z.string().trim().max(200).optional(),
     // Lab outcome. Free text on purpose — a controlled vocabulary is an open
@@ -1507,15 +1551,20 @@ export const equipmentCalibrationRecordCreateSchema = z
     }
   });
 
+/** Post-parse shape (service layer): calibration dates are `Date`. */
 export type EquipmentCalibrationRecordCreateInput = z.infer<
+  typeof equipmentCalibrationRecordCreateSchema
+>;
+/** Request-body shape (client): calibration dates are `YYYY-MM-DD` strings. */
+export type EquipmentCalibrationRecordCreateBody = z.input<
   typeof equipmentCalibrationRecordCreateSchema
 >;
 
 /** PATCH /equipment-calibration-records/:id body. `status` DRAFT→CONFIRMED only. */
 export const equipmentCalibrationRecordUpdateSchema = z.object({
-  calibrationDate: z.coerce.date().optional(),
-  validFrom: z.coerce.date().nullable().optional(),
-  validUntil: z.coerce.date().optional(),
+  calibrationDate: wireDate.optional(),
+  validFrom: wireDate.nullable().optional(),
+  validUntil: wireDate.optional(),
   certificateNumber: z.string().trim().max(120).nullable().optional(),
   provider: z.string().trim().max(200).nullable().optional(),
   result: z.string().trim().max(120).nullable().optional(),
@@ -1525,7 +1574,12 @@ export const equipmentCalibrationRecordUpdateSchema = z.object({
   status: z.enum(EQUIPMENT_CALIBRATION_RECORD_STATUSES).optional(),
 });
 
+/** Post-parse shape (service layer): calibration dates are `Date`. */
 export type EquipmentCalibrationRecordUpdateInput = z.infer<
+  typeof equipmentCalibrationRecordUpdateSchema
+>;
+/** Request-body shape (client): calibration dates are `YYYY-MM-DD` strings. */
+export type EquipmentCalibrationRecordUpdateBody = z.input<
   typeof equipmentCalibrationRecordUpdateSchema
 >;
 
@@ -1728,12 +1782,17 @@ export const calibrationRequestImportConfirmSchema = z.object({
   customerId: z.string().min(1),
   leadId: z.string().min(1).optional(),
   serviceMode: z.enum(serviceModeValues),
-  expectedDate: z.coerce.date().optional(),
+  expectedDate: wireDate.optional(),
   notes: z.string().max(2000).optional(),
   /** One row = one CalibrationRequestItem; each row's qty is stored as-is. */
   rows: z.array(calibrationRequestImportConfirmRowSchema).min(1),
 });
 
+/** Post-parse shape (service layer): `expectedDate` is a `Date`. */
 export type CalibrationRequestImportConfirmInput = z.infer<
+  typeof calibrationRequestImportConfirmSchema
+>;
+/** Request-body shape (client): `expectedDate` is a `YYYY-MM-DD` string. */
+export type CalibrationRequestImportConfirmBody = z.input<
   typeof calibrationRequestImportConfirmSchema
 >;

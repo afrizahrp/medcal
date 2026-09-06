@@ -23,6 +23,7 @@ import {
   type MoneyValue,
   type QuotationCustomer,
 } from "../quotations/quotations-ui";
+import { fmtDateOnly } from "@/lib/date-utils";
 import {
   deviceIdentifierFromItem,
   type AssignmentRole,
@@ -341,7 +342,7 @@ export function WorkOrderTable({
                 <StatusBadge status={row.status} />
               </td>
               <td className="px-4 py-3 text-sm text-slate-500">
-                {formatDateTime(row.scheduledStart)}
+                {fmtDateOnly(row.scheduledStart)}
               </td>
               <td className="px-4 py-3 text-sm text-slate-500">
                 {formatRelativeTime(row.createdAt)}

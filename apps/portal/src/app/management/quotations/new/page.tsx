@@ -51,12 +51,11 @@ function NewQuotationPageInner() {
 
   const [form, setForm] = useState<QuotationFormValue>({
     source: "PORTAL",
-    validUntil: undefined,
+    validUntil: "",
     taxCode: "",
     headerDiscountAmount: "0",
     items: [],
   });
-  const [dateOpen, setDateOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [existingQuotationId, setExistingQuotationId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
@@ -196,7 +195,7 @@ function NewQuotationPageInner() {
       const result = await createMutation.mutateAsync({
         requestId: request!.id,
         source: form.source,
-        validUntil: form.validUntil,
+        validUntil: form.validUntil || undefined,
         taxCode: form.taxCode,
         headerDiscountAmount: moneyNumber(form.headerDiscountAmount),
       });
@@ -264,8 +263,6 @@ function NewQuotationPageInner() {
           <QuotationFormFields
             value={form}
             onChange={setForm}
-            dateOpen={dateOpen}
-            onDateOpenChange={setDateOpen}
             taxes={taxesQuery.data?.data ?? []}
             taxesLoading={taxesQuery.isLoading}
             readOnlyItems

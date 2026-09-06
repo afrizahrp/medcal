@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { parseISO } from "date-fns";
 import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
+import { toDateInputValue } from "@/lib/date-utils";
 import { AccessDenied } from "../../../../../components/access-denied";
 import { QuotationFormFields, type QuotationFormValue } from "../../quotation-form-fields";
 import {
@@ -25,15 +25,6 @@ import {
 import { useQuotation, useUpdateQuotation } from "../../use-quotations-query";
 import { useTaxes } from "../../use-taxes-query";
 
-function parseValidUntil(dateStr: string | null): Date | undefined {
-  if (!dateStr) return undefined;
-  try {
-    return parseISO(dateStr);
-  } catch {
-    return undefined;
-  }
-}
-
 export default function EditQuotationPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -45,12 +36,11 @@ export default function EditQuotationPage() {
 
   const [form, setForm] = useState<QuotationFormValue>({
     source: "PORTAL",
-    validUntil: undefined,
+    validUntil: "",
     taxCode: "",
     headerDiscountAmount: "0",
     items: [],
   });
-  const [dateOpen, setDateOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
 
@@ -60,7 +50,7 @@ export default function EditQuotationPage() {
     if (quotation && !initialized) {
       setForm({
         source: quotation.source,
-        validUntil: parseValidUntil(quotation.validUntil),
+        validUntil: toDateInputValue(quotation.validUntil),
         taxCode: quotation.taxCode ?? "",
         headerDiscountAmount: String(quotation.headerDiscountAmount ?? 0),
         items: itemsFromQuotation(quotation),
@@ -175,7 +165,7 @@ export default function EditQuotationPage() {
         id: quotation!.id,
         input: {
           source: form.source,
-          validUntil: form.validUntil ?? null,
+          validUntil: form.validUntil || null,
           taxCode: form.taxCode,
           headerDiscountAmount: moneyNumber(form.headerDiscountAmount),
           items: form.items.map((item) => ({
@@ -233,8 +223,6 @@ export default function EditQuotationPage() {
           <QuotationFormFields
             value={form}
             onChange={setForm}
-            dateOpen={dateOpen}
-            onDateOpenChange={setDateOpen}
             taxes={taxesQuery.data?.data ?? []}
             taxesLoading={taxesQuery.isLoading}
           />

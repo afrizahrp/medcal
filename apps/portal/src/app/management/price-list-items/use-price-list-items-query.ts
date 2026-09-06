@@ -3,8 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@medcal/shared";
 import type {
-  PriceListItemCreateInput,
-  PriceListItemUpdateInput,
+  PriceListItemCreateBody,
+  PriceListItemUpdateBody,
 } from "@medcal/shared";
 
 export const PRICE_LIST_ITEMS_QUERY_KEY = "price-list-items" as const;
@@ -77,7 +77,7 @@ export function usePriceListItems(params: PriceListItemsQueryParams) {
 export function useCreatePriceListItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: PriceListItemCreateInput) =>
+    mutationFn: (input: PriceListItemCreateBody) =>
       apiFetch<PriceListItemRow>("/price-list-items", {
         method: "POST",
         body: JSON.stringify(input),
@@ -91,7 +91,7 @@ export function useCreatePriceListItem() {
 export function useUpdatePriceListItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: PriceListItemUpdateInput }) =>
+    mutationFn: ({ id, input }: { id: string; input: PriceListItemUpdateBody }) =>
       apiFetch<PriceListItemRow>(`/price-list-items/${id}`, {
         method: "PATCH",
         body: JSON.stringify(input),

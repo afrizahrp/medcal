@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { parseISO } from "date-fns";
 import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
+import { toDateInputValue } from "@/lib/date-utils";
 import { AccessDenied } from "../../../../../components/access-denied";
 import {
   formActionsClass,
@@ -33,15 +33,6 @@ import {
 } from "../../purchase-orders-ui";
 import { usePurchaseOrder, useUpdatePurchaseOrder } from "../../use-purchase-orders-query";
 
-function parseCustomerPoDate(dateStr: string | null | undefined): Date | undefined {
-  if (!dateStr) return undefined;
-  try {
-    return parseISO(dateStr);
-  } catch {
-    return undefined;
-  }
-}
-
 export default function EditPurchaseOrderPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -53,10 +44,9 @@ export default function EditPurchaseOrderPage() {
 
   const [form, setForm] = useState<PurchaseOrderFormValue>({
     customerPoNumber: "",
-    customerPoDate: undefined,
+    customerPoDate: "",
     notes: "",
   });
-  const [dateOpen, setDateOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
 
@@ -66,7 +56,7 @@ export default function EditPurchaseOrderPage() {
     if (purchaseOrder && !initialized) {
       setForm({
         customerPoNumber: purchaseOrder.customerPoNumber,
-        customerPoDate: parseCustomerPoDate(purchaseOrder.customerPoDate),
+        customerPoDate: toDateInputValue(purchaseOrder.customerPoDate),
         notes: purchaseOrder.notes ?? "",
       });
       setInitialized(true);
@@ -142,7 +132,7 @@ export default function EditPurchaseOrderPage() {
         id: purchaseOrder!.id,
         input: buildPurchaseOrderUpdatePayload({
           customerPoNumber: form.customerPoNumber,
-          customerPoDate: form.customerPoDate!,
+          customerPoDate: form.customerPoDate,
           notes: form.notes,
         }),
       });
@@ -190,12 +180,7 @@ export default function EditPurchaseOrderPage() {
             </div>
           </dl>
 
-          <PurchaseOrderFormFields
-            value={form}
-            onChange={setForm}
-            dateOpen={dateOpen}
-            onDateOpenChange={setDateOpen}
-          />
+          <PurchaseOrderFormFields value={form} onChange={setForm} />
 
           <div className="mt-6 border-t border-slate-100 pt-6">
             <PurchaseOrderSnapshot

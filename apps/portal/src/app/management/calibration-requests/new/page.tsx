@@ -3,16 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
-import { id as localeId } from "date-fns/locale";
-import { CalendarIcon, Plus, Save, Trash2 } from "lucide-react";
+import { Plus, Save, Trash2 } from "lucide-react";
 import { ApiError } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
 import { Input } from "@/components/ui/input";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DateField } from "@/components/ui/date-field";
+import { todayDateOnly } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
 import {
   PageHeader,
@@ -63,8 +61,7 @@ export default function NewCalibrationRequestPage() {
 
   const [customerId, setCustomerId] = useState("");
   const [serviceMode, setServiceMode] = useState<ServiceMode>("ON_SITE");
-  const [desiredDate, setDesiredDate] = useState<Date | undefined>(undefined);
-  const [dateOpen, setDateOpen] = useState(false);
+  const [expectedDate, setExpectedDate] = useState("");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<ItemInput[]>([emptyItem()]);
   const [error, setError] = useState<string | null>(null);
@@ -135,7 +132,7 @@ export default function NewCalibrationRequestPage() {
       const result = await createMutation.mutateAsync({
         customerId,
         serviceMode,
-        expectedDate: desiredDate,
+        expectedDate: expectedDate || undefined,
         notes: notes.trim() || undefined,
         items: validItems.map((item) => ({
           deviceTypeId: item.deviceTypeId.trim(),
@@ -223,44 +220,12 @@ export default function NewCalibrationRequestPage() {
                   </select>
                 </div>
 
-                <div className="min-w-0">
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                    Expected Date
-                  </label>
-                  <Popover open={dateOpen} onOpenChange={setDateOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start font-normal",
-                          !desiredDate && "text-slate-400",
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                        <span className="truncate">
-                          {desiredDate
-                            ? format(desiredDate, "PPP", { locale: localeId })
-                            : "Pilih tanggal…"}
-                        </span>
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={desiredDate}
-                        onSelect={(date) => {
-                          setDesiredDate(date);
-                          setDateOpen(false);
-                        }}
-                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                        captionLayout="dropdown"
-                        startMonth={new Date(2020, 0)}
-                        endMonth={new Date(2030, 11)}
-                        autoFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
+                <DateField
+                  label="Expected Date"
+                  value={expectedDate}
+                  onChange={setExpectedDate}
+                  min={todayDateOnly()}
+                />
               </div>
 
               <div>

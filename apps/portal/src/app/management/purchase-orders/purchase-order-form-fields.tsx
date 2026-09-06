@@ -1,31 +1,23 @@
 "use client";
 
-import { format } from "date-fns";
-import { id as localeId } from "date-fns/locale";
-import { CalendarIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DateField } from "@/components/ui/date-field";
 import { cn } from "@/lib/utils";
 import { selectClassName } from "../quotations/quotations-ui";
 
 export type PurchaseOrderFormValue = {
   customerPoNumber: string;
-  customerPoDate: Date | undefined;
+  /** `YYYY-MM-DD`, or `""` when unset. */
+  customerPoDate: string;
   notes: string;
 };
 
 export function PurchaseOrderFormFields({
   value,
   onChange,
-  dateOpen,
-  onDateOpenChange,
 }: {
   value: PurchaseOrderFormValue;
   onChange: (next: PurchaseOrderFormValue) => void;
-  dateOpen: boolean;
-  onDateOpenChange: (open: boolean) => void;
 }) {
   return (
     <section className="space-y-4">
@@ -41,42 +33,12 @@ export function PurchaseOrderFormFields({
             aria-label="Customer PO No"
           />
         </div>
-        <div className="min-w-0">
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Customer PO Date</label>
-          <Popover open={dateOpen} onOpenChange={onDateOpenChange}>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                className={cn(
-                  "h-9 w-full justify-start font-normal",
-                  !value.customerPoDate && "text-slate-400",
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                <span className="truncate">
-                  {value.customerPoDate
-                    ? format(value.customerPoDate, "PPP", { locale: localeId })
-                    : "Pilih tanggal…"}
-                </span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={value.customerPoDate}
-                onSelect={(date) => {
-                  onChange({ ...value, customerPoDate: date });
-                  onDateOpenChange(false);
-                }}
-                captionLayout="dropdown"
-                startMonth={new Date(2020, 0)}
-                endMonth={new Date(2030, 11)}
-                autoFocus
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
+        <DateField
+          label="Customer PO Date"
+          value={value.customerPoDate}
+          onChange={(customerPoDate) => onChange({ ...value, customerPoDate })}
+          aria-label="Customer PO Date"
+        />
       </div>
       <div>
         <label className="mb-1.5 block text-sm font-medium text-slate-700">Notes</label>

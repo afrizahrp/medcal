@@ -34,6 +34,7 @@ import {
 } from "../work-order-form-utils";
 import { WorkOrderEquipmentSection } from "../work-order-equipment-section";
 import { WorkOrderDeliveryNoteSection } from "../work-order-delivery-note-section";
+import { fmtDateOnly } from "@/lib/date-utils";
 import {
   openWorkOrderPdf,
   useAssignWorkOrder,
@@ -274,8 +275,8 @@ export default function WorkOrderDetailPage() {
           ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <DetailField label="Scheduled Start">{formatDateTime(workOrder.scheduledStart)}</DetailField>
-            <DetailField label="Scheduled End">{formatDateTime(workOrder.scheduledEnd)}</DetailField>
+            <DetailField label="Scheduled Start">{fmtDateOnly(workOrder.scheduledStart)}</DetailField>
+            <DetailField label="Scheduled End">{fmtDateOnly(workOrder.scheduledEnd)}</DetailField>
           </div>
 
           <DetailField label="Technicians">

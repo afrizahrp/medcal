@@ -7,6 +7,7 @@ import { Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
+import { todayDateOnly } from "@/lib/date-utils";
 import { AccessDenied } from "../../../../components/access-denied";
 import { useTaxes } from "../../quotations/use-taxes-query";
 import {
@@ -59,10 +60,9 @@ function NewPurchaseOrderPageInner() {
 
   const [form, setForm] = useState<PurchaseOrderFormValue>({
     customerPoNumber: "",
-    customerPoDate: new Date(),
+    customerPoDate: todayDateOnly(),
     notes: "",
   });
-  const [dateOpen, setDateOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [existingPurchaseOrderId, setExistingPurchaseOrderId] = useState<string | null>(null);
 
@@ -179,7 +179,7 @@ function NewPurchaseOrderPageInner() {
         buildPurchaseOrderCreatePayload({
           quotationId: quotation!.id,
           customerPoNumber: form.customerPoNumber,
-          customerPoDate: form.customerPoDate!,
+          customerPoDate: form.customerPoDate,
           notes: form.notes,
         }),
       );
@@ -245,12 +245,7 @@ function NewPurchaseOrderPageInner() {
             </div>
           </dl>
 
-          <PurchaseOrderFormFields
-            value={form}
-            onChange={setForm}
-            dateOpen={dateOpen}
-            onDateOpenChange={setDateOpen}
-          />
+          <PurchaseOrderFormFields value={form} onChange={setForm} />
 
           <div className="mt-6 border-t border-slate-100 pt-6">
             <PurchaseOrderSnapshot

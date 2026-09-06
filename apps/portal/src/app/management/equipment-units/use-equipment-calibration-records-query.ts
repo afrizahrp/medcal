@@ -3,8 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiFetch, apiFetchBlob } from "@medcal/shared";
 import type {
-  EquipmentCalibrationRecordCreateInput,
-  EquipmentCalibrationRecordUpdateInput,
+  EquipmentCalibrationRecordCreateBody,
+  EquipmentCalibrationRecordUpdateBody,
 } from "@medcal/shared";
 
 export const EQUIPMENT_CALIBRATION_RECORDS_QUERY_KEY = "equipment-calibration-records" as const;
@@ -80,7 +80,7 @@ function invalidate(queryClient: ReturnType<typeof useQueryClient>) {
 export function useCreateEquipmentCalibrationRecord(equipmentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: EquipmentCalibrationRecordCreateInput) =>
+    mutationFn: (input: EquipmentCalibrationRecordCreateBody) =>
       apiFetch<EquipmentCalibrationRecordRow>(`/equipment/${equipmentId}/calibration-records`, {
         method: "POST",
         body: JSON.stringify(input),
@@ -92,7 +92,7 @@ export function useCreateEquipmentCalibrationRecord(equipmentId: string) {
 export function useUpdateEquipmentCalibrationRecord() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: EquipmentCalibrationRecordUpdateInput }) =>
+    mutationFn: ({ id, input }: { id: string; input: EquipmentCalibrationRecordUpdateBody }) =>
       apiFetch<EquipmentCalibrationRecordRow>(`/equipment-calibration-records/${id}`, {
         method: "PATCH",
         body: JSON.stringify(input),

@@ -1,5 +1,5 @@
 import { ApiError } from "@medcal/shared";
-import type { PurchaseOrderCreateInput, PurchaseOrderUpdateInput } from "@medcal/shared";
+import type { PurchaseOrderCreateBody, PurchaseOrderUpdateBody } from "@medcal/shared";
 
 export type PurchaseOrderStatus = "DRAFT" | "APPROVED" | "CANCELLED";
 
@@ -64,9 +64,10 @@ export function taxDescriptionForCode(
 export function buildPurchaseOrderCreatePayload(input: {
   quotationId: string;
   customerPoNumber: string;
-  customerPoDate: Date;
+  /** `YYYY-MM-DD`. */
+  customerPoDate: string;
   notes: string;
-}): PurchaseOrderCreateInput {
+}): PurchaseOrderCreateBody {
   return {
     quotationId: input.quotationId,
     customerPoNumber: input.customerPoNumber.trim(),
@@ -77,9 +78,10 @@ export function buildPurchaseOrderCreatePayload(input: {
 
 export function buildPurchaseOrderUpdatePayload(input: {
   customerPoNumber: string;
-  customerPoDate: Date;
+  /** `YYYY-MM-DD`. */
+  customerPoDate: string;
   notes: string;
-}): PurchaseOrderUpdateInput {
+}): PurchaseOrderUpdateBody {
   return {
     customerPoNumber: input.customerPoNumber.trim(),
     customerPoDate: input.customerPoDate,
@@ -89,7 +91,8 @@ export function buildPurchaseOrderUpdatePayload(input: {
 
 export function validatePurchaseOrderForm(input: {
   customerPoNumber: string;
-  customerPoDate: Date | undefined;
+  /** `YYYY-MM-DD`, or `""` when unset. */
+  customerPoDate: string;
   notes: string;
 }): string | null {
   const number = input.customerPoNumber.trim();

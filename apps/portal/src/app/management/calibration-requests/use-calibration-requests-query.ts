@@ -3,11 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiFetch } from "@medcal/shared";
 import type {
-  CalibrationRequestCreateInput,
-  CalibrationRequestImportConfirmInput,
+  CalibrationRequestCreateBody,
+  CalibrationRequestImportConfirmBody,
   CalibrationRequestImportPreviewResponse,
   CalibrationRequestListQuery,
-  CalibrationRequestUpdateInput,
+  CalibrationRequestUpdateBody,
 } from "@medcal/shared";
 import type {
   CalibrationRequestListResponse,
@@ -70,7 +70,7 @@ export function useCalibrationRequest(id: string | undefined) {
 export function useCreateCalibrationRequest() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: CalibrationRequestCreateInput) =>
+    mutationFn: (input: CalibrationRequestCreateBody) =>
       apiFetch<CalibrationRequestRow>("/calibration-requests", {
         method: "POST",
         body: JSON.stringify(input),
@@ -85,7 +85,7 @@ export function useCreateCalibrationRequest() {
 export function useUpdateCalibrationRequest() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: CalibrationRequestUpdateInput }) =>
+    mutationFn: ({ id, input }: { id: string; input: CalibrationRequestUpdateBody }) =>
       apiFetch<CalibrationRequestRow>(`/calibration-requests/${id}`, {
         method: "PATCH",
         body: JSON.stringify(input),
@@ -143,7 +143,7 @@ export function useImportPreview() {
 export function useImportConfirm() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: CalibrationRequestImportConfirmInput) =>
+    mutationFn: (input: CalibrationRequestImportConfirmBody) =>
       apiFetch<CalibrationRequestRow>("/calibration-requests/import/confirm", {
         method: "POST",
         body: JSON.stringify(input),

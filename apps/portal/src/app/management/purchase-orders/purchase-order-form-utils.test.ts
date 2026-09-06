@@ -87,12 +87,11 @@ describe("findActivePurchaseOrder", () => {
 });
 
 describe("buildPurchaseOrderCreatePayload", () => {
-  it("submits only PO-specific fields", () => {
-    const date = new Date("2026-08-15T00:00:00.000Z");
+  it("submits only PO-specific fields, date as a YYYY-MM-DD wire string", () => {
     const payload = buildPurchaseOrderCreatePayload({
       quotationId: "quo-1",
       customerPoNumber: "  PO-CUST-2026-0815  ",
-      customerPoDate: date,
+      customerPoDate: "2026-08-15",
       notes: "  catatan  ",
     });
     expect(Object.keys(payload).sort()).toEqual(
@@ -101,23 +100,25 @@ describe("buildPurchaseOrderCreatePayload", () => {
     expect(payload).toEqual({
       quotationId: "quo-1",
       customerPoNumber: "PO-CUST-2026-0815",
-      customerPoDate: date,
+      customerPoDate: "2026-08-15",
       notes: "catatan",
     });
+    // Never a Date object on the wire — avoids the local-midnight TZ shift.
+    expect(payload.customerPoDate).not.toBeInstanceOf(Date);
   });
 });
 
 describe("buildPurchaseOrderUpdatePayload", () => {
   it("does not include commercial snapshot fields", () => {
-    const date = new Date("2026-08-16T00:00:00.000Z");
     const payload = buildPurchaseOrderUpdatePayload({
       customerPoNumber: "PO-CUST-2",
-      customerPoDate: date,
+      customerPoDate: "2026-08-16",
       notes: "",
     });
     expect(Object.keys(payload).sort()).toEqual(
       ["customerPoDate", "customerPoNumber", "notes"].sort(),
     );
+    expect(payload).toMatchObject({ customerPoDate: "2026-08-16" });
     expect(payload.notes).toBeNull();
   });
 });
@@ -127,10 +128,17 @@ describe("validatePurchaseOrderForm", () => {
     expect(
       validatePurchaseOrderForm({
         customerPoNumber: " ",
-        customerPoDate: undefined,
+        customerPoDate: "",
         notes: "",
       }),
     ).toBe("Customer PO No wajib diisi.");
+    expect(
+      validatePurchaseOrderForm({
+        customerPoNumber: "PO-1",
+        customerPoDate: "",
+        notes: "",
+      }),
+    ).toBe("Customer PO Date wajib diisi.");
   });
 });
 

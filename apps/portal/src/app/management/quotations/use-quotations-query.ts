@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiFetchBlob } from "@medcal/shared";
-import type { QuotationCreateInput, QuotationUpdateInput } from "@medcal/shared";
+import type { QuotationCreateBody, QuotationUpdateBody } from "@medcal/shared";
 import { CALIBRATION_REQUESTS_QUERY_KEY } from "../calibration-requests/use-calibration-requests-query";
 import type { QuotationPreviewResponse } from "./quotation-preview";
 import type {
@@ -93,7 +93,7 @@ export function useQuotationPreview(requestId: string | undefined) {
 export function useCreateQuotation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: QuotationCreateInput) =>
+    mutationFn: (input: QuotationCreateBody) =>
       apiFetch<QuotationRow>("/quotations", {
         method: "POST",
         body: JSON.stringify(input),
@@ -109,7 +109,7 @@ export function useCreateQuotation() {
 export function useUpdateQuotation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: QuotationUpdateInput }) =>
+    mutationFn: ({ id, input }: { id: string; input: QuotationUpdateBody }) =>
       apiFetch<QuotationRow>(`/quotations/${id}`, {
         method: "PATCH",
         body: JSON.stringify(input),

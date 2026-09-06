@@ -4,9 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiFetchBlob } from "@medcal/shared";
 import type {
   WorkOrderAssignInput,
-  WorkOrderCreateInput,
+  WorkOrderCreateBody,
   WorkOrderEquipmentReplaceInput,
-  WorkOrderUpdateInput,
+  WorkOrderUpdateBody,
 } from "@medcal/shared";
 import { PURCHASE_ORDERS_QUERY_KEY } from "../purchase-orders/use-purchase-orders-query";
 import type {
@@ -104,7 +104,7 @@ export function useWorkOrder(id: string | undefined) {
 export function useCreateWorkOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: WorkOrderCreateInput) =>
+    mutationFn: (input: WorkOrderCreateBody) =>
       apiFetch<WorkOrderRow>("/work-orders", {
         method: "POST",
         body: JSON.stringify(input),
@@ -119,7 +119,7 @@ export function useCreateWorkOrder() {
 export function useUpdateWorkOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: WorkOrderUpdateInput }) =>
+    mutationFn: ({ id, input }: { id: string; input: WorkOrderUpdateBody }) =>
       apiFetch<WorkOrderRow>(`/work-orders/${id}`, {
         method: "PATCH",
         body: JSON.stringify(input),

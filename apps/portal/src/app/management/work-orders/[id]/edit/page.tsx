@@ -18,7 +18,7 @@ import {
   buildWorkOrderUpdatePayload,
   formatWorkOrderApiError,
   isWorkOrderTerminal,
-  toDatetimeLocalValue,
+  toScheduleDateValue,
   validateWorkOrderOperationalForm,
 } from "../../work-order-form-utils";
 import { PageHeader, Surface, WorkOrderItemsTable } from "../../work-orders-ui";
@@ -54,8 +54,8 @@ export default function EditWorkOrderPage() {
         geoLat: workOrder.geoLat == null ? "" : String(workOrder.geoLat),
         geoLng: workOrder.geoLng == null ? "" : String(workOrder.geoLng),
         locationNotes: workOrder.locationNotes ?? "",
-        scheduledStart: toDatetimeLocalValue(workOrder.scheduledStart),
-        scheduledEnd: toDatetimeLocalValue(workOrder.scheduledEnd),
+        scheduledStart: toScheduleDateValue(workOrder.scheduledStart),
+        scheduledEnd: toScheduleDateValue(workOrder.scheduledEnd),
       });
       setInitialized(true);
     }

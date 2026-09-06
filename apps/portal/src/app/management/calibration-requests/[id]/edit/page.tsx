@@ -3,17 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { format, parseISO } from "date-fns";
-import { id as localeId } from "date-fns/locale";
-import { CalendarIcon, Check, ChevronsUpDown, Plus, Save, Trash2 } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Save, Trash2 } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calendar } from "@/components/ui/calendar";
+import { DateField } from "@/components/ui/date-field";
 import { CommandGroup, CommandItem } from "@/components/ui/command";
 import { CommandPopover } from "@/components/ui/command-popover";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { toDateInputValue } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
 import { AccessDenied } from "../../../../../components/access-denied";
 import {
@@ -78,15 +76,6 @@ function itemsFromRequest(request: CalibrationRequestRow): ItemInput[] {
   }));
 }
 
-function parseExpectedDate(dateStr: string | null): Date | undefined {
-  if (!dateStr) return undefined;
-  try {
-    return parseISO(dateStr);
-  } catch {
-    return undefined;
-  }
-}
-
 export default function EditCalibrationRequestPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -98,8 +87,7 @@ export default function EditCalibrationRequestPage() {
   const [customerId, setCustomerId] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
   const [serviceMode, setServiceMode] = useState<ServiceMode>("ON_SITE");
-  const [desiredDate, setDesiredDate] = useState<Date | undefined>(undefined);
-  const [dateOpen, setDateOpen] = useState(false);
+  const [expectedDate, setExpectedDate] = useState("");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<ItemInput[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -142,7 +130,7 @@ export default function EditCalibrationRequestPage() {
     if (request && !initialized) {
       setCustomerId(request.customerId);
       setServiceMode(request.serviceMode);
-      setDesiredDate(parseExpectedDate(request.expectedDate));
+      setExpectedDate(toDateInputValue(request.expectedDate));
       setNotes(request.notes ?? "");
       setItems(itemsFromRequest(request));
       setInitialized(true);
@@ -253,7 +241,7 @@ export default function EditCalibrationRequestPage() {
         input: {
           customerId,
           serviceMode,
-          expectedDate: desiredDate ?? null,
+          expectedDate: expectedDate || null,
           notes: notes.trim() || null,
           items: validItems.map((item) => ({
             deviceTypeId: item.deviceTypeId.trim(),
@@ -388,41 +376,11 @@ export default function EditCalibrationRequestPage() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                    Desired Schedule
-                  </label>
-                  <Popover open={dateOpen} onOpenChange={setDateOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start font-normal",
-                          !desiredDate && "text-slate-400",
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {desiredDate
-                          ? format(desiredDate, "PPP", { locale: localeId })
-                          : "Pilih tanggal…"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={desiredDate}
-                        onSelect={(date) => {
-                          setDesiredDate(date);
-                          setDateOpen(false);
-                        }}
-                        captionLayout="dropdown"
-                        startMonth={new Date(2020, 0)}
-                        endMonth={new Date(2030, 11)}
-                        autoFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
+                <DateField
+                  label="Expected Date"
+                  value={expectedDate}
+                  onChange={setExpectedDate}
+                />
 
                 <div className="md:col-span-1" />
               </div>

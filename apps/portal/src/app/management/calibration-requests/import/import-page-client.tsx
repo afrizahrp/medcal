@@ -11,7 +11,7 @@ import type {
 } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { cn } from "@/lib/utils";
 import { AccessDenied } from "../../../../components/access-denied";
 import {
@@ -150,7 +150,7 @@ export default function ImportCalibrationRequestPageClient() {
       const created = await confirmMutation.mutateAsync({
         customerId,
         serviceMode,
-        ...(expectedDate ? { expectedDate: new Date(expectedDate) } : {}),
+        ...(expectedDate ? { expectedDate } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         rows: rows.map((row) => ({
           customerDeviceName: row.customerDeviceName,
@@ -225,16 +225,11 @@ export default function ImportCalibrationRequestPageClient() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                  Expected Date
-                </label>
-                <Input
-                  type="date"
-                  value={expectedDate}
-                  onChange={(e) => setExpectedDate(e.target.value)}
-                />
-              </div>
+              <DateField
+                label="Expected Date"
+                value={expectedDate}
+                onChange={setExpectedDate}
+              />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Notes</label>
