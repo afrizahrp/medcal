@@ -79,11 +79,15 @@ function JobsPageContent() {
   }
 
   const incompleteFetch = Boolean(data && data.data.length < data.total);
+  // Drill-down views (customer / SPK) get a one-tap Beranda shortcut; the root
+  // list is already "home".
+  const inDrillDown = Boolean(customerId);
 
   return (
     <Screen
       title={title}
       leftSlot={leftSlot}
+      showHome={inDrillDown}
       rightSlot={
         <button
           type="button"

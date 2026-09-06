@@ -92,7 +92,7 @@ export default function IdentityCorrectionLayout({ children }: { children: React
 
   if (jobQuery.isPending || (jobQuery.data && !state)) {
     return (
-      <Screen title="Koreksi Identitas" showBack>
+      <Screen title="Koreksi Identitas" showBack showHome={false}>
         <LoadingState />
       </Screen>
     );
@@ -100,7 +100,7 @@ export default function IdentityCorrectionLayout({ children }: { children: React
 
   if (jobQuery.isError || !jobQuery.data) {
     return (
-      <Screen title="Koreksi Identitas" showBack>
+      <Screen title="Koreksi Identitas" showBack showHome={false}>
         <ErrorState
           message={formatApiError(jobQuery.error, "Gagal memuat job.")}
           onRetry={() => void jobQuery.refetch()}
@@ -113,7 +113,7 @@ export default function IdentityCorrectionLayout({ children }: { children: React
 
   if (!canSubmitIdentityCorrection(job)) {
     return (
-      <Screen title="Koreksi Identitas" showBack>
+      <Screen title="Koreksi Identitas" showBack showHome={false}>
         <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
           <p className="text-sm font-medium text-slate-700">Aksi tidak tersedia.</p>
           <Button variant="secondary" onClick={() => router.replace(`/jobs/${id}`)}>
@@ -126,7 +126,7 @@ export default function IdentityCorrectionLayout({ children }: { children: React
 
   if (!state) {
     return (
-      <Screen title="Koreksi Identitas" showBack>
+      <Screen title="Koreksi Identitas" showBack showHome={false}>
         <LoadingState />
       </Screen>
     );

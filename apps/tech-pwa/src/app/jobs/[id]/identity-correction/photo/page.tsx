@@ -43,6 +43,7 @@ export default function IdentityCorrectionPhotoPage() {
     <Screen
       title="Koreksi Identitas (4/5)"
       showBack
+      showHome={false}
       onBack={() => router.replace(`/jobs/${id}/identity-correction/signature-customer`)}
       footer={
         <StickyActionBar>

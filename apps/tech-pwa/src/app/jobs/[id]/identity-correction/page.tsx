@@ -37,6 +37,7 @@ export default function IdentityCorrectionStep1Page() {
     <Screen
       title="Koreksi Identitas (1/5)"
       showBack
+      showHome={false}
       onBack={() => router.replace(`/jobs/${id}`)}
       footer={
         <StickyActionBar>

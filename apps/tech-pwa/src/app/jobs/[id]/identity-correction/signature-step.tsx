@@ -55,6 +55,7 @@ export function SignatureStepScreen({
     <Screen
       title={`Koreksi Identitas (${stepLabel})`}
       showBack
+      showHome={false}
       onBack={() => router.replace(backHref)}
       footer={
         <StickyActionBar>
