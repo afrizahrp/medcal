@@ -202,6 +202,20 @@ enum AkdAklApprovalStatus {
   REJECTED
 }
 
+/// Why the AKD/AKL gate is currently open (only meaningful while
+/// akdAklApprovalStatus = PENDING_REVIEW). Drives whether an approved identity
+/// correction that resolves the declared/observed text mismatch may auto-close
+/// the gate: it may for AUTO_MISMATCH, but a MANUAL_ESCALATION was raised by a
+/// human for a reason the text comparison cannot see (suspected forgery, etc.)
+/// and must wait for an explicit TECHNICIAN_MANAGER decision. Cleared to NULL
+/// whenever the gate leaves PENDING_REVIEW for any reason.
+enum AkdAklGateOrigin {
+  /// Opened automatically because technicianObservedAkdAkl != customerDeclaredAkdAkl.
+  AUTO_MISMATCH
+  /// Opened by a technician's explicit "Eskalasi AKD/AKL" action.
+  MANUAL_ESCALATION
+}
+
 /// Manager decision state for an identity correction Berita Acara. Mirrors
 /// AkdAklApprovalStatus's shape (minus NOT_REQUIRED — an IdentityCorrection
 /// row only exists once a correction is actually submitted). A row enters at
@@ -1852,6 +1866,10 @@ model CalibrationJob {
   akdAklApprovedAt       DateTime?
   /// Manager's rationale, especially for REJECTED / conditional APPROVED.
   akdAklDecisionNote     String?
+  /// Provenance of the currently-open gate — see AkdAklGateOrigin. Set only
+  /// while akdAklApprovalStatus = PENDING_REVIEW, NULL otherwise. Existing rows
+  /// default to NULL (no backfill: a stale NOT_REQUIRED job has no open gate).
+  akdAklGateOpenedBy     AkdAklGateOrigin?
 
   status      CalibrationJobStatus @default(PENDING)
   startedAt   DateTime?

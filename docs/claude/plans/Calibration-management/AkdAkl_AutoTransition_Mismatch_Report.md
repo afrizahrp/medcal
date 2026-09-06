@@ -172,7 +172,76 @@ one-time backfill (and whether `declared = null` should count) is a separate dec
 ### Follow-ups (not done — separate decisions)
 
 1. Backfill the 4 stale pilot jobs (or re-decide their BAs) so they reflect the new rule.
-2. Confirm the "mismatch resolved → NOT_REQUIRED" unwind and whether manual escalations
-   should be sticky.
+2. ~~Confirm whether manual escalations should be sticky.~~ **Resolved — see Stage 3.**
 3. Consider firing the same mismatch check at Identity Correction **submission** time and/or
    in fan-out, not only at correction approval.
+
+---
+
+## Stage 3 — Make manual escalation sticky (provenance-aware gate)
+
+### Problem
+
+The Stage 2 auto-clear (`clearAkdAklGate`) treated every `PENDING_REVIEW` gate the same. A
+technician's manual "Eskalasi AKD/AKL" can be raised for a concern the text comparison
+cannot see (e.g. suspected forged izin-edar document) — yet a later correction that merely
+lined up the AKD/AKL *text* would silently auto-clear it back to `NOT_REQUIRED`, so the
+human-flagged concern vanished with no manager decision. Contradicts the project's
+audit-trail principle.
+
+### Schema change — migration required (additive, no backfill)
+
+`packages/db/prisma/migrations/20260906145344_add_calibrationjob_akdakl_gate_origin/migration.sql`:
+
+```sql
+CREATE TYPE "AkdAklGateOrigin" AS ENUM ('AUTO_MISMATCH', 'MANUAL_ESCALATION');
+ALTER TABLE "CalibrationJob" ADD COLUMN "akdAklGateOpenedBy" "AkdAklGateOrigin";
+```
+
+New nullable enum column + enum type. **No backfill script and none needed** — Postgres
+fills existing rows with `NULL`, which is the correct value (a job that isn't currently
+`PENDING_REVIEW` has no open gate, so no provenance). The 4 stale pilot jobs are `NOT_REQUIRED`
+→ `NULL`, unaffected.
+
+`akdAklGateOpenedBy` is set only while `akdAklApprovalStatus = PENDING_REVIEW` and cleared to
+`NULL` whenever the gate leaves that state, for any reason.
+
+### Files changed (Stage 3)
+
+| File | Change |
+|---|---|
+| `packages/db/prisma/schema.prisma` | New `AkdAklGateOrigin` enum; `CalibrationJob.akdAklGateOpenedBy AkdAklGateOrigin?` |
+| `packages/db/prisma/migrations/20260906145344_.../migration.sql` | Generated migration (above) |
+| `apps/api/.../calibration-jobs.service.ts` | Set/read/clear provenance at the 3 gate write sites |
+| `apps/api/.../calibration-jobs.service.test.ts` | 1 test renamed + provenance assertion, 2 new tests |
+
+### Logic
+
+| Write site | Behaviour |
+|---|---|
+| `escalateIdentity` (manual) | on `→ PENDING_REVIEW`, sets `akdAklGateOpenedBy = "MANUAL_ESCALATION"` |
+| `decideIdentityCorrection` — `openAkdAklGate` branch | sets `akdAklGateOpenedBy = "AUTO_MISMATCH"` (after `AKD_AKL_GATE_STAMP_RESET`) |
+| `decideIdentityCorrection` — `clearAkdAklGate` branch | now also requires `job.akdAklGateOpenedBy === "AUTO_MISMATCH"`; a `MANUAL_ESCALATION` gate is **not** auto-cleared. Clears provenance to `NULL` via the shared reset constant |
+| `decideIdentity` (manager APPROVE/REJECT) | sets `akdAklGateOpenedBy = null` — explicit decision closes the gate, provenance must not carry into a later cycle |
+
+`AKD_AKL_GATE_STAMP_RESET` gained `akdAklGateOpenedBy: null`, so both
+decideIdentityCorrection branches clear it; the open branch then re-sets it to `AUTO_MISMATCH`.
+
+`MANUAL_ESCALATION` gates now behave exactly as they did before Stage 2 — open until an
+explicit `decideIdentity` APPROVE/REJECT.
+
+### Test results — PASS
+
+- `apps/api` typecheck (`tsc --noEmit`): **PASS**
+- `calibration-jobs.service.test.ts` suite: **PASS — 87/87**
+- New/updated Stage 3 tests (all ✓):
+  - `approve unwinds an AUTO_MISMATCH PENDING_REVIEW gate to NOT_REQUIRED when a later correction resolves the mismatch` (renamed from Stage 2; now seeds `akdAklGateOpenedBy: "AUTO_MISMATCH"`, asserts it clears to `null`)
+  - `does NOT unwind a MANUAL_ESCALATION PENDING_REVIEW gate even when a later correction resolves the text mismatch`
+  - `clears akdAklGateOpenedBy when a manager explicitly decides a manually-escalated gate` (covers both APPROVE and REJECT)
+  - `approve opens the gate from NOT_REQUIRED …` — now also asserts `akdAklGateOpenedBy === "AUTO_MISMATCH"`
+- Full `apps/api` suite: see final run in the commit.
+
+### Not done (out of scope)
+
+- `akdAklGateOpenedBy` is not yet surfaced to the Portal / tech-pwa UI (no shared response
+  schema or query type change). Follow-up if the distinction should be shown to reviewers.

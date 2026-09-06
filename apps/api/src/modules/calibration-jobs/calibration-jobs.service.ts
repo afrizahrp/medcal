@@ -164,14 +164,16 @@ function assertAkdAklTransition(from: AkdAklApprovalStatus, to: AkdAklApprovalSt
 
 /**
  * Fields cleared whenever the system (not a manager decision) moves the AKD/AKL
- * gate — a stale approver stamp or decision note must never linger on the new
- * status. Shared by both the mismatch-open and mismatch-resolved paths in
- * decideIdentityCorrection.
+ * gate — a stale approver stamp, decision note, or gate-origin marker must never
+ * linger on the new status. Shared by both the mismatch-open and
+ * mismatch-resolved paths in decideIdentityCorrection; the mismatch-open path
+ * re-sets akdAklGateOpenedBy to AUTO_MISMATCH afterwards.
  */
 const AKD_AKL_GATE_STAMP_RESET = {
   akdAklApprovedByUserId: null,
   akdAklApprovedAt: null,
   akdAklDecisionNote: null,
+  akdAklGateOpenedBy: null,
 } satisfies Prisma.CalibrationJobUncheckedUpdateInput;
 
 /**
@@ -484,6 +486,10 @@ export class CalibrationJobsService {
       where: { id },
       data: {
         akdAklApprovalStatus: "PENDING_REVIEW",
+        // Human-raised: a text-mismatch resolution must never auto-close this
+        // gate (the concern may be forgery, not a typo) — only an explicit
+        // manager decision closes it. See AkdAklGateOrigin.
+        akdAklGateOpenedBy: "MANUAL_ESCALATION",
         ...(input.technicianObservedAkdAkl !== undefined
           ? { technicianObservedAkdAkl: input.technicianObservedAkdAkl }
           : {}),
@@ -526,6 +532,9 @@ export class CalibrationJobsService {
         akdAklApprovalStatus: target,
         akdAklApprovedByUserId: userId,
         akdAklApprovedAt: new Date(),
+        // Gate is closing on an explicit decision — drop the provenance so it
+        // never carries into a later re-escalation cycle.
+        akdAklGateOpenedBy: null,
         ...(input.akdAklDecisionNote !== undefined
           ? { akdAklDecisionNote: input.akdAklDecisionNote }
           : {}),
@@ -897,13 +906,18 @@ export class CalibrationJobsService {
     // "reopen a previously-APPROVED gate" edge — NOT_REQUIRED / APPROVED /
     // REJECTED → PENDING_REVIEW are all permitted by AKD_AKL_TRANSITIONS.
     const openAkdAklGate = akdAklMismatch && job.akdAklApprovalStatus !== "PENDING_REVIEW";
-    // Reverse (judgment call — flagged for confirmation, see report): a
-    // correction that resolves the discrepancy while the gate is still
-    // PENDING_REVIEW and undecided removes the reason for review, so unwind it
-    // to NOT_REQUIRED. A gate a manager already decided (APPROVED / REJECTED)
-    // is left untouched.
+    // Reverse: a correction that resolves the discrepancy while the gate is
+    // still PENDING_REVIEW and undecided removes the reason for review, so
+    // unwind it to NOT_REQUIRED. Only for a gate that opened *because of* the
+    // text mismatch (AUTO_MISMATCH) — a MANUAL_ESCALATION was raised by a human
+    // for a concern the text comparison cannot see and must wait for an
+    // explicit manager decision. A gate a manager already decided
+    // (APPROVED / REJECTED) is likewise left untouched.
     const clearAkdAklGate =
-      akdAklCorrected && !akdAklMismatch && job.akdAklApprovalStatus === "PENDING_REVIEW";
+      akdAklCorrected &&
+      !akdAklMismatch &&
+      job.akdAklApprovalStatus === "PENDING_REVIEW" &&
+      job.akdAklGateOpenedBy === "AUTO_MISMATCH";
     if (openAkdAklGate) {
       assertAkdAklTransition(job.akdAklApprovalStatus, "PENDING_REVIEW");
     }
@@ -919,6 +933,7 @@ export class CalibrationJobsService {
       if (openAkdAklGate) {
         jobData.akdAklApprovalStatus = "PENDING_REVIEW";
         Object.assign(jobData, AKD_AKL_GATE_STAMP_RESET);
+        jobData.akdAklGateOpenedBy = "AUTO_MISMATCH";
       } else if (clearAkdAklGate) {
         jobData.akdAklApprovalStatus = "NOT_REQUIRED";
         Object.assign(jobData, AKD_AKL_GATE_STAMP_RESET);

@@ -715,6 +715,7 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
 
     expect(result.correction.akdAklGateReopened).toBe(true);
     expect(result.job.akdAklApprovalStatus).toBe("PENDING_REVIEW");
+    expect(result.job.akdAklGateOpenedBy).toBe("AUTO_MISMATCH");
     expect(result.job.technicianObservedAkdAkl).toBe("AKL-OBSERVED");
   });
 
@@ -776,7 +777,7 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
     expect(result.job.technicianObservedAkdAkl).toBe("AKL-MATCHES");
   });
 
-  it("approve unwinds a PENDING_REVIEW gate to NOT_REQUIRED when a later correction resolves the mismatch", async () => {
+  it("approve unwinds an AUTO_MISMATCH PENDING_REVIEW gate to NOT_REQUIRED when a later correction resolves the mismatch", async () => {
     const { jobs } = await startedWorkOrderJobs(realCompanyId);
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
     const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
@@ -784,6 +785,7 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
       where: { id: jobs[0]!.id },
       data: {
         akdAklApprovalStatus: "PENDING_REVIEW",
+        akdAklGateOpenedBy: "AUTO_MISMATCH",
         customerDeclaredAkdAkl: "AKL-DECLARED",
         technicianObservedAkdAkl: "AKL-WRONG",
       },
@@ -805,7 +807,79 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
 
     expect(result.correction.akdAklGateReopened).toBe(false);
     expect(result.job.akdAklApprovalStatus).toBe("NOT_REQUIRED");
+    expect(result.job.akdAklGateOpenedBy).toBeNull();
     expect(result.job.technicianObservedAkdAkl).toBe("AKL-DECLARED");
+  });
+
+  it("does NOT unwind a MANUAL_ESCALATION PENDING_REVIEW gate even when a later correction resolves the text mismatch", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+
+    // Technician manually escalates (e.g. suspected forged document), recording
+    // an observed value that already matches the declaration.
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { customerDeclaredAkdAkl: "AKL-DECLARED" },
+    });
+    await calibrationJobsService.escalateIdentity(realCompanyId, jobs[0]!.id, {
+      technicianObservedAkdAkl: "AKL-WRONG",
+      reason: "dokumen izin edar diduga palsu",
+    });
+    const escalated = await prisma.calibrationJob.findUniqueOrThrow({ where: { id: jobs[0]!.id } });
+    expect(escalated.akdAklApprovalStatus).toBe("PENDING_REVIEW");
+    expect(escalated.akdAklGateOpenedBy).toBe("MANUAL_ESCALATION");
+
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      tech.id,
+      { reason: "re-read label; matches declaration", newAkdAkl: "AKL-DECLARED", signatures: UNAVAILABLE_SIGNATURES },
+    );
+    const result = await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobs[0]!.id,
+      correction.id,
+      manager.id,
+      { decision: "APPROVE" },
+    );
+
+    // Gate stays open — the human concern still needs an explicit decision.
+    expect(result.job.akdAklApprovalStatus).toBe("PENDING_REVIEW");
+    expect(result.job.akdAklGateOpenedBy).toBe("MANUAL_ESCALATION");
+    expect(result.job.technicianObservedAkdAkl).toBe("AKL-DECLARED");
+  });
+
+  it("clears akdAklGateOpenedBy when a manager explicitly decides a manually-escalated gate", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+
+    await calibrationJobsService.escalateIdentity(realCompanyId, jobs[0]!.id, {
+      reason: "perlu ditinjau manajer",
+    });
+    const escalated = await prisma.calibrationJob.findUniqueOrThrow({ where: { id: jobs[0]!.id } });
+    expect(escalated.akdAklGateOpenedBy).toBe("MANUAL_ESCALATION");
+
+    const approved = await calibrationJobsService.decideIdentity(
+      realCompanyId,
+      jobs[0]!.id,
+      manager.id,
+      { decision: "APPROVE", akdAklDecisionNote: "sudah diverifikasi" },
+    );
+    expect(approved.akdAklApprovalStatus).toBe("APPROVED");
+    expect(approved.akdAklGateOpenedBy).toBeNull();
+
+    // And a REJECT decision clears it too.
+    const { jobs: jobs2 } = await startedWorkOrderJobs(realCompanyId);
+    await calibrationJobsService.escalateIdentity(realCompanyId, jobs2[0]!.id, { reason: "x" });
+    const rejected = await calibrationJobsService.decideIdentity(
+      realCompanyId,
+      jobs2[0]!.id,
+      manager.id,
+      { decision: "REJECT", akdAklDecisionNote: "ditolak" },
+    );
+    expect(rejected.akdAklApprovalStatus).toBe("REJECTED");
+    expect(rejected.akdAklGateOpenedBy).toBeNull();
   });
 
   it("rejects approve when a SIGNED signature has no uploaded image", async () => {
