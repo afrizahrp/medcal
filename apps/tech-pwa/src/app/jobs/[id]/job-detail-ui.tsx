@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Section, SectionRow } from "../../../components/ui/section";
 import { Badge } from "../../../components/ui/badge";
+import { Button } from "../../../components/ui/button";
 import { JobStatusBadge, AkdAklStatusBadge } from "../jobs-ui";
 import type { TechCalibrationJob, TechIdentityCorrection } from "../../../lib/calibration/types";
 import { IDENTITY_CORRECTION_STATUS_LABELS } from "../../../lib/calibration/types";
@@ -118,6 +119,31 @@ export function ReferenceEquipmentSection({
         ) : null
       ) : null}
     </Section>
+  );
+}
+
+/**
+ * "Mulai Kalibrasi" — the single start action. Shown in the job-detail footer
+ * while the job is still PENDING (startedAt === null). On success the job
+ * becomes IN_PROGRESS and the "Job belum dimulai" gates in this screen and the
+ * reference-equipment screen unlock.
+ */
+export function StartCalibrationAction({
+  onStart,
+  pending,
+  error,
+}: {
+  onStart: () => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  return (
+    <div>
+      <Button fullWidth onClick={onStart} disabled={pending}>
+        {pending ? "Memulai…" : "Mulai Kalibrasi"}
+      </Button>
+      {error ? <p className="mt-1 text-center text-xs text-red-600">{error}</p> : null}
+    </div>
   );
 }
 

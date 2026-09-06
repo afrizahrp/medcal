@@ -82,6 +82,7 @@ export type MeCapabilities = {
   workOrderCancel: boolean;
   workOrderAssign: boolean;
   calibrationJobRead: boolean;
+  calibrationJobStart: boolean;
   calibrationJobEscalateIdentity: boolean;
   calibrationJobApproveIdentity: boolean;
   /**

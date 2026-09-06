@@ -164,6 +164,7 @@ export class MeController {
       workOrderCancel: hasPermission(membership.role, "workOrder", "cancel"),
       workOrderAssign: hasPermission(membership.role, "workOrder", "assign"),
       calibrationJobRead: hasPermission(membership.role, "calibrationJob", "read"),
+      calibrationJobStart: hasPermission(membership.role, "calibrationJob", "start"),
       calibrationJobEscalateIdentity: hasPermission(
         membership.role,
         "calibrationJob",

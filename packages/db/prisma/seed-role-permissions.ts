@@ -151,9 +151,14 @@ const PRESERVED_BASELINE: GrantRow[] = [
   // escalateIdentity. decideIdentityCorrection (APPROVE/REJECT) is
   // TECHNICIAN_MANAGER-only, mirroring approveIdentity.
   { role: "TECHNICIAN", resource: "calibrationJob", action: "read" },
+  // Minimal "Mulai Kalibrasi" start action (2026-09-06): PENDING → IN_PROGRESS +
+  // startedAt, the single gate unblocking reference-equipment recording. Granted
+  // TECHNICIAN + TECHNICIAN_MANAGER, mirroring recordReferenceEquipmentUsed.
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "start" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "escalateIdentity" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "submitIdentityCorrection" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "read" },
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "start" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "escalateIdentity" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "approveIdentity" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "submitIdentityCorrection" },

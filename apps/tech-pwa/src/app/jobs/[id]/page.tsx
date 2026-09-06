@@ -17,7 +17,7 @@ import {
   isReferenceEquipmentLocked,
 } from "../../../lib/calibration/reference-equipment";
 import { markWizardEntryIntent } from "./identity-correction/wizard-nav";
-import { useCorrectionsQuery, useJobQuery } from "./use-job-query";
+import { useCorrectionsQuery, useJobQuery, useStartCalibration } from "./use-job-query";
 import { useReferenceEquipmentUsed } from "./use-reference-equipment-query";
 import {
   ApprovalStatusSection,
@@ -27,6 +27,7 @@ import {
   JobHeaderBlock,
   ObservedIdentitySection,
   ReferenceEquipmentSection,
+  StartCalibrationAction,
 } from "./job-detail-ui";
 
 export default function JobDetailPage() {
@@ -40,6 +41,7 @@ export default function JobDetailPage() {
   const jobQuery = useJobQuery(id, { poll: true });
   const correctionsQuery = useCorrectionsQuery(id, { poll: true });
   const referenceEquipmentQuery = useReferenceEquipmentUsed(id);
+  const startMutation = useStartCalibration(id);
 
   if (jobQuery.isPending) {
     return (
@@ -65,6 +67,8 @@ export default function JobDetailPage() {
   const canEscalate = canEscalateIdentity(job);
   const showEscalate = Boolean(capabilities?.calibrationJobEscalateIdentity);
   const showSubmitCorrection = Boolean(capabilities?.calibrationJobSubmitIdentityCorrection);
+  // "Mulai Kalibrasi" — only while the job has not started yet.
+  const showStart = Boolean(capabilities?.calibrationJobStart) && job.status === "PENDING";
   const showRecordReferenceEquipment = Boolean(
     capabilities?.calibrationJobRecordReferenceEquipmentUsed,
   );
@@ -80,8 +84,19 @@ export default function JobDetailPage() {
       title={job.workOrder.number}
       showBack
       footer={
-        showEscalate || showSubmitCorrection ? (
+        showStart || showEscalate || showSubmitCorrection ? (
           <StickyActionBar>
+            {showStart ? (
+              <StartCalibrationAction
+                onStart={() => startMutation.mutate()}
+                pending={startMutation.isPending}
+                error={
+                  startMutation.isError
+                    ? formatApiError(startMutation.error, "Gagal memulai kalibrasi.")
+                    : null
+                }
+              />
+            ) : null}
             {showEscalate ? (
               canEscalate ? (
                 <LinkButton href={`/jobs/${id}/escalate`} fullWidth>

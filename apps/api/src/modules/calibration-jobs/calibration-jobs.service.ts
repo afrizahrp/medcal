@@ -236,6 +236,36 @@ export class CalibrationJobsService {
     return job;
   }
 
+  /**
+   * Minimal "Mulai Kalibrasi" action — stamps `startedAt` and moves the job
+   * PENDING → IN_PROGRESS. This is the single gate that unblocks the existing
+   * reference-equipment recording feature (CALIBRATION_JOB_NOT_STARTED). It is
+   * deliberately unopinionated: no precondition beyond the job existing and
+   * being PENDING — starting in the field can legitimately happen before
+   * identity is confirmed or AKD/AKL is resolved.
+   *
+   * Not the full job-execution phase (measurement entry, submit-for-review, QA)
+   * — that is designed separately alongside MeasurementResult and may later
+   * absorb this action.
+   */
+  async start(companyId: string, id: string): Promise<CalibrationJobDetail> {
+    const job = await this.findOne(companyId, id);
+    if (job.startedAt !== null || job.status !== "PENDING") {
+      throw new ConflictException({
+        message: "Calibration job has already been started",
+        code: "CALIBRATION_JOB_ALREADY_STARTED",
+        status: job.status,
+      });
+    }
+
+    await prisma.calibrationJob.update({
+      where: { id },
+      data: { status: "IN_PROGRESS", startedAt: new Date() },
+    });
+
+    return this.findOne(companyId, id);
+  }
+
   /** Technician (or their manager) raises the AKD/AKL/NIE gate for one device. */
   async escalateIdentity(
     companyId: string,

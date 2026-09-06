@@ -75,6 +75,24 @@ export function useEscalateIdentity(id: string) {
   });
 }
 
+/**
+ * "Mulai Kalibrasi" — POST /calibration-jobs/:id/start. Moves the job
+ * PENDING → IN_PROGRESS + stamps startedAt, unlocking reference-equipment
+ * recording. Invalidates the job + list queries so the detail screen and the
+ * reference-equipment screen re-evaluate their "Job belum dimulai" gates.
+ */
+export function useStartCalibration(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<TechCalibrationJob>(`/calibration-jobs/${id}/start`, { method: "POST" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: jobKey(id) });
+    },
+  });
+}
+
 export function useDeviceCandidates(jobId: string | undefined, search: string, enabled: boolean) {
   const trimmed = search.trim();
   return useQuery({

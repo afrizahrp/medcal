@@ -123,6 +123,11 @@ const ac = createAccessControl({
     "create",
     "update",
     "complete",
+    // start: on-site actor marks the job as begun (PENDING → IN_PROGRESS,
+    // stamps startedAt). The single gate that unblocks reference-equipment
+    // recording — granted like recordReferenceEquipmentUsed (TECHNICIAN +
+    // TECHNICIAN_MANAGER).
+    "start",
     "escalateIdentity",
     "approveIdentity",
     "submitIdentityCorrection",

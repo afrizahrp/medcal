@@ -72,6 +72,15 @@ export class CalibrationJobsController {
     return this.service.findOne(companyId, id);
   }
 
+  @Post(":id/start")
+  @RequirePermission("calibrationJob", "start")
+  async start(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<CalibrationJobDetail> {
+    return this.service.start(companyId, id);
+  }
+
   @Post(":id/escalate-identity")
   @RequirePermission("calibrationJob", "escalateIdentity")
   async escalateIdentity(

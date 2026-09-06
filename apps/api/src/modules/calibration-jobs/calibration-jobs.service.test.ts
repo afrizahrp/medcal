@@ -384,6 +384,95 @@ describe("CalibrationJobsService — AKD/AKL identity gate", () => {
   });
 });
 
+describe("CalibrationJobsService — start (Mulai Kalibrasi)", () => {
+  it("moves a PENDING job to IN_PROGRESS and stamps startedAt", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const job = jobs[0]!;
+    expect(job.status).toBe("PENDING");
+    expect(job.startedAt).toBeNull();
+
+    const before = Date.now();
+    const started = await calibrationJobsService.start(realCompanyId, job.id);
+
+    expect(started.status).toBe("IN_PROGRESS");
+    expect(started.startedAt).not.toBeNull();
+    expect(started.startedAt!.getTime()).toBeGreaterThanOrEqual(before - 1000);
+  });
+
+  it("does not touch sibling jobs", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 3 });
+    await calibrationJobsService.start(realCompanyId, jobs[1]!.id);
+
+    const after = await prisma.calibrationJob.findMany({
+      where: { id: { in: jobs.map((j) => j.id) } },
+      orderBy: { unitOrdinal: "asc" },
+    });
+    expect(after.map((j) => j.status)).toEqual(["PENDING", "IN_PROGRESS", "PENDING"]);
+    expect(after.map((j) => j.startedAt === null)).toEqual([true, false, true]);
+  });
+
+  it("rejects starting an already-started job with CALIBRATION_JOB_ALREADY_STARTED", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+
+    await expect(
+      calibrationJobsService.start(realCompanyId, jobs[0]!.id),
+    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_ALREADY_STARTED" } });
+  });
+
+  it("rejects starting a job that has advanced past PENDING", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { status: "SUBMITTED" },
+    });
+
+    await expect(
+      calibrationJobsService.start(realCompanyId, jobs[0]!.id),
+    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_ALREADY_STARTED" } });
+  });
+
+  it("unblocks reference-equipment recording (CALIBRATION_JOB_NOT_STARTED gate)", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId, { serviceMode: "ON_SITE" });
+
+    await expect(
+      calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [] },
+      ),
+    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_NOT_STARTED" } });
+
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+
+    // Empty set is now accepted (job has started, nothing to validate).
+    await expect(
+      calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [] },
+      ),
+    ).resolves.toEqual([]);
+  });
+
+  it("company-scoping: cannot start a job from another company", async () => {
+    const otherCompanyId = `S${randomUUID().slice(0, 2).toUpperCase()}`;
+    await prisma.company.create({
+      data: { id: otherCompanyId, name: "Foreign Start Co", status: "ACTIVE" },
+    });
+    createdCompanyIds.push(otherCompanyId);
+    const { jobs } = await startedWorkOrderJobs(otherCompanyId);
+
+    await expect(
+      calibrationJobsService.start(realCompanyId, jobs[0]!.id),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
 describe("CalibrationJobsService — Identity Correction (device identity)", () => {
   it("submit creates a BA + one signature per role atomically (first-time resolution)", async () => {
     const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
@@ -1359,6 +1448,29 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "tl@x.co" } });
 
     await expect(guard.canActivate(contextFor("list"))).resolves.toBe(true);
+  });
+
+  it("allows a TECHNICIAN through the start endpoint", async () => {
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "start-t@x.co" } });
+
+    await expect(guard.canActivate(contextFor("start"))).resolves.toBe(true);
+  });
+
+  it("allows a TECHNICIAN_MANAGER through the start endpoint", async () => {
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "start-m@x.co" } });
+
+    await expect(guard.canActivate(contextFor("start"))).resolves.toBe(true);
+  });
+
+  it("blocks a FINANCE user from the start endpoint (403)", async () => {
+    const finance = await makeMember(realCompanyId, "FINANCE");
+    getSessionMock.mockResolvedValueOnce({ user: { id: finance.id, email: "start-f@x.co" } });
+
+    await expect(guard.canActivate(contextFor("start"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it("allows a TECHNICIAN to escalate", async () => {
