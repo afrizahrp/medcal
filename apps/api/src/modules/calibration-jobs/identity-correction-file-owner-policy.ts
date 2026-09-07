@@ -24,7 +24,7 @@ export const identityCorrectionFileOwnerPolicy: FileOwnerPolicy = {
   fileTypePolicy: {
     mimeTypes: ["image/png", "image/jpeg", "application/pdf"],
     extensions: [".png", ".jpg", ".jpeg", ".pdf"],
-    maxBytes: 5 * 1024 * 1024,
+    maxBytes: 10 * 1024 * 1024,
   },
   async resolveOwner(companyId, ownerId) {
     // ownerId = IdentityCorrection.id (the BA record itself)

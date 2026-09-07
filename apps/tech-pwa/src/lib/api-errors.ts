@@ -30,7 +30,7 @@ const MESSAGES: Record<string, string> = {
   FILE_MIME_NOT_ALLOWED: "Format foto tidak didukung — gunakan JPG atau PNG.",
   FILE_EXTENSION_NOT_ALLOWED: "Format foto tidak didukung — gunakan JPG atau PNG.",
   FILE_CONTENT_MISMATCH: "Isi file tidak sesuai dengan tipe yang dinyatakan.",
-  FILE_TOO_LARGE: "Ukuran foto melebihi batas (5 MB).",
+  FILE_TOO_LARGE: "Ukuran foto melebihi batas (10 MB).",
   FILE_OWNER_LOCKED: "BA ini sudah tidak dapat menerima foto baru.",
   // Reference equipment used (PUT /calibration-jobs/:id/reference-equipment-used)
   CALIBRATION_JOB_NOT_STARTED:
