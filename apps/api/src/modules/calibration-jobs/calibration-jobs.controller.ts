@@ -8,6 +8,7 @@ import {
   Post,
   Put,
   Query,
+  StreamableFile,
   UseGuards,
 } from "@nestjs/common";
 import type { MembershipRole } from "@medcal/db";
@@ -182,6 +183,21 @@ export class CalibrationJobsController {
     @Param("correctionId") correctionId: string,
   ): Promise<IdentityCorrectionDetail> {
     return this.service.getIdentityCorrection(companyId, id, correctionId);
+  }
+
+  @Get(":id/identity-corrections/:correctionId/pdf")
+  @RequirePermission("calibrationJob", "read")
+  async downloadIdentityCorrectionPdf(
+    @CompanyId() companyId: string,
+    @MembershipRoleParam() role: MembershipRole,
+    @Param("id") id: string,
+    @Param("correctionId") correctionId: string,
+  ): Promise<StreamableFile> {
+    const pdf = await this.service.buildIdentityCorrectionPdf(companyId, id, correctionId, role);
+    return new StreamableFile(pdf.buffer, {
+      type: "application/pdf",
+      disposition: `attachment; filename="${pdf.filename}"`,
+    });
   }
 
   @Post(":id/identity-corrections")

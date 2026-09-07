@@ -1,7 +1,9 @@
+import type { Readable } from "node:stream";
 import {
   BadRequestException,
   ConflictException,
   GoneException,
+  Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -21,6 +23,11 @@ import {
 } from "@medcal/shared";
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { DevicesService, type DeviceWithRelations } from "../devices/devices.service";
+import { FilesService } from "../files/files.service";
+import {
+  renderIdentityCorrectionPdf,
+  type IdentityCorrectionPdfResult,
+} from "./identity-correction-pdf";
 import {
   buildReferenceEquipmentCandidates,
   jobNeedsReferenceEquipmentReview,
@@ -234,6 +241,8 @@ export interface IdentityCorrectionSubmitResult {
 @Injectable()
 export class CalibrationJobsService {
   private readonly devices = new DevicesService();
+
+  constructor(@Inject(FilesService) private readonly files: FilesService) {}
 
   private buildListWhere(
     companyId: string,
@@ -712,6 +721,45 @@ export class CalibrationJobsService {
   }
 
   /**
+   * Printable "Berita Acara Koreksi Identitas" for one Identity Correction —
+   * same PKM/KAN letterhead as the SPK / Surat Jalan Alat. The BA photo (at
+   * most one per correction) is streamed through FilesService using the
+   * caller's own role, so access to the embedded image is governed by the
+   * exact same `calibrationJob` permission as the BA record itself.
+   */
+  async buildIdentityCorrectionPdf(
+    companyId: string,
+    jobId: string,
+    correctionId: string,
+    role: MembershipRole,
+  ): Promise<IdentityCorrectionPdfResult> {
+    const job = await this.findOne(companyId, jobId);
+    const correction = await this.getIdentityCorrection(companyId, jobId, correctionId);
+    const company = await prisma.company.findFirst({ where: { id: companyId } });
+    if (!company) {
+      throw new NotFoundException({ message: "Company not found", code: "COMPANY_NOT_FOUND" });
+    }
+
+    const photoFile = correction.files[0];
+    const photo = photoFile
+      ? await (async () => {
+          const { stream, fileObject } = await this.files.getForDownload(
+            companyId,
+            photoFile.id,
+            role,
+          );
+          return {
+            buffer: await streamToBuffer(stream),
+            mimeType: fileObject.mimeType,
+            originalName: fileObject.originalName,
+          };
+        })()
+      : null;
+
+    return renderIdentityCorrectionPdf({ correction, job, company, photo });
+  }
+
+  /**
    * Submit an Identity Correction BA. Creates the IdentityCorrection row +
    * exactly one IdentityCorrectionSignature per role, atomically, at status
    * PENDING_REVIEW. Signature images are uploaded afterwards via POST /files.
@@ -1049,4 +1097,12 @@ export class CalibrationJobsService {
 
     return this.listReferenceEquipmentUsed(companyId, jobId);
   }
+}
+
+async function streamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
 }

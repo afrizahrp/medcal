@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, FileText, Save, ShieldAlert, Upload, X } from "lucide-react";
+import { ArrowLeft, Check, FileDown, FileText, Save, ShieldAlert, Upload, X } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,7 @@ import {
   useEscalateIdentity,
 } from "../use-calibration-jobs-query";
 import {
+  openIdentityCorrectionPdf,
   useDecideIdentityCorrection,
   useIdentityCorrections,
   useSubmitIdentityCorrection,
@@ -435,6 +436,7 @@ export default function CalibrationJobDetailPage() {
               {correctionRows.map((correction) => (
                 <CorrectionCard
                   key={correction.id}
+                  jobId={params.id}
                   correction={correction}
                   canDecide={canDecideCorrection}
                   canUpload={canSubmitCorrection}
@@ -952,6 +954,7 @@ function ReferenceEquipmentCard({ unit }: { unit: ReferenceEquipmentUsed }) {
 // ── Identity correction card (list row + inline detail) ───────────────────────
 
 function CorrectionCard({
+  jobId,
   correction,
   canDecide,
   canUpload,
@@ -960,6 +963,7 @@ function CorrectionCard({
   onDecide,
   onUploadImage,
 }: {
+  jobId: string;
   correction: IdentityCorrection;
   canDecide: boolean;
   canUpload: boolean;
@@ -974,9 +978,23 @@ function CorrectionCard({
 }) {
   const [open, setOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [pdfPending, setPdfPending] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const changes = summarizeCorrectionChanges(correction);
   const missingImage = correctionMissingImage(correction);
   const isPending = correction.status === "PENDING_REVIEW";
+
+  async function handleDownloadPdf() {
+    setPdfError(null);
+    setPdfPending(true);
+    try {
+      await openIdentityCorrectionPdf(jobId, correction.id, `${correction.number.replace(/\//g, "-")}.pdf`);
+    } catch {
+      setPdfError("Gagal membuka PDF Berita Acara.");
+    } finally {
+      setPdfPending(false);
+    }
+  }
 
   return (
     <li className="rounded-lg border border-slate-200">
@@ -1050,6 +1068,20 @@ function CorrectionCard({
             uploadPending={uploadPending}
             onUploadImage={onUploadImage}
           />
+
+          <div className="flex items-center justify-between gap-2 border-t border-slate-200 pt-3">
+            {pdfError ? <p className="text-xs text-red-600">{pdfError}</p> : <span />}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={pdfPending}
+              onClick={handleDownloadPdf}
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              {pdfPending ? "Membuka…" : "Unduh PDF"}
+            </Button>
+          </div>
 
           {correction.status !== "PENDING_REVIEW" ? (
             <div className="grid gap-3 border-t border-slate-200 pt-3 sm:grid-cols-2">

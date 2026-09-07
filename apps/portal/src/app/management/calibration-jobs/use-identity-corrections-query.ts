@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, apiFetch } from "@medcal/shared";
+import { ApiError, apiFetch, apiFetchBlob } from "@medcal/shared";
 import { WORK_ORDERS_QUERY_KEY } from "../work-orders/use-work-orders-query";
 import { CALIBRATION_JOBS_QUERY_KEY } from "./use-calibration-jobs-query";
 import type { CalibrationJobRow } from "./calibration-jobs-ui";
@@ -195,5 +195,39 @@ export function useUploadIdentityCorrectionSignature() {
     },
     onSuccess: (_data, variables) => invalidate(queryClient, variables.jobId),
   });
+}
+
+// ── PDF export ────────────────────────────────────────────────────────────────
+
+export async function fetchIdentityCorrectionPdf(
+  jobId: string,
+  correctionId: string,
+): Promise<Blob> {
+  const blob = await apiFetchBlob(
+    `/calibration-jobs/${jobId}/identity-corrections/${correctionId}/pdf`,
+  );
+  if (blob.size === 0) {
+    throw new Error("Empty identity correction PDF");
+  }
+  return blob;
+}
+
+export async function openIdentityCorrectionPdf(
+  jobId: string,
+  correctionId: string,
+  filename?: string,
+): Promise<void> {
+  const blob = await fetchIdentityCorrectionPdf(jobId, correctionId);
+  const url = URL.createObjectURL(blob);
+  const tab = window.open(url, "_blank", "noopener,noreferrer");
+  if (!tab) {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    if (filename) anchor.download = filename;
+    anchor.click();
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
