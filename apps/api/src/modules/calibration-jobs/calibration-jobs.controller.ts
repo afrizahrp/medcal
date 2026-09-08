@@ -2,9 +2,12 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Inject,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -19,6 +22,9 @@ import {
   identityCorrectionDecisionSchema,
   identityCorrectionSubmitSchema,
   jobReferenceEquipmentReplaceSchema,
+  measurementResultBatchCreateSchema,
+  measurementResultCreateSchema,
+  measurementResultUpdateSchema,
 } from "@medcal/shared";
 import type { DeviceWithRelations } from "../devices/devices.service";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
@@ -39,6 +45,10 @@ import type {
   JobReferenceEquipmentCandidate,
   JobReferenceEquipmentUsedDetail,
 } from "./job-reference-equipment";
+import {
+  MeasurementResultsService,
+  type MeasurementResultRow,
+} from "./measurement-results.service";
 
 @Controller("calibration-jobs")
 @UseGuards(CompanyRoleGuard)
@@ -46,6 +56,8 @@ export class CalibrationJobsController {
   constructor(
     @Inject(CalibrationJobsService)
     private readonly service: CalibrationJobsService,
+    @Inject(MeasurementResultsService)
+    private readonly measurements: MeasurementResultsService,
   ) {}
 
   @Get()
@@ -275,5 +287,91 @@ export class CalibrationJobsController {
       });
     }
     return this.service.replaceReferenceEquipmentUsed(companyId, id, userId, role, parsed.data);
+  }
+
+  // ── MeasurementResult (Stage 2c) ──────────────────────────────────────────
+  // Nested under the job, like reference-equipment-used. The job param stays
+  // `:id` (this controller's convention); the row param is `:measurementId`.
+
+  @Get(":id/measurement-results")
+  @RequirePermission("calibrationJob", "read")
+  async listMeasurementResults(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<MeasurementResultRow[]> {
+    return this.measurements.list(companyId, id);
+  }
+
+  @Post(":id/measurement-results")
+  @RequirePermission("calibrationJob", "recordMeasurement")
+  async createMeasurementResult(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<MeasurementResultRow> {
+    const parsed = measurementResultCreateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid measurement result payload",
+        code: "INVALID_MEASUREMENT_RESULT",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.measurements.create(companyId, { ...parsed.data, calibrationJobId: id }, userId);
+  }
+
+  @Post(":id/measurement-results/batch")
+  @RequirePermission("calibrationJob", "recordMeasurement")
+  async createMeasurementResultsBatch(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<MeasurementResultRow[]> {
+    const parsed = measurementResultBatchCreateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid measurement result batch payload",
+        code: "INVALID_MEASUREMENT_RESULT_BATCH",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.measurements.createMany(
+      companyId,
+      parsed.data.items.map((item) => ({ ...item, calibrationJobId: id })),
+      userId,
+    );
+  }
+
+  @Patch(":id/measurement-results/:measurementId")
+  @RequirePermission("calibrationJob", "recordMeasurement")
+  async updateMeasurementResult(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Param("measurementId") measurementId: string,
+    @Body() rawBody: unknown,
+  ): Promise<MeasurementResultRow> {
+    const parsed = measurementResultUpdateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid measurement result update payload",
+        code: "INVALID_MEASUREMENT_RESULT_UPDATE",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.measurements.update(companyId, measurementId, parsed.data, userId, id);
+  }
+
+  @Delete(":id/measurement-results/:measurementId")
+  @RequirePermission("calibrationJob", "recordMeasurement")
+  @HttpCode(204)
+  async deleteMeasurementResult(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Param("measurementId") measurementId: string,
+  ): Promise<void> {
+    await this.measurements.remove(companyId, measurementId, id);
   }
 }

@@ -1,17 +1,34 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ForbiddenException } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Prisma, prisma } from "@medcal/db";
 import type { MembershipRole } from "@medcal/db";
 import { CalibrationRequestsService } from "../calibration-requests/calibration-requests.service";
 import { QuotationsService } from "../quotations/quotations.service";
 import { PurchaseOrdersService } from "../purchase-orders/purchase-orders.service";
 import { WorkOrdersService } from "../work-orders/work-orders.service";
+import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
+import { CalibrationJobsController } from "./calibration-jobs.controller";
+import type { CalibrationJobsService } from "./calibration-jobs.service";
 import {
   assertMeasurementRowEditable,
   MeasurementResultsService,
 } from "./measurement-results.service";
 
+// Only the Better Auth session boundary is mocked; hasPermission stays real,
+// backed by the RolePermission cache primed in vitest.setup.ts.
+const { getSessionMock } = vi.hoisted(() => ({ getSessionMock: vi.fn() }));
+vi.mock("@medcal/auth", async () => {
+  const actual = await vi.importActual<typeof import("@medcal/auth")>("@medcal/auth");
+  return { ...actual, auth: { api: { getSession: getSessionMock } } };
+});
+
 const svc = new MeasurementResultsService();
+const controller = new CalibrationJobsController(
+  {} as CalibrationJobsService,
+  new MeasurementResultsService(),
+);
 const calibrationRequestsService = new CalibrationRequestsService();
 const quotationsService = new QuotationsService();
 const purchaseOrdersService = new PurchaseOrdersService();
@@ -381,5 +398,150 @@ describe("MeasurementResultsService — CRUD", () => {
     );
     expect(rows).toHaveLength(3);
     expect(rows.every((r) => r.isWithinTolerance === true)).toBe(true);
+  });
+});
+
+describe("CalibrationJobsController — measurement-results routes", () => {
+  it("POST creates a row and returns it with the resolved verdict (no second round-trip)", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { toleranceMin: 0, toleranceMax: 100 });
+
+    const row = await controller.createMeasurementResult(companyId, ctx.technician.id, ctx.jobId, {
+      deviceCalibrationParameterId: param.id,
+      replicateIndex: 1,
+      measuredValue: 42,
+    });
+
+    expect(row.isWithinTolerance).toBe(true);
+    expect(row.effectiveToleranceMax?.toString()).toBe("100");
+    expect(row.recordedByUserId).toBe(ctx.technician.id);
+  });
+
+  it("POST /batch creates many and GET lists them in worksheet order", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { toleranceMin: 0, toleranceMax: 100 });
+
+    const created = await controller.createMeasurementResultsBatch(companyId, ctx.technician.id, ctx.jobId, {
+      items: [1, 2, 3].map((replicateIndex) => ({
+        deviceCalibrationParameterId: param.id,
+        replicateIndex,
+        measuredValue: 10 * replicateIndex,
+      })),
+    });
+    expect(created).toHaveLength(3);
+
+    const listed = await controller.listMeasurementResults(companyId, ctx.jobId);
+    expect(listed.map((r) => r.replicateIndex)).toEqual([1, 2, 3]);
+  });
+
+  it("PATCH updates the value, re-stamps the editor, and recomputes the verdict", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { toleranceMin: 0, toleranceMax: 100 });
+    const editor = await makeMember("TECHNICIAN_MANAGER");
+    const row = await controller.createMeasurementResult(companyId, ctx.technician.id, ctx.jobId, {
+      deviceCalibrationParameterId: param.id,
+      replicateIndex: 1,
+      measuredValue: 50,
+    });
+
+    const updated = await controller.updateMeasurementResult(companyId, editor.id, ctx.jobId, row.id, {
+      measuredValue: 500,
+    });
+    expect(updated.isWithinTolerance).toBe(false);
+    expect(updated.recordedByUserId).toBe(editor.id);
+  });
+
+  it("DELETE removes the row", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { toleranceMin: 0, toleranceMax: 100 });
+    const row = await controller.createMeasurementResult(companyId, ctx.technician.id, ctx.jobId, {
+      deviceCalibrationParameterId: param.id,
+      replicateIndex: 1,
+      measuredValue: 50,
+    });
+
+    await controller.deleteMeasurementResult(companyId, ctx.jobId, row.id);
+    expect(await prisma.measurementResult.findUnique({ where: { id: row.id } })).toBeNull();
+  });
+
+  it("rejects a body missing deviceCalibrationParameterId (INVALID_MEASUREMENT_RESULT)", async () => {
+    const ctx = await startedJob();
+    await expect(
+      controller.createMeasurementResult(companyId, ctx.technician.id, ctx.jobId, {
+        replicateIndex: 1,
+        measuredValue: 5,
+      }),
+    ).rejects.toMatchObject({ response: { code: "INVALID_MEASUREMENT_RESULT" } });
+  });
+
+  it("surfaces the post-submit guard rejection as MEASUREMENT_JOB_SUBMITTED (HTTP 400)", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { toleranceMin: 0, toleranceMax: 100 });
+    const row = await controller.createMeasurementResult(companyId, ctx.technician.id, ctx.jobId, {
+      deviceCalibrationParameterId: param.id,
+      replicateIndex: 1,
+      measuredValue: 50,
+    });
+    await prisma.calibrationJob.update({
+      where: { id: ctx.jobId },
+      data: { status: "SUBMITTED", submittedAt: new Date() },
+    });
+
+    await expect(
+      controller.updateMeasurementResult(companyId, ctx.technician.id, ctx.jobId, row.id, {
+        measuredValue: 60,
+      }),
+    ).rejects.toMatchObject({ status: 400, response: { code: "MEASUREMENT_JOB_SUBMITTED" } });
+    // BadRequestException → HTTP 400, consistent with how IdentityCorrection
+    // guard errors surface (assertIdentityGateOpen also throws BadRequestException).
+  });
+
+  it("a PATCH for a measurement on a different job 404s (nested-route integrity)", async () => {
+    const a = await startedJob();
+    const b = await startedJob();
+    const param = await makeParameter(a, { toleranceMin: 0, toleranceMax: 100 });
+    const row = await controller.createMeasurementResult(companyId, a.technician.id, a.jobId, {
+      deviceCalibrationParameterId: param.id,
+      replicateIndex: 1,
+      measuredValue: 50,
+    });
+
+    await expect(
+      controller.updateMeasurementResult(companyId, a.technician.id, b.jobId, row.id, {
+        measuredValue: 60,
+      }),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_RESULT_NOT_FOUND" } });
+  });
+});
+
+describe("CalibrationJobsController — measurement RBAC (guard chain)", () => {
+  const guard = new CompanyRoleGuard(new Reflector());
+
+  function contextFor(handlerName: keyof CalibrationJobsController) {
+    return {
+      switchToHttp: () => ({ getRequest: () => ({ headers: {} }) }),
+      getHandler: () => CalibrationJobsController.prototype[handlerName],
+      getClass: () => CalibrationJobsController,
+    } as never;
+  }
+
+  it("allows a TECHNICIAN to create a measurement", async () => {
+    const tech = await makeMember("TECHNICIAN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "mr-t@x.co" } });
+    await expect(guard.canActivate(contextFor("createMeasurementResult"))).resolves.toBe(true);
+  });
+
+  it("blocks a FINANCE user from creating a measurement (403)", async () => {
+    const finance = await makeMember("FINANCE");
+    getSessionMock.mockResolvedValueOnce({ user: { id: finance.id, email: "mr-f@x.co" } });
+    await expect(guard.canActivate(contextFor("createMeasurementResult"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("allows a TECHNICIAN to list measurements (read-level)", async () => {
+    const tech = await makeMember("TECHNICIAN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "mr-tl@x.co" } });
+    await expect(guard.canActivate(contextFor("listMeasurementResults"))).resolves.toBe(true);
   });
 });

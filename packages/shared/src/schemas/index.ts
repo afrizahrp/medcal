@@ -837,6 +837,87 @@ export const identityCorrectionDecisionSchema = z
 export type IdentityCorrectionDecisionInput = z.infer<typeof identityCorrectionDecisionSchema>;
 
 // -----------------------------------------------------------------------------
+// Calibration Job — MeasurementResult (Stage 2c)
+// -----------------------------------------------------------------------------
+// Technician measurement entry over HTTP. The service (Stage 2b) runs the
+// "locked after submit" guard, resolves + snapshots the effective tolerance, and
+// computes isWithinTolerance. These schemas validate the request bodies only;
+// attemptNumber / recordedBy / the snapshot columns are all server-derived.
+
+export const MEASUREMENT_DIRECTION_VALUES = ["NONE", "UP", "DOWN"] as const;
+export const MEASUREMENT_ENTRY_KIND_VALUES = ["DIRECT_READING", "LOGGER_SUMMARY"] as const;
+
+/**
+ * A measured/reference reading on the wire. Accepts a JS number or a numeric
+ * string (the string form preserves precision beyond float — the value lands in
+ * Decimal(18,6) untouched); `""` / `null` → `null`. Mirrors `optionalFiniteNumber`
+ * but keeps a string as a string.
+ */
+const measurementDecimalInput = z.preprocess(
+  (value) => {
+    if (value === undefined) return undefined;
+    if (value === null || value === "") return null;
+    if (typeof value === "string") return value.trim();
+    return value;
+  },
+  z
+    .union([
+      z.number().finite(),
+      z.string().regex(/^-?\d+(\.\d+)?$/, "must be a number"),
+    ])
+    .nullable()
+    .optional(),
+);
+
+/** POST /calibration-jobs/:id/measurement-results body (single row). */
+export const measurementResultCreateSchema = z.object({
+  deviceCalibrationParameterId: z.string().min(1),
+  calibrationTestPointId: z.string().min(1).nullable().optional(),
+  replicateIndex: z.coerce.number().int().min(1),
+  direction: z.enum(MEASUREMENT_DIRECTION_VALUES).optional(),
+  entryKind: z.enum(MEASUREMENT_ENTRY_KIND_VALUES).optional(),
+  measuredValue: measurementDecimalInput,
+  referenceValue: measurementDecimalInput,
+  measuredBool: z.boolean().nullable().optional(),
+  measuredText: z.string().trim().max(500).nullable().optional(),
+  uomId: z.string().min(1).nullable().optional(),
+  /** Technician-chosen setpoint for the Pattern D generic-slot case. */
+  suppliedNominalValue: measurementDecimalInput,
+  attachmentFileObjectId: z.string().min(1).nullable().optional(),
+  note: z.string().trim().max(2000).nullable().optional(),
+});
+
+export type MeasurementResultCreateInput = z.infer<typeof measurementResultCreateSchema>;
+
+/** POST /calibration-jobs/:id/measurement-results/batch body (tech-pwa grid submit). */
+export const measurementResultBatchCreateSchema = z.object({
+  items: z.array(measurementResultCreateSchema).min(1).max(200),
+});
+
+export type MeasurementResultBatchCreateInput = z.infer<typeof measurementResultBatchCreateSchema>;
+
+/**
+ * PATCH /calibration-jobs/:id/measurement-results/:measurementId body.
+ * Only the value fields are editable — direction / replicateIndex /
+ * calibrationTestPointId are natural-key components and a change to any of them
+ * is a different row (delete + create), never an update. At least one field must
+ * be present.
+ */
+export const measurementResultUpdateSchema = z
+  .object({
+    measuredValue: measurementDecimalInput,
+    referenceValue: measurementDecimalInput,
+    measuredBool: z.boolean().nullable().optional(),
+    measuredText: z.string().trim().max(500).nullable().optional(),
+    note: z.string().trim().max(2000).nullable().optional(),
+  })
+  .refine((val) => Object.values(val).some((v) => v !== undefined), {
+    message: "At least one field must be provided",
+  });
+
+export type MeasurementResultUpdateInput = z.infer<typeof measurementResultUpdateSchema>;
+
+// -----------------------------------------------------------------------------
 // Calibration Job — Portal management list
 // -----------------------------------------------------------------------------
 

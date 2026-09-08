@@ -93,6 +93,9 @@ export interface UpdateMeasurementResultInput {
   note?: string | null;
 }
 
+/** The row shape every mutating method and `list` return. */
+export type MeasurementResultRow = Prisma.MeasurementResultGetPayload<object>;
+
 const parameterSelect = {
   id: true,
   valueType: true,
@@ -117,7 +120,11 @@ export class MeasurementResultsService {
    * tolerance, computes isWithinTolerance from the raw value, and stamps
    * recordedBy / recordedAt / attemptNumber (= job.currentAttempt).
    */
-  async create(companyId: string, input: CreateMeasurementResultInput, userId: string) {
+  async create(
+    companyId: string,
+    input: CreateMeasurementResultInput,
+    userId: string,
+  ): Promise<MeasurementResultRow> {
     const job = await this.loadJob(companyId, input.calibrationJobId);
     this.assertJobStarted(job);
     // A brand-new row is always for the current attempt, so the superseded
@@ -178,7 +185,11 @@ export class MeasurementResultsService {
    * is guarded + resolved independently; a duplicate natural key anywhere rolls
    * the whole batch back with MEASUREMENT_DUPLICATE_ENTRY.
    */
-  async createMany(companyId: string, inputs: CreateMeasurementResultInput[], userId: string) {
+  async createMany(
+    companyId: string,
+    inputs: CreateMeasurementResultInput[],
+    userId: string,
+  ): Promise<MeasurementResultRow[]> {
     if (inputs.length === 0) return [];
 
     // Every row in a batch must target the same job (the tech-pwa submit is
@@ -256,17 +267,9 @@ export class MeasurementResultsService {
     id: string,
     input: UpdateMeasurementResultInput,
     userId: string,
-  ) {
-    const row = await prisma.measurementResult.findFirst({
-      where: { id, companyId },
-      include: { calibrationJob: { select: { status: true, currentAttempt: true, submittedAt: true } } },
-    });
-    if (!row) {
-      throw new NotFoundException({
-        message: "Measurement result not found",
-        code: "MEASUREMENT_RESULT_NOT_FOUND",
-      });
-    }
+    calibrationJobId?: string,
+  ): Promise<MeasurementResultRow> {
+    const row = await this.loadRowForWrite(companyId, id, calibrationJobId);
     assertMeasurementRowEditable(row.calibrationJob, row);
 
     const data: Prisma.MeasurementResultUncheckedUpdateInput = {
@@ -328,10 +331,40 @@ export class MeasurementResultsService {
    * unique constraint (a deleted row would still block re-entry of the same
    * point), which is a real cost for no benefit.
    */
-  async remove(companyId: string, id: string): Promise<void> {
+  async remove(companyId: string, id: string, calibrationJobId?: string): Promise<void> {
+    const row = await this.loadRowForWrite(companyId, id, calibrationJobId);
+    assertMeasurementRowEditable(row.calibrationJob, row);
+    await prisma.measurementResult.delete({ where: { id } });
+  }
+
+  /**
+   * All readings for one job, worksheet order (parameter sortOrder → test-point
+   * sequence → replicate → direction → attempt). Used by tech-pwa to rehydrate a
+   * job reopened mid-entry. Company-scoped; asserts the job exists.
+   */
+  async list(companyId: string, calibrationJobId: string): Promise<MeasurementResultRow[]> {
+    await this.loadJob(companyId, calibrationJobId);
+    return prisma.measurementResult.findMany({
+      where: { companyId, calibrationJobId },
+      orderBy: [
+        { parameter: { sortOrder: "asc" } },
+        { deviceCalibrationParameterId: "asc" },
+        { testPoint: { sequence: "asc" } },
+        { replicateIndex: "asc" },
+        { direction: "asc" },
+        { attemptNumber: "asc" },
+      ],
+    });
+  }
+
+  // ── helpers ───────────────────────────────────────────────────────────────
+
+  private async loadRowForWrite(companyId: string, id: string, calibrationJobId?: string) {
     const row = await prisma.measurementResult.findFirst({
-      where: { id, companyId },
-      include: { calibrationJob: { select: { status: true, currentAttempt: true, submittedAt: true } } },
+      where: { id, companyId, ...(calibrationJobId ? { calibrationJobId } : {}) },
+      include: {
+        calibrationJob: { select: { status: true, currentAttempt: true, submittedAt: true } },
+      },
     });
     if (!row) {
       throw new NotFoundException({
@@ -339,11 +372,8 @@ export class MeasurementResultsService {
         code: "MEASUREMENT_RESULT_NOT_FOUND",
       });
     }
-    assertMeasurementRowEditable(row.calibrationJob, row);
-    await prisma.measurementResult.delete({ where: { id } });
+    return row;
   }
-
-  // ── helpers ───────────────────────────────────────────────────────────────
 
   private async loadJob(companyId: string, jobId: string) {
     const job = await prisma.calibrationJob.findFirst({
