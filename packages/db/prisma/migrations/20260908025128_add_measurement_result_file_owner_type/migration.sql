@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "FileOwnerType" ADD VALUE 'MEASUREMENT_RESULT';

@@ -345,6 +345,9 @@ enum FileOwnerType {
   /// IdentityCorrectionSignature.id. Deliberately NOT reusing SIGNATURE
   /// (which is CustomerSignature-on-job). (Decision 10)
   IDENTITY_CORRECTION
+  /// Data-logger export (12-channel thermometer PDF/CSV) attached to a
+  /// MeasurementResult LOGGER_SUMMARY row. ownerId = MeasurementResult.id.
+  MEASUREMENT_RESULT
   OTHER
 }
 
@@ -367,6 +370,26 @@ enum CalibrationValueType {
   RATIO
   TEXT
   BOOLEAN
+}
+
+/// Ramp facet for Pattern D paired up/down sweeps (Suction Pump vacuum-gauge
+/// accuracy "Naik | Turun"; Sphygmomanometer pressure accuracy "naik & turun").
+/// NONE is the default and covers every non-ramp reading, so the value is always
+/// non-null and can safely participate in the natural-key unique constraint
+/// (a nullable column there would be defeated by Postgres NULL-distinctness).
+enum MeasurementDirection {
+  NONE
+  UP // naik
+  DOWN // turun
+}
+
+/// Discriminates a directly-typed reading from a summary row that stands in for
+/// an attached data-logger export (Pattern D spatial/temporal uniformity — the
+/// fridge / freezer / oven / sterilizer rows, where 9 sensors x 30 timepoints
+/// are never typed into the worksheet). Drives Excel-export grouping.
+enum MeasurementEntryKind {
+  DIRECT_READING
+  LOGGER_SUMMARY
 }
 
 // Email → Lead Management (locked plan)
@@ -491,6 +514,7 @@ model User {
   identityCorrectionsSubmitted          IdentityCorrection[]         @relation("IdentityCorrectionSubmitter")
   identityCorrectionsDecided            IdentityCorrection[]         @relation("IdentityCorrectionDecider")
   jobReferenceEquipmentUsagesOverridden JobReferenceEquipmentUsed[]  @relation("JobReferenceEquipmentOverrider")
+  measurementResultsRecorded            MeasurementResult[]          @relation("MeasurementResultRecordedBy")
 }
 
 // =============================================================================
@@ -758,6 +782,7 @@ model Uom {
   updatedAt DateTime    @updatedAt
 
   calibrationParameters DeviceCalibrationParameter[]
+  measurementResults    MeasurementResult[]
 
   @@index([category])
   @@index([isActive])
@@ -1303,6 +1328,9 @@ model DeviceCalibrationParameter {
   deviceType     DeviceType           @relation(fields: [deviceTypeId], references: [id])
   capabilityItem DeviceCapabilityItem @relation(fields: [capabilityItemId], references: [id])
   uom            Uom?                 @relation(fields: [uomId], references: [id])
+
+  testPoints         CalibrationTestPoint[]
+  measurementResults MeasurementResult[]
 
   @@unique([deviceTypeId, capabilityItemId, code])
   @@index([deviceTypeId])
@@ -1871,11 +1899,15 @@ model CalibrationJob {
   /// default to NULL (no backfill: a stale NOT_REQUIRED job has no open gate).
   akdAklGateOpenedBy     AkdAklGateOrigin?
 
-  status      CalibrationJobStatus @default(PENDING)
-  startedAt   DateTime?
-  submittedAt DateTime?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  status         CalibrationJobStatus @default(PENDING)
+  /// Current revision attempt. Starts at 1. Incremented by exactly 1 in the
+  /// SUBMITTED -> REWORK transition service method — the single well-defined
+  /// moment. Never decremented. (MeasurementResult_Stage1 §6.)
+  currentAttempt Int                  @default(1)
+  startedAt      DateTime?
+  submittedAt    DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
   workOrder              WorkOrder                   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   purchaseOrderItem      PurchaseOrderItem?          @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
@@ -1899,18 +1931,142 @@ model CalibrationJob {
   @@index([akdAklApprovedByUserId])
 }
 
+/// Optional master-level child of DeviceCalibrationParameter. Created ONLY for
+/// Pattern B parameters (a fixed "Setting Simulator / Setting UUT / Setting
+/// Standar" sweep with one shared tolerance) and the fixed-slot flavour of
+/// Pattern D (generic ordinal points whose numeric value the technician chooses
+/// on-site — settingValue NULL, settingLabel "Titik ukur 1"). Pattern A and
+/// note-only parameters have NO test points; their MeasurementResult rows carry
+/// calibrationTestPointId = NULL.
+///
+/// toleranceMin/Max/Note are an OPTIONAL PER-POINT OVERRIDE: NULL = inherit the
+/// parent DeviceCalibrationParameter's bounds (the Pattern B norm). They exist
+/// for the residual un-split Pattern C / dual-class cases (SUCT_MAX_VACUUM,
+/// INCU_AIR_TEMP) and any future per-analyte analyzer lists, so those never need
+/// to explode into separate DeviceCalibrationParameter rows.
+model CalibrationTestPoint {
+  id                           String @id @default(cuid())
+  deviceCalibrationParameterId String
+
+  /// Stable display / worksheet order within the parameter. 1-based.
+  sequence     Int
+  /// Human label always shown on the worksheet ("80 dB", "121 C cycle",
+  /// "Posisi A", "Titik ukur 1"). Required.
+  settingLabel String
+  /// The nominal setting/target the technician dials in. NULL for the Pattern D
+  /// "generic ordinal slot" case where the value is chosen per unit at
+  /// measurement time (then recorded on MeasurementResult.appliedNominalValue).
+  settingValue Decimal? @db.Decimal(18, 4)
+
+  /// Optional per-point tolerance override. NULL = inherit parent parameter.
+  toleranceMin  Decimal? @db.Decimal(18, 4)
+  toleranceMax  Decimal? @db.Decimal(18, 4)
+  toleranceNote String?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parameter          DeviceCalibrationParameter @relation(fields: [deviceCalibrationParameterId], references: [id], onDelete: Cascade)
+  measurementResults MeasurementResult[]
+
+  @@unique([deviceCalibrationParameterId, sequence])
+  @@unique([deviceCalibrationParameterId, settingLabel])
+  @@index([deviceCalibrationParameterId])
+}
+
+/// One measured reading (or one logger-summary row) for one parameter, at one
+/// test point, for one replicate trial, on one revision attempt, in one ramp
+/// direction. payloadJson / summaryJson are removed. The table had 0 rows and no
+/// runtime, so the migration drops+adds columns with no backfill.
 model MeasurementResult {
-  id               String   @id @default(cuid())
-  companyId        String
-  calibrationJobId String
-  payloadJson      Json
-  summaryJson      Json?
+  id        String @id @default(cuid())
+  companyId String // bare String, no FK — matches the project child-table convention (gap E3)
+
+  // ── Natural / composite key (offline-sync readiness, decision #3) ──────────
+  calibrationJobId             String
+  /// REQUIRED FK — closes the long-standing F2 gap.
+  deviceCalibrationParameterId String
+  /// NULL for Pattern A and note-only parameters (no fixed test points).
+  calibrationTestPointId       String?
+  /// 1-based trial number (LK columns I, II, III, ...). 1 when the worksheet has
+  /// a single measurement column, or for a LOGGER_SUMMARY row.
+  replicateIndex               Int
+  /// Revision cycle. Mirrors CalibrationJob.currentAttempt at write time. Old
+  /// attempts' rows are never edited or deleted (decision #4).
+  attemptNumber                Int
+  /// Ramp facet. NONE for all non-ramp readings (the overwhelming majority).
+  direction                    MeasurementDirection @default(NONE)
+
+  // ── The reading ──────────────────────────────────────────────────────────
+  entryKind      MeasurementEntryKind @default(DIRECT_READING)
+  /// Raw measured value exactly as entered — full precision, NEVER rounded.
+  /// isWithinTolerance is computed from THIS (locked project rule). NULL for
+  /// BOOLEAN / TEXT readings and for a LOGGER_SUMMARY that only carries an
+  /// attachment.
+  measuredValue  Decimal?             @db.Decimal(18, 6)
+  /// Paired reference-standard reading at the same point, when the standard is
+  /// an independent instrument read alongside the UUT (Pattern D thermohygrometer
+  /// ref-vs-UUT tables). NULL when the "standard" is the implicit simulator
+  /// setting (Pattern B) — that value lives in appliedNominalValue instead.
+  referenceValue Decimal?             @db.Decimal(18, 6)
+  /// Qualitative reading for valueType = BOOLEAN (BSC HEPA/ULPA leak Pass/Fail).
+  measuredBool   Boolean?
+  /// Literal reading for valueType = TEXT, and the human form of a RATIO
+  /// ("1:2.0"). measuredValue still holds the numeric form for RATIO math.
+  measuredText   String?
+  /// Per-entry unit override (Pattern D "unit chosen per UUT"). NULL = use the
+  /// parameter's uom.
+  uomId          String?
+
+  // ── Evaluation (computed at entry time, then stored) ─────────────────────
+  /// TRUE / FALSE from raw measuredValue vs the effective tolerance.
+  /// NULL = "cannot be evaluated automatically" — no computable tolerance
+  /// (null bounds AND no parseable "+/- delta" note). Deliberate; judged
+  /// holistically by a human at QualityReview (G4). Never a forced guess,
+  /// never false-by-default. No manual-override field is added here (decision #6).
+  isWithinTolerance     Boolean?
+  /// Snapshot of the bounds actually applied, frozen so a later edit to the
+  /// master catalog never silently rewrites a submitted reading's verdict.
+  effectiveToleranceMin Decimal? @db.Decimal(18, 4)
+  effectiveToleranceMax Decimal? @db.Decimal(18, 4)
+  /// The nominal/setpoint used to resolve a note-only "+/- delta" tolerance into
+  /// concrete bounds (Pattern B: effectiveMin = nominal - delta, etc.). Also the
+  /// home for the technician-chosen value in the Pattern D generic-slot case.
+  appliedNominalValue   Decimal? @db.Decimal(18, 4)
+
+  // ── Pattern D logger fallback ───────────────────────────────────────────
+  /// The attached data-logger export (12-channel thermometer PDF/CSV) backing a
+  /// LOGGER_SUMMARY row. Polymorphic-free typed FK to FileObject. A new
+  /// FileOwnerType.MEASUREMENT_RESULT value is added alongside (see §3.5).
+  attachmentFileObjectId String?
+
+  // ── Provenance ─────────────────────────────────────────────────────────
+  /// Who entered the reading. Nullable only to tolerate offline rows that sync
+  /// before the actor is resolved; the write path sets it.
+  recordedByUserId String?
+  note             String?
   recordedAt       DateTime @default(now())
   createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  calibrationJob CalibrationJob @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  calibrationJob CalibrationJob             @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  parameter      DeviceCalibrationParameter @relation(fields: [deviceCalibrationParameterId], references: [id], onDelete: Restrict)
+  testPoint      CalibrationTestPoint?      @relation(fields: [calibrationTestPointId], references: [id], onDelete: Restrict)
+  uom            Uom?                       @relation(fields: [uomId], references: [id])
+  recordedBy     User?                      @relation("MeasurementResultRecordedBy", fields: [recordedByUserId], references: [id])
+  attachmentFile FileObject?                @relation("MeasurementResultAttachment", fields: [attachmentFileObjectId], references: [id])
 
+  // Natural key (decision #3) + the direction facet (see §3.4 for the caveat).
+  // The generated migration is hand-edited to add NULLS NOT DISTINCT so a NULL
+  // calibrationTestPointId (Pattern A) still collides on duplicates.
+  @@unique([calibrationJobId, deviceCalibrationParameterId, calibrationTestPointId, replicateIndex, attemptNumber, direction], name: "measurement_natural_key")
   @@index([calibrationJobId])
+  @@index([calibrationJobId, attemptNumber])
+  @@index([deviceCalibrationParameterId])
+  @@index([calibrationTestPointId])
+  @@index([companyId])
+  @@index([attachmentFileObjectId])
 }
 
 model JobEvidence {
@@ -2291,12 +2447,13 @@ model FileObject {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer        Customer?           @relation(fields: [customerId], references: [id])
-  uploadedByUser  User?               @relation("FileUploadedBy", fields: [uploadedByUserId], references: [id])
-  jobEvidences    JobEvidence[]
-  signatures      CustomerSignature[]
-  certificatePdfs Certificate[]       @relation("CertificatePdf")
+  company                Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer               Customer?           @relation(fields: [customerId], references: [id])
+  uploadedByUser         User?               @relation("FileUploadedBy", fields: [uploadedByUserId], references: [id])
+  jobEvidences           JobEvidence[]
+  signatures             CustomerSignature[]
+  certificatePdfs        Certificate[]       @relation("CertificatePdf")
+  measurementAttachments MeasurementResult[] @relation("MeasurementResultAttachment")
 
   @@unique([storageKey])
   @@index([companyId, ownerType, ownerId])
