@@ -17,7 +17,8 @@
  *   - Override cases (SUCT_MAX_VACUUM, INCU_AIR_TEMP) -> per-point toleranceMin/Max SET.
  *
  * Pattern A, the 8 already-split Pattern C rows, the Pattern D logger-summary
- * storage-temperature rows, BOOLEAN / RATIO rows, and every environment /
+ * storage-temperature rows (now `DeviceCalibrationParameter.entryStyle =
+ * LOGGER_SUMMARY`), BOOLEAN / RATIO rows, and every environment /
  * electrical-safety row get NO test points — see the extraction report for the
  * explicit "checked, excluded" list.
  *

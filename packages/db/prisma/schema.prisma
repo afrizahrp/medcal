@@ -372,6 +372,17 @@ enum CalibrationValueType {
   BOOLEAN
 }
 
+/// Catalog-level entry UI for a DeviceCalibrationParameter — which worksheet
+/// shape the technician uses. Distinct from MeasurementEntryKind (that one
+/// discriminates a stored MeasurementResult row). Pattern B setpoint grids
+/// stay DIRECT_REPLICATES here and are excluded from Stage A by having
+/// CalibrationTestPoint children. LOGGER_SUMMARY is the Pattern D fridge /
+/// freezer / oven / sterilizer uniformity case (min/max + attachment; Stage C).
+enum CalibrationParameterEntryStyle {
+  DIRECT_REPLICATES
+  LOGGER_SUMMARY
+}
+
 /// Ramp facet for Pattern D paired up/down sweeps (Suction Pump vacuum-gauge
 /// accuracy "Naik | Turun"; Sphygmomanometer pressure accuracy "naik & turun").
 /// NONE is the default and covers every non-ramp reading, so the value is always
@@ -1322,6 +1333,12 @@ model DeviceCalibrationParameter {
   // on `name`. Existing rows are seeded by backfill-calibration-ordering.ts.
   sortOrder        Int                  @default(0)
   isActive         Boolean              @default(true)
+  /// Which entry UI this catalog row needs. Default DIRECT_REPLICATES covers
+  /// Pattern A (+ Pattern C-as-A) and Pattern B (which still uses typed
+  /// readings; the grid is expressed by CalibrationTestPoint children).
+  /// LOGGER_SUMMARY is backfilled for the 9 storage-temperature uniformity
+  /// codes in CalibrationTestPoint_Seed_Extraction.md §6.4.
+  entryStyle       CalibrationParameterEntryStyle @default(DIRECT_REPLICATES)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 

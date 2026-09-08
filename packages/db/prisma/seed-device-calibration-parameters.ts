@@ -17,6 +17,24 @@ interface ParameterSeedRow {
 }
 
 /**
+ * Pattern D logger-summary catalog codes (CalibrationTestPoint_Seed_Extraction.md
+ * §6.4). NUMBER + zero test points, but the entry UI is min/max + attachment,
+ * not N replicate readings. Re-running this seed must keep entryStyle set so
+ * Stage A `listMeasurementParameters` does not leak them.
+ */
+const LOGGER_SUMMARY_CODES = new Set<string>([
+  "BBR_STORAGE_TEMP",
+  "KVAK_STORAGE_TEMP",
+  "CCHAIN_STORAGE_TEMP",
+  "MREF_STORAGE_TEMP",
+  "MFRZ_STORAGE_TEMP",
+  "OVEN_TEMP",
+  "STER_TEMP",
+  "CRFR_STORAGE_TEMP",
+  "PLT_STORAGE_TEMP",
+]);
+
+/**
  * DeviceCapabilityItem.code → parent DeviceCapability.code.
  * Item codes are only unique within a capability (@@unique([capabilityId, code])),
  * so lookups must go through this map rather than querying items by code alone.
@@ -1933,11 +1951,13 @@ async function seedDeviceCalibrationParameters() {
         description: null,
         uomId,
         ...(row.valueType ? { valueType: row.valueType } : {}),
+        entryStyle: LOGGER_SUMMARY_CODES.has(row.code) ? "LOGGER_SUMMARY" : "DIRECT_REPLICATES",
       },
       update: {
         name: row.name,
         uomId,
         ...(row.valueType ? { valueType: row.valueType } : {}),
+        entryStyle: LOGGER_SUMMARY_CODES.has(row.code) ? "LOGGER_SUMMARY" : "DIRECT_REPLICATES",
       },
     });
     upserted += 1;
