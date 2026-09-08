@@ -44,6 +44,17 @@ const MESSAGES: Record<string, string> = {
     "Jenis alat ini tidak diperlukan untuk jenis perangkat pada job ini.",
   DUPLICATE_JOB_REFERENCE_EQUIPMENT: "Ada alat yang terpilih lebih dari sekali.",
   INVALID_JOB_REFERENCE_EQUIPMENT: "Data pilihan alat referensi tidak valid.",
+  // MeasurementResult entry (Stage A)
+  MEASUREMENT_JOB_SUBMITTED: "Job sudah dikirim — hasil pengukuran terkunci.",
+  MEASUREMENT_ATTEMPT_SUPERSEDED:
+    "Pembacaan ini milik attempt lama dan tidak dapat diubah.",
+  MEASUREMENT_DUPLICATE_ENTRY:
+    "Baris pembacaan ini sudah tersimpan. Muat ulang halaman.",
+  DEVICE_CALIBRATION_PARAMETER_NOT_FOUND: "Parameter kalibrasi tidak ditemukan.",
+  MEASUREMENT_RESULT_NOT_FOUND: "Baris pembacaan tidak ditemukan. Muat ulang halaman.",
+  INVALID_MEASUREMENT_RESULT: "Data pembacaan tidak valid.",
+  INVALID_MEASUREMENT_RESULT_BATCH: "Data pembacaan tidak valid.",
+  INVALID_MEASUREMENT_RESULT_UPDATE: "Data perubahan pembacaan tidak valid.",
 };
 
 export function isOffline(): boolean {

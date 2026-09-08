@@ -35,6 +35,9 @@ export interface TechCalibrationJob {
   akdAklDecisionNote: string | null;
   status: CalibrationJobStatus;
   startedAt: string | null;
+  submittedAt: string | null;
+  /** Revision cycle — MeasurementResult rows of earlier attempts are read-only. */
+  currentAttempt: number;
   createdAt: string;
   workOrder: {
     id: string;

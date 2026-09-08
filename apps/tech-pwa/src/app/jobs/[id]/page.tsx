@@ -17,14 +17,23 @@ import {
   isReferenceEquipmentLocked,
 } from "../../../lib/calibration/reference-equipment";
 import { markWizardEntryIntent } from "./identity-correction/wizard-nav";
+import {
+  canRecordMeasurement,
+  measurementLockedReason,
+} from "../../../lib/calibration/measurement";
 import { useCorrectionsQuery, useJobQuery, useStartCalibration } from "./use-job-query";
 import { useReferenceEquipmentUsed } from "./use-reference-equipment-query";
+import {
+  useMeasurementParameters,
+  useMeasurementResults,
+} from "./measurements/use-measurements-query";
 import {
   ApprovalStatusSection,
   AssignedDeviceSection,
   CorrectionsListSection,
   DeclaredIdentitySection,
   JobHeaderBlock,
+  MeasurementsSection,
   ObservedIdentitySection,
   ReferenceEquipmentSection,
   StartCalibrationAction,
@@ -41,6 +50,8 @@ export default function JobDetailPage() {
   const jobQuery = useJobQuery(id, { poll: true });
   const correctionsQuery = useCorrectionsQuery(id, { poll: true });
   const referenceEquipmentQuery = useReferenceEquipmentUsed(id);
+  const measurementParametersQuery = useMeasurementParameters(id);
+  const measurementResultsQuery = useMeasurementResults(id);
   const startMutation = useStartCalibration(id);
 
   if (jobQuery.isPending) {
@@ -78,6 +89,23 @@ export default function JobDetailPage() {
       : isReferenceEquipmentLocked(job)
         ? "Job sudah dikirim — daftar alat referensi terkunci."
         : null;
+
+  const measurementParams = measurementParametersQuery.data;
+  const measurementRowsByParameter = new Map<
+    string,
+    NonNullable<typeof measurementResultsQuery.data>
+  >();
+  for (const row of measurementResultsQuery.data ?? []) {
+    if (row.calibrationTestPointId !== null || row.attemptNumber !== job.currentAttempt) continue;
+    const list = measurementRowsByParameter.get(row.deviceCalibrationParameterId) ?? [];
+    list.push(row);
+    measurementRowsByParameter.set(row.deviceCalibrationParameterId, list);
+  }
+  // Section shows while the job is IN_PROGRESS (entry), or later read-only if any
+  // reading was already recorded. Hidden for PENDING with nothing entered yet.
+  const showRecordMeasurement =
+    Boolean(capabilities?.calibrationJobRecordMeasurement) &&
+    (job.status === "IN_PROGRESS" || measurementRowsByParameter.size > 0);
 
   return (
     <Screen
@@ -163,6 +191,29 @@ export default function JobDetailPage() {
           lockedReason={referenceEquipmentLockedReason}
         />
       )}
+      {showRecordMeasurement ? (
+        measurementParametersQuery.isPending || measurementResultsQuery.isPending ? (
+          <LoadingState label="Memuat parameter pengukuran…" />
+        ) : measurementParametersQuery.isError ? (
+          <ErrorState
+            message={formatApiError(
+              measurementParametersQuery.error,
+              "Gagal memuat parameter pengukuran.",
+            )}
+            onRetry={() => void measurementParametersQuery.refetch()}
+          />
+        ) : (
+          <MeasurementsSection
+            jobId={id}
+            parameters={measurementParams?.parameters ?? []}
+            rowsByParameter={measurementRowsByParameter}
+            deviceTypeResolved={(measurementParams?.deviceType ?? null) !== null}
+            canRecord={showRecordMeasurement}
+            entryOpen={canRecordMeasurement(job)}
+            lockedReason={measurementLockedReason(job)}
+          />
+        )
+      ) : null}
       {correctionsQuery.isPending ? (
         <LoadingState label="Memuat koreksi identitas…" />
       ) : correctionsQuery.isError ? (

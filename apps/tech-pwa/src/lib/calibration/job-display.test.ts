@@ -38,6 +38,8 @@ function job(
     akdAklDecisionNote: null,
     status,
     startedAt: null,
+    submittedAt: null,
+    currentAttempt: 1,
     createdAt: "2026-09-01T00:00:00.000Z",
     workOrder: {
       id: workOrderId,

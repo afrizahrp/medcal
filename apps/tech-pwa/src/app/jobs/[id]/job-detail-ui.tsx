@@ -6,6 +6,11 @@ import { JobStatusBadge, AkdAklStatusBadge } from "../jobs-ui";
 import type { TechCalibrationJob, TechIdentityCorrection } from "../../../lib/calibration/types";
 import { IDENTITY_CORRECTION_STATUS_LABELS } from "../../../lib/calibration/types";
 import type { TechReferenceEquipmentUsed } from "../../../lib/calibration/reference-equipment";
+import {
+  parameterEntryStatus,
+  type TechMeasurementParameter,
+  type TechMeasurementResult,
+} from "../../../lib/calibration/measurement";
 import { declaredAkdAkl, declaredDeviceName } from "../../../lib/calibration/job-display";
 import { RecordedReferenceEquipmentList } from "./reference-equipment/reference-equipment-ui";
 
@@ -113,6 +118,87 @@ export function ReferenceEquipmentSection({
             className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 active:text-brand-800"
           >
             Catat alat referensi
+          </Link>
+        ) : lockedReason ? (
+          <p className="mt-2 text-xs text-slate-500">{lockedReason}</p>
+        ) : null
+      ) : null}
+    </Section>
+  );
+}
+
+/**
+ * Measurement entry (Stage A — Pattern A only). Mirrors ReferenceEquipmentSection:
+ * a compact per-parameter list with entry status, plus the "Catat Hasil
+ * Pengukuran" link when the job is IN_PROGRESS and the actor may record.
+ * Non-NUMBER params, logger-summary catalog rows, and test-point grids are
+ * resolved out server-side (`entryStyle` + `testPoints: none`).
+ */
+export function MeasurementsSection({
+  jobId,
+  parameters,
+  rowsByParameter,
+  deviceTypeResolved,
+  canRecord,
+  entryOpen,
+  lockedReason,
+}: {
+  jobId: string;
+  parameters: TechMeasurementParameter[];
+  rowsByParameter: Map<string, TechMeasurementResult[]>;
+  deviceTypeResolved: boolean;
+  canRecord: boolean;
+  entryOpen: boolean;
+  lockedReason: string | null;
+}) {
+  return (
+    <Section title="Hasil Pengukuran">
+      {!deviceTypeResolved ? (
+        <p className="text-sm text-slate-500">
+          Jenis alat job belum dapat ditentukan — parameter pengukuran belum tersedia.
+        </p>
+      ) : parameters.length === 0 ? (
+        <p className="text-sm text-slate-500">
+          Tidak ada parameter pengukuran langsung untuk jenis alat ini.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-1.5">
+          {parameters.map((param) => {
+            const status = parameterEntryStatus(rowsByParameter.get(param.id) ?? []);
+            return (
+              <li
+                key={param.id}
+                className="flex items-center justify-between gap-2 py-1 text-sm"
+              >
+                <span className="min-w-0 truncate text-slate-700">{param.name}</span>
+                <span
+                  className={[
+                    "shrink-0 rounded-md px-2 py-0.5 text-[11px] font-semibold",
+                    status.complete
+                      ? status.anyFail
+                        ? "bg-red-100 text-red-800"
+                        : "bg-emerald-100 text-emerald-800"
+                      : "bg-slate-100 text-slate-600",
+                  ].join(" ")}
+                >
+                  {status.complete
+                    ? status.anyFail
+                      ? "Ada tidak sesuai"
+                      : "Selesai"
+                    : `${status.filled}/${status.total}`}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {canRecord ? (
+        entryOpen && deviceTypeResolved && parameters.length > 0 ? (
+          <Link
+            href={`/jobs/${jobId}/measurements`}
+            className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 active:text-brand-800"
+          >
+            Catat Hasil Pengukuran
           </Link>
         ) : lockedReason ? (
           <p className="mt-2 text-xs text-slate-500">{lockedReason}</p>
