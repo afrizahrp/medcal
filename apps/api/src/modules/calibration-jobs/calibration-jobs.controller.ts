@@ -40,6 +40,7 @@ import {
   type CalibrationJobListRow,
   type IdentityCorrectionDetail,
   type IdentityCorrectionSubmitResult,
+  type JobMeasurementParametersResult,
 } from "./calibration-jobs.service";
 import type {
   JobReferenceEquipmentCandidate,
@@ -292,6 +293,19 @@ export class CalibrationJobsController {
   // ── MeasurementResult (Stage 2c) ──────────────────────────────────────────
   // Nested under the job, like reference-equipment-used. The job param stays
   // `:id` (this controller's convention); the row param is `:measurementId`.
+
+  // Catalog of directly-entered ("Pattern A") parameters for this job's device
+  // type: NUMBER + DIRECT_REPLICATES + no CalibrationTestPoint children.
+  // Logger-summary rows (entryStyle = LOGGER_SUMMARY) are Stage C. Read-level
+  // grant, like every other GET on this controller.
+  @Get(":id/measurement-parameters")
+  @RequirePermission("calibrationJob", "read")
+  async listMeasurementParameters(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<JobMeasurementParametersResult> {
+    return this.service.listMeasurementParameters(companyId, id);
+  }
 
   @Get(":id/measurement-results")
   @RequirePermission("calibrationJob", "read")

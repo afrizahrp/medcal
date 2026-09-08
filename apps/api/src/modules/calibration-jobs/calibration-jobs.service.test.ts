@@ -1954,3 +1954,105 @@ describe("identityCorrectionFileOwnerPolicy", () => {
     expect(identityCorrectionFileOwnerPolicy.writeAction).toBe("submitIdentityCorrection");
   });
 });
+
+describe("CalibrationJobsService — Measurement Parameters (Stage A, Pattern A)", () => {
+  const createdCapabilityIds: string[] = [];
+  const createdParamDeviceTypeIds: string[] = [];
+
+  async function capabilityItem() {
+    const capability = await prisma.deviceCapability.create({
+      data: { code: `MPCAP-${randomUUID().slice(0, 8).toUpperCase()}`, name: "MP Capability" },
+    });
+    createdCapabilityIds.push(capability.id);
+    const item = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: capability.id, name: "MP Item" },
+    });
+    return item.id;
+  }
+
+  afterAll(async () => {
+    if (createdParamDeviceTypeIds.length > 0) {
+      await prisma.calibrationTestPoint.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdParamDeviceTypeIds } } },
+      });
+      await prisma.deviceCalibrationParameter.deleteMany({
+        where: { deviceTypeId: { in: createdParamDeviceTypeIds } },
+      });
+    }
+    if (createdCapabilityIds.length > 0) {
+      await prisma.deviceCapabilityItem.deleteMany({
+        where: { capabilityId: { in: createdCapabilityIds } },
+      });
+      await prisma.deviceCapability.deleteMany({ where: { id: { in: createdCapabilityIds } } });
+    }
+  });
+
+  it("returns only NUMBER, DIRECT_REPLICATES, active, test-point-free parameters for the job's resolved device type", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+
+    const base = { deviceTypeId, capabilityItemId };
+    const patternA = await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "MP_A", name: "Illuminance", valueType: "NUMBER", toleranceMin: 15000, toleranceNote: ">15.000 lux", sortOrder: 10 },
+    });
+    // excluded: has a test point (Pattern B)
+    const withPoint = await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "MP_B", name: "Sweep", valueType: "NUMBER", sortOrder: 20 },
+    });
+    await prisma.calibrationTestPoint.create({
+      data: { deviceCalibrationParameterId: withPoint.id, sequence: 1, settingLabel: "10", settingValue: 10 },
+    });
+    // excluded: non-NUMBER
+    await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "MP_R", name: "Ratio", valueType: "RATIO", uomId: null, sortOrder: 30 },
+    });
+    // excluded: inactive
+    await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "MP_I", name: "Inactive", valueType: "NUMBER", isActive: false, sortOrder: 40 },
+    });
+
+    const result = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+
+    expect(result.deviceType?.id).toBe(deviceTypeId);
+    expect(result.parameters.map((p) => p.code)).toEqual(["MP_A"]);
+    expect(result.parameters[0]).toMatchObject({
+      id: patternA.id,
+      // decimalPlaces passes through verbatim — read, never defaulted here
+      // (placeholder 0 in pkmdb; NULL for a freshly-created test row).
+      decimalPlaces: null,
+      toleranceMin: "15000",
+      toleranceNote: ">15.000 lux",
+      capabilityItemName: "MP Item",
+      capabilityName: "MP Capability",
+    });
+  });
+
+  it("excludes NUMBER + active + zero-test-point rows whose entryStyle is LOGGER_SUMMARY", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const base = { deviceTypeId, capabilityItemId };
+
+    const patternA = await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "MP_A2", name: "Illuminance", valueType: "NUMBER", sortOrder: 10 },
+    });
+    // BBR_STORAGE_TEMP-style leak: NUMBER, active, no CalibrationTestPoint
+    // children — Stage A used to include this until entryStyle was added.
+    await prisma.deviceCalibrationParameter.create({
+      data: {
+        ...base,
+        code: "BBR_STORAGE_TEMP_STYLE",
+        name: "Keseragaman Suhu Penyimpanan",
+        valueType: "NUMBER",
+        entryStyle: "LOGGER_SUMMARY",
+        sortOrder: 20,
+      },
+    });
+
+    const result = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+
+    expect(result.parameters.map((p) => p.code)).toEqual([patternA.code]);
+    expect(result.parameters.some((p) => p.code === "BBR_STORAGE_TEMP_STYLE")).toBe(false);
+  });
+});
