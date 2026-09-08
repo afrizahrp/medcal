@@ -15,6 +15,7 @@
  *   - Pattern D  (generic-slot) : ordinal slots whose mmHg the technician picks
  *                  on-site (SUCT_VACUUM_GAUGE) -> settingValue NULL, label "Titik ukur N".
  *   - Override cases (SUCT_MAX_VACUUM, INCU_AIR_TEMP) -> per-point toleranceMin/Max SET.
+ *   - Ventilator (2026-09-08): filled Excel, I–III; VENT_* catalog rows already existed.
  *
  * Pattern A, the 8 already-split Pattern C rows, the Pattern D logger-summary
  * storage-temperature rows (now `DeviceCalibrationParameter.entryStyle =
@@ -98,6 +99,8 @@ const SEEDS: ParamSeed[] = [
     device: "Audiometer",
     pattern: "B",
     source: 'LK Audiometer.docx — "Frekuensi Respon / Tanggap" / Earphone Kanan (80/90 dB, ± 2%, I–III)',
+    notes:
+      "2026-09-08 measurement-results/Audiometer.xlsx contains Pure Tone Linearity (I–III) only — this frequency-response sweep was NOT present in the filled file. Values kept from the blank LK template; unverified against field data.",
     testPoints: sweep([250, 500, 6000, 8000], "Hz"),
   },
   {
@@ -105,6 +108,8 @@ const SEEDS: ParamSeed[] = [
     device: "Audiometer",
     pattern: "B",
     source: 'LK Audiometer.docx — "Frekuensi Respon / Tanggap" / Earphone Kiri (80/90 dB, ± 2%, I–III)',
+    notes:
+      "2026-09-08 measurement-results/Audiometer.xlsx contains Pure Tone Linearity (I–III) only — this frequency-response sweep was NOT present in the filled file. Values kept from the blank LK template; unverified against field data.",
     testPoints: sweep([250, 500, 6000, 8000], "Hz"),
   },
 
@@ -129,7 +134,13 @@ const SEEDS: ParamSeed[] = [
     device: "Bed Side Monitor",
     pattern: "B",
     source: 'LK Bed Side Monitor.docx — "Kalibrasi Saturasi Oxygen (SPO2)" (± 3 % SPO2, I–V)',
-    testPoints: sweep([98, 93, 92, 85, 90, 70, 88], "%SpO2"),
+    notes:
+      "2026-09-08 measurement-results/Bed Side Monitor.xlsx records 8 rows and 90 appears TWICE (same shape as PULSEOX_SPO2). Trailing 90 added; labels disambiguated by titik number.",
+    testPoints: [98, 93, 92, 85, 90, 70, 88, 90].map((v, i) => ({
+      sequence: i + 1,
+      settingLabel: v === 90 ? `90 %SpO2 (titik ${i + 1})` : `${v} %SpO2`,
+      settingValue: v,
+    })),
   },
   {
     code: "BSM_SYSTOLIC",
@@ -431,6 +442,72 @@ const SEEDS: ParamSeed[] = [
         }),
       ),
     ],
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // VENTILATOR — measurement-results/ventilator infant.xlsx + ventilator transport.xlsx
+  // Blank LK was a PDF (deferred). Filled Excel uses I–III (not I–V). Peak
+  // inspiratory/expiratory FLOW tables exist in Excel but have no catalog
+  // parameter yet — not seeded here.
+  {
+    code: "VENT_TIDAL_VOLUME",
+    device: "Ventilator",
+    pattern: "B",
+    source: 'measurement-results/ventilator infant.xlsx — "Pengukuran tidal volume" (I–III, ± 10%)',
+    notes:
+      "Worksheet rows mix VT with RR / I:E conditions (500 ml @ RR 10; 800 ml @ I:E 1:2; 300 ml @ RR 20). Seed stores the VT column only.",
+    testPoints: sweep([500, 800, 300], "ml"),
+  },
+  {
+    code: "VENT_MINUTE_VOLUME",
+    device: "Ventilator",
+    pattern: "B",
+    source: 'measurement-results/ventilator infant.xlsx — "Pengukuran minute volume" (I–III, ± 10%)',
+    testPoints: sweep([6, 7, 7.8], "liter"),
+  },
+  {
+    code: "VENT_RESP_RATE",
+    device: "Ventilator",
+    pattern: "B",
+    source: 'measurement-results/ventilator infant.xlsx — "Pengukuran respiration rate" (I–III, ± 2 bpm)',
+    testPoints: sweep([10, 15, 20], "bpm"),
+  },
+  {
+    code: "VENT_INSP_TIME",
+    device: "Ventilator",
+    pattern: "B",
+    source: 'measurement-results/ventilator infant.xlsx — "Inspiratory time (Ti)" (I–III, ± 10%)',
+    testPoints: sweep([1, 2, 3], "sec"),
+  },
+  {
+    code: "VENT_EXP_TIME",
+    device: "Ventilator",
+    pattern: "B",
+    source: 'measurement-results/ventilator infant.xlsx — "Expiratory time (Te)" (I–III, ± 10%)',
+    testPoints: sweep([1, 2, 3], "sec"),
+  },
+  {
+    code: "VENT_PEEP",
+    device: "Ventilator",
+    pattern: "B",
+    source: 'measurement-results/ventilator infant.xlsx — "PEEP" (I–III, ± 10%)',
+    notes: "This filled file only records one setpoint (20 cmH2O).",
+    testPoints: sweep([20], "cmH2O"),
+  },
+  {
+    code: "VENT_PPEAK",
+    device: "Ventilator",
+    pattern: "B",
+    source: 'measurement-results/ventilator infant.xlsx — "Peak inspiratory pressure" (I–III, ± 10%)',
+    notes: "This filled file only records one setpoint (40 cmH2O).",
+    testPoints: sweep([40], "cmH2O"),
+  },
+  {
+    code: "VENT_FIO2",
+    device: "Ventilator",
+    pattern: "B",
+    source: 'measurement-results/ventilator infant.xlsx — "Pengukuran FIO2" (I–III, ± 10%)',
+    testPoints: sweep([21, 50, 75, 99], "%"),
   },
 ];
 

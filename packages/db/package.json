@@ -30,7 +30,8 @@
     "backfill:calibration-ordering": "tsx prisma/backfill-calibration-ordering.ts",
     "backfill:identity-correction-permissions": "tsx prisma/backfill-identity-correction-permissions.ts",
     "backfill:reference-equipment-used-permissions": "tsx prisma/backfill-reference-equipment-used-permissions.ts",
-    "backfill:measurement-result-permissions": "tsx prisma/backfill-measurement-result-permissions.ts"
+    "backfill:measurement-result-permissions": "tsx prisma/backfill-measurement-result-permissions.ts",
+    "backfill:decimal-places-from-results": "tsx prisma/backfill-decimal-places-from-results.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0"
