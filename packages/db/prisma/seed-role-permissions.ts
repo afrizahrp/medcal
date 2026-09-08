@@ -175,6 +175,11 @@ const PRESERVED_BASELINE: GrantRow[] = [
     resource: "calibrationJob",
     action: "overrideReferenceEquipmentValidity",
   },
+  // MeasurementResult (Stage 2b, 2026-09-08): recordMeasurement gates create/
+  // update/delete of measurement readings for the job's current attempt —
+  // TECHNICIAN + TECHNICIAN_MANAGER, mirroring recordReferenceEquipmentUsed.
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "recordMeasurement" },
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "recordMeasurement" },
   // FINANCE
   { role: "FINANCE", resource: "managementDashboard", action: "read" },
   // CUSTOMER

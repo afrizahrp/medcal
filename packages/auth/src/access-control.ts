@@ -134,6 +134,10 @@ const ac = createAccessControl({
     "decideIdentityCorrection",
     "recordReferenceEquipmentUsed",
     "overrideReferenceEquipmentValidity",
+    // recordMeasurement: on-site actor enters/edits/deletes MeasurementResult
+    // rows for the job's current attempt. Granted like recordReferenceEquipmentUsed
+    // (TECHNICIAN + TECHNICIAN_MANAGER). Controller wiring lands in Stage 2c.
+    "recordMeasurement",
   ],
   certificate: ["read", "create", "update", "issue"],
   invoice: ["read", "create", "update", "void"],

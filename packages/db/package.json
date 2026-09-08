@@ -29,7 +29,8 @@
     "backfill:device-calibration-parameter-tolerances": "tsx prisma/backfill-device-calibration-parameter-tolerances.ts",
     "backfill:calibration-ordering": "tsx prisma/backfill-calibration-ordering.ts",
     "backfill:identity-correction-permissions": "tsx prisma/backfill-identity-correction-permissions.ts",
-    "backfill:reference-equipment-used-permissions": "tsx prisma/backfill-reference-equipment-used-permissions.ts"
+    "backfill:reference-equipment-used-permissions": "tsx prisma/backfill-reference-equipment-used-permissions.ts",
+    "backfill:measurement-result-permissions": "tsx prisma/backfill-measurement-result-permissions.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0"

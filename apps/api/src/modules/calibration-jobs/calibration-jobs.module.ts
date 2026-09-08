@@ -5,12 +5,13 @@ import { FileOwnerPolicyRegistry } from "../files/owner-policy";
 import { CalibrationJobsController } from "./calibration-jobs.controller";
 import { CalibrationJobsService } from "./calibration-jobs.service";
 import { identityCorrectionFileOwnerPolicy } from "./identity-correction-file-owner-policy";
+import { MeasurementResultsService } from "./measurement-results.service";
 
 @Module({
   imports: [FilesModule],
   controllers: [CalibrationJobsController],
-  providers: [CalibrationJobsService, CompanyRoleGuard],
-  exports: [CalibrationJobsService],
+  providers: [CalibrationJobsService, MeasurementResultsService, CompanyRoleGuard],
+  exports: [CalibrationJobsService, MeasurementResultsService],
 })
 export class CalibrationJobsModule implements OnModuleInit {
   constructor(
