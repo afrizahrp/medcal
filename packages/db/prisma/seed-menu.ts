@@ -118,7 +118,7 @@ const ROWS: MenuSeedRow[] = [
     code: "device-management.types",
     parentCode: "device-management.devices",
     label: "Devices",
-    href: "/device-types",
+    href: "/devices",
     icon: "tags",
     order: 0,
     viewResource: "deviceType",
@@ -136,13 +136,12 @@ const ROWS: MenuSeedRow[] = [
     viewAction: "read",
   },
   {
-    // Code kept as-is (label only changes): "Customer Devices" is now the
-    // parent group's label; this leaf is the physical units page (/devices).
+    // Code kept as-is: label "Units"; href points at DeviceType catalog.
     application: "MANAGEMENT",
     code: "device-management.customer-devices",
     parentCode: "device-management.devices",
     label: "Units",
-    href: "/devices",
+    href: "/device-types",
     icon: "cpu",
     order: 2,
     viewResource: "device",
