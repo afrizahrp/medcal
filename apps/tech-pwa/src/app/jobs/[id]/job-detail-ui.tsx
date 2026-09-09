@@ -5,6 +5,11 @@ import { Button } from "../../../components/ui/button";
 import { JobStatusBadge, AkdAklStatusBadge } from "../jobs-ui";
 import type { TechCalibrationJob, TechIdentityCorrection } from "../../../lib/calibration/types";
 import { IDENTITY_CORRECTION_STATUS_LABELS } from "../../../lib/calibration/types";
+import {
+  isAwaitingQualityReview,
+  isQualityReviewApproved,
+  latestQualityReview,
+} from "../../../lib/calibration/quality-review";
 import type { TechReferenceEquipmentUsed } from "../../../lib/calibration/reference-equipment";
 import {
   capabilityGroupSections,
@@ -31,15 +36,48 @@ function formatDate(iso: string): string {
 }
 
 export function JobHeaderBlock({ job }: { job: TechCalibrationJob }) {
+  const awaitingReview = isAwaitingQualityReview(job);
+  const approved = isQualityReviewApproved(job);
+  const showApprovedBadge = approved && job.status === "SUBMITTED";
+  const review = latestQualityReview(job);
   return (
     <div className="border-b border-slate-200 bg-white px-4 py-4">
       <p className="text-sm font-medium text-slate-600">{job.workOrder.number}</p>
       <p className="text-xs text-slate-500">
         Unit {job.unitOrdinal} dari {job.unitTotal}
       </p>
-      <div className="mt-2">
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <JobStatusBadge status={job.status} />
+        {awaitingReview ? (
+          <Badge
+            className={[
+              "rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
+              CORRECTION_BADGE_CLASS.PENDING_REVIEW,
+            ].join(" ")}
+          >
+            {IDENTITY_CORRECTION_STATUS_LABELS.PENDING_REVIEW}
+          </Badge>
+        ) : null}
+        {showApprovedBadge ? (
+          <Badge
+            className={[
+              "rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
+              CORRECTION_BADGE_CLASS.APPROVED,
+            ].join(" ")}
+          >
+            {IDENTITY_CORRECTION_STATUS_LABELS.APPROVED}
+          </Badge>
+        ) : null}
       </div>
+      {approved && review ? (
+        <div className="mt-2 space-y-1">
+          <SectionRow label="Diputuskan oleh" value={review.reviewer?.name ?? "—"} />
+          {review.reviewedAt ? (
+            <SectionRow label="Tanggal" value={formatDate(review.reviewedAt)} />
+          ) : null}
+          {review.notes ? <p className="mt-1 text-sm text-slate-600">{review.notes}</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -309,6 +347,44 @@ export function StartCalibrationAction({
     <div>
       <Button fullWidth onClick={onStart} disabled={pending}>
         {pending ? "Memulai…" : "Mulai Kalibrasi"}
+      </Button>
+      {error ? <p className="mt-1 text-center text-xs text-red-600">{error}</p> : null}
+    </div>
+  );
+}
+
+export function SubmitForReviewAction({
+  onSubmit,
+  pending,
+  error,
+}: {
+  onSubmit: () => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  return (
+    <div>
+      <Button fullWidth disabled={pending} onClick={onSubmit}>
+        {pending ? "Mengirim…" : "Kirim"}
+      </Button>
+      {error ? <p className="mt-1 text-center text-xs text-red-600">{error}</p> : null}
+    </div>
+  );
+}
+
+export function CompleteJobAction({
+  onComplete,
+  pending,
+  error,
+}: {
+  onComplete: () => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  return (
+    <div>
+      <Button fullWidth disabled={pending} onClick={onComplete}>
+        Selesai
       </Button>
       {error ? <p className="mt-1 text-center text-xs text-red-600">{error}</p> : null}
     </div>

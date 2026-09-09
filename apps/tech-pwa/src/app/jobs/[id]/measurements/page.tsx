@@ -1,18 +1,21 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuthz } from "@medcal/auth/client";
 import { Screen } from "../../../../components/layout/screen";
+import { StickyActionBar } from "../../../../components/layout/sticky-action-bar";
 import { Button } from "../../../../components/ui/button";
 import { LoadingState, ErrorState, EmptyState } from "../../../../components/ui/state-views";
+import { ErrorBanner } from "../../../../components/feedback/error-banner";
 import { formatApiError } from "../../../../lib/api-errors";
 import {
   capabilityGroupSections,
   hasCapabilityGroups,
   measurementLockedReason,
 } from "../../../../lib/calibration/measurement";
-import { useJobQuery } from "../use-job-query";
+import { canSubmitForReview } from "../../../../lib/calibration/quality-review";
+import { useJobQuery, useSubmitForReview } from "../use-job-query";
 import { JobHeaderBlock } from "../job-detail-ui";
 import { useMeasurementParameters, useMeasurementResults } from "./use-measurements-query";
 import { MeasurementCapabilityGroupList, MeasurementParameterListRow } from "./measurements-ui";
@@ -34,6 +37,8 @@ export default function MeasurementsPage() {
   const jobQuery = useJobQuery(id, { poll: true });
   const parametersQuery = useMeasurementParameters(id);
   const resultsQuery = useMeasurementResults(id);
+  const submitMutation = useSubmitForReview(id);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const canRecord = Boolean(capabilities?.calibrationJobRecordMeasurement);
 
@@ -117,10 +122,40 @@ export default function MeasurementsPage() {
   const noneSupported = grouped
     ? capabilitySections.length === 0
     : parameters.length === 0 && gridParameters.length === 0;
+  const showSubmit =
+    Boolean(capabilities?.calibrationJobSubmitForReview) && canSubmitForReview(job);
+  const pending = submitMutation.isPending;
+
+  async function handleSubmit() {
+    setSubmitError(null);
+    try {
+      await submitMutation.mutateAsync();
+      router.replace(`/jobs/${id}`);
+    } catch (err) {
+      setSubmitError(formatApiError(err, "Gagal mengirim."));
+    }
+  }
 
   return (
-    <GuardScreen>
+    <Screen
+      title="Hasil Pengukuran"
+      showBack
+      footer={
+        showSubmit ? (
+          <StickyActionBar>
+            <Button fullWidth disabled={pending} onClick={() => void handleSubmit()}>
+              {pending ? "Mengirim…" : "Kirim"}
+            </Button>
+          </StickyActionBar>
+        ) : undefined
+      }
+    >
       <JobHeaderBlock job={job} />
+      {submitError ? (
+        <div className="px-4 pt-4">
+          <ErrorBanner message={submitError} />
+        </div>
+      ) : null}
       <div className="flex flex-col gap-4 p-4">
         <p className="text-sm text-slate-600">
           Parameter pengukuran{deviceType?.name ? ` untuk ${deviceType.name}` : ""}. Ketuk parameter
@@ -193,6 +228,6 @@ export default function MeasurementsPage() {
           </>
         )}
       </div>
-    </GuardScreen>
+    </Screen>
   );
 }

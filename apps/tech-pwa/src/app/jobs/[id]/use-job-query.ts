@@ -93,6 +93,32 @@ export function useStartCalibration(id: string) {
   });
 }
 
+/** Technician submitForReview — POST /calibration-jobs/:id/submit. */
+export function useSubmitForReview(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<TechCalibrationJob>(`/calibration-jobs/${id}/submit`, { method: "POST" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: jobKey(id) });
+    },
+  });
+}
+
+/** Technician complete — POST /calibration-jobs/:id/complete. */
+export function useCompleteJob(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<TechCalibrationJob>(`/calibration-jobs/${id}/complete`, { method: "POST" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: jobKey(id) });
+    },
+  });
+}
+
 export function useDeviceCandidates(jobId: string | undefined, search: string, enabled: boolean) {
   const trimmed = search.trim();
   return useQuery({

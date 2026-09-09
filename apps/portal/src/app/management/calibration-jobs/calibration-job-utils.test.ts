@@ -4,9 +4,12 @@ import {
   canDecideIdentity,
   canEscalateIdentity,
   canSubmitIdentityCorrection,
+  canDecideQualityReview,
   correctionMissingImage,
   formatCalibrationJobApiError,
+  isAwaitingQualityReview,
   isIdentityGateLocked,
+  isQualityReviewApproved,
   summarizeCorrectionChanges,
 } from "./calibration-job-utils";
 
@@ -43,6 +46,19 @@ describe("calibration-job identity gate helpers", () => {
   });
 });
 
+describe("quality-review helpers", () => {
+  const approved = { status: "APPROVED" };
+
+  it("treats SUBMITTED without APPROVED as awaiting MT review", () => {
+    expect(isAwaitingQualityReview({ status: "SUBMITTED", reviews: [] })).toBe(true);
+    expect(isAwaitingQualityReview({ status: "SUBMITTED", reviews: [approved] })).toBe(false);
+    expect(isQualityReviewApproved({ status: "SUBMITTED", reviews: [approved] })).toBe(true);
+    expect(canDecideQualityReview({ status: "SUBMITTED", reviews: [] })).toBe(true);
+    expect(canDecideQualityReview({ status: "SUBMITTED", reviews: [approved] })).toBe(false);
+    expect(canDecideQualityReview({ status: "IN_PROGRESS", reviews: [] })).toBe(false);
+  });
+});
+
 describe("formatCalibrationJobApiError", () => {
   it("maps known backend codes to Indonesian copy", () => {
     const err = new ApiError(400, "raw", { code: "DEVICE_TYPE_MISMATCH" });
@@ -55,6 +71,21 @@ describe("formatCalibrationJobApiError", () => {
       "IDENTITY_CORRECTION_ALREADY_PENDING",
       "IDENTITY_CORRECTION_ALREADY_DECIDED",
       "IDENTITY_CORRECTION_SIGNATURE_IMAGE_MISSING",
+    ]) {
+      const msg = formatCalibrationJobApiError(new ApiError(400, "raw", { code }), "fb");
+      expect(msg).not.toBe("fb");
+      expect(msg.length).toBeGreaterThan(5);
+    }
+  });
+
+  it("maps quality-review happy-path codes", () => {
+    for (const code of [
+      "CALIBRATION_JOB_ALREADY_SUBMITTED",
+      "CALIBRATION_JOB_NOT_SUBMITTED",
+      "QUALITY_REVIEW_ALREADY_APPROVED",
+      "QUALITY_REVIEW_NOT_APPROVED",
+      "CALIBRATION_JOB_ALREADY_COMPLETED",
+      "INVALID_QUALITY_REVIEW_DECISION",
     ]) {
       const msg = formatCalibrationJobApiError(new ApiError(400, "raw", { code }), "fb");
       expect(msg).not.toBe("fb");

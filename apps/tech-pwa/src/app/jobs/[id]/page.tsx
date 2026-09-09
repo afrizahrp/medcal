@@ -21,7 +21,11 @@ import {
   canRecordMeasurement,
   measurementLockedReason,
 } from "../../../lib/calibration/measurement";
-import { useCorrectionsQuery, useJobQuery, useStartCalibration } from "./use-job-query";
+import {
+  canCompleteJob,
+  canSubmitForReview,
+} from "../../../lib/calibration/quality-review";
+import { useCompleteJob, useCorrectionsQuery, useJobQuery, useStartCalibration, useSubmitForReview } from "./use-job-query";
 import { useReferenceEquipmentUsed } from "./use-reference-equipment-query";
 import {
   useMeasurementParameters,
@@ -37,6 +41,8 @@ import {
   ObservedIdentitySection,
   ReferenceEquipmentSection,
   StartCalibrationAction,
+  SubmitForReviewAction,
+  CompleteJobAction,
 } from "./job-detail-ui";
 
 export default function JobDetailPage() {
@@ -53,6 +59,8 @@ export default function JobDetailPage() {
   const measurementParametersQuery = useMeasurementParameters(id);
   const measurementResultsQuery = useMeasurementResults(id);
   const startMutation = useStartCalibration(id);
+  const submitMutation = useSubmitForReview(id);
+  const completeMutation = useCompleteJob(id);
 
   if (jobQuery.isPending) {
     return (
@@ -80,6 +88,9 @@ export default function JobDetailPage() {
   const showSubmitCorrection = Boolean(capabilities?.calibrationJobSubmitIdentityCorrection);
   // "Mulai Kalibrasi" — only while the job has not started yet.
   const showStart = Boolean(capabilities?.calibrationJobStart) && job.status === "PENDING";
+  const showSubmitForReview =
+    Boolean(capabilities?.calibrationJobSubmitForReview) && canSubmitForReview(job);
+  const showComplete = Boolean(capabilities?.calibrationJobComplete) && canCompleteJob(job);
   const showRecordReferenceEquipment = Boolean(
     capabilities?.calibrationJobRecordReferenceEquipmentUsed,
   );
@@ -120,7 +131,7 @@ export default function JobDetailPage() {
       title={job.workOrder.number}
       showBack
       footer={
-        showStart || showEscalate || showSubmitCorrection ? (
+        showStart || showEscalate || showSubmitCorrection || showSubmitForReview || showComplete ? (
           <StickyActionBar>
             {showStart ? (
               <StartCalibrationAction
@@ -129,6 +140,28 @@ export default function JobDetailPage() {
                 error={
                   startMutation.isError
                     ? formatApiError(startMutation.error, "Gagal memulai kalibrasi.")
+                    : null
+                }
+              />
+            ) : null}
+            {showSubmitForReview ? (
+              <SubmitForReviewAction
+                onSubmit={() => submitMutation.mutate()}
+                pending={submitMutation.isPending}
+                error={
+                  submitMutation.isError
+                    ? formatApiError(submitMutation.error, "Gagal mengirim.")
+                    : null
+                }
+              />
+            ) : null}
+            {showComplete ? (
+              <CompleteJobAction
+                onComplete={() => completeMutation.mutate()}
+                pending={completeMutation.isPending}
+                error={
+                  completeMutation.isError
+                    ? formatApiError(completeMutation.error, "Gagal.")
                     : null
                 }
               />

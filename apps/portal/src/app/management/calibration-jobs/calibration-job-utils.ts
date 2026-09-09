@@ -74,6 +74,33 @@ export function canSubmitIdentityCorrection(job: Pick<IdentityGateJob, "status">
   return !isIdentityGateLocked(job);
 }
 
+type QualityReviewLike = {
+  status: string;
+};
+
+type JobWithQualityReview = {
+  status: string;
+  reviews?: QualityReviewLike[] | null;
+};
+
+export function latestQualityReview<T extends QualityReviewLike>(
+  job: { reviews?: T[] | null },
+): T | null {
+  return job.reviews?.[0] ?? null;
+}
+
+export function isQualityReviewApproved(job: JobWithQualityReview): boolean {
+  return latestQualityReview(job)?.status === "APPROVED";
+}
+
+export function isAwaitingQualityReview(job: JobWithQualityReview): boolean {
+  return job.status === "SUBMITTED" && !isQualityReviewApproved(job);
+}
+
+export function canDecideQualityReview(job: JobWithQualityReview): boolean {
+  return isAwaitingQualityReview(job);
+}
+
 // ── Identity correction display helpers ───────────────────────────────────────
 
 type CorrectionChangeRow = {
@@ -178,6 +205,14 @@ export function formatCalibrationJobApiError(err: unknown, fallback: string): st
         "Jenis alat ini tidak diperlukan untuk jenis perangkat pada job ini.",
       DUPLICATE_JOB_REFERENCE_EQUIPMENT: "Ada alat yang terpilih lebih dari sekali.",
       INVALID_JOB_REFERENCE_EQUIPMENT: "Data pilihan alat referensi tidak valid.",
+      // Quality-review happy path
+      CALIBRATION_JOB_ALREADY_SUBMITTED: "Job sudah dikirim — hasil pengukuran terkunci.",
+      CALIBRATION_JOB_NOT_IN_PROGRESS: "Hasil pengukuran hanya dapat dicatat saat job berlangsung.",
+      CALIBRATION_JOB_NOT_SUBMITTED: "Job belum dikirim.",
+      QUALITY_REVIEW_ALREADY_APPROVED: "Sudah Disetujui.",
+      QUALITY_REVIEW_NOT_APPROVED: "Menunggu Review.",
+      CALIBRATION_JOB_ALREADY_COMPLETED: "Job sudah Diterima QA.",
+      INVALID_QUALITY_REVIEW_DECISION: "Keputusan review tidak valid.",
     };
     if (code && messages[code]) return messages[code];
     if (typeof err.data?.message === "string") return err.data.message;

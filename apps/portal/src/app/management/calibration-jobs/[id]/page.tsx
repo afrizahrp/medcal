@@ -35,11 +35,15 @@ import {
   canEscalateIdentity,
   canRecordReferenceEquipment,
   canSubmitIdentityCorrection,
+  canDecideQualityReview,
   correctionMissingImage,
   formatCalibrationJobApiError,
   formatReferenceEquipmentError,
+  isAwaitingQualityReview,
   isIdentityGateLocked,
+  isQualityReviewApproved,
   isReferenceEquipmentUsable,
+  latestQualityReview,
   MISSING_CORRECTION_IMAGE_MESSAGE,
   REFERENCE_EQUIPMENT_VALIDITY_BADGE_CLASS,
   REFERENCE_EQUIPMENT_VALIDITY_LABELS,
@@ -49,6 +53,7 @@ import {
   useCalibrationJob,
   useDeviceCandidates,
   useDecideIdentity,
+  useDecideQualityReview,
   useEscalateIdentity,
 } from "../use-calibration-jobs-query";
 import {
@@ -70,6 +75,10 @@ import {
   type ReferenceEquipmentCandidate,
   type ReferenceEquipmentUsed,
 } from "../use-reference-equipment-used-query";
+import {
+  useMeasurementParameters,
+  useMeasurementResults,
+} from "../use-measurement-results-query";
 
 const SIGNER_ROLES = ["TECHNICIAN", "CUSTOMER"] as const;
 type SignerRole = (typeof SIGNER_ROLES)[number];
@@ -87,6 +96,8 @@ export default function CalibrationJobDetailPage() {
 
   const query = useCalibrationJob(params.id);
   const corrections = useIdentityCorrections(params.id);
+  const measurementParameters = useMeasurementParameters(params.id);
+  const measurementResults = useMeasurementResults(params.id);
   const refEquipment = useReferenceEquipmentUsed(params.id);
   const refCandidates = useReferenceEquipmentCandidates(
     params.id,
@@ -95,6 +106,7 @@ export default function CalibrationJobDetailPage() {
   const replaceRefEquipment = useReplaceReferenceEquipmentUsed(params.id);
   const escalateMutation = useEscalateIdentity();
   const decideMutation = useDecideIdentity();
+  const decideQualityReview = useDecideQualityReview();
   const submitCorrection = useSubmitIdentityCorrection();
   const decideCorrection = useDecideIdentityCorrection();
   const uploadSignature = useUploadIdentityCorrectionSignature();
@@ -223,6 +235,22 @@ export default function CalibrationJobDetailPage() {
     }
   }
 
+  async function handleApproveQualityReview(notes?: string) {
+    if (!job) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      await decideQualityReview.mutateAsync({
+        id: job.id,
+        input: { decision: "APPROVE", ...(notes ? { notes } : {}) },
+      });
+      setSuccess("Disetujui.");
+      await Promise.all([query.refetch(), measurementResults.refetch()]);
+    } catch (err) {
+      setError(formatCalibrationJobApiError(err, "Gagal memproses keputusan BA."));
+    }
+  }
+
   async function handleReplaceReferenceEquipment(items: JobReferenceEquipmentReplaceItem[]) {
     if (!job) return;
     setError(null);
@@ -267,6 +295,8 @@ export default function CalibrationJobDetailPage() {
     canSubmitIdentityCorrection(job) &&
     Boolean(capabilities?.calibrationJobSubmitIdentityCorrection);
   const canDecideCorrection = Boolean(capabilities?.calibrationJobDecideIdentityCorrection);
+  const canApproveQualityReview =
+    Boolean(capabilities?.calibrationJobDecideQualityReview) && canDecideQualityReview(job);
   const canRecordRefEquipment = Boolean(capabilities?.calibrationJobRecordReferenceEquipmentUsed);
   const canOverrideRefEquipment = Boolean(
     capabilities?.calibrationJobOverrideReferenceEquipmentValidity,
@@ -393,6 +423,18 @@ export default function CalibrationJobDetailPage() {
             submitting={replaceRefEquipment.isPending}
             notice={refEquipmentNotice}
             onSubmit={handleReplaceReferenceEquipment}
+          />
+        </div>
+
+        <div className="mt-5 border-t border-slate-100 pt-5">
+          <h3 className="text-sm font-semibold text-slate-900">Hasil Pengukuran</h3>
+          <QualityReviewPanel
+            job={job}
+            parametersQuery={measurementParameters}
+            resultsQuery={measurementResults}
+            canDecide={canApproveQualityReview}
+            decidePending={decideQualityReview.isPending}
+            onApprove={handleApproveQualityReview}
           />
         </div>
 
@@ -948,6 +990,120 @@ function ReferenceEquipmentCard({ unit }: { unit: ReferenceEquipmentUsed }) {
         </div>
       ) : null}
     </li>
+  );
+}
+
+// ── Quality review (MT APPROVE only — no Tolak / REJECT) ─────────────────────
+
+function QualityReviewPanel({
+  job,
+  parametersQuery,
+  resultsQuery,
+  canDecide,
+  decidePending,
+  onApprove,
+}: {
+  job: CalibrationJobRow;
+  parametersQuery: ReturnType<typeof useMeasurementParameters>;
+  resultsQuery: ReturnType<typeof useMeasurementResults>;
+  canDecide: boolean;
+  decidePending: boolean;
+  onApprove: (notes?: string) => void | Promise<void>;
+}) {
+  const [notes, setNotes] = useState("");
+  const awaiting = isAwaitingQualityReview(job);
+  const approved = isQualityReviewApproved(job);
+  const review = latestQualityReview(job);
+  const attempt = job.currentAttempt ?? 1;
+  const parameters = [
+    ...(parametersQuery.data?.parameters ?? []),
+    ...(parametersQuery.data?.gridParameters ?? []),
+  ];
+  const nameById = new Map(parameters.map((p) => [p.id, p.name]));
+  const pointLabelById = new Map(
+    parameters.flatMap((p) => (p.testPoints ?? []).map((tp) => [tp.id, tp.settingLabel] as const)),
+  );
+  const rows = (resultsQuery.data ?? []).filter((row) => row.attemptNumber === attempt);
+
+  return (
+    <div className="mt-3 space-y-4">
+      {parametersQuery.isLoading || resultsQuery.isLoading ? (
+        <p className="text-sm text-slate-400">Memuat…</p>
+      ) : parametersQuery.isError || resultsQuery.isError ? (
+        <p className="text-sm text-red-600">Gagal memuat hasil pengukuran.</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-slate-500">Belum ada hasil pengukuran untuk job ini.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[360px] text-xs">
+            <thead>
+              <tr className="text-left text-slate-400">
+                <th className="py-1 pr-3 font-medium">Parameter</th>
+                <th className="py-1 pr-3 font-medium">Replicate</th>
+                <th className="py-1 font-medium">Nilai</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-t border-slate-200">
+                  <td className="py-1 pr-3 text-slate-700">
+                    {nameById.get(row.deviceCalibrationParameterId) ?? row.deviceCalibrationParameterId}
+                    {row.calibrationTestPointId
+                      ? ` · ${pointLabelById.get(row.calibrationTestPointId) ?? row.calibrationTestPointId}`
+                      : ""}
+                  </td>
+                  <td className="py-1 pr-3 font-mono text-slate-500">{row.replicateIndex}</td>
+                  <td className="py-1 font-mono text-slate-800">
+                    {row.measuredValue ?? row.measuredText ?? (row.measuredBool == null ? "—" : String(row.measuredBool))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {approved && review ? (
+        <div className="grid gap-3 border-t border-slate-200 pt-3 sm:grid-cols-2">
+          <DetailField label="Status">
+            <IdentityCorrectionStatusBadge status="APPROVED" />
+          </DetailField>
+          <DetailField label="Diputuskan oleh">{review.reviewer?.name ?? "—"}</DetailField>
+          <DetailField label="Diputuskan pada">{formatDateTime(review.reviewedAt)}</DetailField>
+          <DetailField label="Catatan keputusan">
+            {review.notes ? <span className="whitespace-pre-wrap">{review.notes}</span> : "—"}
+          </DetailField>
+        </div>
+      ) : null}
+
+      {awaiting && !canDecide ? (
+        <IdentityCorrectionStatusBadge status="PENDING_REVIEW" />
+      ) : null}
+
+      {awaiting && canDecide ? (
+        <div className="space-y-3 border-t border-slate-200 pt-3">
+          <label className="block text-sm font-medium text-slate-700">
+            Catatan keputusan
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </label>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={decidePending}
+              onClick={() => onApprove(notes.trim() || undefined)}
+            >
+              <Check className="h-3.5 w-3.5" /> Setujui
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

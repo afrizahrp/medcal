@@ -51,13 +51,14 @@ function job(
     calibrationRequestItem: null,
     akdAklApprovedBy: null,
     identityCorrections: [],
+    reviews: [],
     ...rest,
   };
 }
 
 describe("isJobDone", () => {
-  it("treats SUBMITTED and ACCEPTED_BY_QA as done", () => {
-    expect(isJobDone(job({ id: "1", workOrderId: "w", customerId: "c", customerName: "A", workOrderNumber: "SPK/1", status: "SUBMITTED" }))).toBe(true);
+  it("treats only ACCEPTED_BY_QA as done — SUBMITTED is still open", () => {
+    expect(isJobDone(job({ id: "1", workOrderId: "w", customerId: "c", customerName: "A", workOrderNumber: "SPK/1", status: "SUBMITTED" }))).toBe(false);
     expect(isJobDone(job({ id: "2", workOrderId: "w", customerId: "c", customerName: "A", workOrderNumber: "SPK/1", status: "ACCEPTED_BY_QA" }))).toBe(true);
     expect(isJobDone(job({ id: "3", workOrderId: "w", customerId: "c", customerName: "A", workOrderNumber: "SPK/1", status: "REWORK" }))).toBe(false);
   });
@@ -72,7 +73,7 @@ describe("groupJobsByCustomer", () => {
         customerId: "cust-b",
         customerName: "Beta Clinic",
         workOrderNumber: "SPK/B",
-        status: "SUBMITTED",
+        status: "ACCEPTED_BY_QA",
       }),
       job({
         id: "open-1",

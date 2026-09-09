@@ -55,6 +55,14 @@ const MESSAGES: Record<string, string> = {
   INVALID_MEASUREMENT_RESULT: "Data pembacaan tidak valid.",
   INVALID_MEASUREMENT_RESULT_BATCH: "Data pembacaan tidak valid.",
   INVALID_MEASUREMENT_RESULT_UPDATE: "Data perubahan pembacaan tidak valid.",
+  // Quality-review happy path (submit → MT APPROVE → complete)
+  CALIBRATION_JOB_ALREADY_SUBMITTED: "Job sudah dikirim — hasil pengukuran terkunci.",
+  CALIBRATION_JOB_NOT_IN_PROGRESS: "Hasil pengukuran hanya dapat dicatat saat job berlangsung.",
+  CALIBRATION_JOB_NOT_SUBMITTED: "Job belum dikirim.",
+  QUALITY_REVIEW_ALREADY_APPROVED: "Sudah Disetujui.",
+  QUALITY_REVIEW_NOT_APPROVED: "Menunggu Review.",
+  CALIBRATION_JOB_ALREADY_COMPLETED: "Job sudah Diterima QA.",
+  INVALID_QUALITY_REVIEW_DECISION: "Keputusan review tidak valid.",
 };
 
 export function isOffline(): boolean {

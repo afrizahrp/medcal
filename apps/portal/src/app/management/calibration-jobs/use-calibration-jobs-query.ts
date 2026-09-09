@@ -5,6 +5,7 @@ import { apiFetch } from "@medcal/shared";
 import type {
   CalibrationJobEscalateIdentityInput,
   CalibrationJobIdentityDecisionInput,
+  QualityReviewDecisionInput,
 } from "@medcal/shared";
 import { WORK_ORDERS_QUERY_KEY } from "../work-orders/use-work-orders-query";
 import type {
@@ -166,6 +167,18 @@ export function useDecideIdentity() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: CalibrationJobIdentityDecisionInput }) =>
       apiFetch<CalibrationJobRow>(`/calibration-jobs/${id}/identity-decision`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (_data, variables) => invalidateCalibrationJobQueries(queryClient, variables.id),
+  });
+}
+
+export function useDecideQualityReview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: QualityReviewDecisionInput }) =>
+      apiFetch<CalibrationJobRow>(`/calibration-jobs/${id}/quality-decision`, {
         method: "POST",
         body: JSON.stringify(input),
       }),

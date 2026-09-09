@@ -17,6 +17,10 @@ import {
   type CustomerJobGroup,
   type WorkOrderJobGroup,
 } from "../../lib/calibration/job-display";
+import {
+  isAwaitingQualityReview,
+  isQualityReviewApproved,
+} from "../../lib/calibration/quality-review";
 
 const badgeBase = "rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide";
 
@@ -143,6 +147,16 @@ function UnitRow({ job }: { job: TechCalibrationJob }) {
         <p className="truncate text-sm font-semibold text-slate-900">{declaredDeviceName(job)}</p>
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <JobStatusBadge status={job.status} />
+          {isAwaitingQualityReview(job) ? (
+            <Badge className={[badgeBase, IDENTITY_CORRECTION_BADGE_CLASS.PENDING_REVIEW].join(" ")}>
+              {IDENTITY_CORRECTION_STATUS_LABELS.PENDING_REVIEW}
+            </Badge>
+          ) : null}
+          {isQualityReviewApproved(job) && job.status === "SUBMITTED" ? (
+            <Badge className={[badgeBase, IDENTITY_CORRECTION_BADGE_CLASS.APPROVED].join(" ")}>
+              {IDENTITY_CORRECTION_STATUS_LABELS.APPROVED}
+            </Badge>
+          ) : null}
           {latestCorrection ? <IdentityCorrectionBadge status={latestCorrection.status} /> : null}
           {showAkdAkl ? <AkdAklStatusBadge status={job.akdAklApprovalStatus} /> : null}
         </div>

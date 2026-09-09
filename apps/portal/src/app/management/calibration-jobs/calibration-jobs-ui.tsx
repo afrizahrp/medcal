@@ -21,6 +21,7 @@ import {
   AKD_AKL_APPROVAL_STATUS_VALUES,
   CALIBRATION_JOB_STATUS_LABELS,
   CALIBRATION_JOB_STATUS_VALUES,
+  isAwaitingQualityReview,
   type AkdAklApprovalStatus,
   type CalibrationJobStatus,
 } from "./calibration-job-utils";
@@ -105,6 +106,9 @@ export interface CalibrationJobRow {
     status: IdentityCorrectionStatus;
     createdAt: string;
   }[];
+  /** Latest QualityReview from GET job `reviews` take 1. Empty until MT decides. */
+  reviews: CalibrationJobQualityReview[];
+  currentAttempt: number;
   /**
    * Computed server-side: at least one confirmed reference-equipment unit for
    * this job is currently invalid (expired / no certificate) and not yet
@@ -210,6 +214,20 @@ export function JobStatusBadge({ status }: { status: CalibrationJobStatus }) {
 }
 
 export type IdentityCorrectionStatus = "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+
+export type QualityReviewStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type QualityReviewDecision = "APPROVE" | "REJECT";
+
+export interface CalibrationJobQualityReview {
+  id: string;
+  status: QualityReviewStatus;
+  decision: QualityReviewDecision | null;
+  notes: string | null;
+  reviewerUserId: string;
+  reviewedAt: string | null;
+  createdAt: string;
+  reviewer: { id: string; name: string | null };
+}
 
 const IDENTITY_CORRECTION_BADGE_CLASS: Record<IdentityCorrectionStatus, string> = {
   PENDING_REVIEW: "border-transparent bg-amber-500 text-white hover:bg-amber-500",
@@ -418,7 +436,12 @@ function JobChildRow({ row }: { row: CalibrationJobRow }) {
         )}
       </td>
       <td className="px-4 py-2.5">
-        <JobStatusBadge status={row.status} />
+        <div className="flex flex-col gap-1">
+          <JobStatusBadge status={row.status} />
+          {isAwaitingQualityReview(row) ? (
+            <ChildActionHint label="Menunggu review" />
+          ) : null}
+        </div>
       </td>
       <td className="px-4 py-2.5 text-right">
         <Link href={`/calibration-jobs/${row.id}`}>

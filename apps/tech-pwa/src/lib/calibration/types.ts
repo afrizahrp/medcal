@@ -56,6 +56,22 @@ export interface TechCalibrationJob {
     status: IdentityCorrectionStatus;
     createdAt: string;
   }[];
+  /** Latest QualityReview (GET job `reviews` take 1). Empty until MT decides. */
+  reviews: TechQualityReview[];
+}
+
+export type QualityReviewStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type QualityReviewDecision = "APPROVE" | "REJECT";
+
+export interface TechQualityReview {
+  id: string;
+  status: QualityReviewStatus;
+  decision: QualityReviewDecision | null;
+  notes: string | null;
+  reviewerUserId: string;
+  reviewedAt: string | null;
+  createdAt: string;
+  reviewer: { id: string; name: string | null };
 }
 
 export interface TechJobListResponse {

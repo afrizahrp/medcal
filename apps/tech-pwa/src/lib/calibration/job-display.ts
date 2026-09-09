@@ -8,9 +8,12 @@ export function declaredAkdAkl(job: TechCalibrationJob): string {
   return job.customerDeclaredAkdAkl ?? job.calibrationRequestItem?.akdAkl ?? "—";
 }
 
-/** Units handed off and not awaiting rework — shared by SPK + customer summaries. */
+/**
+ * Terminal job only. SUBMITTED is still open: waiting for MT review, or waiting
+ * for the technician to complete after an APPROVED QualityReview.
+ */
 export function isJobDone(job: TechCalibrationJob): boolean {
-  return job.status === "SUBMITTED" || job.status === "ACCEPTED_BY_QA";
+  return job.status === "ACCEPTED_BY_QA";
 }
 
 export interface WorkOrderJobGroup {
