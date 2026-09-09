@@ -54,6 +54,7 @@ export class PermissionsService {
       "ADMIN",
       "SUPERVISOR",
       "TECHNICIAN",
+      "TECHNICIAN_MANAGER",
       "FINANCE",
       "CUSTOMER",
       "CUSTOMER_SERVICE",
@@ -76,7 +77,11 @@ export class PermissionsService {
     };
   }
 
-  async replaceRole(role: MembershipRole, grants: GrantInput[], actorUserId: string): Promise<RoleGrantSummary> {
+  async replaceRole(
+    role: MembershipRole,
+    grants: GrantInput[],
+    actorUserId: string,
+  ): Promise<RoleGrantSummary> {
     if (role === "SUPERADMIN") {
       throw new BadRequestException({
         message: "SUPERADMIN is fixed and not editable",

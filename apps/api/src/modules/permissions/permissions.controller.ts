@@ -1,4 +1,13 @@
-import { BadRequestException, Body, Controller, Get, Inject, Param, Put, UseGuards } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Param,
+  Put,
+  UseGuards,
+} from "@nestjs/common";
 import { z } from "zod";
 import { Session, type UserSession } from "@thallesp/nestjs-better-auth";
 import { auth, permissionCatalog } from "@medcal/auth";
@@ -12,6 +21,7 @@ const roleEnum = z.enum([
   "ADMIN",
   "SUPERVISOR",
   "TECHNICIAN",
+  "TECHNICIAN_MANAGER",
   "FINANCE",
   "CUSTOMER",
   "CUSTOMER_SERVICE",
@@ -75,6 +85,10 @@ export class PermissionsController {
         issues: parsedBody.error.flatten(),
       });
     }
-    return this.service.replaceRole(parsedRole.data as MembershipRole, parsedBody.data.grants, session.user.id);
+    return this.service.replaceRole(
+      parsedRole.data as MembershipRole,
+      parsedBody.data.grants,
+      session.user.id,
+    );
   }
 }

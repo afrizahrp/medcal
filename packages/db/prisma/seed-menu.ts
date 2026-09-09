@@ -1,7 +1,6 @@
 /**
  * Seeds the Menu Registry with exactly what exists today in the static
- * management/client nav configs — nothing hypothetical (no Technician rows;
- * tech-pwa has no real navigable pages yet).
+ * management/client nav configs and the navigable Technician PWA entrypoint.
  * Run manually: pnpm --filter @medcal/db run seed:menu
  */
 import { prisma } from "../src/index";
@@ -401,6 +400,19 @@ const ROWS: MenuSeedRow[] = [
     icon: "settings",
     order: 2,
     viewResource: "uom",
+    viewAction: "read",
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TECHNICIAN — apps/tech-pwa/src/app/
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    application: "TECHNICIAN",
+    code: "jobs",
+    label: "Job Saya",
+    href: "/jobs",
+    order: 0,
+    viewResource: "calibrationJob",
     viewAction: "read",
   },
 

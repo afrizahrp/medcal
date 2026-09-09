@@ -42,10 +42,16 @@ afterAll(async () => {
 describe("PermissionsService.replaceRole", () => {
   it("rejects unknown resource/action pairs with 400 and creates no rows", async () => {
     await expect(
-      service.replaceRole(TEST_ROLE, [{ resource: "not-a-real-resource", action: "read" }], actorId),
+      service.replaceRole(
+        TEST_ROLE,
+        [{ resource: "not-a-real-resource", action: "read" }],
+        actorId,
+      ),
     ).rejects.toMatchObject({ status: 400, response: { code: "UNKNOWN_PERMISSION" } });
 
-    const rows = await prisma.rolePermission.findMany({ where: { role: TEST_ROLE, resource: "not-a-real-resource" } });
+    const rows = await prisma.rolePermission.findMany({
+      where: { role: TEST_ROLE, resource: "not-a-real-resource" },
+    });
     expect(rows).toHaveLength(0);
   });
 
@@ -105,6 +111,15 @@ describe("PermissionsService.getRole", () => {
   it("synthesizes SUPERADMIN as the full catalog, read-only", async () => {
     const result = await service.getRole("SUPERADMIN");
     expect(result.readOnly).toBe(true);
-    expect(result.grants.some((g) => g.resource === "permission" && g.action === "manage")).toBe(true);
+    expect(result.grants.some((g) => g.resource === "permission" && g.action === "manage")).toBe(
+      true,
+    );
+  });
+
+  it("includes TECHNICIAN_MANAGER in the editable role list", async () => {
+    const roles = await service.listRoles();
+    expect(roles).toContainEqual(
+      expect.objectContaining({ role: "TECHNICIAN_MANAGER", readOnly: false }),
+    );
   });
 });

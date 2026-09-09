@@ -67,6 +67,19 @@ const RESOURCE_LABELS: Record<string, string> = {
   calibrationRequest: "Requisition",
   quotation: "Quotation",
   purchaseOrder: "Purchase Order",
+  workOrder: "Work Order",
+  calibrationJob: "Calibration Job",
+  certificate: "Certificate",
+  invoice: "Invoice",
+  payment: "Payment",
+  tax: "Tax",
+  priceListItem: "Tariff",
+  uom: "UOM",
+  equipmentType: "Reference Equipment Type",
+  equipmentRequirement: "Reference Equipment Requirement",
+  equipment: "Reference Equipment",
+  equipmentCalibrationRecord: "Equipment Calibration Record",
+  notification: "Notification",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -80,6 +93,20 @@ const ACTION_LABELS: Record<string, string> = {
   close: "Close",
   cancel: "Cancel",
   approve: "Approve",
+  assign: "Assign",
+  complete: "Complete",
+  start: "Start",
+  escalateIdentity: "Escalate Identity",
+  approveIdentity: "Approve Identity",
+  submitIdentityCorrection: "Submit Identity Correction",
+  decideIdentityCorrection: "Decide Identity Correction",
+  recordReferenceEquipmentUsed: "Record Reference Equipment",
+  overrideReferenceEquipmentValidity: "Override Equipment Validity",
+  recordMeasurement: "Record Measurement",
+  issue: "Issue",
+  void: "Void",
+  reconcile: "Reconcile",
+  test: "Test",
 };
 
 const selectClassName =
@@ -107,9 +134,7 @@ export default function PermissionManagementPage() {
     setForbidden(false);
     setSavedAt(null);
     try {
-      const data = await apiFetch<RoleGrantSummary>(
-        `/permissions/roles/${targetRole}`,
-      );
+      const data = await apiFetch<RoleGrantSummary>(`/permissions/roles/${targetRole}`);
       setSummary(data);
       setChecked(new Set(data.grants.map(grantKey)));
     } catch (err) {
@@ -126,9 +151,8 @@ export default function PermissionManagementPage() {
   useEffect(() => {
     async function init() {
       try {
-        const catalogData = await apiFetch<Record<string, readonly string[]>>(
-          "/permissions/catalog",
-        );
+        const catalogData =
+          await apiFetch<Record<string, readonly string[]>>("/permissions/catalog");
         setCatalog(catalogData);
       } catch (err) {
         if (isForbidden(err)) {
@@ -167,13 +191,10 @@ export default function PermissionManagementPage() {
         const [resource, action] = key.split(":");
         return { resource, action };
       });
-      const updated = await apiFetch<RoleGrantSummary>(
-        `/permissions/roles/${role}`,
-        {
-          method: "PUT",
-          body: JSON.stringify({ grants }),
-        },
-      );
+      const updated = await apiFetch<RoleGrantSummary>(`/permissions/roles/${role}`, {
+        method: "PUT",
+        body: JSON.stringify({ grants }),
+      });
       setSummary(updated);
       setChecked(new Set(updated.grants.map(grantKey)));
       setSavedAt(Date.now());
@@ -199,18 +220,14 @@ export default function PermissionManagementPage() {
             Permission Management
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Atur permission yang dimiliki setiap role. Perubahan berlaku
-            langsung tanpa deploy — memengaruhi akses backend dan tampilan menu
-            secara real-time.
+            Atur permission yang dimiliki setiap role. Perubahan berlaku langsung tanpa deploy —
+            memengaruhi akses backend dan tampilan menu secara real-time.
           </p>
         </div>
       </div>
 
       <div className="mt-6 flex items-center gap-3">
-        <label
-          htmlFor="role-select"
-          className="text-sm font-medium text-slate-700"
-        >
+        <label htmlFor="role-select" className="text-sm font-medium text-slate-700">
           Role
         </label>
         <select
@@ -234,9 +251,7 @@ export default function PermissionManagementPage() {
       </div>
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-      {savedAt && (
-        <p className="mt-4 text-sm text-emerald-600">Perubahan tersimpan.</p>
-      )}
+      {savedAt && <p className="mt-4 text-sm text-emerald-600">Perubahan tersimpan.</p>}
 
       {loading ? (
         <div className="mt-6 flex items-center justify-center py-12">
@@ -282,10 +297,7 @@ export default function PermissionManagementPage() {
           </div>
 
           <div className="flex justify-end border-t border-slate-200 p-4">
-            <Button
-              onClick={save}
-              disabled={saving || Boolean(summary?.readOnly)}
-            >
+            <Button onClick={save} disabled={saving || Boolean(summary?.readOnly)}>
               <Save className="h-4 w-4" />
               Save Changes
             </Button>
