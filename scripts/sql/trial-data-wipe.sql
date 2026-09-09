@@ -10,7 +10,8 @@
 --
 --  Scope wiped : CalibrationRequest / Quotation / PurchaseOrder chains and all
 --                WorkOrder + CalibrationJob + QA + Certificate descendants,
---                plus the CRQ/QUO/PUR/SPK 2026 DocumentNumberSequence counters.
+--                plus all 2026 DocumentNumberSequence counters owned by that chain
+--                (CRQ/QUO/PUR/SPK/WOL/DLN/BAI/CER).
 --  NOT touched : Device, DeviceType, Equipment, EquipmentType,
 --                EquipmentCalibrationRecord, Customer, Lead, User, Company,
 --                UserMembership, DeviceCalibrationParameter, PriceListItem,
@@ -29,6 +30,29 @@ SELECT current_database()  AS db,
        current_user        AS role;
 
 BEGIN;
+
+-- Capture file metadata owned by the trial chain before its owner rows disappear.
+-- This removes FileObject database rows only; storage objects must be cleaned
+-- separately using their storageKey values when required.
+CREATE TEMP TABLE "_TrialFileObjectToDelete" ON COMMIT DROP AS
+SELECT DISTINCT f.id
+FROM "FileObject" f
+WHERE
+      (f."ownerType" = 'REQUEST_ATTACHMENT'
+       AND f."ownerId" IN (SELECT id FROM "CalibrationRequest"))
+   OR (f."ownerType" = 'JOB_EVIDENCE'
+       AND f."ownerId" IN (SELECT id FROM "JobEvidence"))
+   OR (f."ownerType" = 'SIGNATURE'
+       AND f."ownerId" IN (SELECT id FROM "CustomerSignature"))
+   OR (f."ownerType" = 'IDENTITY_CORRECTION'
+       AND f."ownerId" IN (SELECT id FROM "IdentityCorrection"))
+   OR (f."ownerType" = 'MEASUREMENT_RESULT'
+       AND f."ownerId" IN (SELECT id FROM "MeasurementResult"))
+   OR (f."ownerType" = 'CERTIFICATE'
+       AND f."ownerId" IN (SELECT id FROM "Certificate"))
+   OR f.id IN (SELECT "fileObjectId" FROM "JobEvidence")
+   OR f.id IN (SELECT "fileObjectId" FROM "CustomerSignature" WHERE "fileObjectId" IS NOT NULL)
+   OR f.id IN (SELECT "pdfFileObjectId" FROM "Certificate" WHERE "pdfFileObjectId" IS NOT NULL);
 
 -- ----------------------------------------------------------------------------
 --  BEFORE
@@ -56,7 +80,8 @@ UNION ALL SELECT 'JobEvidence',                 count(*) FROM "JobEvidence"
 UNION ALL SELECT 'CustomerSignature',           count(*) FROM "CustomerSignature"
 UNION ALL SELECT 'QualityReview',               count(*) FROM "QualityReview"
 UNION ALL SELECT 'Certificate',                 count(*) FROM "Certificate"
-UNION ALL SELECT 'FileObject (total)',          count(*) FROM "FileObject"
+UNION ALL SELECT 'InvoiceCertificate',          count(*) FROM "InvoiceCertificate"
+UNION ALL SELECT 'FileObject (trial-owned)',    count(*) FROM "_TrialFileObjectToDelete"
 ORDER BY 1;
 
 \echo ''
@@ -95,6 +120,8 @@ ORDER BY "documentType", "year";
 \echo '################  DELETE - commercial chain  ################'
 DELETE FROM "IdentityCorrectionSignature";
 DELETE FROM "IdentityCorrection";
+DELETE FROM "InvoiceCertificate"
+WHERE "certificateId" IN (SELECT id FROM "Certificate");
 DELETE FROM "Certificate";
 DELETE FROM "QualityReview";
 DELETE FROM "CustomerSignature";
@@ -114,15 +141,17 @@ DELETE FROM "QuotationItem";
 DELETE FROM "Quotation";
 DELETE FROM "CalibrationRequestItem";
 DELETE FROM "CalibrationRequest";
+DELETE FROM "FileObject"
+WHERE id IN (SELECT id FROM "_TrialFileObjectToDelete");
 
 -- ----------------------------------------------------------------------------
 --  RESET - DocumentNumberSequence counters used during the trial
---  Deletes the CRQ / QUO / PUR / SPK rows for 2026 so the next real document
---  re-seeds from 1 (INSERT path of DocumentNumberService.allocate).
+--  Deletes every counter owned by the wiped chain for 2026 so the next real
+--  document re-seeds from 1 (INSERT path of DocumentNumberService.allocate).
 --  The CUSTOMER (CUS) row is intentionally left in place.
 -- ----------------------------------------------------------------------------
 \echo ''
-\echo '################  RESET - DocumentNumberSequence (CRQ/QUO/PUR/SPK 2026)  ################'
+\echo '################  RESET - DocumentNumberSequence (trial chain, PKM/2026)  ################'
 DELETE FROM "DocumentNumberSequence"
 WHERE "companyId" = 'PKM'
   AND "year" = 2026
@@ -130,7 +159,11 @@ WHERE "companyId" = 'PKM'
         'CALIBRATION_REQUEST',
         'QUOTATION',
         'PURCHASE_ORDER',
-        'WORK_ORDER'
+        'WORK_ORDER',
+        'WORK_ORDER_SEND_TO_LAB',
+        'EQUIPMENT_DELIVERY_NOTE',
+        'IDENTITY_CORRECTION_BA',
+        'CERTIFICATE'
       );
 
 -- ----------------------------------------------------------------------------
@@ -159,7 +192,12 @@ UNION ALL SELECT 'JobEvidence',                 count(*) FROM "JobEvidence"
 UNION ALL SELECT 'CustomerSignature',           count(*) FROM "CustomerSignature"
 UNION ALL SELECT 'QualityReview',               count(*) FROM "QualityReview"
 UNION ALL SELECT 'Certificate',                 count(*) FROM "Certificate"
-UNION ALL SELECT 'FileObject (total)',          count(*) FROM "FileObject"
+UNION ALL SELECT 'InvoiceCertificate',          count(*) FROM "InvoiceCertificate"
+UNION ALL SELECT 'FileObject (trial-owned)',    count(*) FROM "_TrialFileObjectToDelete" f
+                                                    WHERE EXISTS (
+                                                      SELECT 1 FROM "FileObject" live
+                                                      WHERE live.id = f.id
+                                                    )
 ORDER BY 1;
 
 \echo ''
@@ -180,7 +218,7 @@ UNION ALL SELECT 'ServiceTariff',              count(*) FROM "ServiceTariff"
 ORDER BY 1;
 
 \echo ''
-\echo '################  AFTER - DocumentNumberSequence (expect only the CUSTOMER/CUS row)  ################'
+\echo '################  AFTER - DocumentNumberSequence (trial-chain PKM/2026 rows must be absent)  ################'
 SELECT "companyId", "documentType", "prefix", "year", "lastSequence", "updatedAt"
 FROM "DocumentNumberSequence"
 ORDER BY "documentType", "year";
