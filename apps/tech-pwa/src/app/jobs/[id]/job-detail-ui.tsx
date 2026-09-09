@@ -7,10 +7,13 @@ import type { TechCalibrationJob, TechIdentityCorrection } from "../../../lib/ca
 import { IDENTITY_CORRECTION_STATUS_LABELS } from "../../../lib/calibration/types";
 import type { TechReferenceEquipmentUsed } from "../../../lib/calibration/reference-equipment";
 import {
+  capabilityGroupSections,
   expectedReplicateCount,
   gridEntryStatus,
+  hasCapabilityGroups,
   parameterEntryStatus,
   usesDirection,
+  type TechMeasurementCapabilityGroup,
   type TechMeasurementParameter,
   type TechMeasurementResult,
 } from "../../../lib/calibration/measurement";
@@ -134,12 +137,14 @@ export function ReferenceEquipmentSection({
  * Measurement entry (Pattern A direct + Pattern B grid). Compact per-parameter
  * lists with entry status, plus "Catat Hasil Pengukuran" when the job is
  * IN_PROGRESS and the actor may record. LOGGER_SUMMARY is resolved out
- * server-side (`entryStyle`).
+ * server-side (`entryStyle`). Visual grouping uses `capabilityGroups` when
+ * present; input-method sections are a legacy fallback only.
  */
 export function MeasurementsSection({
   jobId,
   parameters,
   gridParameters,
+  capabilityGroups,
   rowsByParameter,
   gridRowsByParameter,
   deviceTypeResolved,
@@ -150,6 +155,7 @@ export function MeasurementsSection({
   jobId: string;
   parameters: TechMeasurementParameter[];
   gridParameters: TechMeasurementParameter[];
+  capabilityGroups?: TechMeasurementCapabilityGroup[];
   rowsByParameter: Map<string, TechMeasurementResult[]>;
   gridRowsByParameter: Map<string, TechMeasurementResult[]>;
   deviceTypeResolved: boolean;
@@ -157,7 +163,11 @@ export function MeasurementsSection({
   entryOpen: boolean;
   lockedReason: string | null;
 }) {
-  const hasAny = parameters.length > 0 || gridParameters.length > 0;
+  const grouped = hasCapabilityGroups(capabilityGroups);
+  const capabilitySections = grouped ? capabilityGroupSections(capabilityGroups) : [];
+  const hasAny = grouped
+    ? capabilitySections.length > 0
+    : parameters.length > 0 || gridParameters.length > 0;
   return (
     <Section title="Hasil Pengukuran">
       {!deviceTypeResolved ? (
@@ -168,6 +178,32 @@ export function MeasurementsSection({
         <p className="text-sm text-slate-500">
           Tidak ada parameter pengukuran yang didukung untuk jenis alat ini.
         </p>
+      ) : grouped ? (
+        <div className="flex flex-col gap-3">
+          {capabilitySections.map((section) => (
+            <div key={section.id}>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {section.name}
+              </p>
+              <ul className="flex flex-col gap-1.5">
+                {section.parameters.map(({ parameter, pointCount }) => {
+                  const status =
+                    pointCount !== undefined
+                      ? gridEntryStatus(
+                          gridRowsByParameter.get(parameter.id) ?? [],
+                          pointCount,
+                          expectedReplicateCount(parameter.code),
+                          usesDirection(parameter.code) ? 2 : 1,
+                        )
+                      : parameterEntryStatus(rowsByParameter.get(parameter.id) ?? []);
+                  return (
+                    <MeasurementStatusRow key={parameter.id} name={parameter.name} status={status} />
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="flex flex-col gap-3">
           {parameters.length > 0 ? (

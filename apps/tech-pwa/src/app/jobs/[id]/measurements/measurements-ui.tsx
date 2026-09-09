@@ -6,6 +6,7 @@ import {
   passFailChip,
   toleranceText,
   usesDirection,
+  type MeasurementCapabilitySectionView,
   type ParameterEntryStatus,
   type TechMeasurementParameter,
   type TechMeasurementResult,
@@ -79,5 +80,46 @@ export function MeasurementParameterListRow({
         <StatusChip status={status} />
       </span>
     </Link>
+  );
+}
+
+/** Static capability sections wrapping existing parameter list rows. No accordion. */
+export function MeasurementCapabilityGroupList({
+  jobId,
+  sections,
+  rowsByParameter,
+  gridRowsByParameter,
+}: {
+  jobId: string;
+  sections: MeasurementCapabilitySectionView[];
+  rowsByParameter: Map<string, TechMeasurementResult[]>;
+  gridRowsByParameter: Map<string, TechMeasurementResult[]>;
+}) {
+  return (
+    <>
+      {sections.map((section) => (
+        <section key={section.id} className="flex flex-col gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {section.name}
+          </h2>
+          <ul className="flex flex-col gap-2">
+            {section.parameters.map(({ parameter, pointCount }) => (
+              <li key={parameter.id}>
+                <MeasurementParameterListRow
+                  jobId={jobId}
+                  param={parameter}
+                  rows={
+                    pointCount !== undefined
+                      ? (gridRowsByParameter.get(parameter.id) ?? [])
+                      : (rowsByParameter.get(parameter.id) ?? [])
+                  }
+                  pointCount={pointCount}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </>
   );
 }

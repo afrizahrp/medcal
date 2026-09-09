@@ -45,10 +45,70 @@ export interface TechMeasurementParameter {
   testPoints?: TechMeasurementTestPoint[];
 }
 
+/** Direct replicate list vs test-point grid — same eligibility as parameters[] / gridParameters. */
+export type MeasurementParameterKind = "DIRECT" | "GRID";
+
+export interface TechMeasurementCapabilityRef {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface TechMeasurementGroupedParameter extends TechMeasurementParameter {
+  kind: MeasurementParameterKind;
+  testPoints: TechMeasurementTestPoint[];
+}
+
+export interface TechMeasurementCapabilityGroup {
+  capability: TechMeasurementCapabilityRef;
+  /** Persisted per-DeviceType order; null when no DeviceTypeCapabilityOrder row exists. */
+  sortOrder: number | null;
+  parameters: TechMeasurementGroupedParameter[];
+}
+
 export interface TechMeasurementParametersResponse {
   deviceType: { id: string; name: string } | null;
   parameters: TechMeasurementParameter[];
   gridParameters: TechMeasurementParameter[];
+  /**
+   * LK-oriented tree from GET .../measurement-parameters. Optional so a
+   * pre-Phase-1 payload can still render the input-method fallback.
+   */
+  capabilityGroups?: TechMeasurementCapabilityGroup[];
+}
+
+/** True when the additive capability tree is present (including an empty list). */
+export function hasCapabilityGroups(
+  groups: TechMeasurementCapabilityGroup[] | null | undefined,
+): groups is TechMeasurementCapabilityGroup[] {
+  return Array.isArray(groups);
+}
+
+export interface MeasurementCapabilitySectionView {
+  id: string;
+  name: string;
+  parameters: Array<{
+    parameter: TechMeasurementGroupedParameter;
+    pointCount: number | undefined;
+  }>;
+}
+
+/**
+ * Presentation walk of `capabilityGroups`. Preserves API order — callers must
+ * not sort the result. `pointCount` is set only for GRID so existing status
+ * helpers keep their direct vs grid behavior.
+ */
+export function capabilityGroupSections(
+  groups: TechMeasurementCapabilityGroup[],
+): MeasurementCapabilitySectionView[] {
+  return groups.map((group) => ({
+    id: group.capability.id,
+    name: group.capability.name,
+    parameters: group.parameters.map((parameter) => ({
+      parameter,
+      pointCount: parameter.kind === "GRID" ? (parameter.testPoints?.length ?? 0) : undefined,
+    })),
+  }));
 }
 
 export type MeasurementDirection = "NONE" | "UP" | "DOWN";

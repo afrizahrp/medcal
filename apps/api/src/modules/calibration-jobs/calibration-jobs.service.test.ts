@@ -1975,6 +1975,9 @@ describe("CalibrationJobsService — Measurement Parameters (Stage A, Pattern A)
       await prisma.calibrationTestPoint.deleteMany({
         where: { parameter: { deviceTypeId: { in: createdParamDeviceTypeIds } } },
       });
+      await prisma.deviceTypeCapabilityOrder.deleteMany({
+        where: { deviceTypeId: { in: createdParamDeviceTypeIds } },
+      });
       await prisma.deviceCalibrationParameter.deleteMany({
         where: { deviceTypeId: { in: createdParamDeviceTypeIds } },
       });
@@ -2030,6 +2033,9 @@ describe("CalibrationJobsService — Measurement Parameters (Stage A, Pattern A)
     expect(result.gridParameters[0]?.testPoints).toEqual([
       expect.objectContaining({ sequence: 1, settingLabel: "10", settingValue: "10" }),
     ]);
+    expect(result.capabilityGroups).toHaveLength(1);
+    expect(result.capabilityGroups[0]?.parameters.map((p) => p.code)).toEqual(["MP_A", "MP_B"]);
+    expect(result.capabilityGroups[0]?.parameters.map((p) => p.kind)).toEqual(["DIRECT", "GRID"]);
   });
 
   it("excludes NUMBER + active + zero-test-point rows whose entryStyle is LOGGER_SUMMARY", async () => {
@@ -2059,6 +2065,9 @@ describe("CalibrationJobsService — Measurement Parameters (Stage A, Pattern A)
     expect(result.parameters.map((p) => p.code)).toEqual([patternA.code]);
     expect(result.parameters.some((p) => p.code === "BBR_STORAGE_TEMP_STYLE")).toBe(false);
     expect(result.gridParameters.some((p) => p.code === "BBR_STORAGE_TEMP_STYLE")).toBe(false);
+    expect(
+      result.capabilityGroups.flatMap((g) => g.parameters).some((p) => p.code === "BBR_STORAGE_TEMP_STYLE"),
+    ).toBe(false);
   });
 
   it("puts Pattern B rows in gridParameters and keeps LOGGER_SUMMARY out even when they have test points", async () => {
@@ -2139,5 +2148,186 @@ describe("CalibrationJobsService — Measurement Parameters (Stage A, Pattern A)
     ]);
     expect(result.gridParameters.some((p) => p.code === "LOGGER_WITH_POINT")).toBe(false);
     expect(result.gridParameters.some((p) => p.code === "SUCT_VACUUM_GAUGE")).toBe(false);
+    expect(result.capabilityGroups.map((g) => g.parameters.map((p) => p.code))).toEqual([["MP_GRID"]]);
+    expect(result.capabilityGroups[0]?.parameters[0]?.kind).toBe("GRID");
+  });
+
+  it("groups by capability id/code with configured capability and parameter order, mixing DIRECT and GRID", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+
+    // Names reverse the configured order so alphabetical grouping would fail.
+    const laterCap = await prisma.deviceCapability.create({
+      data: { code: `MPCAP-${randomUUID().slice(0, 8).toUpperCase()}`, name: "A Safety" },
+    });
+    const earlierCap = await prisma.deviceCapability.create({
+      data: { code: `MPCAP-${randomUUID().slice(0, 8).toUpperCase()}`, name: "Z Environment" },
+    });
+    const sameNameA = await prisma.deviceCapability.create({
+      data: { code: `MPCAP-${randomUUID().slice(0, 8).toUpperCase()}`, name: "Shared Label" },
+    });
+    const sameNameB = await prisma.deviceCapability.create({
+      data: { code: `MPCAP-${randomUUID().slice(0, 8).toUpperCase()}`, name: "Shared Label" },
+    });
+    createdCapabilityIds.push(laterCap.id, earlierCap.id, sameNameA.id, sameNameB.id);
+
+    const laterItem = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: laterCap.id, name: "Safety Item" },
+    });
+    const earlierItem = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: earlierCap.id, name: "Env Item" },
+    });
+    const sameItemA = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: sameNameA.id, name: "Item A" },
+    });
+    const sameItemB = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: sameNameB.id, name: "Item B" },
+    });
+
+    await prisma.deviceTypeCapabilityOrder.createMany({
+      data: [
+        { deviceTypeId, capabilityId: earlierCap.id, sortOrder: 10 },
+        { deviceTypeId, capabilityId: laterCap.id, sortOrder: 20 },
+        { deviceTypeId, capabilityId: sameNameA.id, sortOrder: 30 },
+        { deviceTypeId, capabilityId: sameNameB.id, sortOrder: 40 },
+      ],
+    });
+
+    const envGrid = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId: earlierItem.id,
+        code: "ENV_GRID",
+        name: "Zebra Sweep",
+        valueType: "NUMBER",
+        sortOrder: 10,
+      },
+    });
+    await prisma.calibrationTestPoint.create({
+      data: {
+        deviceCalibrationParameterId: envGrid.id,
+        sequence: 2,
+        settingLabel: "60",
+        settingValue: 60,
+      },
+    });
+    await prisma.calibrationTestPoint.create({
+      data: {
+        deviceCalibrationParameterId: envGrid.id,
+        sequence: 1,
+        settingLabel: "30",
+        settingValue: 30,
+      },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId: earlierItem.id,
+        code: "ENV_DIRECT",
+        name: "Alpha Suhu",
+        valueType: "NUMBER",
+        sortOrder: 20,
+      },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId: laterItem.id,
+        code: "SAFETY_DIRECT",
+        name: "Resistansi Isolasi",
+        valueType: "NUMBER",
+        sortOrder: 10,
+      },
+    });
+    const safetyGrid = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId: laterItem.id,
+        code: "SAFETY_GRID",
+        name: "Heart Rate",
+        valueType: "NUMBER",
+        sortOrder: 20,
+      },
+    });
+    await prisma.calibrationTestPoint.create({
+      data: {
+        deviceCalibrationParameterId: safetyGrid.id,
+        sequence: 1,
+        settingLabel: "30 BPM",
+        settingValue: 30,
+      },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId: sameItemA.id,
+        code: "SHARED_A",
+        name: "Param A",
+        valueType: "NUMBER",
+        sortOrder: 10,
+      },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId: sameItemB.id,
+        code: "SHARED_B",
+        name: "Param B",
+        valueType: "NUMBER",
+        sortOrder: 10,
+      },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId: earlierItem.id,
+        code: "ENV_LOGGER",
+        name: "Logger leak",
+        valueType: "NUMBER",
+        entryStyle: "LOGGER_SUMMARY",
+        sortOrder: 30,
+      },
+    });
+
+    const result = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+
+    expect(result.parameters.map((p) => p.code).sort()).toEqual(
+      ["ENV_DIRECT", "SAFETY_DIRECT", "SHARED_A", "SHARED_B"].sort(),
+    );
+    expect(result.gridParameters.map((p) => p.code).sort()).toEqual(["ENV_GRID", "SAFETY_GRID"].sort());
+
+    expect(result.capabilityGroups.map((g) => g.capability.id)).toEqual([
+      earlierCap.id,
+      laterCap.id,
+      sameNameA.id,
+      sameNameB.id,
+    ]);
+    expect(result.capabilityGroups.map((g) => g.capability.code)).toEqual([
+      earlierCap.code,
+      laterCap.code,
+      sameNameA.code,
+      sameNameB.code,
+    ]);
+    expect(result.capabilityGroups.map((g) => g.sortOrder)).toEqual([10, 20, 30, 40]);
+    expect(result.capabilityGroups.filter((g) => g.capability.name === "Shared Label")).toHaveLength(2);
+
+    expect(result.capabilityGroups[0]).toMatchObject({
+      capability: { id: earlierCap.id, name: "Z Environment" },
+      parameters: [
+        { code: "ENV_GRID", kind: "GRID" },
+        { code: "ENV_DIRECT", kind: "DIRECT" },
+      ],
+    });
+    expect(result.capabilityGroups[0]?.parameters[0]?.testPoints.map((tp) => tp.sequence)).toEqual([1, 2]);
+    expect(result.capabilityGroups[0]?.parameters[0]?.testPoints.map((tp) => tp.settingLabel)).toEqual(["30", "60"]);
+    expect(result.capabilityGroups[0]?.parameters[1]?.testPoints).toEqual([]);
+
+    expect(result.capabilityGroups[1]?.parameters.map((p) => ({ code: p.code, kind: p.kind }))).toEqual([
+      { code: "SAFETY_DIRECT", kind: "DIRECT" },
+      { code: "SAFETY_GRID", kind: "GRID" },
+    ]);
+    expect(result.capabilityGroups[2]?.parameters.map((p) => p.code)).toEqual(["SHARED_A"]);
+    expect(result.capabilityGroups[3]?.parameters.map((p) => p.code)).toEqual(["SHARED_B"]);
+    expect(result.capabilityGroups.flatMap((g) => g.parameters).some((p) => p.code === "ENV_LOGGER")).toBe(false);
   });
 });

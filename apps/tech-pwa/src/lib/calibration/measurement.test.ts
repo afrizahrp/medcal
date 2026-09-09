@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   canRecordMeasurement,
+  capabilityGroupSections,
   expectedReplicateCount,
   formatMeasuredValue,
   gridEntryStatus,
+  hasCapabilityGroups,
   isMeasurementLocked,
   isValidMeasuredValue,
   measuredValueInputStep,
@@ -186,5 +188,95 @@ describe("gridEntryStatus", () => {
   it("grows total when more replicates exist than the expected count", () => {
     const rows = [1, 2, 3, 4].map((i) => cell(i, String(i), true));
     expect(gridEntryStatus(rows, 1, 3, 1)).toMatchObject({ filled: 4, total: 4, complete: true });
+  });
+});
+
+describe("capabilityGroupSections / hasCapabilityGroups", () => {
+  const param = (
+    id: string,
+    name: string,
+    kind: "DIRECT" | "GRID",
+    testPoints: { id: string; sequence: number; settingLabel: string }[] = [],
+  ) => ({
+    id,
+    code: id,
+    name,
+    decimalPlaces: 0,
+    uom: null,
+    toleranceMin: null,
+    toleranceMax: null,
+    toleranceNote: null,
+    capabilityName: "unused",
+    capabilityItemName: "unused",
+    kind,
+    testPoints: testPoints.map((tp) => ({
+      ...tp,
+      settingValue: null,
+      toleranceMin: null,
+      toleranceMax: null,
+      toleranceNote: null,
+    })),
+  });
+
+  it("is true for an array (including empty) and false when the field is missing", () => {
+    expect(hasCapabilityGroups([])).toBe(true);
+    expect(hasCapabilityGroups(undefined)).toBe(false);
+    expect(hasCapabilityGroups(null)).toBe(false);
+  });
+
+  it("preserves API capability and parameter order, including mixed DIRECT/GRID", () => {
+    const groups = [
+      {
+        capability: { id: "cap-z", code: "Z", name: "Z Environment" },
+        sortOrder: 10,
+        parameters: [
+          param("grid-1", "Zebra Sweep", "GRID", [
+            { id: "tp-2", sequence: 2, settingLabel: "60" },
+            { id: "tp-1", sequence: 1, settingLabel: "30" },
+          ]),
+          param("direct-1", "Alpha Suhu", "DIRECT"),
+        ],
+      },
+      {
+        capability: { id: "cap-a", code: "A", name: "A Safety" },
+        sortOrder: 20,
+        parameters: [param("direct-2", "Isolasi", "DIRECT")],
+      },
+    ];
+    const sections = capabilityGroupSections(groups);
+    expect(sections.map((s) => s.id)).toEqual(["cap-z", "cap-a"]);
+    expect(sections.map((s) => s.name)).toEqual(["Z Environment", "A Safety"]);
+    expect(
+      sections[0]?.parameters.map((p) => ({
+        id: p.parameter.id,
+        kind: p.parameter.kind,
+        pointCount: p.pointCount,
+      })),
+    ).toEqual([
+      { id: "grid-1", kind: "GRID", pointCount: 2 },
+      { id: "direct-1", kind: "DIRECT", pointCount: undefined },
+    ]);
+    expect(sections[1]?.parameters.map((p) => p.parameter.id)).toEqual(["direct-2"]);
+  });
+
+  it("does not alphabetically sort capabilities or parameters", () => {
+    const groups = [
+      {
+        capability: { id: "2", code: "B", name: "Beta" },
+        sortOrder: 10,
+        parameters: [
+          param("z", "Zulu", "DIRECT"),
+          param("a", "Alpha", "GRID", [{ id: "t", sequence: 1, settingLabel: "1" }]),
+        ],
+      },
+      {
+        capability: { id: "1", code: "A", name: "Alpha" },
+        sortOrder: 20,
+        parameters: [param("m", "Mike", "DIRECT")],
+      },
+    ];
+    const sections = capabilityGroupSections(groups);
+    expect(sections.map((s) => s.name)).toEqual(["Beta", "Alpha"]);
+    expect(sections[0]?.parameters.map((p) => p.parameter.name)).toEqual(["Zulu", "Alpha"]);
   });
 });

@@ -215,6 +215,7 @@ export default function JobDetailPage() {
             jobId={id}
             parameters={measurementParams?.parameters ?? []}
             gridParameters={measurementParams?.gridParameters ?? []}
+            capabilityGroups={measurementParams?.capabilityGroups}
             rowsByParameter={measurementRowsByParameter}
             gridRowsByParameter={measurementGridRowsByParameter}
             deviceTypeResolved={(measurementParams?.deviceType ?? null) !== null}

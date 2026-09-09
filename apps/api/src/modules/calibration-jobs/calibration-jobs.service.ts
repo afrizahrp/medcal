@@ -241,31 +241,80 @@ export interface MeasurementGridParameterSummary extends MeasurementParameterSum
   testPoints: MeasurementTestPointSummary[];
 }
 
+/** Direct replicate list vs test-point grid — same eligibility as parameters[] / gridParameters. */
+export type MeasurementParameterKind = "DIRECT" | "GRID";
+
+export interface MeasurementCapabilityRef {
+  id: string;
+  code: string;
+  name: string;
+}
+
+/**
+ * One eligible parameter inside a capability group. `kind` is the direct/grid
+ * discriminant; `testPoints` is empty on DIRECT and ordered by `sequence` on GRID.
+ */
+export interface MeasurementGroupedParameter extends MeasurementParameterSummary {
+  kind: MeasurementParameterKind;
+  testPoints: MeasurementTestPointSummary[];
+}
+
+/**
+ * Capability section for the tech-pwa LK-oriented list. Capabilities are ordered
+ * by DeviceTypeCapabilityOrder.sortOrder; parameters inside a group by
+ * DeviceCalibrationParameter.sortOrder (capability-scoped).
+ */
+export interface MeasurementCapabilityGroup {
+  capability: MeasurementCapabilityRef;
+  /** Persisted per-DeviceType order; null when no DeviceTypeCapabilityOrder row exists. */
+  sortOrder: number | null;
+  parameters: MeasurementGroupedParameter[];
+}
+
 export interface JobMeasurementParametersResult {
   /** Null when the job's DeviceType can't be resolved from the commercial chain. */
   deviceType: { id: string; name: string } | null;
   parameters: MeasurementParameterSummary[];
   /** Pattern B / D-fixed grids. Additive — Stage A clients that ignore this stay valid. */
   gridParameters: MeasurementGridParameterSummary[];
+  /**
+   * LK-oriented tree. Additive — existing clients that only read parameters[] /
+   * gridParameters[] stay valid. Empty when the DeviceType cannot be resolved.
+   */
+  capabilityGroups: MeasurementCapabilityGroup[];
 }
 
 const measurementParameterSelect = {
   id: true,
   code: true,
   name: true,
+  sortOrder: true,
   decimalPlaces: true,
   toleranceMin: true,
   toleranceMax: true,
   toleranceNote: true,
   uom: { select: { code: true, symbol: true } },
   capabilityItem: {
-    select: { name: true, capability: { select: { name: true } } },
+    select: {
+      name: true,
+      capability: { select: { id: true, code: true, name: true } },
+    },
   },
 } as const;
 
 type MeasurementParameterRow = Prisma.DeviceCalibrationParameterGetPayload<{
   select: typeof measurementParameterSelect;
 }>;
+
+type MeasurementTestPointRow = {
+  id: string;
+  sequence: number;
+  settingLabel: string;
+  settingValue: Prisma.Decimal | null;
+  toleranceMin: Prisma.Decimal | null;
+  toleranceMax: Prisma.Decimal | null;
+  toleranceNote: string | null;
+};
 
 function toParameterSummary(row: MeasurementParameterRow): MeasurementParameterSummary {
   return {
@@ -280,6 +329,103 @@ function toParameterSummary(row: MeasurementParameterRow): MeasurementParameterS
     capabilityName: row.capabilityItem.capability.name,
     capabilityItemName: row.capabilityItem.name,
   };
+}
+
+function toTestPointSummary(tp: MeasurementTestPointRow): MeasurementTestPointSummary {
+  return {
+    id: tp.id,
+    sequence: tp.sequence,
+    settingLabel: tp.settingLabel,
+    settingValue: tp.settingValue?.toString() ?? null,
+    toleranceMin: tp.toleranceMin?.toString() ?? null,
+    toleranceMax: tp.toleranceMax?.toString() ?? null,
+    toleranceNote: tp.toleranceNote,
+  };
+}
+
+function toGroupedParameter(
+  row: MeasurementParameterRow,
+  kind: MeasurementParameterKind,
+  testPoints: MeasurementTestPointSummary[],
+): MeasurementGroupedParameter {
+  return {
+    ...toParameterSummary(row),
+    kind,
+    testPoints,
+  };
+}
+
+/**
+ * Group eligible parameters by capability ID and order both levels from the
+ * existing catalog: DeviceTypeCapabilityOrder, then parameter sortOrder.
+ * Missing capability-order rows go last; tie-break is capability id (stable,
+ * not display-name alphabetical). Parameter ties use name then id, matching
+ * the existing Prisma orderBy on the ungrouped arrays.
+ */
+function buildMeasurementCapabilityGroups(
+  items: Array<{
+    row: MeasurementParameterRow;
+    kind: MeasurementParameterKind;
+    testPoints: MeasurementTestPointSummary[];
+  }>,
+  sortOrderByCapabilityId: Map<string, number>,
+): MeasurementCapabilityGroup[] {
+  const buckets = new Map<
+    string,
+    {
+      capability: MeasurementCapabilityRef;
+      sortOrder: number | null;
+      items: Array<{
+        parameterSortOrder: number;
+        name: string;
+        id: string;
+        grouped: MeasurementGroupedParameter;
+      }>;
+    }
+  >();
+
+  for (const item of items) {
+    const capability = item.row.capabilityItem.capability;
+    let bucket = buckets.get(capability.id);
+    if (!bucket) {
+      bucket = {
+        capability: { id: capability.id, code: capability.code, name: capability.name },
+        sortOrder: sortOrderByCapabilityId.get(capability.id) ?? null,
+        items: [],
+      };
+      buckets.set(capability.id, bucket);
+    }
+    bucket.items.push({
+      parameterSortOrder: item.row.sortOrder,
+      name: item.row.name,
+      id: item.row.id,
+      grouped: toGroupedParameter(item.row, item.kind, item.testPoints),
+    });
+  }
+
+  const groups = [...buckets.values()];
+  groups.sort((a, b) => {
+    const ao = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    const bo = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
+    return a.capability.id.localeCompare(b.capability.id);
+  });
+
+  return groups.map((group) => {
+    group.items.sort((a, b) => {
+      if (a.parameterSortOrder !== b.parameterSortOrder) {
+        return a.parameterSortOrder - b.parameterSortOrder;
+      }
+      const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      if (byName !== 0) return byName;
+      return a.id.localeCompare(b.id);
+    });
+    return {
+      capability: group.capability,
+      sortOrder: group.sortOrder,
+      parameters: group.items.map((entry) => entry.grouped),
+    };
+  });
 }
 
 export interface CalibrationJobListResult {
@@ -1118,6 +1264,10 @@ export class CalibrationJobsService {
    * except they HAVE active test-point children. LOGGER_SUMMARY is excluded
    * from both via `entryStyle`. SUCT_VACUUM_GAUGE (generic-slot + on-site
    * nominal) is excluded from the grid by code allowlist — Pattern D, not Stage B.
+   *
+   * `capabilityGroups` is additive: the same eligible rows, grouped by
+   * DeviceCapability id and ordered by DeviceTypeCapabilityOrder then
+   * DeviceCalibrationParameter.sortOrder.
    */
   async listMeasurementParameters(
     companyId: string,
@@ -1126,10 +1276,10 @@ export class CalibrationJobsService {
     const job = await this.findOne(companyId, jobId);
     const deviceTypeId = this.resolveJobDeviceTypeId(job);
     if (deviceTypeId === null) {
-      return { deviceType: null, parameters: [], gridParameters: [] };
+      return { deviceType: null, parameters: [], gridParameters: [], capabilityGroups: [] };
     }
 
-    const [deviceType, rows, gridRows] = await Promise.all([
+    const [deviceType, rows, gridRows, capabilityOrders] = await Promise.all([
       prisma.deviceType.findUnique({
         where: { id: deviceTypeId },
         select: { id: true, name: true },
@@ -1172,23 +1322,36 @@ export class CalibrationJobsService {
         },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       }),
+      prisma.deviceTypeCapabilityOrder.findMany({
+        where: { deviceTypeId },
+        select: { capabilityId: true, sortOrder: true },
+      }),
     ]);
+
+    const parameters = rows.map(toParameterSummary);
+    const gridParameters = gridRows.map((row) => ({
+      ...toParameterSummary(row),
+      testPoints: row.testPoints.map(toTestPointSummary),
+    }));
+    const sortOrderByCapabilityId = new Map(
+      capabilityOrders.map((row) => [row.capabilityId, row.sortOrder] as const),
+    );
 
     return {
       deviceType: deviceType ?? { id: deviceTypeId, name: "" },
-      parameters: rows.map(toParameterSummary),
-      gridParameters: gridRows.map((row) => ({
-        ...toParameterSummary(row),
-        testPoints: row.testPoints.map((tp) => ({
-          id: tp.id,
-          sequence: tp.sequence,
-          settingLabel: tp.settingLabel,
-          settingValue: tp.settingValue?.toString() ?? null,
-          toleranceMin: tp.toleranceMin?.toString() ?? null,
-          toleranceMax: tp.toleranceMax?.toString() ?? null,
-          toleranceNote: tp.toleranceNote,
-        })),
-      })),
+      parameters,
+      gridParameters,
+      capabilityGroups: buildMeasurementCapabilityGroups(
+        [
+          ...rows.map((row) => ({ row, kind: "DIRECT" as const, testPoints: [] })),
+          ...gridRows.map((row) => ({
+            row,
+            kind: "GRID" as const,
+            testPoints: row.testPoints.map(toTestPointSummary),
+          })),
+        ],
+        sortOrderByCapabilityId,
+      ),
     };
   }
 

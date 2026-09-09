@@ -7,11 +7,15 @@ import { Screen } from "../../../../components/layout/screen";
 import { Button } from "../../../../components/ui/button";
 import { LoadingState, ErrorState, EmptyState } from "../../../../components/ui/state-views";
 import { formatApiError } from "../../../../lib/api-errors";
-import { measurementLockedReason } from "../../../../lib/calibration/measurement";
+import {
+  capabilityGroupSections,
+  hasCapabilityGroups,
+  measurementLockedReason,
+} from "../../../../lib/calibration/measurement";
 import { useJobQuery } from "../use-job-query";
 import { JobHeaderBlock } from "../job-detail-ui";
 import { useMeasurementParameters, useMeasurementResults } from "./use-measurements-query";
-import { MeasurementParameterListRow } from "./measurements-ui";
+import { MeasurementCapabilityGroupList, MeasurementParameterListRow } from "./measurements-ui";
 
 function GuardScreen({ children }: { children: React.ReactNode }) {
   return (
@@ -107,7 +111,12 @@ export default function MeasurementsPage() {
   const deviceType = parametersQuery.data?.deviceType ?? null;
   const parameters = parametersQuery.data?.parameters ?? [];
   const gridParameters = parametersQuery.data?.gridParameters ?? [];
-  const noneSupported = parameters.length === 0 && gridParameters.length === 0;
+  const capabilityGroups = parametersQuery.data?.capabilityGroups;
+  const grouped = hasCapabilityGroups(capabilityGroups);
+  const capabilitySections = grouped ? capabilityGroupSections(capabilityGroups) : [];
+  const noneSupported = grouped
+    ? capabilitySections.length === 0
+    : parameters.length === 0 && gridParameters.length === 0;
 
   return (
     <GuardScreen>
@@ -132,7 +141,14 @@ export default function MeasurementsPage() {
         ) : noneSupported ? (
           <EmptyState
             title="Tidak ada parameter pengukuran yang didukung"
-            subtitle="Jenis alat ini tidak punya pembacaan langsung atau grid titik uji yang didukung."
+            subtitle="Jenis alat ini tidak punya parameter pengukuran yang didukung."
+          />
+        ) : grouped ? (
+          <MeasurementCapabilityGroupList
+            jobId={id}
+            sections={capabilitySections}
+            rowsByParameter={rowsByParameter}
+            gridRowsByParameter={gridRowsByParameter}
           />
         ) : (
           <>
