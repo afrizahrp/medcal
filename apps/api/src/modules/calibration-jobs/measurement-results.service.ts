@@ -24,8 +24,8 @@ export const MEASUREMENT_LOCKED_JOB_STATUSES = new Set<string>(["SUBMITTED", "AC
 /**
  * RBAC capability that gates every measurement write. Defined here alongside the
  * logic; the `@RequirePermission` wiring is added with the controller in Stage
- * 2c. Granted to TECHNICIAN + TECHNICIAN_MANAGER (see seed-role-permissions.ts),
- * mirroring `calibrationJob:recordReferenceEquipmentUsed`.
+ * 2c. Granted to TECHNICIAN only (see seed-role-permissions.ts).
+ * TECHNICIAN_MANAGER reviews via decideQualityReview and must not write values.
  */
 export const RECORD_MEASUREMENT_PERMISSION = {
   resource: "calibrationJob",

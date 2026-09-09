@@ -18,6 +18,7 @@ import { DevicesService } from "../devices/devices.service";
 import { CalibrationJobsController } from "./calibration-jobs.controller";
 import { CalibrationJobsService } from "./calibration-jobs.service";
 import { identityCorrectionFileOwnerPolicy } from "./identity-correction-file-owner-policy";
+import { MeasurementResultsService } from "./measurement-results.service";
 
 const UNAVAILABLE_SIGNATURES = {
   TECHNICIAN: { status: "UNAVAILABLE" as const, unavailableReason: "n/a in test" },
@@ -33,6 +34,7 @@ vi.mock("@medcal/auth", async () => {
 });
 
 const calibrationJobsService = new CalibrationJobsService();
+const measurementResultsService = new MeasurementResultsService();
 const devicesService = new DevicesService();
 const calibrationRequestsService = new CalibrationRequestsService();
 const quotationsService = new QuotationsService();
@@ -49,6 +51,7 @@ const createdCustomerIds: string[] = [];
 const createdCompanyIds: string[] = [];
 const createdDeviceTypeIds: string[] = [];
 const createdDeviceCategoryIds: string[] = [];
+const createdCapabilityIds: string[] = [];
 const createdTaxIds: string[] = [];
 const createdUserIds: string[] = [];
 const createdMembershipKeys: Array<{ userId: string; companyId: string }> = [];
@@ -228,11 +231,20 @@ afterAll(async () => {
   if (createdDeviceTypeIds.length > 0) {
     // Devices created by the device-assignment suite (jobs are already gone via
     // the WorkOrder cascade above) — must go before their DeviceType.
+    await prisma.deviceCalibrationParameter.deleteMany({
+      where: { deviceTypeId: { in: createdDeviceTypeIds } },
+    });
     await prisma.device.deleteMany({ where: { deviceTypeId: { in: createdDeviceTypeIds } } });
     await prisma.priceListItem.deleteMany({
       where: { deviceTypeId: { in: createdDeviceTypeIds } },
     });
     await prisma.deviceType.deleteMany({ where: { id: { in: createdDeviceTypeIds } } });
+  }
+  if (createdCapabilityIds.length > 0) {
+    await prisma.deviceCapabilityItem.deleteMany({
+      where: { capabilityId: { in: createdCapabilityIds } },
+    });
+    await prisma.deviceCapability.deleteMany({ where: { id: { in: createdCapabilityIds } } });
   }
   if (createdDeviceCategoryIds.length > 0) {
     await prisma.deviceCategory.deleteMany({ where: { id: { in: createdDeviceCategoryIds } } });
@@ -1779,6 +1791,205 @@ describe("CalibrationJobsService — list, assignedToMe (technician scope)", () 
   });
 });
 
+describe("CalibrationJobsService — quality review happy path", () => {
+  async function inProgressJob() {
+    const ctx = await startedWorkOrderJobs(realCompanyId);
+    const started = await calibrationJobsService.start(realCompanyId, ctx.jobs[0]!.id);
+    return { ...ctx, job: started };
+  }
+
+  async function recordSampleMeasurement(jobId: string, deviceTypeId: string, technicianId: string) {
+    const capability = await prisma.deviceCapability.create({
+      data: { code: `QRHP${randomUUID().slice(0, 8)}`, name: "QR Happy Path" },
+    });
+    createdCapabilityIds.push(capability.id);
+    const item = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: capability.id, name: "QR Item" },
+    });
+    const param = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId: item.id,
+        code: `QRP${randomUUID().slice(0, 8).toUpperCase()}`,
+        name: "QR Param",
+        valueType: "NUMBER",
+        toleranceMin: 0,
+        toleranceMax: 100,
+      },
+    });
+    return measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: 50,
+      },
+      technicianId,
+    );
+  }
+
+  it("technician submit moves IN_PROGRESS to SUBMITTED and stamps submittedAt", async () => {
+    const { job } = await inProgressJob();
+    const before = Date.now();
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, job.id);
+
+    expect(submitted.status).toBe("SUBMITTED");
+    expect(submitted.submittedAt).not.toBeNull();
+    expect(submitted.submittedAt!.getTime()).toBeGreaterThanOrEqual(before - 1000);
+    expect(submitted.currentAttempt).toBe(1);
+    expect(submitted.reviews).toEqual([]);
+  });
+
+  it("locks MeasurementResult after submit", async () => {
+    const { job, deviceTypeId } = await inProgressJob();
+    const technician = await makeMember(realCompanyId, "TECHNICIAN");
+    const row = await recordSampleMeasurement(job.id, deviceTypeId, technician.id);
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+
+    await expect(
+      measurementResultsService.update(realCompanyId, row.id, { measuredValue: 60 }, technician.id),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_JOB_SUBMITTED" } });
+    await expect(
+      measurementResultsService.create(
+        realCompanyId,
+        {
+          calibrationJobId: job.id,
+          deviceCalibrationParameterId: row.deviceCalibrationParameterId,
+          replicateIndex: 2,
+          measuredValue: 61,
+        },
+        technician.id,
+      ),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_JOB_SUBMITTED" } });
+  });
+
+  it("MT approve creates QualityReview APPROVED, does not change job status or measurements", async () => {
+    const { job, deviceTypeId } = await inProgressJob();
+    const technician = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    const row = await recordSampleMeasurement(job.id, deviceTypeId, technician.id);
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    const submittedAt = submitted.submittedAt!.getTime();
+
+    const approved = await calibrationJobsService.decideQualityReview(
+      realCompanyId,
+      job.id,
+      manager.id,
+      { decision: "APPROVE", notes: "OK" },
+    );
+
+    expect(approved.status).toBe("SUBMITTED");
+    expect(approved.submittedAt!.getTime()).toBe(submittedAt);
+    expect(approved.currentAttempt).toBe(1);
+    expect(approved.reviews).toHaveLength(1);
+    expect(approved.reviews[0]!.status).toBe("APPROVED");
+    expect(approved.reviews[0]!.decision).toBe("APPROVE");
+    expect(approved.reviews[0]!.reviewerUserId).toBe(manager.id);
+    expect(approved.reviews[0]!.notes).toBe("OK");
+    expect(approved.reviews[0]!.reviewedAt).not.toBeNull();
+
+    const after = await prisma.measurementResult.findUniqueOrThrow({ where: { id: row.id } });
+    expect(after.measuredValue?.toNumber()).toBe(50);
+    expect(after.recordedByUserId).toBe(technician.id);
+  });
+
+  it("technician cannot complete before MT approval", async () => {
+    const { job } = await inProgressJob();
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+
+    await expect(calibrationJobsService.complete(realCompanyId, job.id)).rejects.toMatchObject({
+      response: { code: "QUALITY_REVIEW_NOT_APPROVED" },
+    });
+  });
+
+  it("technician complete after MT approve moves SUBMITTED to ACCEPTED_BY_QA", async () => {
+    const { job } = await inProgressJob();
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    await calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+      decision: "APPROVE",
+    });
+
+    const completed = await calibrationJobsService.complete(realCompanyId, job.id);
+    expect(completed.status).toBe("ACCEPTED_BY_QA");
+    expect(completed.submittedAt).not.toBeNull();
+    expect(completed.currentAttempt).toBe(1);
+    expect(completed.reviews[0]!.status).toBe("APPROVED");
+  });
+
+  it("keeps measurements locked after ACCEPTED_BY_QA", async () => {
+    const { job, deviceTypeId } = await inProgressJob();
+    const technician = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    const row = await recordSampleMeasurement(job.id, deviceTypeId, technician.id);
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    await calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+      decision: "APPROVE",
+    });
+    await calibrationJobsService.complete(realCompanyId, job.id);
+
+    await expect(
+      measurementResultsService.update(realCompanyId, row.id, { measuredValue: 70 }, technician.id),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_JOB_SUBMITTED" } });
+  });
+
+  it("rejects double-submit, duplicate approve, and duplicate complete", async () => {
+    const { job } = await inProgressJob();
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+
+    await expect(
+      calibrationJobsService.submitForReview(realCompanyId, job.id),
+    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_ALREADY_SUBMITTED" } });
+
+    await calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+      decision: "APPROVE",
+    });
+    await expect(
+      calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+        decision: "APPROVE",
+      }),
+    ).rejects.toMatchObject({ response: { code: "QUALITY_REVIEW_ALREADY_APPROVED" } });
+
+    await calibrationJobsService.complete(realCompanyId, job.id);
+    await expect(calibrationJobsService.complete(realCompanyId, job.id)).rejects.toMatchObject({
+      response: { code: "CALIBRATION_JOB_ALREADY_COMPLETED" },
+    });
+  });
+
+  it("rejects submit from PENDING and approve from IN_PROGRESS", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    await expect(
+      calibrationJobsService.submitForReview(realCompanyId, jobs[0]!.id),
+    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_NOT_IN_PROGRESS" } });
+
+    const { job } = await inProgressJob();
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await expect(
+      calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+        decision: "APPROVE",
+      }),
+    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_NOT_SUBMITTED" } });
+  });
+
+  it("rejects REJECT on the quality-decision route (REWORK deferred)", async () => {
+    const { job } = await inProgressJob();
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    const controller = new CalibrationJobsController(
+      calibrationJobsService,
+      measurementResultsService,
+    );
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await expect(
+      controller.decideQualityReview(realCompanyId, manager.id, job.id, { decision: "REJECT" }),
+    ).rejects.toMatchObject({ response: { code: "INVALID_QUALITY_REVIEW_DECISION" } });
+    const stillSubmitted = await calibrationJobsService.findOne(realCompanyId, job.id);
+    expect(stillSubmitted.status).toBe("SUBMITTED");
+    expect(stillSubmitted.reviews).toEqual([]);
+  });
+});
+
 describe("CalibrationJobsController RBAC (guard chain)", () => {
   const guard = new CompanyRoleGuard(new Reflector());
 
@@ -1912,6 +2123,68 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     await expect(
       guard.canActivate(contextFor("replaceReferenceEquipmentUsed")),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("allows a TECHNICIAN to submit for review and complete", async () => {
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "sub-t@x.co" } });
+    await expect(guard.canActivate(contextFor("submitForReview"))).resolves.toBe(true);
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "sub-t@x.co" } });
+    await expect(guard.canActivate(contextFor("complete"))).resolves.toBe(true);
+  });
+
+  it("blocks a TECHNICIAN from quality-decision (403)", async () => {
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "qd-t@x.co" } });
+    await expect(guard.canActivate(contextFor("decideQualityReview"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("allows a TECHNICIAN_MANAGER to decide quality review", async () => {
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "qd-m@x.co" } });
+    await expect(guard.canActivate(contextFor("decideQualityReview"))).resolves.toBe(true);
+  });
+
+  it("blocks a TECHNICIAN_MANAGER from submit, complete, and recordMeasurement", async () => {
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "mt-sub@x.co" } });
+    await expect(guard.canActivate(contextFor("submitForReview"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "mt-cmp@x.co" } });
+    await expect(guard.canActivate(contextFor("complete"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "mt-rec@x.co" } });
+    await expect(guard.canActivate(contextFor("createMeasurementResult"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("blocks ADMIN from quality-decision (403)", async () => {
+    const admin = await makeMember(realCompanyId, "ADMIN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: admin.id, email: "qd-a@x.co" } });
+    await expect(guard.canActivate(contextFor("decideQualityReview"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("blocks FINANCE from submit / quality-decision / complete (403)", async () => {
+    const finance = await makeMember(realCompanyId, "FINANCE");
+    getSessionMock.mockResolvedValueOnce({ user: { id: finance.id, email: "f-sub@x.co" } });
+    await expect(guard.canActivate(contextFor("submitForReview"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    getSessionMock.mockResolvedValueOnce({ user: { id: finance.id, email: "f-qd@x.co" } });
+    await expect(guard.canActivate(contextFor("decideQualityReview"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    getSessionMock.mockResolvedValueOnce({ user: { id: finance.id, email: "f-cmp@x.co" } });
+    await expect(guard.canActivate(contextFor("complete"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 });
 

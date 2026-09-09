@@ -20,6 +20,7 @@ import {
   type IdentityCorrectionDecisionInput,
   type IdentityCorrectionSubmitInput,
   type JobReferenceEquipmentReplaceInput,
+  type QualityReviewDecisionInput,
 } from "@medcal/shared";
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { DevicesService, type DeviceWithRelations } from "../devices/devices.service";
@@ -84,6 +85,22 @@ const calibrationJobInclude = {
   // at most one PENDING_REVIEW can exist per job (enforced on submit).
   identityCorrections: {
     select: { id: true, number: true, status: true, createdAt: true },
+    orderBy: { createdAt: "desc" as const },
+    take: 1,
+  },
+  // Latest QualityReview — technician/MT read "has MT approved?" from GET job.
+  // Created only on decide (reviewerUserId is required). Happy path: 0 or 1.
+  reviews: {
+    select: {
+      id: true,
+      status: true,
+      decision: true,
+      notes: true,
+      reviewerUserId: true,
+      reviewedAt: true,
+      createdAt: true,
+      reviewer: { select: { id: true, name: true } },
+    },
     orderBy: { createdAt: "desc" as const },
     take: 1,
   },
@@ -697,6 +714,136 @@ export class CalibrationJobsService {
       where: { id },
       data: { status: "IN_PROGRESS", startedAt: new Date() },
     });
+
+    return this.findOne(companyId, id);
+  }
+
+  /**
+   * Technician hands the current attempt to MT: IN_PROGRESS → SUBMITTED,
+   * stamps submittedAt. Measurement writes lock via the existing guard.
+   * REJECT/REWORK is not handled here.
+   */
+  async submitForReview(companyId: string, id: string): Promise<CalibrationJobDetail> {
+    const job = await this.findOne(companyId, id);
+    if (job.status === "SUBMITTED" || job.status === "ACCEPTED_BY_QA") {
+      throw new ConflictException({
+        message: "Calibration job has already been submitted",
+        code: "CALIBRATION_JOB_ALREADY_SUBMITTED",
+        status: job.status,
+      });
+    }
+    if (job.status !== "IN_PROGRESS" || job.startedAt === null) {
+      throw new BadRequestException({
+        message: "Calibration job must be in progress to submit for review",
+        code: "CALIBRATION_JOB_NOT_IN_PROGRESS",
+        status: job.status,
+      });
+    }
+
+    const updated = await prisma.calibrationJob.updateMany({
+      where: { id, companyId, status: "IN_PROGRESS" },
+      data: { status: "SUBMITTED", submittedAt: new Date() },
+    });
+    if (updated.count !== 1) {
+      throw new ConflictException({
+        message: "Calibration job has already been submitted",
+        code: "CALIBRATION_JOB_ALREADY_SUBMITTED",
+      });
+    }
+
+    return this.findOne(companyId, id);
+  }
+
+  /**
+   * TECHNICIAN_MANAGER APPROVE only (happy path). Creates QualityReview at
+   * decide time. Job stays SUBMITTED; measurements stay locked.
+   */
+  async decideQualityReview(
+    companyId: string,
+    id: string,
+    userId: string,
+    input: QualityReviewDecisionInput,
+  ): Promise<CalibrationJobDetail> {
+    const job = await this.findOne(companyId, id);
+    if (job.status !== "SUBMITTED") {
+      throw new BadRequestException({
+        message: "Quality review is only available on a submitted job",
+        code: "CALIBRATION_JOB_NOT_SUBMITTED",
+        status: job.status,
+      });
+    }
+
+    const alreadyApproved = await prisma.qualityReview.findFirst({
+      where: { companyId, calibrationJobId: id, status: "APPROVED" },
+      select: { id: true },
+    });
+    if (alreadyApproved) {
+      throw new ConflictException({
+        message: "This job already has an approved quality review",
+        code: "QUALITY_REVIEW_ALREADY_APPROVED",
+        reviewId: alreadyApproved.id,
+      });
+    }
+
+    const notes = input.notes && input.notes.length > 0 ? input.notes : null;
+    await prisma.qualityReview.create({
+      data: {
+        companyId,
+        calibrationJobId: id,
+        reviewerUserId: userId,
+        decision: "APPROVE",
+        status: "APPROVED",
+        notes,
+        reviewedAt: new Date(),
+      },
+    });
+
+    return this.findOne(companyId, id);
+  }
+
+  /**
+   * Technician close after MT approve: SUBMITTED + latest QualityReview APPROVED
+   * → ACCEPTED_BY_QA. Does not increment currentAttempt.
+   */
+  async complete(companyId: string, id: string): Promise<CalibrationJobDetail> {
+    const job = await this.findOne(companyId, id);
+    if (job.status === "ACCEPTED_BY_QA") {
+      throw new ConflictException({
+        message: "Calibration job has already been completed",
+        code: "CALIBRATION_JOB_ALREADY_COMPLETED",
+        status: job.status,
+      });
+    }
+    if (job.status !== "SUBMITTED") {
+      throw new BadRequestException({
+        message: "Calibration job must be submitted and approved before complete",
+        code: "CALIBRATION_JOB_NOT_SUBMITTED",
+        status: job.status,
+      });
+    }
+
+    const latestReview = await prisma.qualityReview.findFirst({
+      where: { companyId, calibrationJobId: id },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, status: true, decision: true },
+    });
+    if (latestReview?.status !== "APPROVED" || latestReview.decision !== "APPROVE") {
+      throw new BadRequestException({
+        message: "Technician complete requires an approved quality review",
+        code: "QUALITY_REVIEW_NOT_APPROVED",
+      });
+    }
+
+    const updated = await prisma.calibrationJob.updateMany({
+      where: { id, companyId, status: "SUBMITTED" },
+      data: { status: "ACCEPTED_BY_QA" },
+    });
+    if (updated.count !== 1) {
+      throw new ConflictException({
+        message: "Calibration job has already been completed",
+        code: "CALIBRATION_JOB_ALREADY_COMPLETED",
+      });
+    }
 
     return this.findOne(companyId, id);
   }

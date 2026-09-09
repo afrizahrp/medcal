@@ -176,10 +176,13 @@ const PRESERVED_BASELINE: GrantRow[] = [
     action: "overrideReferenceEquipmentValidity",
   },
   // MeasurementResult (Stage 2b, 2026-09-08): recordMeasurement gates create/
-  // update/delete of measurement readings for the job's current attempt —
-  // TECHNICIAN + TECHNICIAN_MANAGER, mirroring recordReferenceEquipmentUsed.
+  // update/delete of measurement readings for the job's current attempt.
+  // Happy-path review (2026-09-09): TECHNICIAN only — MT reviews via
+  // decideQualityReview and must not write measurement values.
   { role: "TECHNICIAN", resource: "calibrationJob", action: "recordMeasurement" },
-  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "recordMeasurement" },
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "submitForReview" },
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "complete" },
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "decideQualityReview" },
   // FINANCE
   { role: "FINANCE", resource: "managementDashboard", action: "read" },
   // CUSTOMER
@@ -226,6 +229,20 @@ async function seedRolePermissions() {
   }
 
   console.log(`[seed] ${ROWS.length} RolePermission rows upserted.`);
+
+  // Revoke: MT must not write MeasurementResult (quality-review happy path, 2026-09-09).
+  // seed upserts only — without this delete, already-seeded DBs keep the old grant.
+  const revoked = await prisma.rolePermission.deleteMany({
+    where: {
+      role: "TECHNICIAN_MANAGER",
+      resource: "calibrationJob",
+      action: "recordMeasurement",
+    },
+  });
+  if (revoked.count > 0) {
+    console.log(`[seed] removed ${revoked.count} TECHNICIAN_MANAGER recordMeasurement grant(s).`);
+  }
+
   await prisma.$disconnect();
 }
 

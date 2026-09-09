@@ -322,7 +322,7 @@ describe("MeasurementResultsService — CRUD", () => {
     );
     expect(row.isWithinTolerance).toBe(true);
 
-    const editor = await makeMember("TECHNICIAN_MANAGER");
+    const editor = await makeMember("TECHNICIAN");
     const before = Date.now();
     const updated = await svc.update(companyId, row.id, { measuredValue: 150 }, editor.id);
     expect(updated.measuredValue?.toNumber()).toBe(150);
@@ -437,7 +437,7 @@ describe("CalibrationJobsController — measurement-results routes", () => {
   it("PATCH updates the value, re-stamps the editor, and recomputes the verdict", async () => {
     const ctx = await startedJob();
     const param = await makeParameter(ctx, { toleranceMin: 0, toleranceMax: 100 });
-    const editor = await makeMember("TECHNICIAN_MANAGER");
+    const editor = await makeMember("TECHNICIAN");
     const row = await controller.createMeasurementResult(companyId, ctx.technician.id, ctx.jobId, {
       deviceCalibrationParameterId: param.id,
       replicateIndex: 1,
@@ -543,5 +543,13 @@ describe("CalibrationJobsController — measurement RBAC (guard chain)", () => {
     const tech = await makeMember("TECHNICIAN");
     getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "mr-tl@x.co" } });
     await expect(guard.canActivate(contextFor("listMeasurementResults"))).resolves.toBe(true);
+  });
+
+  it("blocks a TECHNICIAN_MANAGER from creating a measurement (403)", async () => {
+    const manager = await makeMember("TECHNICIAN_MANAGER");
+    getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "mr-m@x.co" } });
+    await expect(guard.canActivate(contextFor("createMeasurementResult"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 });

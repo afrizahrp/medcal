@@ -202,6 +202,17 @@ export class MeController {
         "calibrationJob",
         "recordMeasurement",
       ),
+      calibrationJobSubmitForReview: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "submitForReview",
+      ),
+      calibrationJobDecideQualityReview: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "decideQualityReview",
+      ),
+      calibrationJobComplete: hasPermission(membership.role, "calibrationJob", "complete"),
       taxManage: hasPermission(membership.role, "tax", "manage"),
       priceListItemRead: hasPermission(membership.role, "priceListItem", "read"),
       priceListItemCreate: hasPermission(membership.role, "priceListItem", "create"),

@@ -837,6 +837,20 @@ export const identityCorrectionDecisionSchema = z
 export type IdentityCorrectionDecisionInput = z.infer<typeof identityCorrectionDecisionSchema>;
 
 // -----------------------------------------------------------------------------
+// Calibration Job — quality review happy path (submit → MT APPROVE → complete)
+// -----------------------------------------------------------------------------
+// REJECT / REWORK is intentionally not accepted here. Expanding `decision` to
+// include REJECT is a later phase.
+
+/** POST /calibration-jobs/:id/quality-decision body (TECHNICIAN_MANAGER only) */
+export const qualityReviewDecisionSchema = z.object({
+  decision: z.literal("APPROVE"),
+  notes: z.string().trim().max(2000).optional(),
+});
+
+export type QualityReviewDecisionInput = z.infer<typeof qualityReviewDecisionSchema>;
+
+// -----------------------------------------------------------------------------
 // Calibration Job — MeasurementResult (Stage 2c)
 // -----------------------------------------------------------------------------
 // Technician measurement entry over HTTP. The service (Stage 2b) runs the

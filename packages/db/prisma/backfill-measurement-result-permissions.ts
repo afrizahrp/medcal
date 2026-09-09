@@ -1,7 +1,11 @@
 /**
  * One-time RolePermission migration for the MeasurementResult service/API layer
  * (Stage 2b, 2026-09-08). Purely additive — adds:
- *   - calibrationJob:recordMeasurement  (TECHNICIAN, TECHNICIAN_MANAGER)
+ *   - calibrationJob:recordMeasurement  (TECHNICIAN)
+ *
+ * TECHNICIAN_MANAGER previously received this grant; that was revoked on
+ * 2026-09-09 (quality-review happy path — MT is reviewer, not editor). Re-running
+ * this script must not restore the MT write grant.
  *
  * seed-role-permissions.ts only upserts — it never runs again against an
  * already-seeded database (e.g. pkmdb) — so this script grants the new rows
@@ -15,7 +19,6 @@ const prisma = new PrismaClient();
 
 const NEW_GRANTS: Array<{ role: MembershipRole; resource: string; action: string }> = [
   { role: "TECHNICIAN", resource: "calibrationJob", action: "recordMeasurement" },
-  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "recordMeasurement" },
 ];
 
 async function main(): Promise<void> {

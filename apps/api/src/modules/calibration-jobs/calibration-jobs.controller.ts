@@ -25,6 +25,7 @@ import {
   measurementResultBatchCreateSchema,
   measurementResultCreateSchema,
   measurementResultUpdateSchema,
+  qualityReviewDecisionSchema,
 } from "@medcal/shared";
 import type { DeviceWithRelations } from "../devices/devices.service";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
@@ -118,6 +119,43 @@ export class CalibrationJobsController {
     @Param("id") id: string,
   ): Promise<CalibrationJobDetail> {
     return this.service.start(companyId, id);
+  }
+
+  @Post(":id/submit")
+  @RequirePermission("calibrationJob", "submitForReview")
+  async submitForReview(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<CalibrationJobDetail> {
+    return this.service.submitForReview(companyId, id);
+  }
+
+  @Post(":id/quality-decision")
+  @RequirePermission("calibrationJob", "decideQualityReview")
+  async decideQualityReview(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<CalibrationJobDetail> {
+    const parsed = qualityReviewDecisionSchema.safeParse(rawBody ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid quality review decision payload",
+        code: "INVALID_QUALITY_REVIEW_DECISION",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.decideQualityReview(companyId, id, userId, parsed.data);
+  }
+
+  @Post(":id/complete")
+  @RequirePermission("calibrationJob", "complete")
+  async complete(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<CalibrationJobDetail> {
+    return this.service.complete(companyId, id);
   }
 
   @Post(":id/escalate-identity")

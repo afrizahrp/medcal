@@ -134,10 +134,15 @@ const ac = createAccessControl({
     "decideIdentityCorrection",
     "recordReferenceEquipmentUsed",
     "overrideReferenceEquipmentValidity",
-    // recordMeasurement: on-site actor enters/edits/deletes MeasurementResult
-    // rows for the job's current attempt. Granted like recordReferenceEquipmentUsed
-    // (TECHNICIAN + TECHNICIAN_MANAGER). Controller wiring lands in Stage 2c.
+    // recordMeasurement: technician enters/edits/deletes MeasurementResult rows
+    // for the job's current attempt. TECHNICIAN only — TECHNICIAN_MANAGER is the
+    // reviewer and must not write measurement values (happy-path lifecycle).
     "recordMeasurement",
+    // submitForReview: technician IN_PROGRESS → SUBMITTED + submittedAt.
+    // decideQualityReview: TECHNICIAN_MANAGER APPROVE (REJECT/REWORK deferred).
+    // complete: technician SUBMITTED + QualityReview APPROVED → ACCEPTED_BY_QA.
+    "submitForReview",
+    "decideQualityReview",
   ],
   certificate: ["read", "create", "update", "issue"],
   invoice: ["read", "create", "update", "void"],
