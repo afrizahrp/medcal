@@ -158,6 +158,9 @@ const IDENTITY_LOCKED_JOB_STATUSES = new Set<string>(["SUBMITTED", "ACCEPTED_BY_
 // bench, which reference equipment was used is also final.
 const REFERENCE_EQUIPMENT_LOCKED_JOB_STATUSES = new Set<string>(["SUBMITTED", "ACCEPTED_BY_QA"]);
 
+/** Pattern D generic-slot — needs suppliedNominalValue, not a Stage B setpoint grid. */
+const GRID_EXCLUDED_PARAMETER_CODES: readonly string[] = ["SUCT_VACUUM_GAUGE"];
+
 function assertAkdAklTransition(from: AkdAklApprovalStatus, to: AkdAklApprovalStatus): void {
   if (!AKD_AKL_TRANSITIONS[from].includes(to)) {
     throw new BadRequestException({
@@ -219,10 +222,64 @@ export interface MeasurementParameterSummary {
   capabilityItemName: string;
 }
 
+/** One active CalibrationTestPoint nested under a Pattern B grid parameter. */
+export interface MeasurementTestPointSummary {
+  id: string;
+  sequence: number;
+  settingLabel: string;
+  settingValue: string | null;
+  toleranceMin: string | null;
+  toleranceMax: string | null;
+  toleranceNote: string | null;
+}
+
+/**
+ * Pattern B (test-point grid) catalog row. Same scalars as Pattern A plus the
+ * ordered active test points the tech-pwa grid renders as rows.
+ */
+export interface MeasurementGridParameterSummary extends MeasurementParameterSummary {
+  testPoints: MeasurementTestPointSummary[];
+}
+
 export interface JobMeasurementParametersResult {
   /** Null when the job's DeviceType can't be resolved from the commercial chain. */
   deviceType: { id: string; name: string } | null;
   parameters: MeasurementParameterSummary[];
+  /** Pattern B / D-fixed grids. Additive — Stage A clients that ignore this stay valid. */
+  gridParameters: MeasurementGridParameterSummary[];
+}
+
+const measurementParameterSelect = {
+  id: true,
+  code: true,
+  name: true,
+  decimalPlaces: true,
+  toleranceMin: true,
+  toleranceMax: true,
+  toleranceNote: true,
+  uom: { select: { code: true, symbol: true } },
+  capabilityItem: {
+    select: { name: true, capability: { select: { name: true } } },
+  },
+} as const;
+
+type MeasurementParameterRow = Prisma.DeviceCalibrationParameterGetPayload<{
+  select: typeof measurementParameterSelect;
+}>;
+
+function toParameterSummary(row: MeasurementParameterRow): MeasurementParameterSummary {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    decimalPlaces: row.decimalPlaces,
+    uom: row.uom,
+    toleranceMin: row.toleranceMin?.toString() ?? null,
+    toleranceMax: row.toleranceMax?.toString() ?? null,
+    toleranceNote: row.toleranceNote,
+    capabilityName: row.capabilityItem.capability.name,
+    capabilityItemName: row.capabilityItem.name,
+  };
 }
 
 export interface CalibrationJobListResult {
@@ -1054,13 +1111,13 @@ export class CalibrationJobsService {
 
   /** Precomputed picker candidates — sourced from the job's WorkOrder's already-confirmed equipment. */
   /**
-   * The directly-entered ("Pattern A") calibration parameters for a job — the
-   * catalog of what the tech-pwa measurement-entry skeleton (Stage A) collects:
-   * `DeviceCalibrationParameter` scoped to the job's resolved DeviceType, with
-   * `valueType = NUMBER`, `entryStyle = DIRECT_REPLICATES`, `isActive`, and NO
-   * `CalibrationTestPoint` children. Pattern B (test-point grids), Pattern D
-   * logger-summary (`entryStyle = LOGGER_SUMMARY`), and non-NUMBER rows are
-   * later stages. Ordered like the worksheet (`sortOrder`, then name).
+   * Calibration parameters for a job's resolved DeviceType.
+   *
+   * Pattern A (`parameters`): NUMBER, DIRECT_REPLICATES, active, no
+   * CalibrationTestPoint children. Pattern B (`gridParameters`): same filters
+   * except they HAVE active test-point children. LOGGER_SUMMARY is excluded
+   * from both via `entryStyle`. SUCT_VACUUM_GAUGE (generic-slot + on-site
+   * nominal) is excluded from the grid by code allowlist — Pattern D, not Stage B.
    */
   async listMeasurementParameters(
     companyId: string,
@@ -1069,10 +1126,10 @@ export class CalibrationJobsService {
     const job = await this.findOne(companyId, jobId);
     const deviceTypeId = this.resolveJobDeviceTypeId(job);
     if (deviceTypeId === null) {
-      return { deviceType: null, parameters: [] };
+      return { deviceType: null, parameters: [], gridParameters: [] };
     }
 
-    const [deviceType, rows] = await Promise.all([
+    const [deviceType, rows, gridRows] = await Promise.all([
       prisma.deviceType.findUnique({
         where: { id: deviceTypeId },
         select: { id: true, name: true },
@@ -1085,17 +1142,32 @@ export class CalibrationJobsService {
           entryStyle: "DIRECT_REPLICATES",
           testPoints: { none: {} },
         },
+        select: measurementParameterSelect,
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      }),
+      prisma.deviceCalibrationParameter.findMany({
+        where: {
+          deviceTypeId,
+          isActive: true,
+          valueType: "NUMBER",
+          entryStyle: "DIRECT_REPLICATES",
+          code: { notIn: [...GRID_EXCLUDED_PARAMETER_CODES] },
+          testPoints: { some: { isActive: true } },
+        },
         select: {
-          id: true,
-          code: true,
-          name: true,
-          decimalPlaces: true,
-          toleranceMin: true,
-          toleranceMax: true,
-          toleranceNote: true,
-          uom: { select: { code: true, symbol: true } },
-          capabilityItem: {
-            select: { name: true, capability: { select: { name: true } } },
+          ...measurementParameterSelect,
+          testPoints: {
+            where: { isActive: true },
+            orderBy: { sequence: "asc" },
+            select: {
+              id: true,
+              sequence: true,
+              settingLabel: true,
+              settingValue: true,
+              toleranceMin: true,
+              toleranceMax: true,
+              toleranceNote: true,
+            },
           },
         },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -1104,17 +1176,18 @@ export class CalibrationJobsService {
 
     return {
       deviceType: deviceType ?? { id: deviceTypeId, name: "" },
-      parameters: rows.map((row) => ({
-        id: row.id,
-        code: row.code,
-        name: row.name,
-        decimalPlaces: row.decimalPlaces,
-        uom: row.uom,
-        toleranceMin: row.toleranceMin?.toString() ?? null,
-        toleranceMax: row.toleranceMax?.toString() ?? null,
-        toleranceNote: row.toleranceNote,
-        capabilityName: row.capabilityItem.capability.name,
-        capabilityItemName: row.capabilityItem.name,
+      parameters: rows.map(toParameterSummary),
+      gridParameters: gridRows.map((row) => ({
+        ...toParameterSummary(row),
+        testPoints: row.testPoints.map((tp) => ({
+          id: tp.id,
+          sequence: tp.sequence,
+          settingLabel: tp.settingLabel,
+          settingValue: tp.settingValue?.toString() ?? null,
+          toleranceMin: tp.toleranceMin?.toString() ?? null,
+          toleranceMax: tp.toleranceMax?.toString() ?? null,
+          toleranceNote: tp.toleranceNote,
+        })),
       })),
     };
   }

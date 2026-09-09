@@ -95,17 +95,25 @@ export default function JobDetailPage() {
     string,
     NonNullable<typeof measurementResultsQuery.data>
   >();
+  const measurementGridRowsByParameter = new Map<
+    string,
+    NonNullable<typeof measurementResultsQuery.data>
+  >();
   for (const row of measurementResultsQuery.data ?? []) {
-    if (row.calibrationTestPointId !== null || row.attemptNumber !== job.currentAttempt) continue;
-    const list = measurementRowsByParameter.get(row.deviceCalibrationParameterId) ?? [];
+    if (row.attemptNumber !== job.currentAttempt) continue;
+    const map =
+      row.calibrationTestPointId === null ? measurementRowsByParameter : measurementGridRowsByParameter;
+    const list = map.get(row.deviceCalibrationParameterId) ?? [];
     list.push(row);
-    measurementRowsByParameter.set(row.deviceCalibrationParameterId, list);
+    map.set(row.deviceCalibrationParameterId, list);
   }
   // Section shows while the job is IN_PROGRESS (entry), or later read-only if any
   // reading was already recorded. Hidden for PENDING with nothing entered yet.
   const showRecordMeasurement =
     Boolean(capabilities?.calibrationJobRecordMeasurement) &&
-    (job.status === "IN_PROGRESS" || measurementRowsByParameter.size > 0);
+    (job.status === "IN_PROGRESS" ||
+      measurementRowsByParameter.size > 0 ||
+      measurementGridRowsByParameter.size > 0);
 
   return (
     <Screen
@@ -206,7 +214,9 @@ export default function JobDetailPage() {
           <MeasurementsSection
             jobId={id}
             parameters={measurementParams?.parameters ?? []}
+            gridParameters={measurementParams?.gridParameters ?? []}
             rowsByParameter={measurementRowsByParameter}
+            gridRowsByParameter={measurementGridRowsByParameter}
             deviceTypeResolved={(measurementParams?.deviceType ?? null) !== null}
             canRecord={showRecordMeasurement}
             entryOpen={canRecordMeasurement(job)}

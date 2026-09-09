@@ -29,6 +29,7 @@ import {
   useUpdateMeasurement,
 } from "../use-measurements-query";
 import { PassFailChip } from "../measurements-ui";
+import { MeasurementGridEntry } from "../measurement-grid";
 
 function GuardScreen({ children }: { children: React.ReactNode }) {
   return (
@@ -68,13 +69,25 @@ export default function MeasurementParameterEntryPage() {
     return rows.sort((a, b) => a.replicateIndex - b.replicateIndex);
   }, [resultsQuery.data, parameterId, attempt]);
 
+  const gridExistingRows = useMemo(() => {
+    const rows = (resultsQuery.data ?? []).filter(
+      (r) =>
+        r.deviceCalibrationParameterId === parameterId &&
+        r.calibrationTestPointId !== null &&
+        r.attemptNumber === attempt,
+    );
+    return rows.sort((a, b) => a.replicateIndex - b.replicateIndex);
+  }, [resultsQuery.data, parameterId, attempt]);
+
+  const paramA = parametersQuery.data?.parameters.find((p) => p.id === parameterId) ?? null;
+  const paramB = parametersQuery.data?.gridParameters?.find((p) => p.id === parameterId) ?? null;
+  const param = paramA ?? paramB;
+
   const rowByIndex = useMemo(() => {
     const map = new Map<number, TechMeasurementResult>();
     for (const r of existingRows) map.set(r.replicateIndex, r);
     return map;
   }, [existingRows]);
-
-  const param = parametersQuery.data?.parameters.find((p) => p.id === parameterId) ?? null;
 
   if (jobQuery.isPending || parametersQuery.isPending || resultsQuery.isPending) {
     return (
@@ -134,6 +147,23 @@ export default function MeasurementParameterEntryPage() {
 
   const editable = canRecordMeasurement(job);
   const lockedReason = measurementLockedReason(job);
+
+  if (paramB && (paramB.testPoints?.length ?? 0) > 0) {
+    return (
+      <MeasurementGridEntry
+        job={job}
+        parameterId={parameterId}
+        param={paramB}
+        existingRows={gridExistingRows}
+        editable={editable}
+        lockedReason={lockedReason}
+        onBatchCreate={(items) => batchMutation.mutateAsync(items)}
+        onUpdate={(args) => updateMutation.mutateAsync(args)}
+        onRefetch={() => resultsQuery.refetch()}
+      />
+    );
+  }
+
   const dp = param.decimalPlaces ?? 0;
 
   const maxExistingIndex = existingRows.reduce((m, r) => Math.max(m, r.replicateIndex), 0);

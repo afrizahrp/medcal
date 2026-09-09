@@ -1,21 +1,29 @@
 import type { CalibrationJobStatus } from "./types";
 
 /**
- * Measurement entry — Stage A skeleton, Pattern A only.
+ * Measurement entry — Pattern A (direct replicates) + Pattern B (test-point grid).
  *
- * "Pattern A" = a DeviceCalibrationParameter that is directly measured a handful
- * of times: `valueType = NUMBER`, `entryStyle = DIRECT_REPLICATES`, active, and
- * NO CalibrationTestPoint children. The API resolves the set from the job's
- * DeviceType (`GET /calibration-jobs/:id/measurement-parameters`); test-point
- * grids (Pattern B), logger-summary rows (`entryStyle = LOGGER_SUMMARY`), and
- * boolean / ratio rows (Pattern D) are later stages and are excluded
- * server-side by that three-part filter.
+ * Pattern A = NUMBER, DIRECT_REPLICATES, active, no CalibrationTestPoint children.
+ * Pattern B = the same filters except they HAVE active test-point children
+ * (`gridParameters` on GET .../measurement-parameters). LOGGER_SUMMARY and
+ * SUCT_VACUUM_GAUGE are excluded server-side. REWORK / attempt increment is a
+ * future plan — the UI still filters `attemptNumber === currentAttempt`.
  *
  * Local mirrors of the apps/api shapes — dates as ISO strings, Prisma Decimal as
  * numeric string (same wire representation the rest of this API uses).
  */
 
 // ── API response mirrors ─────────────────────────────────────────────────────
+
+export interface TechMeasurementTestPoint {
+  id: string;
+  sequence: number;
+  settingLabel: string;
+  settingValue: string | null;
+  toleranceMin: string | null;
+  toleranceMax: string | null;
+  toleranceNote: string | null;
+}
 
 export interface TechMeasurementParameter {
   id: string;
@@ -33,11 +41,14 @@ export interface TechMeasurementParameter {
   toleranceNote: string | null;
   capabilityName: string;
   capabilityItemName: string;
+  /** Present and non-empty on Pattern B (`gridParameters`). Absent or [] on A. */
+  testPoints?: TechMeasurementTestPoint[];
 }
 
 export interface TechMeasurementParametersResponse {
   deviceType: { id: string; name: string } | null;
   parameters: TechMeasurementParameter[];
+  gridParameters: TechMeasurementParameter[];
 }
 
 export type MeasurementDirection = "NONE" | "UP" | "DOWN";
@@ -70,10 +81,12 @@ export interface TechMeasurementResult {
   updatedAt: string;
 }
 
-/** One item of the `POST .../measurement-results/batch` body (Pattern A subset). */
+/** One item of the `POST .../measurement-results/batch` body. */
 export interface MeasurementBatchItem {
   deviceCalibrationParameterId: string;
+  calibrationTestPointId?: string | null;
   replicateIndex: number;
+  direction?: MeasurementDirection;
   measuredValue: string;
 }
 
@@ -93,6 +106,19 @@ export interface MeasurementUpdateInput {
  * Known soft spot — see the Stage A report.
  */
 export const DEFAULT_REPLICATE_COUNT = 5;
+
+const THREE_REPLICATE_PREFIXES = ["VENT_", "AUD_"] as const;
+const DIRECTION_PARAMETER_CODES = new Set(["SPHYG_PRESSURE_ACC"]);
+
+/** Soft default column count for a Pattern B grid (no catalog field exists). */
+export function expectedReplicateCount(code: string): number {
+  return THREE_REPLICATE_PREFIXES.some((prefix) => code.startsWith(prefix)) ? 3 : DEFAULT_REPLICATE_COUNT;
+}
+
+/** True when each setpoint is recorded naik + turun (two natural-key rows). */
+export function usesDirection(code: string): boolean {
+  return DIRECTION_PARAMETER_CODES.has(code);
+}
 
 // ── Lock state (mirrors MEASUREMENT_LOCKED_JOB_STATUSES in the API) ───────────
 
@@ -236,6 +262,29 @@ export function parameterEntryStatus(
     filled: withValue.length,
     total,
     complete: withValue.length >= total && withValue.length > 0,
+    anyFail: withValue.some((r) => r.isWithinTolerance === false),
+  };
+}
+
+/**
+ * Fold a Pattern B grid (already filtered to the current attempt) into a
+ * "n/total cells" summary. `total` = points × max(expected, max replicateIndex)
+ * × directions (1 or 2).
+ */
+export function gridEntryStatus(
+  rows: Pick<TechMeasurementResult, "replicateIndex" | "measuredValue" | "isWithinTolerance">[],
+  testPointCount: number,
+  expectedReplicates: number,
+  directionCount = 1,
+): ParameterEntryStatus {
+  const withValue = rows.filter((r) => r.measuredValue !== null && r.measuredValue !== "");
+  const maxIndex = rows.reduce((m, r) => Math.max(m, r.replicateIndex), 0);
+  const replicateCount = Math.max(expectedReplicates, maxIndex);
+  const total = Math.max(0, testPointCount) * replicateCount * Math.max(1, directionCount);
+  return {
+    filled: withValue.length,
+    total,
+    complete: total > 0 && withValue.length >= total,
     anyFail: withValue.some((r) => r.isWithinTolerance === false),
   };
 }

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   canRecordMeasurement,
+  expectedReplicateCount,
   formatMeasuredValue,
+  gridEntryStatus,
   isMeasurementLocked,
   isValidMeasuredValue,
   measuredValueInputStep,
@@ -9,6 +11,7 @@ import {
   parameterEntryStatus,
   passFailChip,
   toleranceText,
+  usesDirection,
 } from "./measurement";
 
 describe("formatMeasuredValue", () => {
@@ -126,5 +129,62 @@ describe("parameterEntryStatus", () => {
   });
   it("is not complete with zero readings", () => {
     expect(parameterEntryStatus([])).toMatchObject({ filled: 0, complete: false });
+  });
+});
+
+describe("expectedReplicateCount / usesDirection", () => {
+  it("uses 3 columns for Ventilator and Audiometer prefixes, otherwise 5", () => {
+    expect(expectedReplicateCount("VENT_PEEP")).toBe(3);
+    expect(expectedReplicateCount("VENT_TIDAL_VOLUME")).toBe(3);
+    expect(expectedReplicateCount("AUD_PURE_TONE_LINEARITY_KANAN")).toBe(3);
+    expect(expectedReplicateCount("BSM_HEART_RATE")).toBe(5);
+    expect(expectedReplicateCount("SPHYG_PRESSURE_ACC")).toBe(5);
+  });
+  it("flags only SPHYG_PRESSURE_ACC as a naik/turun parameter", () => {
+    expect(usesDirection("SPHYG_PRESSURE_ACC")).toBe(true);
+    expect(usesDirection("BSM_HEART_RATE")).toBe(false);
+    expect(usesDirection("SUCT_VACUUM_GAUGE")).toBe(false);
+  });
+});
+
+describe("gridEntryStatus", () => {
+  const cell = (replicateIndex: number, measuredValue: string | null, isWithinTolerance: boolean | null) => ({
+    replicateIndex,
+    measuredValue,
+    isWithinTolerance,
+  });
+
+  it("counts filled cells against points × expected replicates", () => {
+    const s = gridEntryStatus([cell(1, "30", true), cell(2, "31", true)], 4, 5, 1);
+    expect(s).toMatchObject({ filled: 2, total: 20, complete: false, anyFail: false });
+  });
+  it("is complete once every cell has a value", () => {
+    const rows = [1, 2, 3, 4, 5].flatMap((i) => [
+      cell(i, "30", true),
+      cell(i, "60", true),
+      cell(i, "120", true),
+      cell(i, "180", true),
+    ]);
+    expect(gridEntryStatus(rows, 4, 5, 1)).toMatchObject({ filled: 20, total: 20, complete: true });
+  });
+  it("marks anyFail when a saved cell is out of tolerance", () => {
+    const rows = [cell(1, "30", true), cell(1, "62", false)];
+    expect(gridEntryStatus(rows, 4, 5, 1).anyFail).toBe(true);
+  });
+  it("uses 1 row × 3 replicates for a single-point parameter like VENT_PEEP", () => {
+    const s = gridEntryStatus([cell(1, "20", true), cell(2, "20.1", true)], 1, 3, 1);
+    expect(s).toMatchObject({ filled: 2, total: 3, complete: false });
+    expect(gridEntryStatus([cell(1, "20", true), cell(2, "20", true), cell(3, "20", true)], 1, 3, 1)).toMatchObject({
+      filled: 3,
+      total: 3,
+      complete: true,
+    });
+  });
+  it("doubles total when directionCount is 2 (Sphyg naik/turun)", () => {
+    expect(gridEntryStatus([], 6, 5, 2)).toMatchObject({ filled: 0, total: 60, complete: false });
+  });
+  it("grows total when more replicates exist than the expected count", () => {
+    const rows = [1, 2, 3, 4].map((i) => cell(i, String(i), true));
+    expect(gridEntryStatus(rows, 1, 3, 1)).toMatchObject({ filled: 4, total: 4, complete: true });
   });
 });

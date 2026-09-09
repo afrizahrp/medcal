@@ -7,7 +7,10 @@ import type { TechCalibrationJob, TechIdentityCorrection } from "../../../lib/ca
 import { IDENTITY_CORRECTION_STATUS_LABELS } from "../../../lib/calibration/types";
 import type { TechReferenceEquipmentUsed } from "../../../lib/calibration/reference-equipment";
 import {
+  expectedReplicateCount,
+  gridEntryStatus,
   parameterEntryStatus,
+  usesDirection,
   type TechMeasurementParameter,
   type TechMeasurementResult,
 } from "../../../lib/calibration/measurement";
@@ -128,16 +131,17 @@ export function ReferenceEquipmentSection({
 }
 
 /**
- * Measurement entry (Stage A — Pattern A only). Mirrors ReferenceEquipmentSection:
- * a compact per-parameter list with entry status, plus the "Catat Hasil
- * Pengukuran" link when the job is IN_PROGRESS and the actor may record.
- * Non-NUMBER params, logger-summary catalog rows, and test-point grids are
- * resolved out server-side (`entryStyle` + `testPoints: none`).
+ * Measurement entry (Pattern A direct + Pattern B grid). Compact per-parameter
+ * lists with entry status, plus "Catat Hasil Pengukuran" when the job is
+ * IN_PROGRESS and the actor may record. LOGGER_SUMMARY is resolved out
+ * server-side (`entryStyle`).
  */
 export function MeasurementsSection({
   jobId,
   parameters,
+  gridParameters,
   rowsByParameter,
+  gridRowsByParameter,
   deviceTypeResolved,
   canRecord,
   entryOpen,
@@ -145,55 +149,67 @@ export function MeasurementsSection({
 }: {
   jobId: string;
   parameters: TechMeasurementParameter[];
+  gridParameters: TechMeasurementParameter[];
   rowsByParameter: Map<string, TechMeasurementResult[]>;
+  gridRowsByParameter: Map<string, TechMeasurementResult[]>;
   deviceTypeResolved: boolean;
   canRecord: boolean;
   entryOpen: boolean;
   lockedReason: string | null;
 }) {
+  const hasAny = parameters.length > 0 || gridParameters.length > 0;
   return (
     <Section title="Hasil Pengukuran">
       {!deviceTypeResolved ? (
         <p className="text-sm text-slate-500">
           Jenis alat job belum dapat ditentukan — parameter pengukuran belum tersedia.
         </p>
-      ) : parameters.length === 0 ? (
+      ) : !hasAny ? (
         <p className="text-sm text-slate-500">
-          Tidak ada parameter pengukuran langsung untuk jenis alat ini.
+          Tidak ada parameter pengukuran yang didukung untuk jenis alat ini.
         </p>
       ) : (
-        <ul className="flex flex-col gap-1.5">
-          {parameters.map((param) => {
-            const status = parameterEntryStatus(rowsByParameter.get(param.id) ?? []);
-            return (
-              <li
-                key={param.id}
-                className="flex items-center justify-between gap-2 py-1 text-sm"
-              >
-                <span className="min-w-0 truncate text-slate-700">{param.name}</span>
-                <span
-                  className={[
-                    "shrink-0 rounded-md px-2 py-0.5 text-[11px] font-semibold",
-                    status.complete
-                      ? status.anyFail
-                        ? "bg-red-100 text-red-800"
-                        : "bg-emerald-100 text-emerald-800"
-                      : "bg-slate-100 text-slate-600",
-                  ].join(" ")}
-                >
-                  {status.complete
-                    ? status.anyFail
-                      ? "Ada tidak sesuai"
-                      : "Selesai"
-                    : `${status.filled}/${status.total}`}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="flex flex-col gap-3">
+          {parameters.length > 0 ? (
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Pembacaan langsung
+              </p>
+              <ul className="flex flex-col gap-1.5">
+                {parameters.map((param) => {
+                  const status = parameterEntryStatus(rowsByParameter.get(param.id) ?? []);
+                  return (
+                    <MeasurementStatusRow key={param.id} name={param.name} status={status} />
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
+          {gridParameters.length > 0 ? (
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Grid titik uji
+              </p>
+              <ul className="flex flex-col gap-1.5">
+                {gridParameters.map((param) => {
+                  const pointCount = param.testPoints?.length ?? 0;
+                  const status = gridEntryStatus(
+                    gridRowsByParameter.get(param.id) ?? [],
+                    pointCount,
+                    expectedReplicateCount(param.code),
+                    usesDirection(param.code) ? 2 : 1,
+                  );
+                  return (
+                    <MeasurementStatusRow key={param.id} name={param.name} status={status} />
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
+        </div>
       )}
       {canRecord ? (
-        entryOpen && deviceTypeResolved && parameters.length > 0 ? (
+        entryOpen && deviceTypeResolved && hasAny ? (
           <Link
             href={`/jobs/${jobId}/measurements`}
             className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 active:text-brand-800"
@@ -205,6 +221,36 @@ export function MeasurementsSection({
         ) : null
       ) : null}
     </Section>
+  );
+}
+
+function MeasurementStatusRow({
+  name,
+  status,
+}: {
+  name: string;
+  status: { complete: boolean; anyFail: boolean; filled: number; total: number };
+}) {
+  return (
+    <li className="flex items-center justify-between gap-2 py-1 text-sm">
+      <span className="min-w-0 truncate text-slate-700">{name}</span>
+      <span
+        className={[
+          "shrink-0 rounded-md px-2 py-0.5 text-[11px] font-semibold",
+          status.complete
+            ? status.anyFail
+              ? "bg-red-100 text-red-800"
+              : "bg-emerald-100 text-emerald-800"
+            : "bg-slate-100 text-slate-600",
+        ].join(" ")}
+      >
+        {status.complete
+          ? status.anyFail
+            ? "Ada tidak sesuai"
+            : "Selesai"
+          : `${status.filled}/${status.total}`}
+      </span>
+    </li>
   );
 }
 

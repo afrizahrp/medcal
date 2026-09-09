@@ -1,8 +1,12 @@
 import Link from "next/link";
 import {
+  expectedReplicateCount,
+  gridEntryStatus,
   parameterEntryStatus,
   passFailChip,
   toleranceText,
+  usesDirection,
+  type ParameterEntryStatus,
   type TechMeasurementParameter,
   type TechMeasurementResult,
 } from "../../../../lib/calibration/measurement";
@@ -14,17 +18,47 @@ export function PassFailChip({ isWithinTolerance }: { isWithinTolerance: boolean
   return <span className={[chipBase, chip.className].join(" ")}>{chip.label}</span>;
 }
 
+function StatusChip({ status }: { status: ParameterEntryStatus }) {
+  if (status.complete) {
+    return (
+      <span
+        className={[
+          chipBase,
+          status.anyFail ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800",
+        ].join(" ")}
+      >
+        {status.anyFail ? "Ada yang tidak sesuai" : "Selesai"}
+      </span>
+    );
+  }
+  return (
+    <span className={[chipBase, "bg-slate-100 text-slate-600"].join(" ")}>
+      {status.filled}/{status.total} diisi
+    </span>
+  );
+}
+
 /** One row in the parameter list on the measurement-entry screen. */
 export function MeasurementParameterListRow({
   jobId,
   param,
   rows,
+  pointCount,
 }: {
   jobId: string;
   param: TechMeasurementParameter;
   rows: TechMeasurementResult[];
+  pointCount?: number;
 }) {
-  const status = parameterEntryStatus(rows);
+  const status =
+    pointCount !== undefined
+      ? gridEntryStatus(
+          rows,
+          pointCount,
+          expectedReplicateCount(param.code),
+          usesDirection(param.code) ? 2 : 1,
+        )
+      : parameterEntryStatus(rows);
   return (
     <Link
       href={`/jobs/${jobId}/measurements/${param.id}`}
@@ -38,23 +72,11 @@ export function MeasurementParameterListRow({
         <span className="mt-1 block text-xs text-slate-600">
           Toleransi: {toleranceText(param)}
           {param.uom?.symbol ? ` · Satuan: ${param.uom.symbol}` : ""}
+          {pointCount !== undefined ? ` · ${pointCount} titik` : ""}
         </span>
       </span>
       <span className="flex shrink-0 flex-col items-end gap-1">
-        {status.complete ? (
-          <span
-            className={[
-              chipBase,
-              status.anyFail ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800",
-            ].join(" ")}
-          >
-            {status.anyFail ? "Ada yang tidak sesuai" : "Selesai"}
-          </span>
-        ) : (
-          <span className={[chipBase, "bg-slate-100 text-slate-600"].join(" ")}>
-            {status.filled}/{status.total} diisi
-          </span>
-        )}
+        <StatusChip status={status} />
       </span>
     </Link>
   );

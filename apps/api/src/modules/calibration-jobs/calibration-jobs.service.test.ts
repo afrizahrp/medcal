@@ -2026,6 +2026,10 @@ describe("CalibrationJobsService — Measurement Parameters (Stage A, Pattern A)
       capabilityItemName: "MP Item",
       capabilityName: "MP Capability",
     });
+    expect(result.gridParameters.map((p) => p.code)).toEqual(["MP_B"]);
+    expect(result.gridParameters[0]?.testPoints).toEqual([
+      expect.objectContaining({ sequence: 1, settingLabel: "10", settingValue: "10" }),
+    ]);
   });
 
   it("excludes NUMBER + active + zero-test-point rows whose entryStyle is LOGGER_SUMMARY", async () => {
@@ -2054,5 +2058,86 @@ describe("CalibrationJobsService — Measurement Parameters (Stage A, Pattern A)
 
     expect(result.parameters.map((p) => p.code)).toEqual([patternA.code]);
     expect(result.parameters.some((p) => p.code === "BBR_STORAGE_TEMP_STYLE")).toBe(false);
+    expect(result.gridParameters.some((p) => p.code === "BBR_STORAGE_TEMP_STYLE")).toBe(false);
+  });
+
+  it("puts Pattern B rows in gridParameters and keeps LOGGER_SUMMARY out even when they have test points", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const base = { deviceTypeId, capabilityItemId };
+
+    const patternB = await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "MP_GRID", name: "Heart Rate", valueType: "NUMBER", sortOrder: 10 },
+    });
+    const tpA = await prisma.calibrationTestPoint.create({
+      data: {
+        deviceCalibrationParameterId: patternB.id,
+        sequence: 1,
+        settingLabel: "30 BPM",
+        settingValue: 30,
+      },
+    });
+    await prisma.calibrationTestPoint.create({
+      data: {
+        deviceCalibrationParameterId: patternB.id,
+        sequence: 2,
+        settingLabel: "60 BPM",
+        settingValue: 60,
+        isActive: false,
+      },
+    });
+
+    const loggerWithPoint = await prisma.deviceCalibrationParameter.create({
+      data: {
+        ...base,
+        code: "LOGGER_WITH_POINT",
+        name: "Logger leak",
+        valueType: "NUMBER",
+        entryStyle: "LOGGER_SUMMARY",
+        sortOrder: 20,
+      },
+    });
+    await prisma.calibrationTestPoint.create({
+      data: {
+        deviceCalibrationParameterId: loggerWithPoint.id,
+        sequence: 1,
+        settingLabel: "T1",
+        settingValue: 4,
+      },
+    });
+
+    const suction = await prisma.deviceCalibrationParameter.create({
+      data: {
+        ...base,
+        code: "SUCT_VACUUM_GAUGE",
+        name: "Vacuum gauge",
+        valueType: "NUMBER",
+        sortOrder: 30,
+      },
+    });
+    await prisma.calibrationTestPoint.create({
+      data: {
+        deviceCalibrationParameterId: suction.id,
+        sequence: 1,
+        settingLabel: "Titik ukur 1",
+        settingValue: null,
+      },
+    });
+
+    const result = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+
+    expect(result.parameters.map((p) => p.code)).toEqual([]);
+    expect(result.gridParameters.map((p) => p.code)).toEqual(["MP_GRID"]);
+    expect(result.gridParameters[0]?.testPoints).toEqual([
+      expect.objectContaining({
+        id: tpA.id,
+        sequence: 1,
+        settingLabel: "30 BPM",
+        settingValue: "30",
+      }),
+    ]);
+    expect(result.gridParameters.some((p) => p.code === "LOGGER_WITH_POINT")).toBe(false);
+    expect(result.gridParameters.some((p) => p.code === "SUCT_VACUUM_GAUGE")).toBe(false);
   });
 });
