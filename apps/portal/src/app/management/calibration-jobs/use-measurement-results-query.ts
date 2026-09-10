@@ -14,13 +14,26 @@ export interface PortalMeasurementParameter {
   code: string;
   name: string;
   uom: { code: string; symbol: string } | null;
+  /** Capability / capability-item this parameter belongs to — used to group the
+   * MT review table the same way the Calibration Parameter catalog is grouped. */
+  capabilityName: string;
+  capabilityItemName: string;
   testPoints?: { id: string; sequence: number; settingLabel: string }[];
+}
+
+/** LK-oriented tree from GET .../measurement-parameters — capabilities already
+ * ordered by DeviceTypeCapabilityOrder.sortOrder, parameters by sortOrder. */
+export interface PortalMeasurementCapabilityGroup {
+  capability: { id: string; code: string; name: string };
+  sortOrder: number | null;
+  parameters: (PortalMeasurementParameter & { kind: "DIRECT" | "GRID" })[];
 }
 
 export interface PortalMeasurementParametersResponse {
   deviceType: { id: string; name: string } | null;
   parameters: PortalMeasurementParameter[];
   gridParameters: PortalMeasurementParameter[];
+  capabilityGroups: PortalMeasurementCapabilityGroup[];
 }
 
 export interface PortalMeasurementResult {

@@ -40,9 +40,14 @@ const AccordionContent = React.forwardRef<
   React.ElementRef<typeof AccordionPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Content>
 >(({ className, children, ...props }, ref) => (
+  // `data-[state=closed]:hidden` is what actually keeps a closed panel hidden.
+  // Without it, a `forceMount` panel (used where in-progress form state must
+  // survive a collapse) snaps back to full height once the collapse animation
+  // ends, because the keyframe has no `forwards` fill. `display:none` also makes
+  // non-forceMount panels close instantly instead of animating out.
   <AccordionPrimitive.Content
     ref={ref}
-    className="overflow-hidden text-sm data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
+    className="overflow-hidden text-sm data-[state=closed]:hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
     {...props}
   >
     <div className={cn("pb-4 pt-0", className)}>{children}</div>

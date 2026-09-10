@@ -83,6 +83,7 @@ import {
 import {
   useMeasurementParameters,
   useMeasurementResults,
+  type PortalMeasurementResult,
 } from "../use-measurement-results-query";
 
 const SIGNER_ROLES = ["TECHNICIAN", "CUSTOMER"] as const;
@@ -1200,7 +1201,28 @@ function QualityReviewPanel({
   const pointLabelById = new Map(
     parameters.flatMap((p) => (p.testPoints ?? []).map((tp) => [tp.id, tp.settingLabel] as const)),
   );
+  const capabilityByParamId = new Map(parameters.map((p) => [p.id, p.capabilityName]));
+  const capabilityOrder = new Map(
+    (parametersQuery.data?.capabilityGroups ?? []).map((g, i) => [g.capability.name, i] as const),
+  );
   const rows = (resultsQuery.data ?? []).filter((row) => row.attemptNumber === attempt);
+  // Bucket the (already parameter-sorted) result rows by capability, preserving
+  // row order within each bucket. Bucket order follows the catalog's capability
+  // sort order (DeviceTypeCapabilityOrder); unknown capabilities sort last.
+  const groupedRows = (() => {
+    const buckets = new Map<string, PortalMeasurementResult[]>();
+    for (const row of rows) {
+      const cap = capabilityByParamId.get(row.deviceCalibrationParameterId) ?? "Lainnya";
+      const bucket = buckets.get(cap);
+      if (bucket) bucket.push(row);
+      else buckets.set(cap, [row]);
+    }
+    return [...buckets.entries()].sort(
+      ([a], [b]) =>
+        (capabilityOrder.get(a) ?? Number.MAX_SAFE_INTEGER) -
+          (capabilityOrder.get(b) ?? Number.MAX_SAFE_INTEGER) || a.localeCompare(b),
+    );
+  })();
 
   return (
     <div className="mt-3 space-y-4">
@@ -1220,22 +1242,37 @@ function QualityReviewPanel({
                 <th className="py-1 font-medium">Nilai</th>
               </tr>
             </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-t border-slate-200">
-                  <td className="py-1 pr-3 text-slate-700">
-                    {nameById.get(row.deviceCalibrationParameterId) ?? row.deviceCalibrationParameterId}
-                    {row.calibrationTestPointId
-                      ? ` · ${pointLabelById.get(row.calibrationTestPointId) ?? row.calibrationTestPointId}`
-                      : ""}
-                  </td>
-                  <td className="py-1 pr-3 font-mono text-slate-500">{row.replicateIndex}</td>
-                  <td className="py-1 font-mono text-slate-800">
-                    {row.measuredValue ?? row.measuredText ?? (row.measuredBool == null ? "—" : String(row.measuredBool))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+            {groupedRows.map(([capabilityName, capRows]) => {
+              const paramCount = new Set(capRows.map((r) => r.deviceCalibrationParameterId)).size;
+              return (
+                <tbody key={capabilityName}>
+                  <tr className="border-t border-slate-200 bg-slate-100/70">
+                    <td colSpan={3} className="py-1.5 pr-3">
+                      <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        {capabilityName}
+                        <span className="font-normal normal-case text-slate-400">
+                          · {paramCount} parameter
+                        </span>
+                      </span>
+                    </td>
+                  </tr>
+                  {capRows.map((row) => (
+                    <tr key={row.id} className="border-t border-slate-200">
+                      <td className="py-1 pr-3 text-slate-700">
+                        {nameById.get(row.deviceCalibrationParameterId) ?? row.deviceCalibrationParameterId}
+                        {row.calibrationTestPointId
+                          ? ` · ${pointLabelById.get(row.calibrationTestPointId) ?? row.calibrationTestPointId}`
+                          : ""}
+                      </td>
+                      <td className="py-1 pr-3 font-mono text-slate-500">{row.replicateIndex}</td>
+                      <td className="py-1 font-mono text-slate-800">
+                        {row.measuredValue ?? row.measuredText ?? (row.measuredBool == null ? "—" : String(row.measuredBool))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              );
+            })}
           </table>
         </div>
       )}
