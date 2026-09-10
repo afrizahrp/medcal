@@ -3,6 +3,8 @@
 import { useRequireSession } from "@medcal/auth/client";
 import { useNav } from "../../lib/use-nav";
 import { ManagementShell } from "../../components/management/management-shell";
+import { DeviceManagementInfoPanel } from "../../components/management/device-management-info-panel";
+import { CalibrationManagementInfoPanel } from "../../components/management/calibration-management-info-panel";
 import { AccessDenied } from "../../components/access-denied";
 import { PendingAuthorization } from "../../components/pending-authorization";
 
@@ -24,6 +26,8 @@ export default function ManagementLayout({ children }: { children: React.ReactNo
 
   return (
     <ManagementShell nav={nav}>
+      <DeviceManagementInfoPanel nav={nav} />
+      <CalibrationManagementInfoPanel nav={nav} />
       {children}
     </ManagementShell>
   );

@@ -204,11 +204,7 @@ export default function DeviceTypeAliasesPageClient() {
         ) : null}
       </div>
 
-      <p className="mt-2 max-w-2xl text-sm text-slate-500">
-        Alias adalah istilah pelanggan (mis. &quot;Tensimeter&quot;) yang dipetakan ke satu Device
-        Name resmi (mis. &quot;Sphygmomanometer&quot;). Digunakan untuk pencocokan otomatis saat
-        import Excel Requisition.
-      </p>
+    
 
       {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 

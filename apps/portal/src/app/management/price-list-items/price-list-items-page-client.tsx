@@ -246,12 +246,7 @@ export default function PriceListItemsPageClient() {
         ) : null}
       </div>
 
-      <p className="mt-2 max-w-2xl text-sm text-slate-500">
-        Tarif default per Device Name. Saat quotation dibuat dari Requisition, sistem mengambil
-        tarif yang aktif pada tanggal quotation dan menyimpannya sebagai <em>snapshot</em> di
-        quotation. Perubahan tarif di sini tidak mengubah quotation yang sudah dibuat.
-      </p>
-
+    
       {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
       {showAdd && canManage ? (
