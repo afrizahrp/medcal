@@ -139,10 +139,12 @@ const ac = createAccessControl({
     // reviewer and must not write measurement values (happy-path lifecycle).
     "recordMeasurement",
     // submitForReview: technician IN_PROGRESS → SUBMITTED + submittedAt.
-    // decideQualityReview: TECHNICIAN_MANAGER APPROVE (REJECT/REWORK deferred).
+    // decideQualityReview: TECHNICIAN_MANAGER APPROVE or REJECT (REJECT → REWORK).
+    // resumeAfterRework: technician REWORK → IN_PROGRESS (does not increment attempt).
     // complete: technician SUBMITTED + QualityReview APPROVED → ACCEPTED_BY_QA.
     "submitForReview",
     "decideQualityReview",
+    "resumeAfterRework",
   ],
   certificate: ["read", "create", "update", "issue"],
   invoice: ["read", "create", "update", "void"],

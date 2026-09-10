@@ -229,6 +229,24 @@ describe("assertMeasurementRowEditable (guard, §7.1)", () => {
   it("allows a write on the current attempt of an IN_PROGRESS job", () => {
     expect(() => assertMeasurementRowEditable(base, { attemptNumber: 2 })).not.toThrow();
   });
+
+  it("rejects a write when status is REWORK even if submittedAt is null (Option A)", () => {
+    expect(() =>
+      assertMeasurementRowEditable(
+        { status: "REWORK", currentAttempt: 2, submittedAt: null },
+        { attemptNumber: 2 },
+      ),
+    ).toThrow(/only while the job is in progress/);
+  });
+
+  it("rejects a write when status is PENDING even if submittedAt is null", () => {
+    expect(() =>
+      assertMeasurementRowEditable(
+        { status: "PENDING", currentAttempt: 1, submittedAt: null },
+        { attemptNumber: 1 },
+      ),
+    ).toThrow(/only while the job is in progress/);
+  });
 });
 
 describe("MeasurementResultsService — CRUD", () => {

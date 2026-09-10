@@ -837,16 +837,28 @@ export const identityCorrectionDecisionSchema = z
 export type IdentityCorrectionDecisionInput = z.infer<typeof identityCorrectionDecisionSchema>;
 
 // -----------------------------------------------------------------------------
-// Calibration Job — quality review happy path (submit → MT APPROVE → complete)
+// Calibration Job — quality review (submit → MT APPROVE | REJECT → complete)
 // -----------------------------------------------------------------------------
-// REJECT / REWORK is intentionally not accepted here. Expanding `decision` to
-// include REJECT is a later phase.
+// REJECT is the pre-approval REWORK branch. Mirror Identity Correction: notes
+// are required when rejecting. Do not add REQUEST_CHANGES.
+
+const qualityReviewDecisionValues = ["APPROVE", "REJECT"] as const;
 
 /** POST /calibration-jobs/:id/quality-decision body (TECHNICIAN_MANAGER only) */
-export const qualityReviewDecisionSchema = z.object({
-  decision: z.literal("APPROVE"),
-  notes: z.string().trim().max(2000).optional(),
-});
+export const qualityReviewDecisionSchema = z
+  .object({
+    decision: z.enum(qualityReviewDecisionValues),
+    notes: z.string().trim().max(2000).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.decision === "REJECT" && !val.notes) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["notes"],
+        message: "A decision note is required when rejecting",
+      });
+    }
+  });
 
 export type QualityReviewDecisionInput = z.infer<typeof qualityReviewDecisionSchema>;
 

@@ -158,6 +158,15 @@ export class CalibrationJobsController {
     return this.service.complete(companyId, id);
   }
 
+  @Post(":id/resume")
+  @RequirePermission("calibrationJob", "resumeAfterRework")
+  async resumeAfterRework(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<CalibrationJobDetail> {
+    return this.service.resumeAfterRework(companyId, id);
+  }
+
   @Post(":id/escalate-identity")
   @RequirePermission("calibrationJob", "escalateIdentity")
   async escalateIdentity(

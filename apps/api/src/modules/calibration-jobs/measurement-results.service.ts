@@ -39,10 +39,12 @@ interface GuardJob {
 }
 
 /**
- * A MeasurementResult row is immutable when EITHER:
+ * A MeasurementResult row is immutable when:
  *  - it belongs to a superseded attempt (row.attemptNumber < job.currentAttempt), OR
  *  - the job's current attempt has been submitted (status in the locked set, or
- *    submittedAt is set — redundant by design, §7.1).
+ *    submittedAt is set — redundant by design, §7.1), OR
+ *  - the job is not IN_PROGRESS (Option A: REWORK / PENDING / etc. are not writable
+ *    even when submittedAt is null — resumeAfterRework is the write gate).
  *
  * Role-independent — no bypass, including TECHNICIAN_MANAGER (decision #5).
  * Called at the top of every create / update / delete path.
@@ -60,6 +62,13 @@ export function assertMeasurementRowEditable(job: GuardJob, row: { attemptNumber
     throw new BadRequestException({
       message: "Measurements are locked once the job attempt has been submitted",
       code: "MEASUREMENT_JOB_SUBMITTED",
+      status: job.status,
+    });
+  }
+  if (job.status !== "IN_PROGRESS") {
+    throw new BadRequestException({
+      message: "Record measurements only while the job is in progress",
+      code: "MEASUREMENT_JOB_NOT_IN_PROGRESS",
       status: job.status,
     });
   }

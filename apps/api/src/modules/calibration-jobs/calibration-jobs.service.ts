@@ -755,8 +755,10 @@ export class CalibrationJobsService {
   }
 
   /**
-   * TECHNICIAN_MANAGER APPROVE only (happy path). Creates QualityReview at
-   * decide time. Job stays SUBMITTED; measurements stay locked.
+   * TECHNICIAN_MANAGER decide. APPROVE: create QualityReview; job stays SUBMITTED;
+   * measurements stay locked (happy path — do not change these semantics).
+   * REJECT: atomic SUBMITTED → REWORK, submittedAt null, currentAttempt +1,
+   * QualityReview REJECTED with mandatory notes.
    */
   async decideQualityReview(
     companyId: string,
@@ -785,6 +787,46 @@ export class CalibrationJobsService {
       });
     }
 
+    if (input.decision === "REJECT") {
+      const notes = input.notes?.trim() ?? "";
+      if (!notes) {
+        throw new BadRequestException({
+          message: "A decision note is required when rejecting",
+          code: "QUALITY_REVIEW_NOTES_REQUIRED",
+        });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const claimed = await tx.calibrationJob.updateMany({
+          where: { id, companyId, status: "SUBMITTED" },
+          data: {
+            status: "REWORK",
+            submittedAt: null,
+            currentAttempt: { increment: 1 },
+          },
+        });
+        if (claimed.count !== 1) {
+          throw new ConflictException({
+            message: "This submission has already been decided",
+            code: "QUALITY_REVIEW_ALREADY_DECIDED",
+          });
+        }
+        await tx.qualityReview.create({
+          data: {
+            companyId,
+            calibrationJobId: id,
+            reviewerUserId: userId,
+            decision: "REJECT",
+            status: "REJECTED",
+            notes,
+            reviewedAt: new Date(),
+          },
+        });
+      });
+
+      return this.findOne(companyId, id);
+    }
+
     const notes = input.notes && input.notes.length > 0 ? input.notes : null;
     await prisma.qualityReview.create({
       data: {
@@ -797,6 +839,35 @@ export class CalibrationJobsService {
         reviewedAt: new Date(),
       },
     });
+
+    return this.findOne(companyId, id);
+  }
+
+  /**
+   * Technician resume after MT REJECT: REWORK → IN_PROGRESS. Does not increment
+   * currentAttempt, does not stamp submittedAt, does not create reviews/results.
+   * Resume is the backend write gate for the new attempt.
+   */
+  async resumeAfterRework(companyId: string, id: string): Promise<CalibrationJobDetail> {
+    const job = await this.findOne(companyId, id);
+    if (job.status !== "REWORK") {
+      throw new BadRequestException({
+        message: "Calibration job must be in rework to resume",
+        code: "CALIBRATION_JOB_NOT_IN_REWORK",
+        status: job.status,
+      });
+    }
+
+    const updated = await prisma.calibrationJob.updateMany({
+      where: { id, companyId, status: "REWORK" },
+      data: { status: "IN_PROGRESS" },
+    });
+    if (updated.count !== 1) {
+      throw new ConflictException({
+        message: "Calibration job has already been resumed",
+        code: "CALIBRATION_JOB_ALREADY_RESUMED",
+      });
+    }
 
     return this.findOne(companyId, id);
   }

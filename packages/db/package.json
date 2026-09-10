@@ -32,6 +32,7 @@
     "backfill:reference-equipment-used-permissions": "tsx prisma/backfill-reference-equipment-used-permissions.ts",
     "backfill:measurement-result-permissions": "tsx prisma/backfill-measurement-result-permissions.ts",
     "backfill:quality-review-happy-path-permissions": "tsx prisma/backfill-quality-review-happy-path-permissions.ts",
+    "backfill:rework-resume-permissions": "tsx prisma/backfill-rework-resume-permissions.ts",
     "backfill:decimal-places-from-results": "tsx prisma/backfill-decimal-places-from-results.ts"
   },
   "dependencies": {

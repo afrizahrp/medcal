@@ -10,11 +10,11 @@
 
 ## 0. Status dokumen
 
-| Bagian | Status |
-|---|---|
-| A. Kesimpulan audit Identity Correction | **DISETUJUI** (kunci desain) |
-| B–F. Mapping status, QualityReview, izin, kontrak transisi | **DIKUNCI di laporan ini** — menunggu persetujuan sebelum kode |
-| UI detail MT / teknisi, signature, notifikasi, PDF, PASS/FAIL | **Di luar scope** (brief asli §9) |
+| Bagian                                                        | Status                                                         |
+| ------------------------------------------------------------- | -------------------------------------------------------------- |
+| A. Kesimpulan audit Identity Correction                       | **DISETUJUI** (kunci desain)                                   |
+| B–F. Mapping status, QualityReview, izin, kontrak transisi    | **DIKUNCI di laporan ini** — menunggu persetujuan sebelum kode |
+| UI detail MT / teknisi, signature, notifikasi, PDF, PASS/FAIL | **Di luar scope** (brief asli §9)                              |
 
 ---
 
@@ -22,13 +22,13 @@
 
 Tidak membuat kerangka koreksi kedua. Tidak memakai tabel `IdentityCorrection` untuk hasil pengukuran.
 
-| Keputusan | Isi |
-|---|---|
-| Reuse | **Pola perilaku** Identity Correction: split izin submit vs decide, feedback terpisah dari payload, histori append-only, satu pending per subjek, lock setelah submit, ADMIN bukan approver. |
-| Aktifkan yang sudah ada | `CalibrationJobStatus` (`IN_PROGRESS` / `SUBMITTED` / `REWORK` / `ACCEPTED_BY_QA`), `submittedAt`, `currentAttempt`, lock `MeasurementResult`, model `QualityReview`. |
-| Jangan | Tabel `MeasurementCorrection`, `CorrectionFramework` generik, `AuditLog` baru, enum `DRAFT` / `REVISION_REQUIRED` / `CLOSED`, memaksa review hasil lewat BA identitas. |
-| MT vs data | MT adalah reviewer. MT **tidak** menulis `MeasurementResult`. Feedback hanya di `QualityReview.notes`. |
-| Polaritas | Identity Correction = teknisi usul ubah, MT apply/tolak. Review hasil = teknisi kirim data, MT minta koreksi, teknisi yang mengubah nilai. Domain tetap terpisah. |
+| Keputusan               | Isi                                                                                                                                                                                          |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reuse                   | **Pola perilaku** Identity Correction: split izin submit vs decide, feedback terpisah dari payload, histori append-only, satu pending per subjek, lock setelah submit, ADMIN bukan approver. |
+| Aktifkan yang sudah ada | `CalibrationJobStatus` (`IN_PROGRESS` / `SUBMITTED` / `REWORK` / `ACCEPTED_BY_QA`), `submittedAt`, `currentAttempt`, lock `MeasurementResult`, model `QualityReview`.                        |
+| Jangan                  | Tabel `MeasurementCorrection`, `CorrectionFramework` generik, `AuditLog` baru, enum `DRAFT` / `REVISION_REQUIRED` / `CLOSED`, memaksa review hasil lewat BA identitas.                       |
+| MT vs data              | MT adalah reviewer. MT **tidak** menulis `MeasurementResult`. Feedback hanya di `QualityReview.notes`.                                                                                       |
+| Polaritas               | Identity Correction = teknisi usul ubah, MT apply/tolak. Review hasil = teknisi kirim data, MT minta koreksi, teknisi yang mengubah nilai. Domain tetap terpisah.                            |
 
 Identity Correction **tidak diubah** agar mendukung review pengukuran. Keterbatasan BA (tidak ada DRAFT, apply-on-approve, nomor BAI, tanda tangan pelanggan) tepat untuk identitas, salah untuk hasil.
 
@@ -38,17 +38,17 @@ Identity Correction **tidak diubah** agar mendukung review pengukuran. Keterbata
 
 Label bisnis di kolom kiri **konseptual**. Nama enum di kode **tidak diganti**.
 
-| Konsep bisnis | Konsep existing | Arti operasional |
-|---|---|---|
-| (sebelum mulai) | `PENDING` | Fan-out; belum `startedAt`. |
-| DRAFT (isi hasil) | `IN_PROGRESS` + `startedAt` | Teknisi CRUD `MeasurementResult` attempt berjalan. |
-| SUBMITTED / antrean MT | `SUBMITTED` + `submittedAt` terisi | Hasil terkunci. Menunggu keputusan MT **atau** (setelah approve) menunggu close teknisi. |
-| MT REVIEW | Job `SUBMITTED` + belum ada `QualityReview` APPROVED/REJECTED untuk siklus submit ini | Portal: antrian review. |
-| REVISION_REQUIRED | `REWORK` + `QualityReview` `REJECTED` + `notes` | Attempt baru sudah di-increment; entry UI masih kunci sampai resume. |
-| Technician correction | `IN_PROGRESS` setelah resume, `currentAttempt = N+1` | Hanya teknisi yang menulis hasil. Baris attempt lama immutable. |
-| Resubmit | `IN_PROGRESS` → `SUBMITTED` lagi | Endpoint submit yang sama. |
-| APPROVED / SIGNED (keputusan MT) | `QualityReview` `APPROVED` ; job **tetap** `SUBMITTED` | Tanda tangan MT **ditunda** (brief §9). Job belum terminal. |
-| Technician Close / CLOSED | `ACCEPTED_BY_QA` via `complete` | Terminal job. Tidak menambah enum `CLOSED`. |
+| Konsep bisnis                    | Konsep existing                                                                       | Arti operasional                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| (sebelum mulai)                  | `PENDING`                                                                             | Fan-out; belum `startedAt`.                                                              |
+| DRAFT (isi hasil)                | `IN_PROGRESS` + `startedAt`                                                           | Teknisi CRUD `MeasurementResult` attempt berjalan.                                       |
+| SUBMITTED / antrean MT           | `SUBMITTED` + `submittedAt` terisi                                                    | Hasil terkunci. Menunggu keputusan MT **atau** (setelah approve) menunggu close teknisi. |
+| MT REVIEW                        | Job `SUBMITTED` + belum ada `QualityReview` APPROVED/REJECTED untuk siklus submit ini | Portal: antrian review.                                                                  |
+| REVISION_REQUIRED                | `REWORK` + `QualityReview` `REJECTED` + `notes`                                       | Attempt baru sudah di-increment; entry UI masih kunci sampai resume.                     |
+| Technician correction            | `IN_PROGRESS` setelah resume, `currentAttempt = N+1`                                  | Hanya teknisi yang menulis hasil. Baris attempt lama immutable.                          |
+| Resubmit                         | `IN_PROGRESS` → `SUBMITTED` lagi                                                      | Endpoint submit yang sama.                                                               |
+| APPROVED / SIGNED (keputusan MT) | `QualityReview` `APPROVED` ; job **tetap** `SUBMITTED`                                | Tanda tangan MT **ditunda** (brief §9). Job belum terminal.                              |
+| Technician Close / CLOSED        | `ACCEPTED_BY_QA` via `complete`                                                       | Terminal job. Tidak menambah enum `CLOSED`.                                              |
 
 `ACCEPTED_BY_QA` **semantiknya** = hasil sudah disetujui MT **dan** ditutup teknisi. Label “QA” di enum/UI **tidak diganti di fase ini**. Aktor runtime = `TECHNICIAN_MANAGER` (MT). Enum `MT` / `TECHNICAL_MANAGER`: tidak ada, jangan diciptakan.
 
@@ -116,10 +116,10 @@ Satu keputusan per periode `SUBMITTED`:
 
 `ReviewDecision` hanya `APPROVE` | `REJECT`. **Tidak** menambah `REQUEST_CHANGES`.
 
-| MT | Efek job | Efek QR |
-|---|---|---|
-| REJECT | `returnForRework` (lihat D) | `REJECTED` + `notes` wajib |
-| APPROVE | job tetap `SUBMITTED`, `submittedAt` tetap | `APPROVED` |
+| MT      | Efek job                                   | Efek QR                    |
+| ------- | ------------------------------------------ | -------------------------- |
+| REJECT  | `returnForRework` (lihat D)                | `REJECTED` + `notes` wajib |
+| APPROVE | job tetap `SUBMITTED`, `submittedAt` tetap | `APPROVED`                 |
 
 Mirror Zod Identity Correction: note wajib jika REJECT ([`identityCorrectionDecisionSchema`](../../../../packages/shared/src/schemas/index.ts)).
 
@@ -145,14 +145,14 @@ Aturan lock pengukuran **tidak diubah**:
 
 ### D.1 `submitForReview` — teknisi
 
-| | |
-|---|---|
-| Dari | `IN_PROGRESS` |
-| Ke | `SUBMITTED` |
-| `submittedAt` | `now()` |
-| `currentAttempt` | tidak berubah |
-| QR | tidak dibuat |
-| Efek | semua write MeasurementResult terkunci |
+|                  |                                        |
+| ---------------- | -------------------------------------- |
+| Dari             | `IN_PROGRESS`                          |
+| Ke               | `SUBMITTED`                            |
+| `submittedAt`    | `now()`                                |
+| `currentAttempt` | tidak berubah                          |
+| QR               | tidak dibuat                           |
+| Efek             | semua write MeasurementResult terkunci |
 
 Resubmit setelah koreksi = method yang sama.
 
@@ -160,13 +160,13 @@ Optimistic: `update` dengan `where: { id, status: "IN_PROGRESS" }` (atau cek-lal
 
 ### D.2 `decideQualityReview` REJECT → `returnForRework` — MT, satu transaksi
 
-| | |
-|---|---|
-| Dari | `SUBMITTED` (belum QR APPROVED pada siklus ini) |
-| Ke | `REWORK` |
-| `currentAttempt` | Prisma `increment: 1` **satu-satunya** momen increment |
-| `submittedAt` | `null` (reset flag job-level; aturan lock tidak diubah) |
-| QR | create `REJECTED` + `notes` wajib |
+|                  |                                                         |
+| ---------------- | ------------------------------------------------------- |
+| Dari             | `SUBMITTED` (belum QR APPROVED pada siklus ini)         |
+| Ke               | `REWORK`                                                |
+| `currentAttempt` | Prisma `increment: 1` **satu-satunya** momen increment  |
+| `submittedAt`    | `null` (reset flag job-level; aturan lock tidak diubah) |
+| QR               | create `REJECTED` + `notes` wajib                       |
 
 Ditolak: increment pada `SUBMITTED → IN_PROGRESS` satu langkah (meniadakan `REWORK`).
 Ditolak: meninggalkan `submittedAt` terisi setelah REWORK (attempt baru tidak bisa ditulis).
@@ -175,36 +175,36 @@ Ditolak: meninggalkan `submittedAt` terisi setelah REWORK (attempt baru tidak bi
 
 ### D.3 `resumeAfterRework` — teknisi
 
-| | |
-|---|---|
-| Dari | `REWORK` |
-| Ke | `IN_PROGRESS` |
-| `currentAttempt` | tidak berubah |
-| `submittedAt` | tetap `null` |
-| Efek | `canRecordMeasurement` terbuka; create row `attemptNumber = currentAttempt`; attempt lama SUPERSEDED |
+|                  |                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------- |
+| Dari             | `REWORK`                                                                                             |
+| Ke               | `IN_PROGRESS`                                                                                        |
+| `currentAttempt` | tidak berubah                                                                                        |
+| `submittedAt`    | tetap `null`                                                                                         |
+| Efek             | `canRecordMeasurement` terbuka; create row `attemptNumber = currentAttempt`; attempt lama SUPERSEDED |
 
 Bukan tombol “Mulai attempt baru” baru di desain UI ini — hanya transisi yang UI existing sudah nantikan.
 
 ### D.4 `decideQualityReview` APPROVE — MT, satu transaksi
 
-| | |
-|---|---|
-| Dari | `SUBMITTED` |
-| Ke | tetap `SUBMITTED` |
-| `submittedAt` | tetap terisi (hasil tetap terkunci) |
-| `currentAttempt` | tidak berubah |
-| QR | create `APPROVED` |
+|                  |                                     |
+| ---------------- | ----------------------------------- |
+| Dari             | `SUBMITTED`                         |
+| Ke               | tetap `SUBMITTED`                   |
+| `submittedAt`    | tetap terisi (hasil tetap terkunci) |
+| `currentAttempt` | tidak berubah                       |
+| QR               | create `APPROVED`                   |
 
 Tidak pindah ke `ACCEPTED_BY_QA` di sini.
 
 ### D.5 `complete` — teknisi close
 
-| | |
-|---|---|
-| Dari | `SUBMITTED` **dan** QR terbaru `APPROVED` |
-| Ke | `ACCEPTED_BY_QA` |
-| `submittedAt` | tetap terisi |
-| `currentAttempt` | tidak berubah |
+|                  |                                           |
+| ---------------- | ----------------------------------------- |
+| Dari             | `SUBMITTED` **dan** QR terbaru `APPROVED` |
+| Ke               | `ACCEPTED_BY_QA`                          |
+| `submittedAt`    | tetap terisi                              |
+| `currentAttempt` | tidak berubah                             |
 
 Tanpa QR APPROVED → ditolak. Dari `REWORK` / `IN_PROGRESS` → ditolak.
 
@@ -238,13 +238,13 @@ SUBMITTED, attempt N, submittedAt terisi          ← MT review; hasil kunci
 
 Mirror route identity yang sudah hidup (`POST .../identity-decision`, `POST .../identity-corrections/:id/decision`):
 
-| Method | Path usulan | Permission | Aktor |
-|---|---|---|---|
-| POST | `/calibration-jobs/:id/submit` | `submitForReview` | TECHNICIAN |
-| POST | `/calibration-jobs/:id/quality-decision` | `decideQualityReview` | TECHNICIAN_MANAGER |
-| POST | `/calibration-jobs/:id/resume` | `resumeAfterRework` | TECHNICIAN |
-| POST | `/calibration-jobs/:id/complete` | `complete` | TECHNICIAN |
-| GET | `/calibration-jobs/:id/quality-reviews` | `read` | yang sudah bisa baca job |
+| Method | Path usulan                              | Permission            | Aktor                    |
+| ------ | ---------------------------------------- | --------------------- | ------------------------ |
+| POST   | `/calibration-jobs/:id/submit`           | `submitForReview`     | TECHNICIAN               |
+| POST   | `/calibration-jobs/:id/quality-decision` | `decideQualityReview` | TECHNICIAN_MANAGER       |
+| POST   | `/calibration-jobs/:id/resume`           | `resumeAfterRework`   | TECHNICIAN               |
+| POST   | `/calibration-jobs/:id/complete`         | `complete`            | TECHNICIAN               |
+| GET    | `/calibration-jobs/:id/quality-reviews`  | `read`                | yang sudah bisa baca job |
 
 Body decide: `{ decision: "APPROVE" \| "REJECT", notes?: string }` dengan `notes` wajib pada REJECT. Jangan PATCH MeasurementResult dari jalur ini.
 
@@ -273,14 +273,14 @@ Nama `decideQualityReview` mirror `decideIdentityCorrection`. Jangan memakai `re
 
 ### E.2 Seed grants
 
-| Action | TECHNICIAN | TECHNICIAN_MANAGER |
-|---|---|---|
-| `recordMeasurement` | ya | **tidak (dicabut)** |
-| `submitForReview` | ya | tidak |
-| `resumeAfterRework` | ya | tidak |
-| `complete` | ya | tidak |
-| `decideQualityReview` | tidak | ya |
-| `start` / identity / ref-eq | tidak diubah di desain ini | tidak diubah |
+| Action                      | TECHNICIAN                 | TECHNICIAN_MANAGER  |
+| --------------------------- | -------------------------- | ------------------- |
+| `recordMeasurement`         | ya                         | **tidak (dicabut)** |
+| `submitForReview`           | ya                         | tidak               |
+| `resumeAfterRework`         | ya                         | tidak               |
+| `complete`                  | ya                         | tidak               |
+| `decideQualityReview`       | tidak                      | ya                  |
+| `start` / identity / ref-eq | tidak diubah di desain ini | tidak diubah        |
 
 **Cabut** grant existing:
 
@@ -306,14 +306,14 @@ Identity Correction mengizinkan MT **submit BA**. Untuk hasil pengukuran, bisnis
 
 ## F. Audit trail (tanpa mekanisme baru)
 
-| Peristiwa | Jejak existing |
-|---|---|
-| Submit | `submittedAt`, status `SUBMITTED` |
-| Review / minta koreksi | `QualityReview` REJECTED: `reviewerUserId`, `reviewedAt`, `notes` |
-| Koreksi teknisi | `MeasurementResult.recordedByUserId` / `recordedAt` pada `attemptNumber` baru |
-| Resubmit | `submittedAt` di-set lagi; QR baru pada decide berikutnya |
-| Approval MT | `QualityReview` APPROVED |
-| Close | status `ACCEPTED_BY_QA` |
+| Peristiwa              | Jejak existing                                                                |
+| ---------------------- | ----------------------------------------------------------------------------- |
+| Submit                 | `submittedAt`, status `SUBMITTED`                                             |
+| Review / minta koreksi | `QualityReview` REJECTED: `reviewerUserId`, `reviewedAt`, `notes`             |
+| Koreksi teknisi        | `MeasurementResult.recordedByUserId` / `recordedAt` pada `attemptNumber` baru |
+| Resubmit               | `submittedAt` di-set lagi; QR baru pada decide berikutnya                     |
+| Approval MT            | `QualityReview` APPROVED                                                      |
+| Close                  | status `ACCEPTED_BY_QA`                                                       |
 
 Tidak ada `AuditLog` generik. Jangan meniru `akdAklDecisionNote` yang tertimpa.
 
@@ -338,13 +338,13 @@ Tidak termasuk sekarang: schema baru, enum baru, modul QualityReview terpisah di
 
 ### Ditutup di laporan ini
 
-| Item audit K | Keputusan |
-|---|---|
-| QA vs MT | MT = `TECHNICIAN_MANAGER`. Enum `ACCEPTED_BY_QA` dipertahankan sebagai terminal close. |
-| Close teknisi | Langkah terpisah: `complete` → `ACCEPTED_BY_QA`. Bukan close otomatis saat MT approve. |
-| Resume REWORK | `resumeAfterRework` + reset `submittedAt` pada rework (diagnosis §3). |
-| MT write hasil | Dicabut `recordMeasurement`; MT tidak submit/resume/complete. |
-| QR tanpa REQUEST_CHANGES | REJECT = rework. |
+| Item audit K             | Keputusan                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------------- |
+| QA vs MT                 | MT = `TECHNICIAN_MANAGER`. Enum `ACCEPTED_BY_QA` dipertahankan sebagai terminal close. |
+| Close teknisi            | Langkah terpisah: `complete` → `ACCEPTED_BY_QA`. Bukan close otomatis saat MT approve. |
+| Resume REWORK            | `resumeAfterRework` + reset `submittedAt` pada rework (diagnosis §3).                  |
+| MT write hasil           | Dicabut `recordMeasurement`; MT tidak submit/resume/complete.                          |
+| QR tanpa REQUEST_CHANGES | REJECT = rework.                                                                       |
 
 ### Tetap terbuka (bukan blocker lifecycle)
 

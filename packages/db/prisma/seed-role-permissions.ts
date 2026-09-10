@@ -181,6 +181,7 @@ const PRESERVED_BASELINE: GrantRow[] = [
   // decideQualityReview and must not write measurement values.
   { role: "TECHNICIAN", resource: "calibrationJob", action: "recordMeasurement" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "submitForReview" },
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "resumeAfterRework" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "complete" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "decideQualityReview" },
   // FINANCE

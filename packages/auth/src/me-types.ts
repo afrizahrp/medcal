@@ -99,6 +99,7 @@ export type MeCapabilities = {
   calibrationJobRecordMeasurement: boolean;
   calibrationJobSubmitForReview: boolean;
   calibrationJobDecideQualityReview: boolean;
+  calibrationJobResumeAfterRework: boolean;
   calibrationJobComplete: boolean;
   taxManage: boolean;
   priceListItemRead: boolean;

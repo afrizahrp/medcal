@@ -1973,7 +1973,66 @@ describe("CalibrationJobsService — quality review happy path", () => {
     ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_NOT_SUBMITTED" } });
   });
 
-  it("rejects REJECT on the quality-decision route (REWORK deferred)", async () => {
+  it("MT reject on the quality-decision route moves SUBMITTED to REWORK", async () => {
+    const { job } = await inProgressJob();
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    const controller = new CalibrationJobsController(
+      calibrationJobsService,
+      measurementResultsService,
+    );
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    const rejected = await controller.decideQualityReview(realCompanyId, manager.id, job.id, {
+      decision: "REJECT",
+      notes: "NIBP perlu diukur ulang",
+    });
+    expect(rejected.status).toBe("REWORK");
+    expect(rejected.submittedAt).toBeNull();
+    expect(rejected.currentAttempt).toBe(2);
+    expect(rejected.reviews).toHaveLength(1);
+    expect(rejected.reviews[0]!.decision).toBe("REJECT");
+    expect(rejected.reviews[0]!.status).toBe("REJECTED");
+  });
+});
+
+describe("CalibrationJobsService — quality review REWORK lifecycle", () => {
+  async function inProgressJob() {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    const started = await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+    return { job: started, deviceTypeId };
+  }
+
+  async function recordSampleMeasurement(jobId: string, deviceTypeId: string, technicianId: string) {
+    const capability = await prisma.deviceCapability.create({
+      data: { code: `QRRE${randomUUID().slice(0, 8)}`, name: "QR Rework" },
+    });
+    createdCapabilityIds.push(capability.id);
+    const item = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: capability.id, name: "QR Rework Item" },
+    });
+    const param = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId: item.id,
+        code: `QRR${randomUUID().slice(0, 8).toUpperCase()}`,
+        name: "QR Rework Param",
+        valueType: "NUMBER",
+        toleranceMin: 0,
+        toleranceMax: 100,
+      },
+    });
+    return measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: 50,
+      },
+      technicianId,
+    );
+  }
+
+  it("REJECT requires notes (controller Zod)", async () => {
     const { job } = await inProgressJob();
     await calibrationJobsService.submitForReview(realCompanyId, job.id);
     const controller = new CalibrationJobsController(
@@ -1984,9 +2043,320 @@ describe("CalibrationJobsService — quality review happy path", () => {
     await expect(
       controller.decideQualityReview(realCompanyId, manager.id, job.id, { decision: "REJECT" }),
     ).rejects.toMatchObject({ response: { code: "INVALID_QUALITY_REVIEW_DECISION" } });
+    await expect(
+      controller.decideQualityReview(realCompanyId, manager.id, job.id, {
+        decision: "REJECT",
+        notes: "   ",
+      }),
+    ).rejects.toMatchObject({ response: { code: "INVALID_QUALITY_REVIEW_DECISION" } });
     const stillSubmitted = await calibrationJobsService.findOne(realCompanyId, job.id);
     expect(stillSubmitted.status).toBe("SUBMITTED");
     expect(stillSubmitted.reviews).toEqual([]);
+  });
+
+  it("REJECT creates QualityReview REJECTED, clears submittedAt, increments currentAttempt once", async () => {
+    const { job, deviceTypeId } = await inProgressJob();
+    const technician = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    const row = await recordSampleMeasurement(job.id, deviceTypeId, technician.id);
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, job.id);
+
+    const rejected = await calibrationJobsService.decideQualityReview(
+      realCompanyId,
+      job.id,
+      manager.id,
+      { decision: "REJECT", notes: "NIBP perlu diukur ulang" },
+    );
+
+    expect(rejected.status).toBe("REWORK");
+    expect(rejected.submittedAt).toBeNull();
+    expect(rejected.currentAttempt).toBe(submitted.currentAttempt + 1);
+    expect(rejected.reviews).toHaveLength(1);
+    expect(rejected.reviews[0]!.decision).toBe("REJECT");
+    expect(rejected.reviews[0]!.status).toBe("REJECTED");
+    expect(rejected.reviews[0]!.reviewerUserId).toBe(manager.id);
+    expect(rejected.reviews[0]!.notes).toBe("NIBP perlu diukur ulang");
+    expect(rejected.reviews[0]!.reviewedAt).not.toBeNull();
+
+    const after = await prisma.measurementResult.findUniqueOrThrow({ where: { id: row.id } });
+    expect(after.measuredValue?.toNumber()).toBe(50);
+    expect(after.attemptNumber).toBe(1);
+  });
+
+  it("REJECT from IN_PROGRESS is rejected; sequential double REJECT is rejected", async () => {
+    const { job } = await inProgressJob();
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await expect(
+      calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+        decision: "REJECT",
+        notes: "too early",
+      }),
+    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_NOT_SUBMITTED" } });
+
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    await calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+      decision: "REJECT",
+      notes: "first reject",
+    });
+    await expect(
+      calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+        decision: "REJECT",
+        notes: "second reject",
+      }),
+    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_NOT_SUBMITTED" } });
+    const after = await calibrationJobsService.findOne(realCompanyId, job.id);
+    expect(after.status).toBe("REWORK");
+    expect(after.currentAttempt).toBe(2);
+  });
+
+  it("resumeAfterRework moves REWORK to IN_PROGRESS without incrementing currentAttempt", async () => {
+    const { job } = await inProgressJob();
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    const rejected = await calibrationJobsService.decideQualityReview(
+      realCompanyId,
+      job.id,
+      manager.id,
+      { decision: "REJECT", notes: "fix NIBP" },
+    );
+    expect(rejected.currentAttempt).toBe(2);
+    expect(rejected.startedAt).not.toBeNull();
+
+    const resumed = await calibrationJobsService.resumeAfterRework(realCompanyId, job.id);
+    expect(resumed.status).toBe("IN_PROGRESS");
+    expect(resumed.currentAttempt).toBe(2);
+    expect(resumed.submittedAt).toBeNull();
+    expect(resumed.startedAt!.getTime()).toBe(rejected.startedAt!.getTime());
+    expect(resumed.reviews[0]!.status).toBe("REJECTED");
+  });
+
+  it("resume from SUBMITTED is rejected; duplicate resume is rejected", async () => {
+    const { job } = await inProgressJob();
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    await expect(calibrationJobsService.resumeAfterRework(realCompanyId, job.id)).rejects.toMatchObject(
+      { response: { code: "CALIBRATION_JOB_NOT_IN_REWORK" } },
+    );
+
+    await calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+      decision: "REJECT",
+      notes: "fix",
+    });
+    await calibrationJobsService.resumeAfterRework(realCompanyId, job.id);
+    await expect(calibrationJobsService.resumeAfterRework(realCompanyId, job.id)).rejects.toMatchObject(
+      { response: { code: "CALIBRATION_JOB_NOT_IN_REWORK" } },
+    );
+  });
+
+  it("REWORK cannot submitForReview or complete", async () => {
+    const { job } = await inProgressJob();
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    await calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+      decision: "REJECT",
+      notes: "fix",
+    });
+
+    await expect(calibrationJobsService.submitForReview(realCompanyId, job.id)).rejects.toMatchObject({
+      response: { code: "CALIBRATION_JOB_NOT_IN_PROGRESS" },
+    });
+    await expect(calibrationJobsService.complete(realCompanyId, job.id)).rejects.toMatchObject({
+      response: { code: "CALIBRATION_JOB_NOT_SUBMITTED" },
+    });
+  });
+
+  it("denies MeasurementResult create/update/delete while REWORK; allows create after resume on the new attempt", async () => {
+    const { job, deviceTypeId } = await inProgressJob();
+    const technician = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    const row = await recordSampleMeasurement(job.id, deviceTypeId, technician.id);
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    await calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+      decision: "REJECT",
+      notes: "ukur ulang",
+    });
+
+    await expect(
+      measurementResultsService.create(
+        realCompanyId,
+        {
+          calibrationJobId: job.id,
+          deviceCalibrationParameterId: row.deviceCalibrationParameterId,
+          replicateIndex: 2,
+          measuredValue: 55,
+        },
+        technician.id,
+      ),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_JOB_NOT_IN_PROGRESS" } });
+    await expect(
+      measurementResultsService.update(realCompanyId, row.id, { measuredValue: 60 }, technician.id),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_ATTEMPT_SUPERSEDED" } });
+    await expect(measurementResultsService.remove(realCompanyId, row.id)).rejects.toMatchObject({
+      response: { code: "MEASUREMENT_ATTEMPT_SUPERSEDED" },
+    });
+
+    await calibrationJobsService.resumeAfterRework(realCompanyId, job.id);
+    const attempt2 = await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: job.id,
+        deviceCalibrationParameterId: row.deviceCalibrationParameterId,
+        replicateIndex: 1,
+        measuredValue: 52,
+      },
+      technician.id,
+    );
+    expect(attempt2.attemptNumber).toBe(2);
+
+    await expect(
+      measurementResultsService.update(realCompanyId, row.id, { measuredValue: 70 }, technician.id),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_ATTEMPT_SUPERSEDED" } });
+    await expect(measurementResultsService.remove(realCompanyId, row.id)).rejects.toMatchObject({
+      response: { code: "MEASUREMENT_ATTEMPT_SUPERSEDED" },
+    });
+
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    await expect(
+      measurementResultsService.update(
+        realCompanyId,
+        attempt2.id,
+        { measuredValue: 53 },
+        technician.id,
+      ),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_JOB_SUBMITTED" } });
+  });
+
+  it("supports two REJECT cycles then APPROVE and complete; QualityReview history is append-only", async () => {
+    const { job, deviceTypeId } = await inProgressJob();
+    const technician = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    const first = await recordSampleMeasurement(job.id, deviceTypeId, technician.id);
+
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    const reject1 = await calibrationJobsService.decideQualityReview(
+      realCompanyId,
+      job.id,
+      manager.id,
+      { decision: "REJECT", notes: "NIBP perlu diukur ulang" },
+    );
+    const reject1Id = reject1.reviews[0]!.id;
+    expect(reject1.currentAttempt).toBe(2);
+
+    await calibrationJobsService.resumeAfterRework(realCompanyId, job.id);
+    await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: job.id,
+        deviceCalibrationParameterId: first.deviceCalibrationParameterId,
+        replicateIndex: 1,
+        measuredValue: 51,
+      },
+      technician.id,
+    );
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    const reject2 = await calibrationJobsService.decideQualityReview(
+      realCompanyId,
+      job.id,
+      manager.id,
+      { decision: "REJECT", notes: "SpO2 perlu diperiksa" },
+    );
+    const reject2Id = reject2.reviews[0]!.id;
+    expect(reject2.currentAttempt).toBe(3);
+    expect(reject2Id).not.toBe(reject1Id);
+
+    await calibrationJobsService.resumeAfterRework(realCompanyId, job.id);
+    await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: job.id,
+        deviceCalibrationParameterId: first.deviceCalibrationParameterId,
+        replicateIndex: 1,
+        measuredValue: 52,
+      },
+      technician.id,
+    );
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    const approved = await calibrationJobsService.decideQualityReview(
+      realCompanyId,
+      job.id,
+      manager.id,
+      { decision: "APPROVE", notes: "OK" },
+    );
+    expect(approved.status).toBe("SUBMITTED");
+    expect(approved.submittedAt).not.toBeNull();
+    expect(approved.currentAttempt).toBe(3);
+    expect(approved.reviews[0]!.status).toBe("APPROVED");
+
+    const completed = await calibrationJobsService.complete(realCompanyId, job.id);
+    expect(completed.status).toBe("ACCEPTED_BY_QA");
+    expect(completed.currentAttempt).toBe(3);
+
+    const history = await prisma.qualityReview.findMany({
+      where: { companyId: realCompanyId, calibrationJobId: job.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(history).toHaveLength(3);
+    expect(history.map((r) => r.decision)).toEqual(["REJECT", "REJECT", "APPROVE"]);
+    expect(history.map((r) => r.notes)).toEqual([
+      "NIBP perlu diukur ulang",
+      "SpO2 perlu diperiksa",
+      "OK",
+    ]);
+    expect(history[0]!.id).toBe(reject1Id);
+    expect(history[1]!.id).toBe(reject2Id);
+    expect(history[0]!.notes).toBe("NIBP perlu diukur ulang");
+  });
+
+  it("concurrent REJECT increments currentAttempt exactly once", async () => {
+    const { job } = await inProgressJob();
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+
+    const results = await Promise.allSettled([
+      calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+        decision: "REJECT",
+        notes: "concurrent A",
+      }),
+      calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+        decision: "REJECT",
+        notes: "concurrent B",
+      }),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    const after = await calibrationJobsService.findOne(realCompanyId, job.id);
+    expect(after.status).toBe("REWORK");
+    expect(after.currentAttempt).toBe(2);
+    const reviews = await prisma.qualityReview.count({
+      where: { companyId: realCompanyId, calibrationJobId: job.id },
+    });
+    expect(reviews).toBe(1);
+  });
+
+  it("concurrent resume cannot both succeed", async () => {
+    const { job } = await inProgressJob();
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    await calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+      decision: "REJECT",
+      notes: "fix",
+    });
+
+    const results = await Promise.allSettled([
+      calibrationJobsService.resumeAfterRework(realCompanyId, job.id),
+      calibrationJobsService.resumeAfterRework(realCompanyId, job.id),
+    ]);
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    const after = await calibrationJobsService.findOne(realCompanyId, job.id);
+    expect(after.status).toBe("IN_PROGRESS");
+    expect(after.currentAttempt).toBe(2);
   });
 });
 
@@ -2125,10 +2495,12 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it("allows a TECHNICIAN to submit for review and complete", async () => {
+  it("allows a TECHNICIAN to submit for review, resume after rework, and complete", async () => {
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
     getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "sub-t@x.co" } });
     await expect(guard.canActivate(contextFor("submitForReview"))).resolves.toBe(true);
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "res-t@x.co" } });
+    await expect(guard.canActivate(contextFor("resumeAfterRework"))).resolves.toBe(true);
     getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "sub-t@x.co" } });
     await expect(guard.canActivate(contextFor("complete"))).resolves.toBe(true);
   });
@@ -2147,7 +2519,7 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     await expect(guard.canActivate(contextFor("decideQualityReview"))).resolves.toBe(true);
   });
 
-  it("blocks a TECHNICIAN_MANAGER from submit, complete, and recordMeasurement", async () => {
+  it("blocks a TECHNICIAN_MANAGER from submit, complete, resume, and recordMeasurement", async () => {
     const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
     getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "mt-sub@x.co" } });
     await expect(guard.canActivate(contextFor("submitForReview"))).rejects.toBeInstanceOf(
@@ -2155,6 +2527,10 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     );
     getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "mt-cmp@x.co" } });
     await expect(guard.canActivate(contextFor("complete"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "mt-res@x.co" } });
+    await expect(guard.canActivate(contextFor("resumeAfterRework"))).rejects.toBeInstanceOf(
       ForbiddenException,
     );
     getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "mt-rec@x.co" } });
