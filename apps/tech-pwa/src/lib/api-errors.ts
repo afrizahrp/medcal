@@ -68,6 +68,23 @@ const MESSAGES: Record<string, string> = {
   MEASUREMENT_JOB_NOT_IN_PROGRESS: "Hasil pengukuran hanya dapat dicatat saat job berlangsung.",
   QUALITY_REVIEW_NOTES_REQUIRED: "Catatan keputusan wajib diisi saat menolak.",
   QUALITY_REVIEW_ALREADY_DECIDED: "Keputusan untuk pengiriman ini sudah dibuat.",
+  // Physical Inspection (BAIK / TIDAK_BAIK)
+  PHYSICAL_CHECK_JOB_SUBMITTED: "Job sudah dikirim — pemeriksaan fisik terkunci.",
+  PHYSICAL_CHECK_ATTEMPT_SUPERSEDED:
+    "Hasil pemeriksaan fisik ini milik attempt lama dan tidak dapat diubah.",
+  PHYSICAL_CHECK_DUPLICATE_ENTRY:
+    "Hasil pemeriksaan fisik ini sudah tersimpan. Muat ulang halaman.",
+  PHYSICAL_CHECK_JOB_NOT_IN_PROGRESS:
+    "Pemeriksaan fisik hanya dapat dicatat saat job berlangsung.",
+  PHYSICAL_CHECK_RESULT_NOT_FOUND: "Hasil pemeriksaan fisik tidak ditemukan. Muat ulang halaman.",
+  PHYSICAL_CHECK_ITEM_NOT_FOUND: "Item pemeriksaan fisik tidak ditemukan.",
+  PHYSICAL_CHECK_ITEM_INACTIVE: "Item pemeriksaan fisik ini berstatus nonaktif.",
+  PHYSICAL_CHECK_DEVICE_TYPE_UNRESOLVED: "Jenis alat untuk job ini belum dapat ditentukan.",
+  PHYSICAL_CHECK_DEVICE_TYPE_MISMATCH: "Item pemeriksaan fisik tidak sesuai jenis alat job.",
+  PHYSICAL_CHECK_BATCH_MULTIPLE_JOBS: "Data batch pemeriksaan fisik tidak valid.",
+  INVALID_PHYSICAL_CHECK_RESULT: "Data pemeriksaan fisik tidak valid.",
+  INVALID_PHYSICAL_CHECK_RESULT_BATCH: "Data pemeriksaan fisik tidak valid.",
+  INVALID_PHYSICAL_CHECK_RESULT_UPDATE: "Data perubahan pemeriksaan fisik tidak valid.",
 };
 
 export function isOffline(): boolean {

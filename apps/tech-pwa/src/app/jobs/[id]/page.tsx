@@ -23,6 +23,12 @@ import {
   shouldShowMeasurementSection,
 } from "../../../lib/calibration/measurement";
 import {
+  canRecordPhysicalCheck,
+  filterCurrentAttemptResults,
+  physicalCheckLockedReason,
+  shouldShowPhysicalCheckSection,
+} from "../../../lib/calibration/physical-check";
+import {
   canCompleteJob,
   canShowResumeAfterRework,
   canSubmitForReview,
@@ -41,6 +47,10 @@ import {
   useMeasurementResults,
 } from "./measurements/use-measurements-query";
 import {
+  usePhysicalCheckItems,
+  usePhysicalCheckResults,
+} from "./physical-check/use-physical-check-query";
+import {
   ApprovalStatusSection,
   AssignedDeviceSection,
   CorrectionsListSection,
@@ -48,6 +58,7 @@ import {
   JobHeaderBlock,
   MeasurementsSection,
   ObservedIdentitySection,
+  PhysicalCheckSection,
   ReferenceEquipmentSection,
   StartCalibrationAction,
   SubmitForReviewAction,
@@ -66,6 +77,8 @@ export default function JobDetailPage() {
   const jobQuery = useJobQuery(id, { poll: true });
   const correctionsQuery = useCorrectionsQuery(id, { poll: true });
   const referenceEquipmentQuery = useReferenceEquipmentUsed(id);
+  const physicalCheckItemsQuery = usePhysicalCheckItems(id);
+  const physicalCheckResultsQuery = usePhysicalCheckResults(id);
   const measurementParametersQuery = useMeasurementParameters(id);
   const measurementResultsQuery = useMeasurementResults(id);
   const startMutation = useStartCalibration(id);
@@ -133,6 +146,16 @@ export default function JobDetailPage() {
     list.push(row);
     map.set(row.deviceCalibrationParameterId, list);
   }
+  const physicalCheckCurrentResults = filterCurrentAttemptResults(
+    physicalCheckResultsQuery.data ?? [],
+    job.currentAttempt,
+  );
+  const showRecordPhysicalCheck = shouldShowPhysicalCheckSection(
+    job,
+    Boolean(capabilities?.calibrationJobRecordPhysicalCheck),
+    physicalCheckCurrentResults.length > 0,
+  );
+
   // Section shows while IN_PROGRESS (entry), REWORK (locked until resume), or
   // later read-only if any reading was already recorded on the current attempt.
   const showRecordMeasurement = shouldShowMeasurementSection(
@@ -263,6 +286,36 @@ export default function JobDetailPage() {
           lockedReason={referenceEquipmentLockedReason}
         />
       )}
+      {showRecordPhysicalCheck ? (
+        physicalCheckItemsQuery.isPending || physicalCheckResultsQuery.isPending ? (
+          <LoadingState label="Memuat pemeriksaan fisik…" />
+        ) : physicalCheckItemsQuery.isError ? (
+          <ErrorState
+            message={formatApiError(
+              physicalCheckItemsQuery.error,
+              "Gagal memuat katalog pemeriksaan fisik.",
+            )}
+            onRetry={() => void physicalCheckItemsQuery.refetch()}
+          />
+        ) : physicalCheckResultsQuery.isError ? (
+          <ErrorState
+            message={formatApiError(
+              physicalCheckResultsQuery.error,
+              "Gagal memuat hasil pemeriksaan fisik.",
+            )}
+            onRetry={() => void physicalCheckResultsQuery.refetch()}
+          />
+        ) : (
+          <PhysicalCheckSection
+            jobId={id}
+            items={physicalCheckItemsQuery.data ?? []}
+            currentAttemptResults={physicalCheckCurrentResults}
+            canRecord={showRecordPhysicalCheck}
+            entryOpen={canRecordPhysicalCheck(job)}
+            lockedReason={physicalCheckLockedReason(job)}
+          />
+        )
+      ) : null}
       {showRecordMeasurement ? (
         measurementParametersQuery.isPending || measurementResultsQuery.isPending ? (
           <LoadingState label="Memuat parameter pengukuran…" />

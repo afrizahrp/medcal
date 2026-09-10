@@ -1,0 +1,353 @@
+# Device Management — Info Panel Content Proposal (Stage 1)
+
+**Status:** Investigation + draft copy. READ-ONLY stage. No panel component built yet.
+**Next:** HARD STOP for review before Stage 2 (panel component).
+
+## Purpose of this document
+
+We plan to add a **persistent, collapsible info panel** at the top of each
+parent-menu section in Portal — **Device Management** first, as the pilot — so new
+users can self-orient without formal training. This report is the accurate,
+verified picture of what actually lives under this menu, how the pieces relate, what
+help text already exists, and a draft of the panel copy.
+
+---
+
+## Key finding up front: the menu is DB-driven, not static code
+
+The Management sidebar is rendered from the `Menu` database table, fetched at runtime
+via `GET /menu/nav?application=MANAGEMENT`
+([apps/portal/src/lib/use-nav.ts:28](../../../../apps/portal/src/lib/use-nav.ts#L28)),
+rendered by
+[apps/portal/src/components/management/sidebar-nav.tsx](../../../../apps/portal/src/components/management/sidebar-nav.tsx).
+The code-defined source of truth is the seed
+[packages/db/prisma/seed-menu.ts:85-224](../../../../packages/db/prisma/seed-menu.ts#L85-L224),
+but the table is **editable at runtime** via `/management/menu-management`, so a
+deployed DB may differ from the seed. Labels below are from the seed as of this
+investigation — **confirm against the live DB before the panel copy is frozen.**
+
+### Label vs. target inconsistency (this is the confusing area)
+
+| Nav label | href | `viewResource` | Actual page / concept |
+|---|---|---|---|
+| **Devices** | `/devices` | `deviceType` (mismatch) | `devices/` — a **customer's physical unit** |
+| **Units** | `/device-types` | `device` (mismatch) | `device-types/` — a **catalog device class** ("Device Name") |
+
+The `viewResource` values look swapped relative to their `href`. The seed carries an
+apologetic comment at
+[seed-menu.ts:138-139](../../../../packages/db/prisma/seed-menu.ts#L138-L139):
+`// Code kept as-is: label "Units"; href points at DeviceType catalog.` The pages
+themselves relabel "Device Type" as **"Device Name"** in all user-facing copy. This
+naming tangle is the strongest signal the panel is needed. **Recommendation:** track
+it as a separate cleanup item; do not block the panel on it.
+
+---
+
+## 1. Sub-menu inventory (verbatim, in coded order)
+
+Parent group: **`Device Management`**
+([seed-menu.ts:88-95](../../../../packages/db/prisma/seed-menu.ts#L88-L95), `order: 2`).
+
+| # | Label (verbatim) | Type | href | Page dir under `apps/portal/src/app/management/` | seed lines |
+|---|---|---|---|---|---|
+| 0 | `Categories` | leaf | `/device-categories` | `device-categories/` | 96-106 |
+| 1 | `Customer Devices` | **subgroup** | — | — | 107-115 |
+| 1.0 | `Devices` | leaf | `/devices` | `devices/` | 116-126 |
+| 1.1 | `Name Aliases` | leaf | `/device-type-aliases` | `device-type-aliases/` | 127-137 |
+| 1.2 | `Units` | leaf | `/device-types` | `device-types/` | 138-149 |
+| 2 | `Models` | leaf | `/device-models` | `device-models/` | 150-160 |
+| 3 | `Capabilities` | leaf | `/device-capabilities` | `device-capabilities/` | 161-171 |
+| 4 | `Calibration Parameters` | leaf | `/device-calibration-parameters` | `device-calibration-parameters/` | 172-182 |
+| 5 | `Reference Equipment` | **subgroup** | — | — | 183-191 |
+| 5.0 | `Equipments` | leaf | `/equipment-types` | `equipment-types/` | 192-202 |
+| 5.1 | `Requirements` | leaf | `/equipment-requirements` | `equipment-requirements/` | 203-213 |
+| 5.2 | `Units` | leaf | `/equipment-units` | `equipment-units/` | 214-224 |
+
+> **No "Test Points" page** exists in Device Management. Test points
+> (`CalibrationTestPoint`) are managed only as tolerance / decimal-places fields on a
+> Calibration Parameter; actual per-job readings live in Calibration Management →
+> Calibration Jobs.
+
+---
+
+## 2. Per-item detail
+
+All model blocks are in
+[packages/db/prisma/schema.prisma](../../../../packages/db/prisma/schema.prisma).
+Everything on the "definition" side is **global master data (no `companyId`)**; only
+`Device`, `Equipment`, `EquipmentCalibrationRecord` are company-scoped.
+
+### 0. Categories — `/device-categories`
+- **Model:** `DeviceCategory` (schema 1047-1059).
+- **Plain language:** the top-level filing buckets for kinds of medical equipment
+  (e.g. "Patient Monitoring", "Respiratory"). Pure taxonomy — no measurement logic.
+- **Actions:** list / search / create / edit / activate-deactivate. No delete in UI,
+  no bulk / import.
+- **Dependency:** none — the first thing you create. Every Device Name must point at
+  a category.
+- **Who:** office / admin catalog setup, once, rarely touched afterward.
+
+### 1.0. Devices — `/devices`
+- **Model:** `Device` (schema 1415-1447); FK `deviceTypeId → DeviceType`,
+  `customerId → Customer`, `companyId → Company`.
+- **Plain language:** an actual physical instrument owned by a specific customer,
+  sitting at a specific site — the individual unit that gets calibrated. `code` is
+  auto-issued and immutable (`DVC-000001`). Brand / model / serial are free text.
+- **Actions:** list / search (brand, model, serial, type, customer) / filter by
+  device type, customer, status / sortable / create / edit / view. No delete in UI,
+  no bulk / import.
+- **Dependency:** **must select an existing Device Name (type) AND an existing
+  Customer before saving** (`devices/device-form-fields.tsx`; guards in
+  `new/page.tsx` / `[id]/page.tsx`: `"Device Type wajib dipilih."`,
+  `"Customer wajib dipilih."`).
+- **Who:** office staff, ongoing — grows every time a customer sends equipment or a
+  request is imported. The only routinely-touched page in this menu.
+
+### 1.1. Name Aliases — `/device-type-aliases`
+- **Model:** `DeviceTypeAlias` (schema 1094-1108); FK `deviceTypeId → DeviceType`
+  (cascade delete); `normalizedAlias` globally unique.
+- **Plain language:** a synonym dictionary mapping the words customers use
+  ("Tensimeter", "Blood Pressure Monitor") to the one official Device Name
+  ("Sphygmomanometer"). Used when matching rows during Excel / request import.
+- **Actions:** list / search / create / edit / activate-deactivate.
+- **Dependency:** the target Device Name must already exist.
+- **Who:** office staff, occasionally — whenever an import surfaces an unrecognised
+  customer term.
+
+### 1.2. Units — `/device-types` (user-facing term: **"Device Name"**)
+- **Model:** `DeviceType` (schema 1061-1084); FK `categoryId → DeviceCategory`.
+- **Plain language:** a **class** of device the lab is accredited to calibrate — the
+  Kemenkes capability list (~35 types), e.g. "Sphygmomanometer", "Infusion Pump",
+  "Defibrillator". The **hub of the whole domain**: it owns the calibration worksheet
+  (parameters), the physical-check checklist, the required reference-equipment list,
+  the price list, and the aliases.
+- **Actions:** list / search (code, name) / filter by category / sortable / create /
+  edit / view / activate-deactivate. `code` system-generated. No delete in UI, no
+  bulk / import.
+- **Dependency:** **must select an existing Category before saving**
+  (`device-type-form-fields.tsx:53-55`; guard `"Kategori wajib dipilih."`).
+- **Who:** admin / office, during catalog setup and when the lab adds a newly
+  accredited device class. Rare after initial setup.
+
+### 2. Models — `/device-models`
+- **Model:** `DeviceModel` (schema 1257-1272); FK `deviceTypeId → DeviceType`;
+  unique `(deviceTypeId, manufacturer, model)`.
+- **Plain language:** a specific product under a Device Name — e.g. Infusion Pump →
+  "B. Braun" / "Infusomat Space". Manufacturer is plain text, not its own entity.
+  **Currently reference data only** — `Device` is deliberately not FK'd to it yet.
+- **Actions:** list / search / create / edit / activate-deactivate.
+- **Dependency:** the parent Device Name must already exist.
+- **Who:** office staff, optional / low priority — a lookup aid, not required to run
+  calibration.
+
+### 3. Capabilities — `/device-capabilities`
+- **Models:** `DeviceCapability` (schema 1280-1293) + `DeviceCapabilityItem`
+  (schema 1298-1313; FK `capabilityId → DeviceCapability`, unique
+  `(capabilityId, name)`).
+- **Plain language:** a **measurable function** of a device (e.g. "NIBP", "ECG",
+  "SpO2"), and under it the **sub-facets** that actually get measured (NIBP →
+  Systolic / Diastolic / MAP). Shared building blocks reused across many Device Names.
+- **Actions:** capability — list / search / create / edit / activate-deactivate.
+  Items — added / edited / activated inline on the capability detail page. No delete
+  in UI, no bulk, no reorder here (capability order is set per-device-type on the
+  Calibration Parameters page).
+- **Dependency:** create a Capability first, then add its Items. A Calibration
+  Parameter later points at a Capability **Item**, so items must exist before
+  parameters can be built.
+- **Who:** admin, during initial setup; extended when a new measurement function is
+  needed for a new device class.
+
+### 4. Calibration Parameters — `/device-calibration-parameters`
+- **Models:** `DeviceCalibrationParameter` (schema 1322-1367; FK
+  `deviceTypeId → DeviceType`, `capabilityItemId → DeviceCapabilityItem`,
+  `uomId → Uom` optional) + `CalibrationTestPoint` (schema 2000-2029; FK to
+  parameter, cascade) as the setpoint / tolerance detail.
+- **Plain language:** the **rows of the calibration worksheet** for one Device Name —
+  each row is one thing the technician measures, with its acceptance tolerance
+  (min / max / note copied verbatim from the LK standard), unit, value type
+  (NUMBER / RATIO / TEXT / BOOLEAN), decimal precision, and worksheet input style.
+- **Actions:** bespoke expandable tree (Device Name → Capability → parameter rows);
+  search (auto-expands matches); status filter; create (header button, or inline
+  "Tambah parameter untuk {name}" with the device type pre-filled); edit; view;
+  **drag-and-drop reorder** of capabilities and of parameters within a capability
+  (`@dnd-kit`, optimistic with rollback). No delete in UI, no bulk (a seed script
+  exists). Edit mode **locks the whole hierarchy** — shows a read-only breadcrumb
+  `DeviceType › Capability › CapabilityItem` ("Konteks (tidak dapat diubah)").
+- **Dependency (strongest in the menu):** create form requires, in order —
+  **Device Name → Capability → Capability Item → UOM → Name**. The Capability Item
+  picker is disabled until a Capability is chosen (`"Pilih capability dulu"`). Full
+  prerequisite chain: Category → Device Name; Capability → Capability Item;
+  (optionally) UOM — all must exist first.
+- **Who:** admin / calibration engineer, during setup of each new device class and
+  when a standard is revised. Not touched in day-to-day operations.
+
+### 5.0. Equipments — `/equipment-types`
+- **Model:** `EquipmentType` (schema 1120-1134).
+- **Plain language:** a **class of reference / standard instrument** the lab uses to
+  calibrate customer devices — e.g. "Electrical Safety Analyzer", "Digital Pressure
+  Calibrator".
+- **Actions:** list / search / create / edit / activate-deactivate.
+- **Dependency:** none — independent master. Needed before Requirements and before
+  registering physical reference units.
+- **Who:** admin, during setup.
+
+### 5.1. Requirements — `/equipment-requirements`
+- **Model:** `DeviceTypeEquipmentRequirement` (schema 1228-1251; FK
+  `deviceTypeId → DeviceType`, `equipmentTypeId → EquipmentType`, unique pair).
+- **Plain language:** the rule "to calibrate **this** Device Name you normally need
+  **this** kind of reference equipment" — with display ordering for the worksheet
+  ("Daftar Alat yang Digunakan").
+- **Actions:** list / create / edit / reorder (per device type).
+- **Dependency:** both the Device Name and the Equipment (type) must already exist.
+- **Who:** admin, during setup of each device class.
+
+### 5.2. Units — `/equipment-units`
+- **Model:** `Equipment` (schema 1145-1169; FK `companyId → Company`,
+  `equipmentTypeId → EquipmentType`); calibration validity comes from
+  `EquipmentCalibrationRecord` (schema 1190-1220).
+- **Plain language:** the lab's **actual owned reference units** — e.g. "ESA-001", a
+  Fluke ESA620, serial 12345 — the physical tools a technician brings on-site.
+- **Actions:** list / search / filter / create / edit / activate-deactivate; manage
+  calibration records (date, valid-until, certificate number).
+- **Dependency:** the Equipment type must already exist; company-scoped.
+- **Who:** admin / lab manager, ongoing — kept current as instruments are
+  re-calibrated or retired.
+
+---
+
+## 3. Relationships & onboarding order
+
+```
+DeviceCategory ──< DeviceType ──< DeviceModel
+                       │           DeviceTypeAlias
+                       │           DevicePhysicalCheckItem   (surfaced in Calibration Mgmt)
+                       ├──< DeviceCalibrationParameter ──< CalibrationTestPoint
+                       │        ^          ^
+                       │        │          └── DeviceCapabilityItem ──> DeviceCapability
+                       │        └── Uom (optional)
+                       ├──< DeviceTypeCapabilityOrder ──> DeviceCapability
+                       └──< DeviceTypeEquipmentRequirement ──> EquipmentType ──< Equipment ──< EquipmentCalibrationRecord
+
+Device (customer's physical unit) ──> DeviceType   [+ Customer, + Company]
+```
+
+**Which page feeds which:** `Categories` feeds the category picker on `Units (Device
+Name)`. `Units` + `Capabilities`/items + `UOM` all feed `Calibration Parameters`.
+`Units` + `Equipments` feed `Requirements`. `Equipments` feeds `Units (equipment)`.
+`Units (Device Name)` feeds `Name Aliases`, `Models`, and the device-type picker on
+`Devices`.
+
+**Natural setup sequence for onboarding a new device class:**
+
+1. **Categories** — create the bucket.
+2. **Units (Device Name)** — create the device class under that category.
+3. **Capabilities** — create the function(s) it measures, then their **Items**
+   (sub-facets). Reusable — skip if they already exist.
+4. **Calibration Parameters** — build the worksheet rows for the device class
+   (needs Device Name + Capability Item + UOM), then set tolerances / test points and
+   drag them into order.
+5. **Equipments** → **Requirements** — declare which reference-equipment classes are
+   needed to calibrate this device class.
+6. **Reference Equipment › Units** — ensure the physical reference instruments are
+   registered and in-calibration.
+7. **Name Aliases** — add customer synonyms so imports match.
+8. **Models** — optional catalogue of known manufacturer / model entries.
+
+Only after the catalog is in place does day-to-day work begin: **Devices** (customer
+units) are added continuously, then Calibration Requests / Jobs consume the catalog.
+
+---
+
+## 4. Existing help content found
+
+- **No i18n framework** in Portal — all copy is inline literal strings.
+- **No tooltip component, no info panel, no onboarding / tour** anywhere in these
+  pages. Nothing to reconcile or supersede — this panel would be the first of its kind.
+- **No toast library** — feedback is inline `<p>` (red = error, emerald = success).
+- Inline helper text that already exists (match this tone; don't duplicate it):
+  - `"Kode dibuat otomatis oleh sistem saat disimpan."` / `"Kode otomatis — tidak dapat diubah."`
+  - Calibration Parameters tolerance helper:
+    `"Isi keduanya untuk rentang (25 ± 6°C → 19–31). Hanya max untuk batas atas (≤500 µA)."`
+  - `"Jumlah digit di belakang koma untuk hasil pengukuran parameter ini (0–10)."`
+  - `"Konteks (tidak dapat diubah)"` (locked breadcrumb in parameter edit)
+  - `"Unik dalam capability ini"` (capability item name hint)
+  - Dependency error strings — shipped but currently unreachable (no delete UI):
+    `"Capability masih memiliki item — hapus item terlebih dahulu."`,
+    `"Capability Item masih memiliki calibration parameter — hapus parameter terlebih dahulu."`
+  - Longer descriptive-sentence pattern elsewhere in Portal (Work Orders):
+    `"Setelah ditandai selesai, Work Order terkunci. Tidak ada edit, assignment, cancel, atau pembalikan status."`
+- **Tone conventions:** formal but terse, sentence-case, **no "Anda"** in
+  labels / hints; imperative verbs (`Cari…`, `Pilih…`, `Masukkan…`); noun-phrase
+  errors ending with a period. English domain nouns kept verbatim ("Device",
+  "Customer", "Capability", "Calibration Parameter", "UOM"). Status is always
+  **"Aktif" / "Nonaktif"**. User-facing term for `DeviceType` is **"Device Name"**;
+  "Device" = the customer's physical unit; **"Perangkat" is not used**.
+
+---
+
+## 5. Draft panel copy (Bahasa Indonesia)
+
+> ### Tentang Device Management
+>
+> Bagian ini berisi **data master katalog**: jenis alat yang lab terakreditasi
+> mengkalibrasinya, fungsi ukur beserta parameter kalibrasinya, dan alat standar
+> (referensi) milik lab. Data ini disiapkan admin di awal — sebelum ada Calibration
+> Request atau Job — lalu jarang diubah.
+>
+> **Isi tiap menu**
+>
+> - **Categories** — kelompok besar jenis alat medis (misal Patient Monitoring,
+>   Respiratory). Hanya pengelompokan.
+> - **Customer Devices › Devices** — unit alat fisik milik customer yang dikalibrasi.
+>   Kode dibuat otomatis. Bertambah terus seiring alat masuk.
+> - **Customer Devices › Name Aliases** — daftar sinonim: menghubungkan istilah
+>   customer ("Tensimeter") ke satu Device Name resmi ("Sphygmomanometer") agar cocok
+>   saat import.
+> - **Customer Devices › Units** — **Device Name**: kelas/jenis alat yang lab
+>   terakreditasi mengkalibrasinya. Ini pusat katalog — worksheet kalibrasi, checklist
+>   fisik, dan daftar alat standar menempel di sini.
+> - **Models** — merek/model spesifik di bawah sebuah Device Name. Sebagai referensi;
+>   opsional.
+> - **Capabilities** — fungsi ukur alat (misal NIBP, ECG, SpO2) beserta item
+>   turunannya (NIBP → Systolic, Diastolic, MAP). Dipakai ulang lintas Device Name.
+> - **Calibration Parameters** — baris-baris worksheet kalibrasi untuk tiap Device
+>   Name: yang diukur teknisi, satuan, toleransi penerimaan (sesuai LK), dan urutannya.
+> - **Reference Equipment › Equipments** — jenis alat standar/referensi milik lab
+>   (misal Electrical Safety Analyzer, Pressure Calibrator).
+> - **Reference Equipment › Requirements** — aturan: alat standar apa yang diperlukan
+>   untuk mengkalibrasi sebuah Device Name.
+> - **Reference Equipment › Units** — unit alat standar fisik milik lab beserta data
+>   kalibrasinya (berlaku sampai kapan, nomor sertifikat).
+>
+> **Urutan penyiapan untuk jenis alat baru**
+>
+> Categories → Units (Device Name) → Capabilities beserta itemnya → Calibration
+> Parameters (butuh Device Name + Capability Item + UOM) → Equipments lalu
+> Requirements → daftarkan unit alat standar di Reference Equipment › Units → Name
+> Aliases dan Models (opsional). Setelah katalog siap, **Devices** (unit customer)
+> diisi berjalan.
+
+---
+
+## 6. Decisions & open items
+
+**Confirmed with reviewer:**
+1. **Scope:** panel covers **all 11 leaf items** + the full setup sequence.
+2. **Naming:** use current terms **as-is** — panel says "Device Name" to match page
+   copy. The `Devices` / `Units` label vs. `viewResource` mismatch is a **separate
+   cleanup item**, not a blocker.
+
+**Still recommended before copy is frozen:**
+3. Confirm the live menu labels / order against `/management/menu-management` in case
+   the seed is stale.
+
+---
+
+## Verification
+
+This stage produces only this Markdown report — no code. Verify by:
+- Confirming the sub-menu list against the running Portal sidebar and
+  `/management/menu-management`.
+- Spot-checking each page's create form for the stated required-field dependencies.
+- Reviewer sign-off on the draft copy (section 5) before Stage 2 (panel component)
+  begins.

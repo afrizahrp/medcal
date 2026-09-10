@@ -23,8 +23,15 @@ import {
   type TechMeasurementParameter,
   type TechMeasurementResult,
 } from "../../../lib/calibration/measurement";
+import {
+  physicalCheckEntryStatus,
+  physicalCheckStatusChip,
+  type TechPhysicalCheckItem,
+  type TechPhysicalCheckResult,
+} from "../../../lib/calibration/physical-check";
 import { declaredAkdAkl, declaredDeviceName } from "../../../lib/calibration/job-display";
 import { RecordedReferenceEquipmentList } from "./reference-equipment/reference-equipment-ui";
+import { PhysicalCheckStatusRow } from "./physical-check/physical-check-ui";
 
 const CORRECTION_BADGE_CLASS: Record<TechIdentityCorrection["status"], string> = {
   PENDING_REVIEW: "bg-amber-500",
@@ -173,6 +180,80 @@ export function ReferenceEquipmentSection({
             className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 active:text-brand-800"
           >
             Catat alat referensi
+          </Link>
+        ) : lockedReason ? (
+          <p className="mt-2 text-xs text-slate-500">{lockedReason}</p>
+        ) : null
+      ) : null}
+    </Section>
+  );
+}
+
+/**
+ * Physical Inspection summary. Separate domain from MeasurementResult —
+ * BAIK / TIDAK_BAIK (+ optional note). Entry route is flat `/physical-check`.
+ */
+export function PhysicalCheckSection({
+  jobId,
+  items,
+  currentAttemptResults,
+  canRecord,
+  entryOpen,
+  lockedReason,
+}: {
+  jobId: string;
+  items: TechPhysicalCheckItem[];
+  currentAttemptResults: TechPhysicalCheckResult[];
+  canRecord: boolean;
+  entryOpen: boolean;
+  lockedReason: string | null;
+}) {
+  const hasAny = items.length > 0;
+  const sectionStatus = physicalCheckEntryStatus(items, currentAttemptResults);
+  const sectionChip = physicalCheckStatusChip(sectionStatus);
+  const resultsByItem = new Map(
+    currentAttemptResults.map((r) => [r.devicePhysicalCheckItemId, r] as const),
+  );
+  return (
+    <Section title="Pemeriksaan Fisik">
+      {!hasAny ? (
+        <p className="text-sm text-slate-500">
+          Tidak ada item pemeriksaan fisik yang didukung untuk jenis alat ini.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-slate-500">Ringkasan attempt saat ini</p>
+            <span
+              className={[
+                "shrink-0 rounded-md px-2 py-0.5 text-[11px] font-semibold",
+                sectionChip.className,
+              ].join(" ")}
+            >
+              {sectionChip.label}
+            </span>
+          </div>
+          <ul className="flex flex-col gap-1.5">
+            {items.map((item) => {
+              const row = resultsByItem.get(item.id);
+              return (
+                <PhysicalCheckStatusRow
+                  key={item.id}
+                  name={item.name}
+                  verdict={row?.verdict}
+                />
+              );
+            })}
+          </ul>
+        </div>
+      )}
+      {canRecord ? (
+        entryOpen && hasAny ? (
+          <Link
+            href={`/jobs/${jobId}/physical-check`}
+            className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 active:text-brand-800"
+          >
+            Catat Pemeriksaan Fisik
           </Link>
         ) : lockedReason ? (
           <p className="mt-2 text-xs text-slate-500">{lockedReason}</p>
