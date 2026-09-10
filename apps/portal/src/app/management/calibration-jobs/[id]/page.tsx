@@ -406,6 +406,7 @@ export default function CalibrationJobDetailPage() {
           job={job}
           onFocusIdentity={() => focusSection("identity", identitySectionRef)}
           onFocusRefEquipment={() => focusSection("ref-equipment", refEquipmentSectionRef)}
+          onFocusMeasurement={() => focusSection("measurement", measurementSectionRef)}
           onFocusCorrections={() => focusSection("corrections", correctionsSectionRef)}
           onFocusAkdAkl={() => focusSection("akd-akl", akdAklSectionRef)}
         />
@@ -734,20 +735,23 @@ function StatusChip({
  * At-a-glance summary above the accordion sections. `referenceEquipmentNeedsApproval`
  * and `identityCorrectionPending` come straight off `job.actionSignals` — already
  * fetched for this job (GET /calibration-jobs/:id returns the same list-row shape
- * as the Calibration Jobs list), not recomputed client-side. Identitas has no
- * existing "needs attention" signal, so its chip stays neutral — it is a
- * navigation shortcut, not a verdict.
+ * as the Calibration Jobs list), not recomputed client-side. Identitas and Hasil
+ * Pengukuran have no "needs attention" signal (a real "measurement complete"
+ * signal is deferred to Stage B/C), so their chips stay neutral — pure
+ * navigation shortcuts, not verdicts.
  */
 function StatusStrip({
   job,
   onFocusIdentity,
   onFocusRefEquipment,
+  onFocusMeasurement,
   onFocusCorrections,
   onFocusAkdAkl,
 }: {
   job: CalibrationJobRow;
   onFocusIdentity: () => void;
   onFocusRefEquipment: () => void;
+  onFocusMeasurement: () => void;
   onFocusCorrections: () => void;
   onFocusAkdAkl: () => void;
 }) {
@@ -763,6 +767,9 @@ function StatusStrip({
         tone={refEquipmentNeedsApproval ? "attention" : "neutral"}
         onClick={onFocusRefEquipment}
       />
+      {/* Purely navigational — no "measurement complete" signal exists yet
+          (deferred to Stage B/C), so this stays neutral like Identitas. */}
+      <StatusChip label="Hasil Pengukuran" tone="neutral" onClick={onFocusMeasurement} />
       <StatusChip
         label={identityCorrectionPending ? "Koreksi Identitas · Menunggu Review" : "Koreksi Identitas"}
         tone={identityCorrectionPending ? "attention" : "neutral"}
