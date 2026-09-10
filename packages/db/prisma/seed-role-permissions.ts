@@ -109,6 +109,11 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "ADMIN", resource: "deviceCalibrationParameter", action: "create" },
   { role: "ADMIN", resource: "deviceCalibrationParameter", action: "update" },
   { role: "ADMIN", resource: "deviceCalibrationParameter", action: "delete" },
+  // DevicePhysicalCheckItem Master Data (Portal Physical Inspection, 2026-09-10)
+  { role: "ADMIN", resource: "devicePhysicalCheckItem", action: "read" },
+  { role: "ADMIN", resource: "devicePhysicalCheckItem", action: "create" },
+  { role: "ADMIN", resource: "devicePhysicalCheckItem", action: "update" },
+  { role: "ADMIN", resource: "devicePhysicalCheckItem", action: "delete" },
   // Equipment Type master + Required Equipment (2026-08-29, Phase 1)
   { role: "ADMIN", resource: "equipmentType", action: "read" },
   { role: "ADMIN", resource: "equipmentType", action: "create" },

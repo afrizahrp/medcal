@@ -25,6 +25,7 @@ import { DeviceTypeAliasesModule } from "./modules/device-type-aliases/device-ty
 import { DeviceModelsModule } from "./modules/device-models/device-models.module";
 import { DeviceCapabilitiesModule } from "./modules/device-capabilities/device-capabilities.module";
 import { DeviceCalibrationParametersModule } from "./modules/device-calibration-parameters/device-calibration-parameters.module";
+import { DevicePhysicalCheckItemsModule } from "./modules/device-physical-check-items/device-physical-check-items.module";
 import { DevicesModule } from "./modules/devices/devices.module";
 import { EquipmentModule } from "./modules/equipment/equipment.module";
 import { EquipmentCalibrationRecordsModule } from "./modules/equipment-calibration-records/equipment-calibration-records.module";
@@ -50,6 +51,7 @@ import { PriceListItemsModule } from "./modules/price-list-items/price-list-item
     DeviceModelsModule,
     DeviceCapabilitiesModule,
     DeviceCalibrationParametersModule,
+    DevicePhysicalCheckItemsModule,
     DevicesModule,
     EquipmentModule,
     FilesModule,

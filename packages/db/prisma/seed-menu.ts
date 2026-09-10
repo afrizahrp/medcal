@@ -182,11 +182,22 @@ const ROWS: MenuSeedRow[] = [
   },
   {
     application: "MANAGEMENT",
+    code: "device-management.physical-inspection",
+    parentCode: "device-management",
+    label: "Physical Inspection",
+    href: "/device-physical-check-items",
+    icon: "clipboardList",
+    order: 5,
+    viewResource: "devicePhysicalCheckItem",
+    viewAction: "read",
+  },
+  {
+    application: "MANAGEMENT",
     code: "device-management.equipment",
     parentCode: "device-management",
     label: "Reference Equipment",
     icon: "square-scissors",
-    order: 5,
+    order: 6,
     isGroup: true,
   },
   {

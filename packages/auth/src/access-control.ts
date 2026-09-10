@@ -45,6 +45,9 @@ import type { MembershipRole } from "@medcal/db";
  * - deviceCalibrationParameter:read/create/update/delete (Calibration
  *   parameter master): what is measured/assessed during calibration,
  *   linked to a DeviceCapabilityItem and a centralized Uom.
+ * - devicePhysicalCheckItem:read/create/update/delete (Physical Inspection
+ *   master): DeviceType → checklist items (name + inspectionLimit prose).
+ *   Separate from calibrationJob:recordPhysicalCheck (technician job writes).
  * - device:read/create/update/delete (physical Device asset): company-scoped
  *   inventory row with a required DeviceType FK; brand/model remain strings.
  */
@@ -65,6 +68,9 @@ const ac = createAccessControl({
   deviceCapability: ["read", "create", "update", "delete"],
   deviceCapabilityItem: ["read", "create", "update", "delete"],
   deviceCalibrationParameter: ["read", "create", "update", "delete"],
+  // Physical Inspection master (Portal Device Management) — NOT the Tech
+  // calibrationJob:recordPhysicalCheck execution permission.
+  devicePhysicalCheckItem: ["read", "create", "update", "delete"],
   // Equipment Type master + Device Type → Required Equipment (Phase 1).
   // equipmentType = calibration tool/equipment catalog (type, not physical unit).
   // equipmentRequirement = "this DeviceType normally requires this EquipmentType".

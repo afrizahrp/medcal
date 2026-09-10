@@ -1526,6 +1526,97 @@ export type DeviceCalibrationParameterParameterOrderInput = z.infer<
 >;
 
 // =============================================================================
+// DevicePhysicalCheckItem Master Data
+// (Portal Device Management → Physical Inspection)
+// Flat DeviceType → items. No Capability / UOM / tolerance / MeasurementResult.
+// =============================================================================
+
+/**
+ * POST /device-physical-check-items body.
+ * `code` is not accepted — server allocates `${deviceType.code}_PHYSICAL_NNN`
+ * (same deterministic convention as the Physical Inspection master seed).
+ * `sortOrder` is not accepted — appended to the end of the DeviceType scope.
+ */
+export const devicePhysicalCheckItemCreateSchema = z.object({
+  deviceTypeId: z.string().min(1),
+  name: z.string().trim().min(1).max(200),
+  inspectionLimit: z.string().trim().min(1).max(500),
+  isActive: z.boolean().optional(),
+});
+
+export type DevicePhysicalCheckItemCreateInput = z.infer<
+  typeof devicePhysicalCheckItemCreateSchema
+>;
+
+/** GET /device-physical-check-items query params (flat list, optional). */
+export const devicePhysicalCheckItemListQuerySchema = baseListQuerySchema.extend({
+  deviceTypeId: z.string().min(1).optional(),
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type DevicePhysicalCheckItemListQuery = z.infer<
+  typeof devicePhysicalCheckItemListQuerySchema
+>;
+
+/** Whitelisted `sortBy` values for the flat list — see resolveSortOrder. */
+export const DEVICE_PHYSICAL_CHECK_ITEM_SORTABLE_FIELDS = [
+  "createdAt",
+  "code",
+  "name",
+  "sortOrder",
+] as const;
+
+/**
+ * PATCH /device-physical-check-items/:id body.
+ * DeviceType ownership and `code` are immutable. Reorder via the dedicated
+ * item-order endpoint — not via direct sortOrder edits.
+ */
+export const devicePhysicalCheckItemUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  inspectionLimit: z.string().trim().min(1).max(500).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type DevicePhysicalCheckItemUpdateInput = z.infer<
+  typeof devicePhysicalCheckItemUpdateSchema
+>;
+
+/**
+ * GET /device-physical-check-items/grouped query params — items grouped by
+ * Device Type for the expandable browse UI. Pagination is at the Device-Type
+ * (parent) level so a Device Type and all its items stay on one page.
+ */
+export const devicePhysicalCheckItemGroupedQuerySchema = z.object({
+  search: z.string().trim().min(1).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type DevicePhysicalCheckItemGroupedQuery = z.infer<
+  typeof devicePhysicalCheckItemGroupedQuerySchema
+>;
+
+/**
+ * PATCH /device-physical-check-items/device-types/:deviceTypeId/item-order body.
+ * `itemIds` is the FULL ordered list of items currently attached to that
+ * device type — the server rejects any set mismatch.
+ */
+export const devicePhysicalCheckItemOrderSchema = z.object({
+  itemIds: z.array(z.string().min(1)).min(1),
+});
+
+export type DevicePhysicalCheckItemOrderInput = z.infer<
+  typeof devicePhysicalCheckItemOrderSchema
+>;
+
+// =============================================================================
 // EquipmentType + DeviceTypeEquipmentRequirement Master Data
 // (Phase 1 — "Required Equipment". No physical Equipment instance layer.)
 // =============================================================================

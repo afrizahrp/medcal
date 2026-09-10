@@ -108,6 +108,26 @@ export class MeController {
         "deviceCalibrationParameter",
         "delete",
       ),
+      devicePhysicalCheckItemRead: hasPermission(
+        membership.role,
+        "devicePhysicalCheckItem",
+        "read",
+      ),
+      devicePhysicalCheckItemCreate: hasPermission(
+        membership.role,
+        "devicePhysicalCheckItem",
+        "create",
+      ),
+      devicePhysicalCheckItemUpdate: hasPermission(
+        membership.role,
+        "devicePhysicalCheckItem",
+        "update",
+      ),
+      devicePhysicalCheckItemDelete: hasPermission(
+        membership.role,
+        "devicePhysicalCheckItem",
+        "delete",
+      ),
       equipmentTypeRead: hasPermission(membership.role, "equipmentType", "read"),
       equipmentTypeCreate: hasPermission(membership.role, "equipmentType", "create"),
       equipmentTypeUpdate: hasPermission(membership.role, "equipmentType", "update"),

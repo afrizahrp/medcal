@@ -42,6 +42,10 @@ export type MeCapabilities = {
   deviceCalibrationParameterCreate: boolean;
   deviceCalibrationParameterUpdate: boolean;
   deviceCalibrationParameterDelete: boolean;
+  devicePhysicalCheckItemRead: boolean;
+  devicePhysicalCheckItemCreate: boolean;
+  devicePhysicalCheckItemUpdate: boolean;
+  devicePhysicalCheckItemDelete: boolean;
   equipmentTypeRead: boolean;
   equipmentTypeCreate: boolean;
   equipmentTypeUpdate: boolean;

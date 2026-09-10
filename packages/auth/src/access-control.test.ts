@@ -75,6 +75,10 @@ const FIXTURE: GrantRow[] = [
   { role: "ADMIN", resource: "deviceCalibrationParameter", action: "create" },
   { role: "ADMIN", resource: "deviceCalibrationParameter", action: "update" },
   { role: "ADMIN", resource: "deviceCalibrationParameter", action: "delete" },
+  { role: "ADMIN", resource: "devicePhysicalCheckItem", action: "read" },
+  { role: "ADMIN", resource: "devicePhysicalCheckItem", action: "create" },
+  { role: "ADMIN", resource: "devicePhysicalCheckItem", action: "update" },
+  { role: "ADMIN", resource: "devicePhysicalCheckItem", action: "delete" },
   { role: "ADMIN", resource: "device", action: "read" },
   { role: "ADMIN", resource: "device", action: "create" },
   { role: "ADMIN", resource: "device", action: "update" },
@@ -253,6 +257,27 @@ describe("hasPermission — deviceCalibrationParameter master data", () => {
     expect(hasPermission("TECHNICIAN", "deviceCalibrationParameter", "create")).toBe(false);
     expect(hasPermission("FINANCE", "deviceCalibrationParameter", "update")).toBe(false);
     expect(hasPermission("CUSTOMER", "deviceCalibrationParameter", "delete")).toBe(false);
+  });
+});
+
+describe("hasPermission — devicePhysicalCheckItem master data", () => {
+  it("grants ADMIN read/create/update/delete", () => {
+    expect(hasPermission("ADMIN", "devicePhysicalCheckItem", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "devicePhysicalCheckItem", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "devicePhysicalCheckItem", "update")).toBe(true);
+    expect(hasPermission("ADMIN", "devicePhysicalCheckItem", "delete")).toBe(true);
+  });
+
+  it("denies roles with no devicePhysicalCheckItem grant", () => {
+    expect(hasPermission("SUPERVISOR", "devicePhysicalCheckItem", "read")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "devicePhysicalCheckItem", "create")).toBe(false);
+    expect(hasPermission("FINANCE", "devicePhysicalCheckItem", "update")).toBe(false);
+    expect(hasPermission("CUSTOMER", "devicePhysicalCheckItem", "delete")).toBe(false);
+  });
+
+  it("keeps master management separate from technician execution grants", () => {
+    expect(hasPermission("ADMIN", "devicePhysicalCheckItem", "update")).toBe(true);
+    expect(hasPermission("TECHNICIAN", "devicePhysicalCheckItem", "update")).toBe(false);
   });
 });
 
