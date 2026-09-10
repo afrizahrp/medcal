@@ -944,6 +944,48 @@ export const measurementResultUpdateSchema = z
 export type MeasurementResultUpdateInput = z.infer<typeof measurementResultUpdateSchema>;
 
 // -----------------------------------------------------------------------------
+// Calibration Job — Physical Inspection
+// -----------------------------------------------------------------------------
+// Technician checklist/observation over HTTP. Server stamps companyId,
+// attemptNumber, recordedBy, recordedAt, and inspectionLimitSnapshot.
+// Client may only send the catalog item, verdict, and optional note.
+// BAIK / TIDAK_BAIK is a judgment — no tolerance engine.
+
+export const PHYSICAL_CHECK_VERDICT_VALUES = ["BAIK", "TIDAK_BAIK"] as const;
+
+/** POST /calibration-jobs/:id/physical-check-results body (single row). */
+export const physicalCheckResultCreateSchema = z.object({
+  devicePhysicalCheckItemId: z.string().min(1),
+  verdict: z.enum(PHYSICAL_CHECK_VERDICT_VALUES),
+  note: z.string().trim().max(2000).nullable().optional(),
+});
+
+export type PhysicalCheckResultCreateInput = z.infer<typeof physicalCheckResultCreateSchema>;
+
+/** POST /calibration-jobs/:id/physical-check-results/batch body. */
+export const physicalCheckResultBatchCreateSchema = z.object({
+  items: z.array(physicalCheckResultCreateSchema).min(1).max(200),
+});
+
+export type PhysicalCheckResultBatchCreateInput = z.infer<typeof physicalCheckResultBatchCreateSchema>;
+
+/**
+ * PATCH /calibration-jobs/:id/physical-check-results/:resultId body.
+ * Only verdict / note are editable. inspectionLimitSnapshot is frozen at create.
+ * At least one field must be present.
+ */
+export const physicalCheckResultUpdateSchema = z
+  .object({
+    verdict: z.enum(PHYSICAL_CHECK_VERDICT_VALUES).optional(),
+    note: z.string().trim().max(2000).nullable().optional(),
+  })
+  .refine((val) => Object.values(val).some((v) => v !== undefined), {
+    message: "At least one field must be provided",
+  });
+
+export type PhysicalCheckResultUpdateInput = z.infer<typeof physicalCheckResultUpdateSchema>;
+
+// -----------------------------------------------------------------------------
 // Calibration Job — Portal management list
 // -----------------------------------------------------------------------------
 

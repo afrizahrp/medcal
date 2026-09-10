@@ -114,6 +114,9 @@ describe("PermissionsService.getRole", () => {
     expect(result.grants.some((g) => g.resource === "permission" && g.action === "manage")).toBe(
       true,
     );
+    expect(
+      result.grants.some((g) => g.resource === "calibrationJob" && g.action === "recordPhysicalCheck"),
+    ).toBe(true);
   });
 
   it("includes TECHNICIAN_MANAGER in the editable role list", async () => {

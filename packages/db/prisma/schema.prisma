@@ -403,6 +403,14 @@ enum MeasurementEntryKind {
   LOGGER_SUMMARY
 }
 
+/// Technician judgment for Physical Inspection (LK "Pemerikasaan Kondisi Fisik
+/// dan Fungsi Komponen Alat"). Dedicated enum — not CalibrationValueType,
+/// ReviewDecision, or a boolean Pass/Fail. No tolerance engine.
+enum PhysicalCheckVerdict {
+  BAIK
+  TIDAK_BAIK
+}
+
 // Email → Lead Management (locked plan)
 enum EmailFolder {
   INBOX
@@ -526,6 +534,7 @@ model User {
   identityCorrectionsDecided            IdentityCorrection[]         @relation("IdentityCorrectionDecider")
   jobReferenceEquipmentUsagesOverridden JobReferenceEquipmentUsed[]  @relation("JobReferenceEquipmentOverrider")
   measurementResultsRecorded            MeasurementResult[]          @relation("MeasurementResultRecordedBy")
+  physicalCheckResultsRecorded          PhysicalCheckResult[]        @relation("PhysicalCheckResultRecordedBy")
 }
 
 // =============================================================================
@@ -1063,6 +1072,7 @@ model DeviceType {
   models                  DeviceModel[]
   devices                 Device[]
   calibrationParameters   DeviceCalibrationParameter[]
+  physicalCheckItems      DevicePhysicalCheckItem[]
   capabilityOrders        DeviceTypeCapabilityOrder[]
   calibrationRequestItems CalibrationRequestItem[]
   equipmentRequirements   DeviceTypeEquipmentRequirement[]
@@ -1375,6 +1385,31 @@ model DeviceTypeCapabilityOrder {
 
   @@unique([deviceTypeId, capabilityId])
   @@index([deviceTypeId])
+}
+
+/// Per-DeviceType Physical Inspection catalog item. Covers physical condition,
+/// component condition, and observable function checks as ONE domain (LK
+/// "Pemerikasaan Kondisi Fisik dan Fungsi Komponen Alat"). Global master — no
+/// companyId, no inheritance, no capabilityItemId / UoM / tolerance. A DeviceType
+/// with zero items is valid. inspectionLimit is the LK "Batas Pemeriksaan" prose,
+/// not a numeric tolerance.
+model DevicePhysicalCheckItem {
+  id              String   @id @default(cuid())
+  deviceTypeId    String
+  code            String
+  name            String
+  inspectionLimit String
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  deviceType DeviceType            @relation(fields: [deviceTypeId], references: [id])
+  results    PhysicalCheckResult[]
+
+  @@unique([deviceTypeId, code])
+  @@index([deviceTypeId])
+  @@index([isActive])
 }
 
 model Device {
@@ -1932,6 +1967,7 @@ model CalibrationJob {
   calibrationRequestItem CalibrationRequestItem?     @relation(fields: [calibrationRequestItemId], references: [id], onDelete: SetNull)
   akdAklApprovedBy       User?                       @relation("CalibrationJobAkdAklApprover", fields: [akdAklApprovedByUserId], references: [id])
   results                MeasurementResult[]
+  physicalCheckResults   PhysicalCheckResult[]
   evidences              JobEvidence[]
   referenceEquipmentUsed JobReferenceEquipmentUsed[]
   signature              CustomerSignature?
@@ -2084,6 +2120,40 @@ model MeasurementResult {
   @@index([calibrationTestPointId])
   @@index([companyId])
   @@index([attachmentFileObjectId])
+}
+
+/// One Physical Inspection verdict for one DevicePhysicalCheckItem on one
+/// revision attempt of one CalibrationJob. Separate domain from MeasurementResult
+/// — no replicateIndex, direction, testPoint, or tolerance fields. BAIK /
+/// TIDAK_BAIK is a technician judgment. inspectionLimitSnapshot freezes the
+/// master prose at write time so later catalog edits never rewrite history.
+model PhysicalCheckResult {
+  id                        String               @id @default(cuid())
+  companyId                 String // bare String, no FK — matches MeasurementResult child-table convention
+  calibrationJobId          String
+  devicePhysicalCheckItemId String
+  /// Revision cycle. Mirrors CalibrationJob.currentAttempt at write time. Old
+  /// attempts' rows are never edited or deleted (same as MeasurementResult).
+  attemptNumber             Int
+  verdict                   PhysicalCheckVerdict
+  note                      String?
+  /// Copy of DevicePhysicalCheckItem.inspectionLimit at record time. Never
+  /// recalculated when the master is later edited.
+  inspectionLimitSnapshot   String
+  recordedByUserId          String?
+  recordedAt                DateTime             @default(now())
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+
+  calibrationJob          CalibrationJob          @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  devicePhysicalCheckItem DevicePhysicalCheckItem @relation(fields: [devicePhysicalCheckItemId], references: [id], onDelete: Restrict)
+  recordedBy              User?                   @relation("PhysicalCheckResultRecordedBy", fields: [recordedByUserId], references: [id])
+
+  @@unique([calibrationJobId, devicePhysicalCheckItemId, attemptNumber], name: "physical_check_natural_key", map: "physical_check_natural_key")
+  @@index([calibrationJobId])
+  @@index([calibrationJobId, attemptNumber])
+  @@index([devicePhysicalCheckItemId])
+  @@index([companyId])
 }
 
 model JobEvidence {

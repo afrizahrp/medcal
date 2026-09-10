@@ -25,6 +25,9 @@ import {
   measurementResultBatchCreateSchema,
   measurementResultCreateSchema,
   measurementResultUpdateSchema,
+  physicalCheckResultBatchCreateSchema,
+  physicalCheckResultCreateSchema,
+  physicalCheckResultUpdateSchema,
   qualityReviewDecisionSchema,
 } from "@medcal/shared";
 import type { DeviceWithRelations } from "../devices/devices.service";
@@ -51,6 +54,11 @@ import {
   MeasurementResultsService,
   type MeasurementResultRow,
 } from "./measurement-results.service";
+import {
+  PhysicalCheckResultsService,
+  type DevicePhysicalCheckItemRow,
+  type PhysicalCheckResultRow,
+} from "./physical-check-results.service";
 
 @Controller("calibration-jobs")
 @UseGuards(CompanyRoleGuard)
@@ -60,6 +68,8 @@ export class CalibrationJobsController {
     private readonly service: CalibrationJobsService,
     @Inject(MeasurementResultsService)
     private readonly measurements: MeasurementResultsService,
+    @Inject(PhysicalCheckResultsService)
+    private readonly physicalChecks: PhysicalCheckResultsService,
   ) {}
 
   @Get()
@@ -434,5 +444,104 @@ export class CalibrationJobsController {
     @Param("measurementId") measurementId: string,
   ): Promise<void> {
     await this.measurements.remove(companyId, measurementId, id);
+  }
+
+  // ── Physical Inspection ───────────────────────────────────────────────────
+  // Nested under the job, like measurement-results. Catalog GET is read-level;
+  // writes use recordPhysicalCheck (TECHNICIAN only — not recordMeasurement).
+
+  @Get(":id/physical-check-items")
+  @RequirePermission("calibrationJob", "read")
+  async listPhysicalCheckItems(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<DevicePhysicalCheckItemRow[]> {
+    return this.physicalChecks.listItems(companyId, id);
+  }
+
+  @Get(":id/physical-check-results")
+  @RequirePermission("calibrationJob", "read")
+  async listPhysicalCheckResults(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<PhysicalCheckResultRow[]> {
+    return this.physicalChecks.list(companyId, id);
+  }
+
+  @Post(":id/physical-check-results")
+  @RequirePermission("calibrationJob", "recordPhysicalCheck")
+  async createPhysicalCheckResult(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<PhysicalCheckResultRow> {
+    const parsed = physicalCheckResultCreateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid physical check result payload",
+        code: "INVALID_PHYSICAL_CHECK_RESULT",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.physicalChecks.create(
+      companyId,
+      { ...parsed.data, calibrationJobId: id },
+      userId,
+    );
+  }
+
+  @Post(":id/physical-check-results/batch")
+  @RequirePermission("calibrationJob", "recordPhysicalCheck")
+  async createPhysicalCheckResultsBatch(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<PhysicalCheckResultRow[]> {
+    const parsed = physicalCheckResultBatchCreateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid physical check result batch payload",
+        code: "INVALID_PHYSICAL_CHECK_RESULT_BATCH",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.physicalChecks.createMany(
+      companyId,
+      parsed.data.items.map((item) => ({ ...item, calibrationJobId: id })),
+      userId,
+    );
+  }
+
+  @Patch(":id/physical-check-results/:resultId")
+  @RequirePermission("calibrationJob", "recordPhysicalCheck")
+  async updatePhysicalCheckResult(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Param("resultId") resultId: string,
+    @Body() rawBody: unknown,
+  ): Promise<PhysicalCheckResultRow> {
+    const parsed = physicalCheckResultUpdateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid physical check result update payload",
+        code: "INVALID_PHYSICAL_CHECK_RESULT_UPDATE",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.physicalChecks.update(companyId, resultId, parsed.data, userId, id);
+  }
+
+  @Delete(":id/physical-check-results/:resultId")
+  @RequirePermission("calibrationJob", "recordPhysicalCheck")
+  @HttpCode(204)
+  async deletePhysicalCheckResult(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Param("resultId") resultId: string,
+  ): Promise<void> {
+    await this.physicalChecks.remove(companyId, resultId, id);
   }
 }

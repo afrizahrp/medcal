@@ -202,6 +202,11 @@ export class MeController {
         "calibrationJob",
         "recordMeasurement",
       ),
+      calibrationJobRecordPhysicalCheck: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "recordPhysicalCheck",
+      ),
       calibrationJobSubmitForReview: hasPermission(
         membership.role,
         "calibrationJob",

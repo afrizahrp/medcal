@@ -180,6 +180,10 @@ const PRESERVED_BASELINE: GrantRow[] = [
   // Happy-path review (2026-09-09): TECHNICIAN only — MT reviews via
   // decideQualityReview and must not write measurement values.
   { role: "TECHNICIAN", resource: "calibrationJob", action: "recordMeasurement" },
+  // Physical Inspection (2026-09-10): recordPhysicalCheck gates create/update/
+  // delete of PhysicalCheckResult rows. TECHNICIAN only — MT is read-only via
+  // calibrationJob:read. Do not grant this to TECHNICIAN_MANAGER.
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "recordPhysicalCheck" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "submitForReview" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "resumeAfterRework" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "complete" },
@@ -242,6 +246,19 @@ async function seedRolePermissions() {
   });
   if (revoked.count > 0) {
     console.log(`[seed] removed ${revoked.count} TECHNICIAN_MANAGER recordMeasurement grant(s).`);
+  }
+
+  const revokedPhysical = await prisma.rolePermission.deleteMany({
+    where: {
+      role: "TECHNICIAN_MANAGER",
+      resource: "calibrationJob",
+      action: "recordPhysicalCheck",
+    },
+  });
+  if (revokedPhysical.count > 0) {
+    console.log(
+      `[seed] removed ${revokedPhysical.count} TECHNICIAN_MANAGER recordPhysicalCheck grant(s).`,
+    );
   }
 
   await prisma.$disconnect();

@@ -26,6 +26,7 @@
     "seed:device-taxonomy-extension-parameters": "tsx prisma/seed-device-taxonomy-extension-parameters.ts",
     "seed:reference-equipment-types": "tsx prisma/seed-reference-equipment-types.ts",
     "seed:device-type-equipment-requirements": "tsx prisma/seed-device-type-equipment-requirements.ts",
+    "seed:physical-check-items": "tsx prisma/seed-physical-check-items.ts",
     "backfill:device-calibration-parameter-tolerances": "tsx prisma/backfill-device-calibration-parameter-tolerances.ts",
     "backfill:calibration-ordering": "tsx prisma/backfill-calibration-ordering.ts",
     "backfill:identity-correction-permissions": "tsx prisma/backfill-identity-correction-permissions.ts",
@@ -33,6 +34,7 @@
     "backfill:measurement-result-permissions": "tsx prisma/backfill-measurement-result-permissions.ts",
     "backfill:quality-review-happy-path-permissions": "tsx prisma/backfill-quality-review-happy-path-permissions.ts",
     "backfill:rework-resume-permissions": "tsx prisma/backfill-rework-resume-permissions.ts",
+    "backfill:physical-check-permissions": "tsx prisma/backfill-physical-check-permissions.ts",
     "backfill:decimal-places-from-results": "tsx prisma/backfill-decimal-places-from-results.ts"
   },
   "dependencies": {
