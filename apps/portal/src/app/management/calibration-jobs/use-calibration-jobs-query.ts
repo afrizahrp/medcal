@@ -112,6 +112,10 @@ export function useCalibrationJob(id: string | undefined) {
     queryKey: [CALIBRATION_JOBS_QUERY_KEY, id],
     queryFn: () => apiFetch<CalibrationJobRow>(`/calibration-jobs/${id}`),
     enabled: Boolean(id),
+    // Keeps the detail page's status strip (actionSignals, akdAklApprovalStatus)
+    // current against decisions made elsewhere, same cadence as the list queries.
+    refetchInterval: 6000,
+    refetchOnWindowFocus: true,
   });
 }
 

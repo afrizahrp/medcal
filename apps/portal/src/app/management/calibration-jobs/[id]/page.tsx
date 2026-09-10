@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Check, FileDown, FileText, Save, ShieldAlert, Upload, X } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -31,6 +32,7 @@ import {
   type CalibrationJobRow,
 } from "../calibration-jobs-ui";
 import {
+  AKD_AKL_APPROVAL_STATUS_LABELS,
   canDecideIdentity,
   canEscalateIdentity,
   canRecordReferenceEquipment,
@@ -125,6 +127,32 @@ export default function CalibrationJobDetailPage() {
     ok: boolean;
     text: string;
   } | null>(null);
+
+  // Status-strip accordion: which sections are expanded. Sections whose badge
+  // signals "needs attention" auto-expand once, on first load — re-derived on
+  // every 6s poll would fight the user's manual expand/collapse choices.
+  const [openSections, setOpenSections] = useState<string[]>([]);
+  const didInitExpand = useRef(false);
+  const identitySectionRef = useRef<HTMLDivElement>(null);
+  const refEquipmentSectionRef = useRef<HTMLDivElement>(null);
+  const measurementSectionRef = useRef<HTMLDivElement>(null);
+  const correctionsSectionRef = useRef<HTMLDivElement>(null);
+  const akdAklSectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (didInitExpand.current || !query.data) return;
+    didInitExpand.current = true;
+    const initial: string[] = [];
+    if (query.data.actionSignals.referenceEquipmentNeedsApproval) initial.push("ref-equipment");
+    if (query.data.actionSignals.identityCorrectionPending) initial.push("corrections");
+    if (query.data.akdAklApprovalStatus === "PENDING_REVIEW") initial.push("akd-akl");
+    setOpenSections(initial);
+  }, [query.data]);
+
+  function focusSection(value: string, ref: RefObject<HTMLDivElement | null>) {
+    setOpenSections((prev) => (prev.includes(value) ? prev : [...prev, value]));
+    requestAnimationFrame(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
 
   const job = query.data;
 
@@ -373,175 +401,224 @@ export default function CalibrationJobDetailPage() {
           </p>
         ) : null}
 
-        <dl className="mt-4 space-y-4 text-sm">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <DetailField label="Declared Device Name">{declaredDeviceName(job)}</DetailField>
-            <DetailField label="Resolved Device Type">
-              {deviceType ? (
-                <>
-                  {deviceType.name}
-                  <span className="ml-2 font-mono text-xs text-slate-400">{deviceType.code}</span>
-                </>
-              ) : (
-                <span className="text-slate-400">Tidak dapat ditentukan</span>
-              )}
-            </DetailField>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <DetailField label="Declared AKD/AKL/NIE">{declaredAkdAkl(job)}</DetailField>
-            <DetailField label="Technician Observed AKD/AKL">
-              {job.technicianObservedAkdAkl ?? "—"}
-            </DetailField>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <DetailField label="Technician Observed Serial">
-              {job.technicianObservedSerial ?? "—"}
-            </DetailField>
-            <DetailField label="Requisition Line">
-              {job.calibrationRequestItemId ? (
-                <span className="font-mono text-xs text-slate-500">
-                  {job.calibrationRequestItemId}
-                </span>
-              ) : (
-                "—"
-              )}
-            </DetailField>
-          </div>
-        </dl>
+        <StatusStrip
+          job={job}
+          onFocusIdentity={() => focusSection("identity", identitySectionRef)}
+          onFocusRefEquipment={() => focusSection("ref-equipment", refEquipmentSectionRef)}
+          onFocusCorrections={() => focusSection("corrections", correctionsSectionRef)}
+          onFocusAkdAkl={() => focusSection("akd-akl", akdAklSectionRef)}
+        />
 
-        <div className="mt-5 border-t border-slate-100 pt-5">
-          <h3 className="text-sm font-semibold text-slate-900">Assigned Device</h3>
-          {job.device ? (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/50 p-3">
-              <div>
-                <Link
-                  href={`/devices/${job.device.id}`}
-                  className="font-mono text-sm font-medium text-brand-700 hover:underline"
-                >
-                  {job.device.code ?? job.device.id}
-                </Link>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Serial: {job.device.serialNumber ?? "—"}
-                </p>
+        <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="mt-2">
+          <AccordionItem ref={identitySectionRef} value="identity" className="border-t border-slate-100">
+            <AccordionTrigger className="px-0 py-3 text-sm font-semibold text-slate-900 hover:no-underline">
+              Identitas
+            </AccordionTrigger>
+            <AccordionContent>
+              <dl className="space-y-4 text-sm">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <DetailField label="Declared Device Name">{declaredDeviceName(job)}</DetailField>
+                  <DetailField label="Resolved Device Type">
+                    {deviceType ? (
+                      <>
+                        {deviceType.name}
+                        <span className="ml-2 font-mono text-xs text-slate-400">
+                          {deviceType.code}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-slate-400">Tidak dapat ditentukan</span>
+                    )}
+                  </DetailField>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <DetailField label="Declared AKD/AKL/NIE">{declaredAkdAkl(job)}</DetailField>
+                  <DetailField label="Technician Observed AKD/AKL">
+                    {job.technicianObservedAkdAkl ?? "—"}
+                  </DetailField>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <DetailField label="Technician Observed Serial">
+                    {job.technicianObservedSerial ?? "—"}
+                  </DetailField>
+                  <DetailField label="Requisition Line">
+                    {job.calibrationRequestItemId ? (
+                      <span className="font-mono text-xs text-slate-500">
+                        {job.calibrationRequestItemId}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </DetailField>
+                </div>
+              </dl>
+
+              <div className="mt-5 border-t border-slate-100 pt-5">
+                <h4 className="text-sm font-semibold text-slate-900">Assigned Device</h4>
+                {job.device ? (
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                    <div>
+                      <Link
+                        href={`/devices/${job.device.id}`}
+                        className="font-mono text-sm font-medium text-brand-700 hover:underline"
+                      >
+                        {job.device.code ?? job.device.id}
+                      </Link>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        Serial: {job.device.serialNumber ?? "—"}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">
+                    Belum ada device yang di-assign. Identitas fisik dikonfirmasi lewat Berita
+                    Acara Koreksi Identitas di bawah.
+                  </p>
+                )}
               </div>
-            </div>
-          ) : (
-            <p className="mt-2 text-sm text-slate-500">
-              Belum ada device yang di-assign. Identitas fisik dikonfirmasi lewat Berita Acara
-              Koreksi Identitas di bawah.
-            </p>
-          )}
-        </div>
+            </AccordionContent>
+          </AccordionItem>
 
-        <div className="mt-5 border-t border-slate-100 pt-5">
-          <h3 className="text-sm font-semibold text-slate-900">Alat Referensi yang Digunakan</h3>
-          <ReferenceEquipmentSection
-            job={job}
-            used={refEquipment}
-            candidates={refCandidates}
-            canRecord={canRecordRefEquipment}
-            canOverride={canOverrideRefEquipment}
-            submitting={replaceRefEquipment.isPending}
-            notice={refEquipmentNotice}
-            onSubmit={handleReplaceReferenceEquipment}
-          />
-        </div>
+          <AccordionItem
+            ref={refEquipmentSectionRef}
+            value="ref-equipment"
+            className="border-t border-slate-100"
+          >
+            <AccordionTrigger className="px-0 py-3 text-sm font-semibold text-slate-900 hover:no-underline">
+              Alat Referensi yang Digunakan
+            </AccordionTrigger>
+            <AccordionContent forceMount>
+              <ReferenceEquipmentSection
+                job={job}
+                used={refEquipment}
+                candidates={refCandidates}
+                canRecord={canRecordRefEquipment}
+                canOverride={canOverrideRefEquipment}
+                submitting={replaceRefEquipment.isPending}
+                notice={refEquipmentNotice}
+                onSubmit={handleReplaceReferenceEquipment}
+              />
+            </AccordionContent>
+          </AccordionItem>
 
-        <div className="mt-5 border-t border-slate-100 pt-5">
-          <h3 className="text-sm font-semibold text-slate-900">Hasil Pengukuran</h3>
-          <QualityReviewPanel
-            job={job}
-            parametersQuery={measurementParameters}
-            resultsQuery={measurementResults}
-            canDecide={canApproveQualityReview}
-            decidePending={decideQualityReview.isPending}
-            onApprove={handleApproveQualityReview}
-            onReject={handleRejectQualityReview}
-          />
-        </div>
+          <AccordionItem
+            ref={measurementSectionRef}
+            value="measurement"
+            className="border-t border-slate-100"
+          >
+            <AccordionTrigger className="px-0 py-3 text-sm font-semibold text-slate-900 hover:no-underline">
+              Hasil Pengukuran
+            </AccordionTrigger>
+            <AccordionContent forceMount>
+              <QualityReviewPanel
+                job={job}
+                parametersQuery={measurementParameters}
+                resultsQuery={measurementResults}
+                canDecide={canApproveQualityReview}
+                decidePending={decideQualityReview.isPending}
+                onApprove={handleApproveQualityReview}
+                onReject={handleRejectQualityReview}
+              />
+            </AccordionContent>
+          </AccordionItem>
 
-        <div className="mt-5 border-t border-slate-100 pt-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-slate-900">
+          <AccordionItem
+            ref={correctionsSectionRef}
+            value="corrections"
+            className="border-t border-slate-100"
+          >
+            <AccordionTrigger className="px-0 py-3 text-sm font-semibold text-slate-900 hover:no-underline">
               Identity Corrections (Berita Acara)
-            </h3>
-            {canSubmitCorrection ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={hasPendingCorrection}
-                onClick={() => {
-                  setError(null);
-                  setSuccess(null);
-                  setDialog("submit-correction");
-                }}
-              >
-                Ajukan Koreksi Identitas
-              </Button>
-            ) : null}
-          </div>
-          {hasPendingCorrection && canSubmitCorrection ? (
-            <p className="mt-1 text-xs text-amber-600">
-              Sudah ada BA yang menunggu review — selesaikan dulu sebelum mengajukan yang baru.
-            </p>
-          ) : null}
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {canSubmitCorrection ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={hasPendingCorrection}
+                    onClick={() => {
+                      setError(null);
+                      setSuccess(null);
+                      setDialog("submit-correction");
+                    }}
+                  >
+                    Ajukan Koreksi Identitas
+                  </Button>
+                ) : null}
+              </div>
+              {hasPendingCorrection && canSubmitCorrection ? (
+                <p className="mt-1 text-xs text-amber-600">
+                  Sudah ada BA yang menunggu review — selesaikan dulu sebelum mengajukan yang baru.
+                </p>
+              ) : null}
 
-          {corrections.isLoading ? (
-            <p className="mt-3 text-sm text-slate-400">Memuat…</p>
-          ) : corrections.isError ? (
-            <p className="mt-3 text-sm text-red-600">Gagal memuat daftar koreksi identitas.</p>
-          ) : correctionRows.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">
-              Belum ada koreksi identitas untuk job ini.
-            </p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {correctionRows.map((correction) => (
-                <CorrectionCard
-                  key={correction.id}
-                  jobId={params.id}
-                  correction={correction}
-                  canDecide={canDecideCorrection}
-                  canUpload={canSubmitCorrection}
-                  uploadPending={uploadSignature.isPending}
-                  decidePending={decideCorrection.isPending}
-                  onDecide={handleDecideCorrection}
-                  onUploadImage={handleUploadCorrectionImage}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="mt-5 border-t border-slate-100 pt-5">
-          <h3 className="text-sm font-semibold text-slate-900">AKD/AKL/NIE Approval</h3>
-          <dl className="mt-3 space-y-4 text-sm">
-            <DetailField label="Status">
-              <AkdAklStatusBadge status={job.akdAklApprovalStatus} />
-            </DetailField>
-            {gateReopenedBy ? (
-              <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                Gate dibuka kembali ke PENDING_REVIEW oleh BA {gateReopenedBy.number}.
-              </p>
-            ) : null}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <DetailField label="Decided By">{job.akdAklApprovedBy?.name ?? "—"}</DetailField>
-              <DetailField label="Decided At">{formatDateTime(job.akdAklApprovedAt)}</DetailField>
-            </div>
-            <DetailField label="Decision / Escalation Note">
-              {job.akdAklDecisionNote ? (
-                <span className="whitespace-pre-wrap">{job.akdAklDecisionNote}</span>
+              {corrections.isLoading ? (
+                <p className="mt-3 text-sm text-slate-400">Memuat…</p>
+              ) : corrections.isError ? (
+                <p className="mt-3 text-sm text-red-600">Gagal memuat daftar koreksi identitas.</p>
+              ) : correctionRows.length === 0 ? (
+                <p className="mt-2 text-sm text-slate-500">
+                  Belum ada koreksi identitas untuk job ini.
+                </p>
               ) : (
-                "—"
+                <ul className="mt-3 space-y-2">
+                  {correctionRows.map((correction) => (
+                    <CorrectionCard
+                      key={correction.id}
+                      jobId={params.id}
+                      correction={correction}
+                      canDecide={canDecideCorrection}
+                      canUpload={canSubmitCorrection}
+                      uploadPending={uploadSignature.isPending}
+                      decidePending={decideCorrection.isPending}
+                      onDecide={handleDecideCorrection}
+                      onUploadImage={handleUploadCorrectionImage}
+                    />
+                  ))}
+                </ul>
               )}
-            </DetailField>
-          </dl>
-          <p className="mt-2 text-xs text-slate-400">
-            v1: catatan eskalasi dan catatan keputusan berbagi satu kolom — catatan teknisi akan
-            tertimpa oleh catatan manajer.
-          </p>
-        </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem
+            ref={akdAklSectionRef}
+            value="akd-akl"
+            className="border-t border-slate-100"
+          >
+            <AccordionTrigger className="px-0 py-3 text-sm font-semibold text-slate-900 hover:no-underline">
+              AKD/AKL/NIE Approval
+            </AccordionTrigger>
+            <AccordionContent>
+              <dl className="space-y-4 text-sm">
+                <DetailField label="Status">
+                  <AkdAklStatusBadge status={job.akdAklApprovalStatus} />
+                </DetailField>
+                {gateReopenedBy ? (
+                  <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Gate dibuka kembali ke PENDING_REVIEW oleh BA {gateReopenedBy.number}.
+                  </p>
+                ) : null}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <DetailField label="Decided By">{job.akdAklApprovedBy?.name ?? "—"}</DetailField>
+                  <DetailField label="Decided At">{formatDateTime(job.akdAklApprovedAt)}</DetailField>
+                </div>
+                <DetailField label="Decision / Escalation Note">
+                  {job.akdAklDecisionNote ? (
+                    <span className="whitespace-pre-wrap">{job.akdAklDecisionNote}</span>
+                  ) : (
+                    "—"
+                  )}
+                </DetailField>
+              </dl>
+              <p className="mt-2 text-xs text-slate-400">
+                v1: catatan eskalasi dan catatan keputusan berbagi satu kolom — catatan teknisi
+                akan tertimpa oleh catatan manajer.
+              </p>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
         <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
           {showEscalate ? (
@@ -620,6 +697,80 @@ export default function CalibrationJobDetailPage() {
         pending={submitCorrection.isPending || uploadSignature.isPending}
         onCancel={() => setDialog(null)}
         onSubmit={handleSubmitCorrection}
+      />
+    </div>
+  );
+}
+
+// ── Status strip ──────────────────────────────────────────────────────────────
+
+const statusChipBase =
+  "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors focus:outline-none focus:ring-1 focus:ring-ring";
+const statusChipNeutral = "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100";
+const statusChipAttention = "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100";
+const statusChipOk = "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100";
+
+function StatusChip({
+  label,
+  tone,
+  onClick,
+}: {
+  label: string;
+  tone: "neutral" | "attention" | "ok";
+  onClick: () => void;
+}) {
+  const toneClass =
+    tone === "attention" ? statusChipAttention : tone === "ok" ? statusChipOk : statusChipNeutral;
+  return (
+    <button type="button" className={`${statusChipBase} ${toneClass}`} onClick={onClick}>
+      {tone === "attention" ? <ShieldAlert className="h-3.5 w-3.5" /> : null}
+      {label}
+    </button>
+  );
+}
+
+/**
+ * At-a-glance summary above the accordion sections. `referenceEquipmentNeedsApproval`
+ * and `identityCorrectionPending` come straight off `job.actionSignals` — already
+ * fetched for this job (GET /calibration-jobs/:id returns the same list-row shape
+ * as the Calibration Jobs list), not recomputed client-side. Identitas has no
+ * existing "needs attention" signal, so its chip stays neutral — it is a
+ * navigation shortcut, not a verdict.
+ */
+function StatusStrip({
+  job,
+  onFocusIdentity,
+  onFocusRefEquipment,
+  onFocusCorrections,
+  onFocusAkdAkl,
+}: {
+  job: CalibrationJobRow;
+  onFocusIdentity: () => void;
+  onFocusRefEquipment: () => void;
+  onFocusCorrections: () => void;
+  onFocusAkdAkl: () => void;
+}) {
+  const refEquipmentNeedsApproval = job.actionSignals.referenceEquipmentNeedsApproval;
+  const identityCorrectionPending = job.actionSignals.identityCorrectionPending;
+  const akdAklPending = job.akdAklApprovalStatus === "PENDING_REVIEW";
+
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      <StatusChip label="Identitas" tone="neutral" onClick={onFocusIdentity} />
+      <StatusChip
+        label={refEquipmentNeedsApproval ? "Alat Referensi · Perlu Persetujuan" : "Alat Referensi"}
+        tone={refEquipmentNeedsApproval ? "attention" : "neutral"}
+        onClick={onFocusRefEquipment}
+      />
+      <StatusChip
+        label={identityCorrectionPending ? "Koreksi Identitas · Menunggu Review" : "Koreksi Identitas"}
+        tone={identityCorrectionPending ? "attention" : "neutral"}
+        onClick={onFocusCorrections}
+      />
+      <StatusChip
+        label={`AKD/AKL · ${AKD_AKL_APPROVAL_STATUS_LABELS[job.akdAklApprovalStatus]}`}
+        tone={akdAklPending ? "attention" : job.akdAklApprovalStatus === "APPROVED" ? "ok" : "neutral"}
+        onClick={onFocusAkdAkl}
       />
     </div>
   );
