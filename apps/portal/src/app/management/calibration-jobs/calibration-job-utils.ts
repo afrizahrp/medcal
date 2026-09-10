@@ -93,12 +93,45 @@ export function isQualityReviewApproved(job: JobWithQualityReview): boolean {
   return latestQualityReview(job)?.status === "APPROVED";
 }
 
+export function isQualityReviewRejected(job: JobWithQualityReview): boolean {
+  return latestQualityReview(job)?.status === "REJECTED";
+}
+
 export function isAwaitingQualityReview(job: JobWithQualityReview): boolean {
   return job.status === "SUBMITTED" && !isQualityReviewApproved(job);
 }
 
 export function canDecideQualityReview(job: JobWithQualityReview): boolean {
   return isAwaitingQualityReview(job);
+}
+
+/**
+ * Show MT rejection notes. SUBMITTED + latest REJECTED is a new review cycle.
+ */
+export function shouldShowRejectionFeedback(job: JobWithQualityReview): boolean {
+  return (
+    isQualityReviewRejected(job) &&
+    (job.status === "REWORK" || job.status === "IN_PROGRESS")
+  );
+}
+
+/** While REWORK, currentAttempt is already N+1 with no rows — show the rejected attempt. */
+export function qualityReviewDisplayAttempt(job: {
+  status: string;
+  currentAttempt?: number | null;
+}): number {
+  const current = job.currentAttempt ?? 1;
+  if (job.status === "REWORK" && current > 1) return current - 1;
+  return current;
+}
+
+/** Reject payload. Empty / whitespace-only notes are not sent. */
+export function toQualityReviewRejectInput(
+  notes: string,
+): { decision: "REJECT"; notes: string } | null {
+  const trimmed = notes.trim();
+  if (!trimmed) return null;
+  return { decision: "REJECT", notes: trimmed };
 }
 
 // ── Identity correction display helpers ───────────────────────────────────────
@@ -211,8 +244,13 @@ export function formatCalibrationJobApiError(err: unknown, fallback: string): st
       CALIBRATION_JOB_NOT_SUBMITTED: "Job belum dikirim.",
       QUALITY_REVIEW_ALREADY_APPROVED: "Sudah Disetujui.",
       QUALITY_REVIEW_NOT_APPROVED: "Menunggu Review.",
+      QUALITY_REVIEW_NOTES_REQUIRED: "Catatan keputusan wajib diisi saat menolak.",
+      QUALITY_REVIEW_ALREADY_DECIDED: "Keputusan untuk pengiriman ini sudah dibuat.",
       CALIBRATION_JOB_ALREADY_COMPLETED: "Job sudah Diterima QA.",
       INVALID_QUALITY_REVIEW_DECISION: "Keputusan review tidak valid.",
+      CALIBRATION_JOB_NOT_IN_REWORK: "Job harus dalam perbaikan untuk dilanjutkan.",
+      CALIBRATION_JOB_ALREADY_RESUMED: "Job sudah dilanjutkan.",
+      MEASUREMENT_JOB_NOT_IN_PROGRESS: "Hasil pengukuran hanya dapat dicatat saat job berlangsung.",
     };
     if (code && messages[code]) return messages[code];
     if (typeof err.data?.message === "string") return err.data.message;

@@ -105,6 +105,7 @@ const ACTION_LABELS: Record<string, string> = {
   recordMeasurement: "Record Measurement",
   submitForReview: "Submit For Review",
   decideQualityReview: "Decide Quality Review",
+  resumeAfterRework: "Resume After Rework",
   issue: "Issue",
   void: "Void",
   reconcile: "Reconcile",

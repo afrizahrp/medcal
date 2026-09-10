@@ -20,12 +20,21 @@ import { markWizardEntryIntent } from "./identity-correction/wizard-nav";
 import {
   canRecordMeasurement,
   measurementLockedReason,
+  shouldShowMeasurementSection,
 } from "../../../lib/calibration/measurement";
 import {
   canCompleteJob,
+  canShowResumeAfterRework,
   canSubmitForReview,
 } from "../../../lib/calibration/quality-review";
-import { useCompleteJob, useCorrectionsQuery, useJobQuery, useStartCalibration, useSubmitForReview } from "./use-job-query";
+import {
+  useCompleteJob,
+  useCorrectionsQuery,
+  useJobQuery,
+  useResumeAfterRework,
+  useStartCalibration,
+  useSubmitForReview,
+} from "./use-job-query";
 import { useReferenceEquipmentUsed } from "./use-reference-equipment-query";
 import {
   useMeasurementParameters,
@@ -42,6 +51,7 @@ import {
   ReferenceEquipmentSection,
   StartCalibrationAction,
   SubmitForReviewAction,
+  ResumeAfterReworkAction,
   CompleteJobAction,
 } from "./job-detail-ui";
 
@@ -60,6 +70,7 @@ export default function JobDetailPage() {
   const measurementResultsQuery = useMeasurementResults(id);
   const startMutation = useStartCalibration(id);
   const submitMutation = useSubmitForReview(id);
+  const resumeMutation = useResumeAfterRework(id);
   const completeMutation = useCompleteJob(id);
 
   if (jobQuery.isPending) {
@@ -90,6 +101,10 @@ export default function JobDetailPage() {
   const showStart = Boolean(capabilities?.calibrationJobStart) && job.status === "PENDING";
   const showSubmitForReview =
     Boolean(capabilities?.calibrationJobSubmitForReview) && canSubmitForReview(job);
+  const showResume = canShowResumeAfterRework(
+    job,
+    Boolean(capabilities?.calibrationJobResumeAfterRework),
+  );
   const showComplete = Boolean(capabilities?.calibrationJobComplete) && canCompleteJob(job);
   const showRecordReferenceEquipment = Boolean(
     capabilities?.calibrationJobRecordReferenceEquipmentUsed,
@@ -118,20 +133,25 @@ export default function JobDetailPage() {
     list.push(row);
     map.set(row.deviceCalibrationParameterId, list);
   }
-  // Section shows while the job is IN_PROGRESS (entry), or later read-only if any
-  // reading was already recorded. Hidden for PENDING with nothing entered yet.
-  const showRecordMeasurement =
-    Boolean(capabilities?.calibrationJobRecordMeasurement) &&
-    (job.status === "IN_PROGRESS" ||
-      measurementRowsByParameter.size > 0 ||
-      measurementGridRowsByParameter.size > 0);
+  // Section shows while IN_PROGRESS (entry), REWORK (locked until resume), or
+  // later read-only if any reading was already recorded on the current attempt.
+  const showRecordMeasurement = shouldShowMeasurementSection(
+    job,
+    Boolean(capabilities?.calibrationJobRecordMeasurement),
+    measurementRowsByParameter.size > 0 || measurementGridRowsByParameter.size > 0,
+  );
 
   return (
     <Screen
       title={job.workOrder.number}
       showBack
       footer={
-        showStart || showEscalate || showSubmitCorrection || showSubmitForReview || showComplete ? (
+        showStart ||
+        showResume ||
+        showEscalate ||
+        showSubmitCorrection ||
+        showSubmitForReview ||
+        showComplete ? (
           <StickyActionBar>
             {showStart ? (
               <StartCalibrationAction
@@ -140,6 +160,17 @@ export default function JobDetailPage() {
                 error={
                   startMutation.isError
                     ? formatApiError(startMutation.error, "Gagal memulai kalibrasi.")
+                    : null
+                }
+              />
+            ) : null}
+            {showResume ? (
+              <ResumeAfterReworkAction
+                onResume={() => resumeMutation.mutate()}
+                pending={resumeMutation.isPending}
+                error={
+                  resumeMutation.isError
+                    ? formatApiError(resumeMutation.error, "Gagal melanjutkan perbaikan.")
                     : null
                 }
               />

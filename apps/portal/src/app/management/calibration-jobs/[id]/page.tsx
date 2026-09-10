@@ -45,9 +45,12 @@ import {
   isReferenceEquipmentUsable,
   latestQualityReview,
   MISSING_CORRECTION_IMAGE_MESSAGE,
+  qualityReviewDisplayAttempt,
   REFERENCE_EQUIPMENT_VALIDITY_BADGE_CLASS,
   REFERENCE_EQUIPMENT_VALIDITY_LABELS,
+  shouldShowRejectionFeedback,
   summarizeCorrectionChanges,
+  toQualityReviewRejectInput,
 } from "../calibration-job-utils";
 import {
   useCalibrationJob,
@@ -251,6 +254,24 @@ export default function CalibrationJobDetailPage() {
     }
   }
 
+  async function handleRejectQualityReview(notes: string) {
+    if (!job) return;
+    const input = toQualityReviewRejectInput(notes);
+    if (!input) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      await decideQualityReview.mutateAsync({
+        id: job.id,
+        input,
+      });
+      setSuccess("Dikembalikan untuk perbaikan.");
+      await Promise.all([query.refetch(), measurementResults.refetch()]);
+    } catch (err) {
+      setError(formatCalibrationJobApiError(err, "Gagal menolak hasil."));
+    }
+  }
+
   async function handleReplaceReferenceEquipment(items: JobReferenceEquipmentReplaceItem[]) {
     if (!job) return;
     setError(null);
@@ -435,6 +456,7 @@ export default function CalibrationJobDetailPage() {
             canDecide={canApproveQualityReview}
             decidePending={decideQualityReview.isPending}
             onApprove={handleApproveQualityReview}
+            onReject={handleRejectQualityReview}
           />
         </div>
 
@@ -993,7 +1015,7 @@ function ReferenceEquipmentCard({ unit }: { unit: ReferenceEquipmentUsed }) {
   );
 }
 
-// ── Quality review (MT APPROVE only — no Tolak / REJECT) ─────────────────────
+// ── Quality review (MT APPROVE | REJECT) ─────────────────────────────────────
 
 function QualityReviewPanel({
   job,
@@ -1002,6 +1024,7 @@ function QualityReviewPanel({
   canDecide,
   decidePending,
   onApprove,
+  onReject,
 }: {
   job: CalibrationJobRow;
   parametersQuery: ReturnType<typeof useMeasurementParameters>;
@@ -1009,12 +1032,15 @@ function QualityReviewPanel({
   canDecide: boolean;
   decidePending: boolean;
   onApprove: (notes?: string) => void | Promise<void>;
+  onReject: (notes: string) => void | Promise<void>;
 }) {
   const [notes, setNotes] = useState("");
+  const [rejectOpen, setRejectOpen] = useState(false);
   const awaiting = isAwaitingQualityReview(job);
   const approved = isQualityReviewApproved(job);
+  const showRejection = shouldShowRejectionFeedback(job);
   const review = latestQualityReview(job);
-  const attempt = job.currentAttempt ?? 1;
+  const attempt = qualityReviewDisplayAttempt(job);
   const parameters = [
     ...(parametersQuery.data?.parameters ?? []),
     ...(parametersQuery.data?.gridParameters ?? []),
@@ -1076,6 +1102,16 @@ function QualityReviewPanel({
         </div>
       ) : null}
 
+      {showRejection && review ? (
+        <div className="grid gap-3 border-t border-slate-200 pt-3 sm:grid-cols-2">
+          <DetailField label="Diputuskan oleh">{review.reviewer?.name ?? "—"}</DetailField>
+          <DetailField label="Diputuskan pada">{formatDateTime(review.reviewedAt)}</DetailField>
+          <DetailField label="Catatan keputusan">
+            {review.notes ? <span className="whitespace-pre-wrap">{review.notes}</span> : "—"}
+          </DetailField>
+        </div>
+      ) : null}
+
       {awaiting && !canDecide ? (
         <IdentityCorrectionStatusBadge status="PENDING_REVIEW" />
       ) : null}
@@ -1100,9 +1136,31 @@ function QualityReviewPanel({
             >
               <Check className="h-3.5 w-3.5" /> Setujui
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={decidePending}
+              onClick={() => setRejectOpen(true)}
+            >
+              <X className="h-3.5 w-3.5" /> Tolak
+            </Button>
           </div>
         </div>
       ) : null}
+
+      <RejectDialog
+        open={rejectOpen}
+        pending={decidePending}
+        title="Tolak hasil pengukuran"
+        description="Hasil dikembalikan ke teknisi untuk perbaikan. Catatan wajib diisi."
+        confirmLabel="Tolak"
+        onCancel={() => setRejectOpen(false)}
+        onSubmit={async (note) => {
+          await onReject(note);
+          setRejectOpen(false);
+        }}
+      />
     </div>
   );
 }
@@ -1462,6 +1520,7 @@ function RejectDialog({
   pending,
   title,
   description,
+  confirmLabel = "Reject",
   onCancel,
   onSubmit,
 }: {
@@ -1469,6 +1528,7 @@ function RejectDialog({
   pending: boolean;
   title: string;
   description: string;
+  confirmLabel?: string;
   onCancel: () => void;
   onSubmit: (note: string) => void;
 }) {
@@ -1494,7 +1554,7 @@ function RejectDialog({
       </label>
       <DialogActions
         pending={pending}
-        confirmLabel="Reject"
+        confirmLabel={confirmLabel}
         destructive
         disabled={!note.trim()}
         onCancel={onCancel}

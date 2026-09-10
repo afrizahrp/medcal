@@ -19,9 +19,37 @@ export function isQualityReviewApproved(job: JobWithReviews): boolean {
   return latestQualityReview(job)?.status === "APPROVED";
 }
 
+export function isQualityReviewRejected(job: JobWithReviews): boolean {
+  return latestQualityReview(job)?.status === "REJECTED";
+}
+
 /** SUBMITTED and MT has not approved yet — waiting for review. */
 export function isAwaitingQualityReview(job: JobWithReviews): boolean {
   return job.status === "SUBMITTED" && !isQualityReviewApproved(job);
+}
+
+/**
+ * Show MT rejection notes. Job status participates: SUBMITTED + latest REJECTED
+ * is a new cycle awaiting review, not an active rejection.
+ */
+export function shouldShowRejectionFeedback(job: JobWithReviews): boolean {
+  return (
+    isQualityReviewRejected(job) &&
+    (job.status === "REWORK" || job.status === "IN_PROGRESS")
+  );
+}
+
+/** Technician resumeAfterRework — REWORK only. Capability is checked at the call site. */
+export function canResumeAfterRework(job: { status: CalibrationJobStatus }): boolean {
+  return job.status === "REWORK";
+}
+
+/** Resume action: capability flag AND REWORK. Do not infer from role names. */
+export function canShowResumeAfterRework(
+  job: { status: CalibrationJobStatus },
+  hasResumeCapability: boolean,
+): boolean {
+  return hasResumeCapability && canResumeAfterRework(job);
 }
 
 /**

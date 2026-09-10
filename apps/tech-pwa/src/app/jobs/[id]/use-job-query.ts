@@ -119,6 +119,19 @@ export function useCompleteJob(id: string) {
   });
 }
 
+/** Technician resumeAfterRework — POST /calibration-jobs/:id/resume. */
+export function useResumeAfterRework(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<TechCalibrationJob>(`/calibration-jobs/${id}/resume`, { method: "POST" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: jobKey(id) });
+    },
+  });
+}
+
 export function useDeviceCandidates(jobId: string | undefined, search: string, enabled: boolean) {
   const trimmed = search.trim();
   return useQuery({

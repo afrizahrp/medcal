@@ -63,6 +63,11 @@ const MESSAGES: Record<string, string> = {
   QUALITY_REVIEW_NOT_APPROVED: "Menunggu Review.",
   CALIBRATION_JOB_ALREADY_COMPLETED: "Job sudah Diterima QA.",
   INVALID_QUALITY_REVIEW_DECISION: "Keputusan review tidak valid.",
+  CALIBRATION_JOB_NOT_IN_REWORK: "Job harus dalam perbaikan untuk dilanjutkan.",
+  CALIBRATION_JOB_ALREADY_RESUMED: "Job sudah dilanjutkan.",
+  MEASUREMENT_JOB_NOT_IN_PROGRESS: "Hasil pengukuran hanya dapat dicatat saat job berlangsung.",
+  QUALITY_REVIEW_NOTES_REQUIRED: "Catatan keputusan wajib diisi saat menolak.",
+  QUALITY_REVIEW_ALREADY_DECIDED: "Keputusan untuk pengiriman ini sudah dibuat.",
 };
 
 export function isOffline(): boolean {

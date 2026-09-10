@@ -199,6 +199,21 @@ export function canRecordMeasurement(job: {
   return job.status === "IN_PROGRESS" && job.startedAt !== null;
 }
 
+/**
+ * Section visibility is separate from editability. REWORK keeps Hasil Pengukuran
+ * visible (locked) even when the new attempt has zero rows.
+ */
+export function shouldShowMeasurementSection(
+  job: { status: CalibrationJobStatus },
+  hasRecordCapability: boolean,
+  hasCurrentAttemptRows: boolean,
+): boolean {
+  return (
+    hasRecordCapability &&
+    (job.status === "IN_PROGRESS" || job.status === "REWORK" || hasCurrentAttemptRows)
+  );
+}
+
 /** Human reason the entry UI is read-only, or null when it is editable. */
 export function measurementLockedReason(job: {
   status: CalibrationJobStatus;

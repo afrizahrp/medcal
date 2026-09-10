@@ -11,6 +11,7 @@ import {
   measuredValueInputStep,
   measurementLockedReason,
   parameterEntryStatus,
+  shouldShowMeasurementSection,
   passFailChip,
   toleranceText,
   usesDirection,
@@ -101,6 +102,20 @@ describe("lock helpers", () => {
     expect(canRecordMeasurement({ status: "IN_PROGRESS", startedAt: null })).toBe(false);
     expect(canRecordMeasurement({ status: "PENDING", startedAt: null })).toBe(false);
     expect(canRecordMeasurement({ status: "SUBMITTED", startedAt: "2026-09-08T00:00:00Z" })).toBe(false);
+    expect(canRecordMeasurement({ status: "REWORK", startedAt: "2026-09-08T00:00:00Z" })).toBe(false);
+  });
+
+  it("keeps Hasil Pengukuran visible on REWORK even with zero current-attempt rows, but locked", () => {
+    expect(shouldShowMeasurementSection({ status: "REWORK" }, true, false)).toBe(true);
+    expect(shouldShowMeasurementSection({ status: "REWORK" }, false, false)).toBe(false);
+    expect(shouldShowMeasurementSection({ status: "PENDING" }, true, false)).toBe(false);
+    expect(shouldShowMeasurementSection({ status: "IN_PROGRESS" }, true, false)).toBe(true);
+    expect(shouldShowMeasurementSection({ status: "SUBMITTED" }, true, true)).toBe(true);
+    expect(shouldShowMeasurementSection({ status: "SUBMITTED" }, true, false)).toBe(false);
+    expect(canRecordMeasurement({ status: "REWORK", startedAt: "2026-09-08T00:00:00Z" })).toBe(false);
+    expect(measurementLockedReason({ status: "REWORK", startedAt: "x" })).toBe(
+      "Job dikembalikan untuk perbaikan — mulai ulang attempt sebelum mencatat hasil.",
+    );
   });
   it("measurementLockedReason explains each blocked state", () => {
     expect(measurementLockedReason({ status: "PENDING", startedAt: null })).toMatch(/belum dimulai/);

@@ -10,7 +10,10 @@ import {
   isAwaitingQualityReview,
   isIdentityGateLocked,
   isQualityReviewApproved,
+  qualityReviewDisplayAttempt,
+  shouldShowRejectionFeedback,
   summarizeCorrectionChanges,
+  toQualityReviewRejectInput,
 } from "./calibration-job-utils";
 
 const base = { status: "IN_PROGRESS", akdAklApprovalStatus: "NOT_REQUIRED" };
@@ -48,6 +51,7 @@ describe("calibration-job identity gate helpers", () => {
 
 describe("quality-review helpers", () => {
   const approved = { status: "APPROVED" };
+  const rejected = { status: "REJECTED" };
 
   it("treats SUBMITTED without APPROVED as awaiting MT review", () => {
     expect(isAwaitingQualityReview({ status: "SUBMITTED", reviews: [] })).toBe(true);
@@ -56,6 +60,42 @@ describe("quality-review helpers", () => {
     expect(canDecideQualityReview({ status: "SUBMITTED", reviews: [] })).toBe(true);
     expect(canDecideQualityReview({ status: "SUBMITTED", reviews: [approved] })).toBe(false);
     expect(canDecideQualityReview({ status: "IN_PROGRESS", reviews: [] })).toBe(false);
+  });
+
+  it("treats SUBMITTED + latest REJECTED as awaiting the current cycle, not active rejection", () => {
+    expect(isAwaitingQualityReview({ status: "SUBMITTED", reviews: [rejected] })).toBe(true);
+    expect(canDecideQualityReview({ status: "SUBMITTED", reviews: [rejected] })).toBe(true);
+    expect(shouldShowRejectionFeedback({ status: "SUBMITTED", reviews: [rejected] })).toBe(false);
+  });
+
+  it("shows rejection feedback on REWORK, not on SUBMITTED, and hides decide", () => {
+    expect(shouldShowRejectionFeedback({ status: "REWORK", reviews: [rejected] })).toBe(true);
+    expect(canDecideQualityReview({ status: "REWORK", reviews: [rejected] })).toBe(false);
+    expect(isAwaitingQualityReview({ status: "REWORK", reviews: [rejected] })).toBe(false);
+    expect(shouldShowRejectionFeedback({ status: "IN_PROGRESS", reviews: [rejected] })).toBe(true);
+  });
+
+  it("shows the rejected attempt while REWORK, then the current attempt after resume", () => {
+    expect(qualityReviewDisplayAttempt({ status: "REWORK", currentAttempt: 2 })).toBe(1);
+    expect(qualityReviewDisplayAttempt({ status: "IN_PROGRESS", currentAttempt: 2 })).toBe(2);
+    expect(qualityReviewDisplayAttempt({ status: "SUBMITTED", currentAttempt: 1 })).toBe(1);
+  });
+
+  it("hides decide after REJECT until the job is SUBMITTED again", () => {
+    expect(canDecideQualityReview({ status: "REWORK", reviews: [rejected] })).toBe(false);
+    expect(canDecideQualityReview({ status: "IN_PROGRESS", reviews: [rejected] })).toBe(false);
+    expect(canDecideQualityReview({ status: "SUBMITTED", reviews: [rejected] })).toBe(true);
+    expect(canDecideQualityReview({ status: "SUBMITTED", reviews: [approved] })).toBe(false);
+  });
+
+  it("rejects empty or whitespace-only notes and sends trimmed REJECT notes", () => {
+    expect(toQualityReviewRejectInput("")).toBeNull();
+    expect(toQualityReviewRejectInput("   ")).toBeNull();
+    expect(toQualityReviewRejectInput("\n\t")).toBeNull();
+    expect(toQualityReviewRejectInput("  NIBP diukur ulang  ")).toEqual({
+      decision: "REJECT",
+      notes: "NIBP diukur ulang",
+    });
   });
 });
 
@@ -84,8 +124,10 @@ describe("formatCalibrationJobApiError", () => {
       "CALIBRATION_JOB_NOT_SUBMITTED",
       "QUALITY_REVIEW_ALREADY_APPROVED",
       "QUALITY_REVIEW_NOT_APPROVED",
+      "QUALITY_REVIEW_NOTES_REQUIRED",
       "CALIBRATION_JOB_ALREADY_COMPLETED",
       "INVALID_QUALITY_REVIEW_DECISION",
+      "CALIBRATION_JOB_NOT_IN_REWORK",
     ]) {
       const msg = formatCalibrationJobApiError(new ApiError(400, "raw", { code }), "fb");
       expect(msg).not.toBe("fb");

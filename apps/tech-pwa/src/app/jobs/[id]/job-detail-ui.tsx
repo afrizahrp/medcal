@@ -9,6 +9,7 @@ import {
   isAwaitingQualityReview,
   isQualityReviewApproved,
   latestQualityReview,
+  shouldShowRejectionFeedback,
 } from "../../../lib/calibration/quality-review";
 import type { TechReferenceEquipmentUsed } from "../../../lib/calibration/reference-equipment";
 import {
@@ -39,6 +40,7 @@ export function JobHeaderBlock({ job }: { job: TechCalibrationJob }) {
   const awaitingReview = isAwaitingQualityReview(job);
   const approved = isQualityReviewApproved(job);
   const showApprovedBadge = approved && job.status === "SUBMITTED";
+  const showRejection = shouldShowRejectionFeedback(job);
   const review = latestQualityReview(job);
   return (
     <div className="border-b border-slate-200 bg-white px-4 py-4">
@@ -76,6 +78,15 @@ export function JobHeaderBlock({ job }: { job: TechCalibrationJob }) {
             <SectionRow label="Tanggal" value={formatDate(review.reviewedAt)} />
           ) : null}
           {review.notes ? <p className="mt-1 text-sm text-slate-600">{review.notes}</p> : null}
+        </div>
+      ) : null}
+      {showRejection && review ? (
+        <div className="mt-2 space-y-1">
+          <SectionRow label="Diputuskan oleh" value={review.reviewer?.name ?? "—"} />
+          {review.reviewedAt ? (
+            <SectionRow label="Tanggal" value={formatDate(review.reviewedAt)} />
+          ) : null}
+          <SectionRow label="Catatan keputusan" value={review.notes ?? "—"} />
         </div>
       ) : null}
     </div>
@@ -366,6 +377,25 @@ export function SubmitForReviewAction({
     <div>
       <Button fullWidth disabled={pending} onClick={onSubmit}>
         {pending ? "Mengirim…" : "Kirim"}
+      </Button>
+      {error ? <p className="mt-1 text-center text-xs text-red-600">{error}</p> : null}
+    </div>
+  );
+}
+
+export function ResumeAfterReworkAction({
+  onResume,
+  pending,
+  error,
+}: {
+  onResume: () => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  return (
+    <div>
+      <Button fullWidth disabled={pending} onClick={onResume}>
+        {pending ? "Melanjutkan…" : "Lanjutkan perbaikan"}
       </Button>
       {error ? <p className="mt-1 text-center text-xs text-red-600">{error}</p> : null}
     </div>
