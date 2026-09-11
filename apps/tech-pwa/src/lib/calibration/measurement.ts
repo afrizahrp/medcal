@@ -1,4 +1,15 @@
+import {
+  measuredValueDecimalPlacesExceededMessage,
+  validateMeasuredValuePrecision,
+  type MeasuredValuePrecisionResult,
+} from "@medcal/shared";
 import type { CalibrationJobStatus } from "./types";
+
+export {
+  measuredValueDecimalPlacesExceededMessage,
+  validateMeasuredValuePrecision,
+  type MeasuredValuePrecisionResult,
+};
 
 /**
  * Measurement entry — Pattern A (direct replicates) + Pattern B (test-point grid).
@@ -252,15 +263,37 @@ export function formatMeasuredValue(
   return n.toFixed(dp);
 }
 
-/** `inputMode`/`step` for the numeric entry field given the parameter precision. */
+/**
+ * `inputMode`/`step` for the numeric entry field given the parameter precision.
+ * Null `decimalPlaces` → no precision restriction (`any`). Not the enforcement
+ * mechanism — see `validateMeasuredValue`.
+ */
 export function measuredValueInputStep(decimalPlaces: number | null | undefined): string {
-  const dp = Math.max(0, decimalPlaces ?? 0);
+  if (decimalPlaces == null) return "any";
+  const dp = Math.max(0, decimalPlaces);
   return dp === 0 ? "1" : `0.${"0".repeat(dp - 1)}1`;
 }
 
-/** True when the string is a plain decimal the API's measurementDecimalInput accepts. */
-export function isValidMeasuredValue(raw: string): boolean {
-  return /^-?\d+(\.\d+)?$/.test(raw.trim());
+/**
+ * Validate a measured-value draft: numeric shape, then max fractional digits
+ * when `decimalPlaces` is not null. Null `decimalPlaces` = no precision cap.
+ */
+export function validateMeasuredValue(
+  raw: string,
+  decimalPlaces?: number | null,
+): MeasuredValuePrecisionResult {
+  return validateMeasuredValuePrecision(raw, decimalPlaces);
+}
+
+/**
+ * True when the string is a plain decimal the API accepts and (when set)
+ * respects `decimalPlaces` as a maximum fractional length.
+ */
+export function isValidMeasuredValue(
+  raw: string,
+  decimalPlaces?: number | null,
+): boolean {
+  return validateMeasuredValue(raw, decimalPlaces).ok;
 }
 
 /**

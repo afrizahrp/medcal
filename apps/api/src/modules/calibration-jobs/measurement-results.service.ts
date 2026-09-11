@@ -2,6 +2,10 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma, prisma } from "@medcal/db";
 import type { MeasurementDirection, MeasurementEntryKind } from "@medcal/db";
 import {
+  measuredValueDecimalPlacesExceededMessage,
+  validateMeasuredValuePrecision,
+} from "@medcal/shared";
+import {
   computeIsWithinTolerance,
   resolveEffectiveTolerance,
   type ResolvedTolerance,
@@ -108,6 +112,7 @@ export type MeasurementResultRow = Prisma.MeasurementResultGetPayload<object>;
 const parameterSelect = {
   id: true,
   valueType: true,
+  decimalPlaces: true,
   toleranceMin: true,
   toleranceMax: true,
   toleranceNote: true,
@@ -145,6 +150,8 @@ export class MeasurementResultsService {
       input.deviceCalibrationParameterId,
       input.calibrationTestPointId ?? null,
     );
+
+    assertMeasuredValueDecimalPlaces(input.measuredValue, parameter.decimalPlaces);
 
     const resolved = resolveEffectiveTolerance({
       valueType: parameter.valueType,
@@ -221,6 +228,7 @@ export class MeasurementResultsService {
           input.deviceCalibrationParameterId,
           input.calibrationTestPointId ?? null,
         );
+        assertMeasuredValueDecimalPlaces(input.measuredValue, parameter.decimalPlaces);
         const resolved = resolveEffectiveTolerance({
           valueType: parameter.valueType,
           parameter,
@@ -297,6 +305,16 @@ export class MeasurementResultsService {
       input.measuredBool !== undefined && (input.measuredBool ?? null) !== row.measuredBool;
     const measuredTextChanged =
       input.measuredText !== undefined && (input.measuredText ?? null) !== row.measuredText;
+
+    // Precision is judged on the submitted text (trailing zeros count). Validate
+    // whenever measuredValue is present — not only when the Decimal magnitude changed.
+    if (input.measuredValue !== undefined) {
+      const { parameter } = await this.loadCatalog(
+        row.deviceCalibrationParameterId,
+        row.calibrationTestPointId,
+      );
+      assertMeasuredValueDecimalPlaces(input.measuredValue, parameter.decimalPlaces);
+    }
 
     if (input.measuredValue !== undefined) data.measuredValue = toDecimalOrNull(input.measuredValue);
     if (input.measuredBool !== undefined) data.measuredBool = input.measuredBool ?? null;
@@ -462,6 +480,45 @@ export class MeasurementResultsService {
 }
 
 // ── module-private value helpers ────────────────────────────────────────────
+
+/**
+ * Wire `measuredValue` → text for precision checks. Strings keep trailing zeros
+ * (`"23.0"`). Numbers use `String(n)` (JSON numbers cannot express trailing
+ * zeros). Tech-PWA always submits strings.
+ */
+function measuredValueWireText(value: string | number): string {
+  return typeof value === "string" ? value.trim() : String(value);
+}
+
+/**
+ * Reject measured values whose textual fractional length exceeds the parameter
+ * maximum. `decimalPlaces === null` → no precision restriction. Does not round.
+ */
+function assertMeasuredValueDecimalPlaces(
+  measuredValue: number | string | null | undefined,
+  decimalPlaces: number | null,
+): void {
+  if (measuredValue === null || measuredValue === undefined || measuredValue === "") return;
+  if (decimalPlaces == null) return;
+
+  const text = measuredValueWireText(measuredValue);
+  const result = validateMeasuredValuePrecision(text, decimalPlaces);
+  if (result.ok) return;
+  if (result.reason === "invalid_format") {
+    // Shape is already gated by Zod on HTTP; keep a defensive service-level check.
+    throw new BadRequestException({
+      message: "measuredValue must be a number",
+      code: "INVALID_MEASUREMENT_RESULT",
+      measuredValue: text,
+    });
+  }
+  throw new BadRequestException({
+    message: measuredValueDecimalPlacesExceededMessage(decimalPlaces),
+    code: "MEASUREMENT_DECIMAL_PLACES_EXCEEDED",
+    decimalPlaces,
+    measuredValue: text,
+  });
+}
 
 function toDecimalOrNull(value: number | string | null | undefined): Prisma.Decimal | null {
   if (value === null || value === undefined) return null;

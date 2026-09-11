@@ -1,4 +1,5 @@
 export * from "./calibration-job-action-signals";
+export * from "./measured-value-decimal-places";
 
 /**
  * Indonesian Rupiah display formatter. Presentation only — never use the

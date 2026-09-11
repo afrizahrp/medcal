@@ -15,6 +15,7 @@ import {
   passFailChip,
   toleranceText,
   usesDirection,
+  validateMeasuredValue,
 } from "./measurement";
 
 describe("formatMeasuredValue", () => {
@@ -39,9 +40,13 @@ describe("measuredValueInputStep", () => {
     expect(measuredValueInputStep(1)).toBe("0.1");
     expect(measuredValueInputStep(3)).toBe("0.001");
   });
+  it("uses any when decimalPlaces is null (no restriction)", () => {
+    expect(measuredValueInputStep(null)).toBe("any");
+    expect(measuredValueInputStep(undefined)).toBe("any");
+  });
 });
 
-describe("isValidMeasuredValue", () => {
+describe("isValidMeasuredValue / validateMeasuredValue", () => {
   it("accepts plain decimals and integers, rejects junk", () => {
     expect(isValidMeasuredValue("120")).toBe(true);
     expect(isValidMeasuredValue("-3.25")).toBe(true);
@@ -49,6 +54,41 @@ describe("isValidMeasuredValue", () => {
     expect(isValidMeasuredValue("12,0")).toBe(false);
     expect(isValidMeasuredValue("abc")).toBe(false);
     expect(isValidMeasuredValue("")).toBe(false);
+  });
+
+  it("enforces decimalPlaces = 0 as a maximum", () => {
+    expect(isValidMeasuredValue("23", 0)).toBe(true);
+    expect(isValidMeasuredValue("23.0", 0)).toBe(false);
+    expect(isValidMeasuredValue("23.2", 0)).toBe(false);
+  });
+
+  it("enforces decimalPlaces = 1 as a maximum", () => {
+    expect(isValidMeasuredValue("23", 1)).toBe(true);
+    expect(isValidMeasuredValue("23.0", 1)).toBe(true);
+    expect(isValidMeasuredValue("23.2", 1)).toBe(true);
+    expect(isValidMeasuredValue("23.23", 1)).toBe(false);
+  });
+
+  it("enforces decimalPlaces = 2 as a maximum", () => {
+    expect(isValidMeasuredValue("23", 2)).toBe(true);
+    expect(isValidMeasuredValue("23.2", 2)).toBe(true);
+    expect(isValidMeasuredValue("23.23", 2)).toBe(true);
+    expect(isValidMeasuredValue("23.234", 2)).toBe(false);
+  });
+
+  it("does not restrict fractional digits when decimalPlaces is null", () => {
+    expect(isValidMeasuredValue("23.234567", null)).toBe(true);
+    expect(isValidMeasuredValue("23.234567")).toBe(true);
+  });
+
+  it("distinguishes invalid format from excess decimals", () => {
+    expect(validateMeasuredValue("12,0", 1)).toEqual({ ok: false, reason: "invalid_format" });
+    expect(validateMeasuredValue("23.23", 1)).toEqual({
+      ok: false,
+      reason: "decimal_places_exceeded",
+      decimalPlaces: 1,
+    });
+    expect(validateMeasuredValue("23.2", 1)).toEqual({ ok: true });
   });
 });
 

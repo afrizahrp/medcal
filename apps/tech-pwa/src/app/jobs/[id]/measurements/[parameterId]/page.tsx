@@ -13,10 +13,11 @@ import {
   DEFAULT_REPLICATE_COUNT,
   canRecordMeasurement,
   formatMeasuredValue,
-  isValidMeasuredValue,
+  measuredValueDecimalPlacesExceededMessage,
   measuredValueInputStep,
   measurementLockedReason,
   toleranceText,
+  validateMeasuredValue,
   type MeasurementBatchItem,
   type TechMeasurementResult,
 } from "../../../../../lib/calibration/measurement";
@@ -164,7 +165,8 @@ export default function MeasurementParameterEntryPage() {
     );
   }
 
-  const dp = param.decimalPlaces ?? 0;
+  const dp = param.decimalPlaces;
+  const exampleHint = dp == null ? "12.3" : dp === 0 ? "120" : (12.3).toFixed(dp);
 
   const maxExistingIndex = existingRows.reduce((m, r) => Math.max(m, r.replicateIndex), 0);
   const rowCount = Math.max(DEFAULT_REPLICATE_COUNT, maxExistingIndex) + extraRows;
@@ -188,7 +190,18 @@ export default function MeasurementParameterEntryPage() {
       return value !== stored.trim();
     });
 
-  const hasInvalid = dirtyValues.some(({ value }) => value !== "" && !isValidMeasuredValue(value));
+  const invalidDirty = dirtyValues
+    .filter(({ value }) => value !== "")
+    .map(({ value }) => validateMeasuredValue(value, dp))
+    .filter((result) => !result.ok);
+  const hasInvalid = invalidDirty.length > 0;
+  const precisionError = invalidDirty.find((result) => result.reason === "decimal_places_exceeded");
+  const footerValidationMessage =
+    precisionError && precisionError.reason === "decimal_places_exceeded"
+      ? measuredValueDecimalPlacesExceededMessage(precisionError.decimalPlaces)
+      : hasInvalid
+        ? `Ada nilai yang tidak valid — gunakan angka (mis. ${exampleHint}).`
+        : null;
   const newItems: MeasurementBatchItem[] = dirtyValues
     .filter(({ value, existing }) => value !== "" && !existing)
     .map(({ index, value }) => ({
@@ -226,10 +239,8 @@ export default function MeasurementParameterEntryPage() {
       footer={
         editable ? (
           <StickyActionBar>
-            {hasInvalid ? (
-              <p className="text-center text-xs text-red-600">
-                Ada nilai yang tidak valid — gunakan angka (mis. {dp === 0 ? "120" : (12.3).toFixed(dp)}).
-              </p>
+            {footerValidationMessage ? (
+              <p className="text-center text-xs text-red-600">{footerValidationMessage}</p>
             ) : null}
             <Button fullWidth disabled={saving || nothingToSave || hasInvalid} onClick={handleSave}>
               {saving ? "Menyimpan…" : "Simpan pembacaan"}
@@ -248,7 +259,7 @@ export default function MeasurementParameterEntryPage() {
             Toleransi: <span className="font-medium">{toleranceText(param)}</span>
           </p>
           <p className="mt-0.5 text-slate-600">
-            Satuan: {param.uom?.symbol ?? "—"} · Desimal: {dp}
+            Satuan: {param.uom?.symbol ?? "—"} · Desimal: {dp == null ? "—" : dp}
           </p>
         </div>
 
@@ -264,7 +275,10 @@ export default function MeasurementParameterEntryPage() {
           {indices.map((index) => {
             const existing = rowByIndex.get(index);
             const value = draftFor(index);
-            const invalid = touched && value.trim() !== "" && !isValidMeasuredValue(value);
+            const trimmed = value.trim();
+            const validation =
+              touched && trimmed !== "" ? validateMeasuredValue(trimmed, dp) : { ok: true as const };
+            const invalid = !validation.ok;
             return (
               <li
                 key={index}
@@ -284,7 +298,7 @@ export default function MeasurementParameterEntryPage() {
                       "min-w-0 flex-1 rounded-lg border px-3 py-2 text-base",
                       invalid ? "border-red-400" : "border-slate-300",
                     ].join(" ")}
-                    placeholder={dp === 0 ? "0" : (0).toFixed(dp)}
+                    placeholder={dp == null || dp === 0 ? "0" : (0).toFixed(dp)}
                   />
                 ) : (
                   <span className="min-w-0 flex-1 text-base text-slate-900">

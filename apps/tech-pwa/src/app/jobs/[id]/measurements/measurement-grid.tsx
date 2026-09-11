@@ -9,10 +9,11 @@ import { formatApiError } from "../../../../lib/api-errors";
 import {
   expectedReplicateCount,
   formatMeasuredValue,
-  isValidMeasuredValue,
+  measuredValueDecimalPlacesExceededMessage,
   measuredValueInputStep,
   toleranceText,
   usesDirection,
+  validateMeasuredValue,
   type MeasurementBatchItem,
   type MeasurementDirection,
   type TechMeasurementParameter,
@@ -59,7 +60,8 @@ export function MeasurementGridEntry({
   const testPoints = [...(param.testPoints ?? [])].sort((a, b) => a.sequence - b.sequence);
   const directions: MeasurementDirection[] = usesDirection(param.code) ? ["UP", "DOWN"] : ["NONE"];
   const expected = expectedReplicateCount(param.code);
-  const dp = param.decimalPlaces ?? 0;
+  const dp = param.decimalPlaces;
+  const exampleHint = dp == null ? "12.3" : dp === 0 ? "120" : (12.3).toFixed(dp);
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [extraCols, setExtraCols] = useState(0);
@@ -106,7 +108,18 @@ export function MeasurementGridEntry({
     return value !== stored.trim();
   });
 
-  const hasInvalid = dirtyCells.some(({ value }) => value !== "" && !isValidMeasuredValue(value));
+  const invalidDirty = dirtyCells
+    .filter(({ value }) => value !== "")
+    .map(({ value }) => validateMeasuredValue(value, dp))
+    .filter((result) => !result.ok);
+  const hasInvalid = invalidDirty.length > 0;
+  const precisionError = invalidDirty.find((result) => result.reason === "decimal_places_exceeded");
+  const footerValidationMessage =
+    precisionError && precisionError.reason === "decimal_places_exceeded"
+      ? measuredValueDecimalPlacesExceededMessage(precisionError.decimalPlaces)
+      : hasInvalid
+        ? `Ada nilai yang tidak valid — gunakan angka (mis. ${exampleHint}).`
+        : null;
   const newItems: MeasurementBatchItem[] = dirtyCells
     .filter(({ value, existing }) => value !== "" && !existing)
     .map(({ tp, direction, index, value }) => ({
@@ -150,10 +163,8 @@ export function MeasurementGridEntry({
       footer={
         editable ? (
           <StickyActionBar>
-            {hasInvalid ? (
-              <p className="text-center text-xs text-red-600">
-                Ada nilai yang tidak valid — gunakan angka (mis. {dp === 0 ? "120" : (12.3).toFixed(dp)}).
-              </p>
+            {footerValidationMessage ? (
+              <p className="text-center text-xs text-red-600">{footerValidationMessage}</p>
             ) : null}
             <Button
               fullWidth
@@ -176,8 +187,8 @@ export function MeasurementGridEntry({
             Toleransi: <span className="font-medium">{toleranceText(param)}</span>
           </p>
           <p className="mt-0.5 text-slate-600">
-            Satuan: {param.uom?.symbol ?? "—"} · Desimal: {dp} · {testPoints.length} titik uji ·{" "}
-            {colCount} ulangan
+            Satuan: {param.uom?.symbol ?? "—"} · Desimal: {dp == null ? "—" : dp} ·{" "}
+            {testPoints.length} titik uji · {colCount} ulangan
           </p>
         </div>
 
@@ -229,7 +240,12 @@ export function MeasurementGridEntry({
                         const key = cellKey(tp.id, direction, index);
                         const existing = rowByKey.get(key);
                         const value = draftFor(key, existing);
-                        const invalid = touched && value.trim() !== "" && !isValidMeasuredValue(value);
+                        const trimmed = value.trim();
+                        const validation =
+                          touched && trimmed !== ""
+                            ? validateMeasuredValue(trimmed, dp)
+                            : { ok: true as const };
+                        const invalid = !validation.ok;
                         return (
                           <td key={key} className="px-2 py-2 align-top">
                             {editable ? (
@@ -243,7 +259,7 @@ export function MeasurementGridEntry({
                                   "w-full min-w-[4.5rem] rounded-md border px-2 py-1.5 text-base",
                                   invalid ? "border-red-400" : "border-slate-300",
                                 ].join(" ")}
-                                placeholder={dp === 0 ? "0" : (0).toFixed(dp)}
+                                placeholder={dp == null || dp === 0 ? "0" : (0).toFixed(dp)}
                               />
                             ) : (
                               <span className="block text-base text-slate-900">

@@ -421,6 +421,305 @@ describe("MeasurementResultsService — CRUD", () => {
   });
 });
 
+describe("MeasurementResultsService — decimalPlaces enforcement", () => {
+  it("create rejects excess decimals (MEASUREMENT_DECIMAL_PLACES_EXCEEDED)", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, {
+      decimalPlaces: 1,
+      toleranceMin: 20,
+      toleranceMax: 30,
+    });
+
+    await expect(
+      svc.create(
+        companyId,
+        {
+          calibrationJobId: ctx.jobId,
+          deviceCalibrationParameterId: param.id,
+          replicateIndex: 1,
+          measuredValue: "23.23",
+        },
+        ctx.technician.id,
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        code: "MEASUREMENT_DECIMAL_PLACES_EXCEEDED",
+        decimalPlaces: 1,
+        measuredValue: "23.23",
+      },
+    });
+
+    expect(
+      await prisma.measurementResult.count({
+        where: { calibrationJobId: ctx.jobId, deviceCalibrationParameterId: param.id },
+      }),
+    ).toBe(0);
+  });
+
+  it("create accepts values within the parameter decimalPlaces maximum", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, {
+      decimalPlaces: 1,
+      toleranceMin: 20,
+      toleranceMax: 30,
+    });
+
+    const row = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: "23.2",
+      },
+      ctx.technician.id,
+    );
+
+    expect(row.measuredValue?.toString()).toBe("23.2");
+    expect(row.isWithinTolerance).toBe(true);
+  });
+
+  it("create accepts integers and one trailing zero when decimalPlaces = 1", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { decimalPlaces: 1, toleranceMin: 0, toleranceMax: 100 });
+
+    const a = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: "23",
+      },
+      ctx.technician.id,
+    );
+    const b = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 2,
+        measuredValue: "23.0",
+      },
+      ctx.technician.id,
+    );
+    expect(a.measuredValue?.toString()).toBe("23");
+    expect(b.measuredValue?.toString()).toBe("23");
+  });
+
+  it("create rejects any fractional part when decimalPlaces = 0", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { decimalPlaces: 0, toleranceMin: 0, toleranceMax: 100 });
+
+    await expect(
+      svc.create(
+        companyId,
+        {
+          calibrationJobId: ctx.jobId,
+          deviceCalibrationParameterId: param.id,
+          replicateIndex: 1,
+          measuredValue: "23.0",
+        },
+        ctx.technician.id,
+      ),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_DECIMAL_PLACES_EXCEEDED" } });
+
+    const row = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: "23",
+      },
+      ctx.technician.id,
+    );
+    expect(row.measuredValue?.toString()).toBe("23");
+  });
+
+  it("create does not restrict fractional digits when decimalPlaces is null", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, {
+      decimalPlaces: null,
+      toleranceMin: 0,
+      toleranceMax: 100,
+    });
+
+    const row = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: "23.234567",
+      },
+      ctx.technician.id,
+    );
+    expect(row.measuredValue?.toString()).toBe("23.234567");
+  });
+
+  it("createMany rejects the whole batch when any item exceeds decimalPlaces", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { decimalPlaces: 1, toleranceMin: 0, toleranceMax: 100 });
+
+    await expect(
+      svc.createMany(
+        companyId,
+        [
+          {
+            calibrationJobId: ctx.jobId,
+            deviceCalibrationParameterId: param.id,
+            replicateIndex: 1,
+            measuredValue: "23.2",
+          },
+          {
+            calibrationJobId: ctx.jobId,
+            deviceCalibrationParameterId: param.id,
+            replicateIndex: 2,
+            measuredValue: "23.23",
+          },
+        ],
+        ctx.technician.id,
+      ),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_DECIMAL_PLACES_EXCEEDED" } });
+
+    expect(
+      await prisma.measurementResult.count({
+        where: { calibrationJobId: ctx.jobId, deviceCalibrationParameterId: param.id },
+      }),
+    ).toBe(0);
+  });
+
+  it("createMany accepts a batch within decimalPlaces", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { decimalPlaces: 2, toleranceMin: 0, toleranceMax: 100 });
+
+    const rows = await svc.createMany(
+      companyId,
+      [
+        {
+          calibrationJobId: ctx.jobId,
+          deviceCalibrationParameterId: param.id,
+          replicateIndex: 1,
+          measuredValue: "23.23",
+        },
+        {
+          calibrationJobId: ctx.jobId,
+          deviceCalibrationParameterId: param.id,
+          replicateIndex: 2,
+          measuredValue: "23.2",
+        },
+      ],
+      ctx.technician.id,
+    );
+    expect(rows).toHaveLength(2);
+  });
+
+  it("update rejects excess decimals and leaves the stored value unchanged", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { decimalPlaces: 1, toleranceMin: 0, toleranceMax: 100 });
+    const row = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: "23.2",
+      },
+      ctx.technician.id,
+    );
+
+    await expect(
+      svc.update(companyId, row.id, { measuredValue: "23.23" }, ctx.technician.id),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_DECIMAL_PLACES_EXCEEDED" } });
+
+    const reloaded = await prisma.measurementResult.findUniqueOrThrow({ where: { id: row.id } });
+    expect(reloaded.measuredValue?.toString()).toBe("23.2");
+  });
+
+  it("update accepts a value within decimalPlaces", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { decimalPlaces: 1, toleranceMin: 0, toleranceMax: 100 });
+    const row = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: "20",
+      },
+      ctx.technician.id,
+    );
+
+    const updated = await svc.update(companyId, row.id, { measuredValue: "23.0" }, ctx.technician.id);
+    expect(updated.measuredValue?.toString()).toBe("23");
+  });
+
+  it("GRID create uses the parameter decimalPlaces (not test-point fields)", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, {
+      decimalPlaces: 1,
+      toleranceMin: null,
+      toleranceMax: null,
+      toleranceNote: "± 5",
+    });
+    const tp = await prisma.calibrationTestPoint.create({
+      data: {
+        deviceCalibrationParameterId: param.id,
+        sequence: 1,
+        settingLabel: "60",
+        settingValue: 60,
+      },
+    });
+
+    await expect(
+      svc.create(
+        companyId,
+        {
+          calibrationJobId: ctx.jobId,
+          deviceCalibrationParameterId: param.id,
+          calibrationTestPointId: tp.id,
+          replicateIndex: 1,
+          measuredValue: "60.12",
+        },
+        ctx.technician.id,
+      ),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_DECIMAL_PLACES_EXCEEDED" } });
+
+    const row = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        calibrationTestPointId: tp.id,
+        replicateIndex: 1,
+        measuredValue: "60.1",
+      },
+      ctx.technician.id,
+    );
+    expect(row.calibrationTestPointId).toBe(tp.id);
+    expect(row.measuredValue?.toString()).toBe("60.1");
+  });
+
+  it("does not round excess decimals — rejects instead of storing 23.2", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { decimalPlaces: 1, toleranceMin: 0, toleranceMax: 100 });
+
+    await expect(
+      svc.create(
+        companyId,
+        {
+          calibrationJobId: ctx.jobId,
+          deviceCalibrationParameterId: param.id,
+          replicateIndex: 1,
+          measuredValue: "23.23",
+        },
+        ctx.technician.id,
+      ),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_DECIMAL_PLACES_EXCEEDED" } });
+  });
+});
+
 describe("CalibrationJobsController — measurement-results routes", () => {
   it("POST creates a row and returns it with the resolved verdict (no second round-trip)", async () => {
     const ctx = await startedJob();
