@@ -64,6 +64,11 @@ describe("resolveDocumentPrefix", () => {
     expect(DOCUMENT_TYPE_PREFIX.QUOTATION).toBe("QUO");
     expect(DOCUMENT_TYPE_PREFIX.PURCHASE_ORDER).toBe("PUR");
     expect(DOCUMENT_TYPE_PREFIX.WORK_ORDER).toBe("SPK");
+    expect(DOCUMENT_TYPE_PREFIX.WORK_ORDER_SEND_TO_LAB).toBe("WOL");
+    expect(DOCUMENT_TYPE_PREFIX.IDENTITY_CORRECTION_BA).toBe("BAI");
+    expect(DOCUMENT_TYPE_PREFIX.KONTROL_ALAT).toBe("KAL");
+    expect(DOCUMENT_TYPE_PREFIX.CERTIFICATE).toBe("CER");
+    expect(resolveDocumentPrefix("KONTROL_ALAT")).toBe("KAL");
     expect(resolveDocumentPrefix("QUOTATION")).toBe("QUO");
   });
 });

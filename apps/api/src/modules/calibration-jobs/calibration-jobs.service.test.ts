@@ -70,6 +70,7 @@ async function cleanupSequences(companyId: string) {
           "QUOTATION",
           "CALIBRATION_REQUEST",
           "IDENTITY_CORRECTION_BA",
+          "KONTROL_ALAT",
         ],
       },
     },

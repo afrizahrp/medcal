@@ -13,6 +13,7 @@ export const DOCUMENT_TYPE_PREFIX: Record<DocumentType, string> = {
   CERTIFICATE: "CER",
   CREDIT_NOTE: "CRN",
   IDENTITY_CORRECTION_BA: "BAI",
+  KONTROL_ALAT: "KAL",
 };
 
 export function resolveDocumentPrefix(documentType: DocumentType): string {

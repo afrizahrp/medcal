@@ -452,12 +452,13 @@ export default function KontrolAlatPage() {
           className="w-full"
           onClick={() => void handleDownloadPdf()}
         >
-          Unduh PDF F.MU.08
+          Unduh PDF
         </Button>
       </div>
 
       {/* WO / Job info */}
       <Section title="Informasi Job">
+        <SectionRow label="No. Dokumen" value={ka.number} />
         <SectionRow label="Work Order" value={job.workOrder.number} />
         <SectionRow label="Unit" value={`${job.unitOrdinal} dari ${job.unitTotal}`} />
         {job.workOrder.purchaseOrder ? (

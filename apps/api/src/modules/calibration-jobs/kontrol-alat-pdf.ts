@@ -5,6 +5,7 @@ import {
   resolvePkmLogoPath,
   text,
 } from "../work-orders/work-order-pdf-shared";
+import { quotationPdfFilename } from "../quotations/quotation-pdf";
 
 const MARGIN = 45;
 const INK = "#0f172a";
@@ -56,6 +57,8 @@ export interface KontrolAlatPdfInput {
     requestReviewCompletedBy: { name: string | null } | null;
   };
   kontrolAlat: {
+    number: string;
+    createdAt: Date;
     workExecuted: boolean | null;
     notExecutedReason: string | null;
     capacity: string | null;
@@ -98,7 +101,11 @@ export function renderKontrolAlatPdf(
     doc.on("end", () => {
       resolve({
         buffer: Buffer.concat(chunks),
-        filename: `F.MU.08-${workOrder.number.replace(/\//g, "-")}-Unit${job.unitOrdinal}.pdf`,
+        filename: quotationPdfFilename({
+          number: kontrolAlat.number,
+          companyId: company.id,
+          issuedAt: kontrolAlat.createdAt,
+        }),
       });
     });
 
@@ -113,6 +120,7 @@ export function renderKontrolAlatPdf(
     // ── Keterangan umum / identitas job ──────────────────────────────────────
 
     y = kvTable(doc, left, y, width, [
+      ["No. Dokumen", text(kontrolAlat.number) ?? "—"],
       ["No. Order", text(workOrder.purchaseOrder?.customerPoNumber) ?? "—"],
       ["No. Sertifikat", text(kontrolAlat.certificateNumber) ?? "—"],
       ["No. Work Order", workOrder.number],

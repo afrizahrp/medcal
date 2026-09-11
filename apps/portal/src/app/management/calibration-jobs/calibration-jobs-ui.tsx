@@ -49,6 +49,7 @@ export interface CalibrationJobDeviceTypeRef {
 
 export interface KontrolAlatSummary {
   id: string;
+  number: string;
   workExecuted: boolean | null;
   completedAt: string | null;
   certificateNumber: string | null;

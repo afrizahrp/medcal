@@ -990,10 +990,17 @@ function KontrolAlatAccordionContent({
           onClick={handleDownloadPdf}
         >
           <FileDown className="h-3.5 w-3.5" />
-          {pdfPending ? "Membuka…" : "PDF F.MU.08"}
+          {pdfPending ? "Membuka…" : "Unduh PDF"}
         </Button>
       </div>
       {pdfError ? <p className="text-xs text-red-600">{pdfError}</p> : null}
+
+      <div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          No. Dokumen
+        </p>
+        <p className="font-mono text-slate-800">{ka.number}</p>
+      </div>
 
       {/* No. Sertifikat — editable only after MT approve */}
       <div>

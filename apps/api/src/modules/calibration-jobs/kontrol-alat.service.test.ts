@@ -197,6 +197,7 @@ describe("KontrolAlatService", () => {
     const { jobId, technician } = await startedJob("SEND_TO_LAB");
     const got = await svc.get(companyId, jobId);
     expect(got.calibrationJobId).toBe(jobId);
+    expect(got.number).toMatch(/^KAL\/\d{4}\/\d{2}\/\d{5}$/);
     expect(got.completedAt).toBeNull();
 
     const patched = await svc.patch(companyId, jobId, technician.id, {
@@ -297,6 +298,7 @@ describe("KontrolAlatService", () => {
     expect(row.workOrder.serviceMode).toBe("SEND_TO_LAB");
     expect(row.workOrder.purchaseOrder.customerPoNumber).toBe(customerPoNumber);
     expect(row.kontrolAlat?.id).toBeTruthy();
+    expect(row.kontrolAlat?.number).toMatch(/^KAL\/\d{4}\/\d{2}\/\d{5}$/);
     expect(row.kontrolAlat?.completedAt).toBeNull();
   });
 
@@ -312,6 +314,18 @@ describe("KontrolAlatService", () => {
     await expect(
       svc.patch(companyId, jobId, technician.id, { workExecuted: false }),
     ).rejects.toMatchObject({ response: { code: "KONTROL_ALAT_REASON_REQUIRED" } });
+  });
+
+  it("buildPdf uses the KAL document number as the filename, not F.MU.08", async () => {
+    const { jobId } = await startedJob("SEND_TO_LAB");
+    const ka = await svc.get(companyId, jobId);
+    const pdf = await svc.buildPdf(companyId, jobId);
+    expect(pdf.buffer.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(pdf.filename).toContain("KAL");
+    expect(pdf.filename).toMatch(/^PKM-KAL-\d{8}-\d{5}\.pdf$/);
+    expect(pdf.filename).not.toContain("F.MU.08");
+    const seq = ka.number.split("/")[3];
+    expect(pdf.filename).toContain(seq);
   });
 });
 

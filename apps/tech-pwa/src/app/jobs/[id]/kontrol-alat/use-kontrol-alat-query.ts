@@ -103,7 +103,7 @@ export async function openKontrolAlatPdfPwa(jobId: string): Promise<void> {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `F.MU.08-${jobId}.pdf`;
+  anchor.download = `KAL-${jobId}.pdf`;
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

@@ -61,6 +61,7 @@ const calibrationJobInclude = {
   kontrolAlat: {
     select: {
       id: true,
+      number: true,
       completedAt: true,
       certificateNumber: true,
       workExecuted: true,

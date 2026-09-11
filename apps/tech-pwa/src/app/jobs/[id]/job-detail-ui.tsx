@@ -544,6 +544,10 @@ export function KontrolAlatSection({
         </span>
       </div>
 
+      {kontrolAlat?.number ? (
+        <SectionRow label="No. Dokumen" value={kontrolAlat.number} />
+      ) : null}
+
       {kontrolAlat?.certificateNumber ? (
         <SectionRow label="No. Sertifikat" value={kontrolAlat.certificateNumber} />
       ) : null}

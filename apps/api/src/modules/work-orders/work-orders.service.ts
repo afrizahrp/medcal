@@ -647,10 +647,17 @@ export class WorkOrdersService {
     }
 
     for (const job of jobs) {
+      const number = await DocumentNumberService.allocate({
+        companyId: workOrder.companyId,
+        documentType: "KONTROL_ALAT",
+        issuedAt: new Date(),
+        tx,
+      });
       const created = await tx.kontrolAlat.create({
         data: {
           companyId: workOrder.companyId,
           calibrationJobId: job.id,
+          number,
         },
       });
       const itemId = job.purchaseOrderItemId

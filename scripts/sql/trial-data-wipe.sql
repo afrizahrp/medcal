@@ -163,6 +163,7 @@ WHERE "companyId" = 'PKM'
         'WORK_ORDER_SEND_TO_LAB',
         'EQUIPMENT_DELIVERY_NOTE',
         'IDENTITY_CORRECTION_BA',
+        'KONTROL_ALAT',
         'CERTIFICATE'
       );
 

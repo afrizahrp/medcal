@@ -191,6 +191,8 @@ export class KontrolAlatService {
       },
       workOrder: fullJob.workOrder,
       kontrolAlat: {
+        number: kontrolAlat.number,
+        createdAt: kontrolAlat.createdAt,
         workExecuted: kontrolAlat.workExecuted,
         notExecutedReason: kontrolAlat.notExecutedReason,
         capacity: kontrolAlat.capacity,

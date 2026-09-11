@@ -25,6 +25,7 @@ export type KontrolAlatSignerKind = "ADMINISTRATION" | "TECHNICAL_OFFICER";
 /** Summary of Kontrol Alat included on CalibrationJob GET. Null for ON_SITE jobs. */
 export interface TechKontrolAlatSummary {
   id: string;
+  number: string;
   workExecuted: boolean | null;
   completedAt: string | null;
   certificateNumber: string | null;
@@ -33,6 +34,7 @@ export interface TechKontrolAlatSummary {
 /** Full Kontrol Alat detail returned by GET /calibration-jobs/:id/kontrol-alat. */
 export interface TechKontrolAlat {
   id: string;
+  number: string;
   workExecuted: boolean | null;
   notExecutedReason: string | null;
   capacity: string | null;

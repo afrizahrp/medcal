@@ -306,6 +306,9 @@ enum DocumentType {
   /// Berita Acara Identitas — identity correction (device_id / serial / AKD-AKL).
   /// Prefix "BAI". Number allocated from IdentityCorrection.number. (Decision 9)
   IDENTITY_CORRECTION_BA
+  /// Kontrol Alat (In Lab intake). Prefix "KAL". Number allocated on
+  /// KontrolAlat.number. F.MU.08 is the paper-form code only, not the document number.
+  KONTROL_ALAT
 }
 
 enum ReminderChannel {
@@ -2054,10 +2057,16 @@ model CalibrationJob {
 /// Derived (NOT stored here): No. Order = PurchaseOrder.customerPoNumber;
 /// Tgl. Terima Alat / Tgl. Kalibrasi = CalibrationJob.startedAt;
 /// Tgl. Selesai = approved QualityReview.reviewedAt ?? CalibrationJob.submittedAt.
+/// Stored document number: KontrolAlat.number (KAL/YYYY/MM/NNNNN). F.MU.08 is
+/// the paper-form code only.
 model KontrolAlat {
   id               String @id @default(cuid())
   companyId        String
   calibrationJobId String @unique
+  /// System document number from DocumentNumberService (prefix "KAL"), unique
+  /// per company. Named `number` so readMaxExistingSequence's hardcoded
+  /// "number" column applies. Not the CalibrationJob id, WOL number, or F.MU.08.
+  number           String
 
   /// I.a Dilaksanakan vs I.b Tidak dilaksanakan
   workExecuted      Boolean?
@@ -2093,6 +2102,7 @@ model KontrolAlat {
   accessories    KontrolAlatAccessory[]
   signatures     KontrolAlatSignature[]
 
+  @@unique([companyId, number])
   @@index([companyId])
   @@index([createdByUserId])
 }
@@ -2118,8 +2128,9 @@ model KontrolAlatAccessory {
   @@index([sourceWorkOrderItemAccessoryId])
 }
 
-/// Administration + Technical Officer signatures on Kontrol Alat.
-/// signerName + signerUserId + signedAt only — no signature image in Phase 1.
+/// Two fixed slots: ADMINISTRATION (Administrasi) and TECHNICAL_OFFICER
+/// (Petugas Teknis). signerName + signerUserId + signedAt only —
+/// signature image / e-sign is deferred. No dedicated Administrasi Membership role.
 model KontrolAlatSignature {
   id            String                @id @default(cuid())
   companyId     String

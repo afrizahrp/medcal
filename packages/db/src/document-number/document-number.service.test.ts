@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "../index";
 import { DOCUMENT_TYPE_PREFIX } from "./document-type-prefix";
+import { DOCUMENT_TYPE_NUMBER_TABLE } from "./document-type-table";
 import { DocumentNumberService } from "./document-number.service";
 import { parseDocumentNumberYearMonth } from "./format-document-number";
 
@@ -298,6 +299,60 @@ describe("DocumentNumberService.allocate", () => {
       expect(await allocate(TEST_COMPANY_A, "WORK_ORDER", aug2026)).toBe(
         "SPK/2026/08/00001",
       );
+    });
+  });
+
+  describe("Kontrol Alat KAL sequence", () => {
+    const sep2026 = new Date("2026-09-12T08:00:00.000Z");
+    const jan2027 = new Date("2027-01-05T08:00:00.000Z");
+
+    const allocateKal = (companyId: string, issuedAt: Date) =>
+      prisma.$transaction((tx) =>
+        DocumentNumberService.allocate({
+          companyId,
+          documentType: "KONTROL_ALAT",
+          issuedAt,
+          tx,
+        }),
+      );
+
+    it("maps KONTROL_ALAT to prefix KAL and table KontrolAlat, not CER or WOL", async () => {
+      expect(DOCUMENT_TYPE_PREFIX.KONTROL_ALAT).toBe("KAL");
+      expect(DOCUMENT_TYPE_NUMBER_TABLE.KONTROL_ALAT).toBe("KontrolAlat");
+      expect(DOCUMENT_TYPE_PREFIX.CERTIFICATE).toBe("CER");
+      expect(DOCUMENT_TYPE_PREFIX.WORK_ORDER_SEND_TO_LAB).toBe("WOL");
+    });
+
+    it("issues KAL/YYYY/MM/NNNNN independently of WOL and CER", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+
+      const wol = await prisma.$transaction((tx) =>
+        DocumentNumberService.allocate({
+          companyId: TEST_COMPANY_A,
+          documentType: "WORK_ORDER_SEND_TO_LAB",
+          issuedAt: sep2026,
+          tx,
+        }),
+      );
+      const cer = await prisma.$transaction((tx) =>
+        DocumentNumberService.allocate({
+          companyId: TEST_COMPANY_A,
+          documentType: "CERTIFICATE",
+          issuedAt: sep2026,
+          tx,
+        }),
+      );
+
+      expect(wol).toBe("WOL/2026/09/00001");
+      expect(cer).toBe("CER/2026/09/00001");
+      expect(await allocateKal(TEST_COMPANY_A, sep2026)).toBe("KAL/2026/09/00001");
+      expect(await allocateKal(TEST_COMPANY_A, sep2026)).toBe("KAL/2026/09/00002");
+    });
+
+    it("resets the KAL sequence on a new year", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+      expect(await allocateKal(TEST_COMPANY_A, sep2026)).toBe("KAL/2026/09/00001");
+      expect(await allocateKal(TEST_COMPANY_A, jan2027)).toBe("KAL/2027/01/00001");
     });
   });
 });

@@ -35,6 +35,7 @@ export interface PortalKontrolAlatSignature {
 export interface PortalKontrolAlat {
   id: string;
   calibrationJobId: string;
+  number: string;
   workExecuted: boolean | null;
   notExecutedReason: string | null;
   capacity: string | null;
@@ -156,7 +157,7 @@ export async function openKontrolAlatPdf(jobId: string): Promise<void> {
   if (!tab) {
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `F.MU.08-${jobId}.pdf`;
+    anchor.download = `KAL-${jobId}.pdf`;
     anchor.click();
   }
   setTimeout(() => URL.revokeObjectURL(url), 60_000);

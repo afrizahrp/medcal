@@ -79,6 +79,7 @@ async function cleanupSequences(companyId: string) {
           "PURCHASE_ORDER",
           "QUOTATION",
           "CALIBRATION_REQUEST",
+          "KONTROL_ALAT",
         ],
       },
     },
@@ -1044,9 +1045,12 @@ describe("WorkOrdersService CalibrationJob fan-out on start()", () => {
     expect(jobs).toHaveLength(2);
     for (const job of jobs) {
       expect(job.kontrolAlat).not.toBeNull();
+      expect(job.kontrolAlat!.number).toMatch(/^KAL\/\d{4}\/\d{2}\/\d{5}$/);
       expect(job.kontrolAlat!.accessories.map((row) => row.label)).toEqual(["Unit", "Kabel Power"]);
       expect(job.kontrolAlat!.accessories[0]!.sourceWorkOrderItemAccessoryId).toBeTruthy();
     }
+    const numbers = jobs.map((job) => job.kontrolAlat!.number);
+    expect(new Set(numbers).size).toBe(numbers.length);
   });
 
   it("recreates missing KontrolAlat on a later fan-out without duplicating jobs", async () => {
