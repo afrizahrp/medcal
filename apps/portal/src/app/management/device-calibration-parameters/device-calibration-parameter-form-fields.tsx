@@ -500,6 +500,12 @@ export function formatDeviceCalibrationParameterApiError(error: unknown): string
     ) {
       return "Data Calibration Parameter tidak valid. Periksa kembali isian form.";
     }
+    if (code === "INVALID_DEVICE_CALIBRATION_PARAMETER_COPY") {
+      return "Data copy tidak valid. Periksa kembali Device Name sumber/tujuan dan parameter yang dipilih.";
+    }
+    if (code === "DEVICE_CALIBRATION_PARAMETER_COPY_INVALID_SOURCE") {
+      return "Beberapa parameter yang dipilih sudah tidak ada di Device Name sumber. Muat ulang halaman dan coba lagi.";
+    }
     if (typeof error.data?.message === "string") return error.data.message;
     return error.message;
   }

@@ -8,6 +8,7 @@ import { MasterCodeService, prisma } from "@medcal/db";
 import type { Prisma } from "@medcal/db";
 import {
   DEVICE_CALIBRATION_PARAMETER_SORTABLE_FIELDS,
+  type DeviceCalibrationParameterCopyInput,
   type DeviceCalibrationParameterCreateInput,
   type DeviceCalibrationParameterListQuery,
   type DeviceCalibrationParameterUpdateInput,
@@ -83,6 +84,29 @@ export interface DeviceCalibrationParameterDeviceTypeGroup {
   capabilities: DeviceCalibrationParameterCapabilityGroup[];
   /** Flattened view of `capabilities` (same order) — kept for backward compatibility. */
   parameters: DeviceCalibrationParameterWithRelations[];
+}
+
+export interface DeviceCalibrationParameterCopySkippedRow {
+  sourceParameterId: string;
+  name: string;
+}
+
+export interface DeviceCalibrationParameterCopyUnsupportedRow
+  extends DeviceCalibrationParameterCopySkippedRow {
+  entryStyle: string;
+  valueType: string;
+}
+
+export interface DeviceCalibrationParameterCopyCreatedRow {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface DeviceCalibrationParameterCopyResult {
+  created: DeviceCalibrationParameterCopyCreatedRow[];
+  skippedDuplicateName: DeviceCalibrationParameterCopySkippedRow[];
+  skippedUnsupportedEntryStyle: DeviceCalibrationParameterCopyUnsupportedRow[];
 }
 
 export interface DeviceCalibrationParameterGroupedResult {
@@ -355,6 +379,103 @@ export class DeviceCalibrationParametersService {
         include: parameterInclude,
       });
     });
+  }
+
+  /**
+   * Copy a chosen subset of `sourceDeviceTypeId`'s calibration parameters onto
+   * `targetDeviceTypeId`. Capability/CapabilityItem are global master data
+   * shared across device types (schema.prisma:1290-1323), so a copied row
+   * reuses the SAME `capabilityItemId` as its source — no new capability is
+   * ever created. `code` is always freshly allocated (never copied — it is
+   * system-issued and globally unique, so source/target can never collide on
+   * it: schema.prisma:1372 is scoped per deviceTypeId).
+   *
+   * Rows are skipped (not erroring the whole batch) rather than copied when:
+   * - the target already has a parameter with the same name under the same
+   *   capability item (`assertUniqueName` scope) — `skippedDuplicateName`.
+   * - the source uses a shape the create path can't express yet
+   *   (`entryStyle !== DIRECT_REPLICATES` or `valueType !== NUMBER`, e.g.
+   *   Pattern B/LOGGER_SUMMARY parameters with CalibrationTestPoint children)
+   *   — `skippedUnsupportedEntryStyle`. Copying these silently would produce a
+   *   parameter that looks like Pattern A but is missing its test points.
+   */
+  async copy(input: DeviceCalibrationParameterCopyInput): Promise<DeviceCalibrationParameterCopyResult> {
+    await this.assertDeviceTypeExists(input.sourceDeviceTypeId);
+    await this.assertDeviceTypeExists(input.targetDeviceTypeId);
+
+    const requestedIds = new Set(input.parameterIds);
+    const sourceParameters = await prisma.deviceCalibrationParameter.findMany({
+      where: { id: { in: [...requestedIds] }, deviceTypeId: input.sourceDeviceTypeId },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    });
+
+    const foundIds = new Set(sourceParameters.map((row) => row.id));
+    const missingIds = [...requestedIds].filter((id) => !foundIds.has(id));
+    if (missingIds.length > 0) {
+      throw new BadRequestException({
+        message: "Some parameterIds do not belong to sourceDeviceTypeId",
+        code: "DEVICE_CALIBRATION_PARAMETER_COPY_INVALID_SOURCE",
+        parameterIds: missingIds,
+      });
+    }
+
+    const created: DeviceCalibrationParameterCopyCreatedRow[] = [];
+    const skippedDuplicateName: DeviceCalibrationParameterCopySkippedRow[] = [];
+    const skippedUnsupportedEntryStyle: DeviceCalibrationParameterCopyUnsupportedRow[] = [];
+
+    await prisma.$transaction(async (tx) => {
+      for (const source of sourceParameters) {
+        if (source.entryStyle !== "DIRECT_REPLICATES" || source.valueType !== "NUMBER") {
+          skippedUnsupportedEntryStyle.push({
+            sourceParameterId: source.id,
+            name: source.name,
+            entryStyle: source.entryStyle,
+            valueType: source.valueType,
+          });
+          continue;
+        }
+
+        const duplicate = await tx.deviceCalibrationParameter.findFirst({
+          where: {
+            deviceTypeId: input.targetDeviceTypeId,
+            capabilityItemId: source.capabilityItemId,
+            name: { equals: source.name, mode: "insensitive" },
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          skippedDuplicateName.push({ sourceParameterId: source.id, name: source.name });
+          continue;
+        }
+
+        const code = await MasterCodeService.allocate({
+          entity: "DEVICE_CALIBRATION_PARAMETER",
+          tx,
+        });
+        const capabilityId = await this.resolveCapabilityId(tx, source.capabilityItemId);
+        const sortOrder = await this.appendToOrderingScope(tx, input.targetDeviceTypeId, capabilityId);
+        const createdRow = await tx.deviceCalibrationParameter.create({
+          data: {
+            deviceTypeId: input.targetDeviceTypeId,
+            capabilityItemId: source.capabilityItemId,
+            code,
+            name: source.name,
+            description: source.description,
+            uomId: source.uomId,
+            toleranceMin: source.toleranceMin,
+            toleranceMax: source.toleranceMax,
+            toleranceNote: source.toleranceNote,
+            decimalPlaces: source.decimalPlaces,
+            isActive: true,
+            sortOrder,
+          },
+          select: { id: true, code: true, name: true },
+        });
+        created.push(createdRow);
+      }
+    });
+
+    return { created, skippedDuplicateName, skippedUnsupportedEntryStyle };
   }
 
   async findAll(

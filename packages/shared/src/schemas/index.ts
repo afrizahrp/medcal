@@ -1525,6 +1525,28 @@ export type DeviceCalibrationParameterParameterOrderInput = z.infer<
   typeof deviceCalibrationParameterParameterOrderSchema
 >;
 
+/**
+ * POST /device-calibration-parameters/copy body. Copies a chosen subset of
+ * one DeviceType's calibration parameters (identified by id) onto another
+ * DeviceType. `code` is always re-allocated server-side (never reused from
+ * the source); rows that would collide on name, or whose entryStyle/valueType
+ * the create path can't express, are skipped rather than erroring the batch.
+ */
+export const deviceCalibrationParameterCopySchema = z
+  .object({
+    sourceDeviceTypeId: z.string().min(1),
+    targetDeviceTypeId: z.string().min(1),
+    parameterIds: z.array(z.string().min(1)).min(1),
+  })
+  .refine((data) => data.sourceDeviceTypeId !== data.targetDeviceTypeId, {
+    message: "targetDeviceTypeId must differ from sourceDeviceTypeId",
+    path: ["targetDeviceTypeId"],
+  });
+
+export type DeviceCalibrationParameterCopyInput = z.infer<
+  typeof deviceCalibrationParameterCopySchema
+>;
+
 // =============================================================================
 // DevicePhysicalCheckItem Master Data
 // (Portal Device Management → Physical Inspection)

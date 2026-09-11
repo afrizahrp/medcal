@@ -43,7 +43,10 @@ function buildSearchParams(params: DeviceCalibrationParametersQueryParams): URLS
   return qs;
 }
 
-export function useDeviceCalibrationParameters(params: DeviceCalibrationParametersQueryParams) {
+export function useDeviceCalibrationParameters(
+  params: DeviceCalibrationParametersQueryParams,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: [
       DEVICE_CALIBRATION_PARAMETERS_QUERY_KEY,
@@ -62,6 +65,7 @@ export function useDeviceCalibrationParameters(params: DeviceCalibrationParamete
       apiFetch<DeviceCalibrationParameterListResponse>(
         `/device-calibration-parameters?${buildSearchParams(params).toString()}`,
       ),
+    enabled: options?.enabled ?? true,
     placeholderData: (previous) => previous,
   });
 }
@@ -132,6 +136,44 @@ export function useUpdateDeviceCalibrationParameter() {
       queryClient.invalidateQueries({
         queryKey: [DEVICE_CALIBRATION_PARAMETERS_QUERY_KEY, variables.id],
       });
+    },
+  });
+}
+
+export interface DeviceCalibrationParameterCopyRequest {
+  sourceDeviceTypeId: string;
+  targetDeviceTypeId: string;
+  parameterIds: string[];
+}
+
+export interface DeviceCalibrationParameterCopySkippedRow {
+  sourceParameterId: string;
+  name: string;
+}
+
+export interface DeviceCalibrationParameterCopyUnsupportedRow
+  extends DeviceCalibrationParameterCopySkippedRow {
+  entryStyle: string;
+  valueType: string;
+}
+
+export interface DeviceCalibrationParameterCopyResponse {
+  created: { id: string; code: string; name: string }[];
+  skippedDuplicateName: DeviceCalibrationParameterCopySkippedRow[];
+  skippedUnsupportedEntryStyle: DeviceCalibrationParameterCopyUnsupportedRow[];
+}
+
+/** POST /device-calibration-parameters/copy — see Stage 2 design doc. */
+export function useCopyDeviceCalibrationParameters() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: DeviceCalibrationParameterCopyRequest) =>
+      apiFetch<DeviceCalibrationParameterCopyResponse>("/device-calibration-parameters/copy", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [DEVICE_CALIBRATION_PARAMETERS_QUERY_KEY] });
     },
   });
 }

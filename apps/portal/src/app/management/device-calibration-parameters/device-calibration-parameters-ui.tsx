@@ -19,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronRight, GripVertical, Plus, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, GripVertical, Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +69,12 @@ export interface DeviceCalibrationParameterRow {
   decimalPlaces: number | null;
   sortOrder: number;
   isActive: boolean;
+  /**
+   * Which entry UI this parameter needs. Only DIRECT_REPLICATES can be
+   * created (and therefore copied) via the Portal today — LOGGER_SUMMARY
+   * parameters have CalibrationTestPoint children with no create endpoint yet.
+   */
+  entryStyle: "DIRECT_REPLICATES" | "LOGGER_SUMMARY";
   createdAt: string;
   updatedAt: string;
   deviceType: DeviceCalibrationParameterTypeRef;
@@ -419,13 +425,22 @@ function ChildRows({
       {canCreate ? (
         <tr className="border-b border-slate-100 last:border-0">
           <td colSpan={7} className="px-4 py-1.5 pl-6">
-            <Link
-              href={`/device-calibration-parameters/new?deviceTypeId=${group.deviceType.id}`}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Tambah parameter untuk {group.deviceType.name}
-            </Link>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <Link
+                href={`/device-calibration-parameters/new?deviceTypeId=${group.deviceType.id}`}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Tambah parameter untuk {group.deviceType.name}
+              </Link>
+              <Link
+                href={`/device-calibration-parameters/copy?targetDeviceTypeId=${group.deviceType.id}`}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Copy dari device lain
+              </Link>
+            </div>
           </td>
         </tr>
       ) : null}

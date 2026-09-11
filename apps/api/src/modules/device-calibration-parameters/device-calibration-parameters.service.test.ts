@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@medcal/db";
-import { deviceCalibrationParameterCreateSchema } from "@medcal/shared";
+import {
+  deviceCalibrationParameterCopySchema,
+  deviceCalibrationParameterCreateSchema,
+} from "@medcal/shared";
 import { DeviceCalibrationParametersService } from "./device-calibration-parameters.service";
 import { DeviceCapabilitiesService } from "../device-capabilities/device-capabilities.service";
 
@@ -203,6 +206,237 @@ describe("DeviceCalibrationParametersService.create", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
       service.create(baseInput(deviceType.id, item.id, "missing", "C")),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe("deviceCalibrationParameterCopySchema", () => {
+  it("requires sourceDeviceTypeId, targetDeviceTypeId, and a non-empty parameterIds", () => {
+    expect(deviceCalibrationParameterCopySchema.safeParse({}).success).toBe(false);
+    expect(
+      deviceCalibrationParameterCopySchema.safeParse({
+        sourceDeviceTypeId: "a",
+        targetDeviceTypeId: "b",
+        parameterIds: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects sourceDeviceTypeId equal to targetDeviceTypeId", () => {
+    expect(
+      deviceCalibrationParameterCopySchema.safeParse({
+        sourceDeviceTypeId: "same",
+        targetDeviceTypeId: "same",
+        parameterIds: ["p1"],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("DeviceCalibrationParametersService.copy", () => {
+  it("copies parameters onto another device type, reusing the same capabilityItemId and allocating a new code", async () => {
+    const source = await createDeviceType();
+    const target = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const marker = uniqueSlug();
+    const a = await service.create({
+      ...baseInput(source.id, item.id, uom.id, `${marker} Alpha`),
+      toleranceMin: 1,
+      toleranceMax: 9,
+      toleranceNote: "note",
+      decimalPlaces: 2,
+    });
+    const b = await service.create(baseInput(source.id, item.id, uom.id, `${marker} Beta`));
+    createdParameterIds.push(a.id, b.id);
+
+    const result = await service.copy({
+      sourceDeviceTypeId: source.id,
+      targetDeviceTypeId: target.id,
+      parameterIds: [a.id, b.id],
+    });
+    createdParameterIds.push(...result.created.map((row) => row.id));
+
+    expect(result.skippedDuplicateName).toEqual([]);
+    expect(result.skippedUnsupportedEntryStyle).toEqual([]);
+    expect(result.created).toHaveLength(2);
+
+    const copiedAlpha = await service.findOne(
+      result.created.find((row) => row.name === `${marker} Alpha`)!.id,
+    );
+    expect(copiedAlpha.deviceTypeId).toBe(target.id);
+    expect(copiedAlpha.capabilityItemId).toBe(item.id);
+    expect(copiedAlpha.code).not.toBe(a.code);
+    expect(Number(copiedAlpha.toleranceMin)).toBe(1);
+    expect(Number(copiedAlpha.toleranceMax)).toBe(9);
+    expect(copiedAlpha.decimalPlaces).toBe(2);
+    expect(copiedAlpha.isActive).toBe(true);
+  });
+
+  it("skips a row whose name already exists under the same capability item on the target", async () => {
+    const source = await createDeviceType();
+    const target = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const marker = uniqueSlug();
+    const sourceParam = await service.create(baseInput(source.id, item.id, uom.id, `${marker} Dup`));
+    const targetParam = await service.create(baseInput(target.id, item.id, uom.id, `${marker} Dup`));
+    createdParameterIds.push(sourceParam.id, targetParam.id);
+
+    const result = await service.copy({
+      sourceDeviceTypeId: source.id,
+      targetDeviceTypeId: target.id,
+      parameterIds: [sourceParam.id],
+    });
+
+    expect(result.created).toEqual([]);
+    expect(result.skippedDuplicateName).toEqual([{ sourceParameterId: sourceParam.id, name: `${marker} Dup` }]);
+  });
+
+  it("skips a row whose entryStyle or valueType the create path can't express", async () => {
+    const source = await createDeviceType();
+    const target = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const marker = uniqueSlug();
+
+    const loggerSummary = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId: source.id,
+        capabilityItemId: item.id,
+        code: `DCP-TEST-${uniqueSlug()}`,
+        name: `${marker} Logger`,
+        uomId: uom.id,
+        entryStyle: "LOGGER_SUMMARY",
+      },
+    });
+    const nonNumber = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId: source.id,
+        capabilityItemId: item.id,
+        code: `DCP-TEST-${uniqueSlug()}`,
+        name: `${marker} Text`,
+        uomId: uom.id,
+        valueType: "TEXT",
+      },
+    });
+    createdParameterIds.push(loggerSummary.id, nonNumber.id);
+
+    const result = await service.copy({
+      sourceDeviceTypeId: source.id,
+      targetDeviceTypeId: target.id,
+      parameterIds: [loggerSummary.id, nonNumber.id],
+    });
+
+    expect(result.created).toEqual([]);
+    expect(result.skippedDuplicateName).toEqual([]);
+    expect(result.skippedUnsupportedEntryStyle).toEqual([
+      { sourceParameterId: loggerSummary.id, name: `${marker} Logger`, entryStyle: "LOGGER_SUMMARY", valueType: "NUMBER" },
+      { sourceParameterId: nonNumber.id, name: `${marker} Text`, entryStyle: "DIRECT_REPLICATES", valueType: "TEXT" },
+    ]);
+  });
+
+  it("separates created / skippedDuplicateName / skippedUnsupportedEntryStyle in one mixed request", async () => {
+    const source = await createDeviceType();
+    const target = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const marker = uniqueSlug();
+
+    const ok = await service.create(baseInput(source.id, item.id, uom.id, `${marker} Ok`));
+    const dupSource = await service.create(baseInput(source.id, item.id, uom.id, `${marker} Dup2`));
+    const dupTarget = await service.create(baseInput(target.id, item.id, uom.id, `${marker} Dup2`));
+    const unsupported = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId: source.id,
+        capabilityItemId: item.id,
+        code: `DCP-TEST-${uniqueSlug()}`,
+        name: `${marker} Unsupported`,
+        uomId: uom.id,
+        entryStyle: "LOGGER_SUMMARY",
+      },
+    });
+    createdParameterIds.push(ok.id, dupSource.id, dupTarget.id, unsupported.id);
+
+    const result = await service.copy({
+      sourceDeviceTypeId: source.id,
+      targetDeviceTypeId: target.id,
+      parameterIds: [ok.id, dupSource.id, unsupported.id],
+    });
+    createdParameterIds.push(...result.created.map((row) => row.id));
+
+    expect(result.created.map((row) => row.name)).toEqual([`${marker} Ok`]);
+    expect(result.skippedDuplicateName).toEqual([{ sourceParameterId: dupSource.id, name: `${marker} Dup2` }]);
+    expect(result.skippedUnsupportedEntryStyle).toEqual([
+      { sourceParameterId: unsupported.id, name: `${marker} Unsupported`, entryStyle: "LOGGER_SUMMARY", valueType: "NUMBER" },
+    ]);
+  });
+
+  it("creates a DeviceTypeCapabilityOrder row when the target never had this capability", async () => {
+    const source = await createDeviceType();
+    const target = await createDeviceType();
+    const { capability, item } = await createCapabilityItem();
+    const uom = await createUom();
+    const marker = uniqueSlug();
+    const sourceParam = await service.create(baseInput(source.id, item.id, uom.id, `${marker} New`));
+    createdParameterIds.push(sourceParam.id);
+
+    const before = await prisma.deviceTypeCapabilityOrder.findUnique({
+      where: { deviceTypeId_capabilityId: { deviceTypeId: target.id, capabilityId: capability.id } },
+    });
+    expect(before).toBeNull();
+
+    const result = await service.copy({
+      sourceDeviceTypeId: source.id,
+      targetDeviceTypeId: target.id,
+      parameterIds: [sourceParam.id],
+    });
+    createdParameterIds.push(...result.created.map((row) => row.id));
+
+    const after = await prisma.deviceTypeCapabilityOrder.findUnique({
+      where: { deviceTypeId_capabilityId: { deviceTypeId: target.id, capabilityId: capability.id } },
+    });
+    expect(after).not.toBeNull();
+  });
+
+  it("rejects a parameterId that does not belong to sourceDeviceTypeId", async () => {
+    const source = await createDeviceType();
+    const target = await createDeviceType();
+    const otherType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const foreign = await service.create(baseInput(otherType.id, item.id, uom.id, "Foreign"));
+    createdParameterIds.push(foreign.id);
+
+    await expect(
+      service.copy({
+        sourceDeviceTypeId: source.id,
+        targetDeviceTypeId: target.id,
+        parameterIds: [foreign.id],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects an unknown sourceDeviceTypeId or targetDeviceTypeId", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const param = await service.create(baseInput(deviceType.id, item.id, uom.id, "X"));
+    createdParameterIds.push(param.id);
+
+    await expect(
+      service.copy({
+        sourceDeviceTypeId: "missing",
+        targetDeviceTypeId: deviceType.id,
+        parameterIds: [param.id],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.copy({
+        sourceDeviceTypeId: deviceType.id,
+        targetDeviceTypeId: "missing",
+        parameterIds: [param.id],
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

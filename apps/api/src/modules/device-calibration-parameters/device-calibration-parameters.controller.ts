@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import {
   deviceCalibrationParameterCapabilityOrderSchema,
+  deviceCalibrationParameterCopySchema,
   deviceCalibrationParameterCreateSchema,
   deviceCalibrationParameterGroupedQuerySchema,
   deviceCalibrationParameterListQuerySchema,
@@ -24,6 +25,7 @@ import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   DeviceCalibrationParametersService,
   type DeviceCalibrationParameterCapabilityGroup,
+  type DeviceCalibrationParameterCopyResult,
   type DeviceCalibrationParameterGroupedResult,
   type DeviceCalibrationParameterListResult,
   type DeviceCalibrationParameterWithRelations,
@@ -63,6 +65,20 @@ export class DeviceCalibrationParametersController {
       });
     }
     return this.service.findAll(parsed.data);
+  }
+
+  @Post("copy")
+  @RequirePermission("deviceCalibrationParameter", "create")
+  async copy(@Body() rawBody: unknown): Promise<DeviceCalibrationParameterCopyResult> {
+    const parsed = deviceCalibrationParameterCopySchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid device calibration parameter copy payload",
+        code: "INVALID_DEVICE_CALIBRATION_PARAMETER_COPY",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.copy(parsed.data);
   }
 
   @Get("grouped")
