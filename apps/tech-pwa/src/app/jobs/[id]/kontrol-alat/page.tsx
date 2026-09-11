@@ -14,6 +14,7 @@ import {
   usePatchKontrolAlat,
   useUpdateKontrolAlatAccessory,
   useSignKontrolAlat,
+  openKontrolAlatPdfPwa,
 } from "./use-kontrol-alat-query";
 import type {
   TechKontrolAlat,
@@ -420,20 +421,39 @@ export default function KontrolAlatPage() {
 
   const completed = ka.completedAt != null;
 
+  async function handleDownloadPdf() {
+    try {
+      await openKontrolAlatPdfPwa(id);
+    } catch {
+      // silent — most browsers show their own error toast for failed downloads
+    }
+  }
+
   return (
     <Screen title="Kontrol Alat (F.MU.08)" showBack>
-      {/* Status banner */}
-      <div
-        className={[
-          "mx-4 mt-4 rounded-lg px-4 py-3 text-sm",
-          completed
-            ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
-            : "border border-amber-200 bg-amber-50 text-amber-800",
-        ].join(" ")}
-      >
-        {completed
-          ? "Kontrol Alat selesai & ditandatangani — kalibrasi dapat dimulai."
-          : "Kontrol Alat belum lengkap. Isi semua bagian dan tanda tangan untuk membuka kunci Mulai Kalibrasi."}
+      {/* Status banner + download */}
+      <div className="mx-4 mt-4 space-y-2">
+        <div
+          className={[
+            "rounded-lg px-4 py-3 text-sm",
+            completed
+              ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border border-amber-200 bg-amber-50 text-amber-800",
+          ].join(" ")}
+        >
+          {completed
+            ? "Kontrol Alat selesai & ditandatangani — kalibrasi dapat dimulai."
+            : "Kontrol Alat belum lengkap. Isi semua bagian dan tanda tangan untuk membuka kunci Mulai Kalibrasi."}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => void handleDownloadPdf()}
+        >
+          Unduh PDF F.MU.08
+        </Button>
       </div>
 
       {/* WO / Job info */}

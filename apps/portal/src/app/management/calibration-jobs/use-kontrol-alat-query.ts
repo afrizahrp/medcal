@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@medcal/shared";
+import { apiFetch, apiFetchBlob } from "@medcal/shared";
 import type {
   KontrolAlatPatchInput,
   KontrolAlatAccessoryCreateInput,
@@ -146,4 +146,18 @@ export function useSignPortalKontrolAlat(jobId: string) {
       queryClient.invalidateQueries({ queryKey: [CALIBRATION_JOBS_QUERY_KEY, jobId] });
     },
   });
+}
+
+export async function openKontrolAlatPdf(jobId: string): Promise<void> {
+  const blob = await apiFetchBlob(`/calibration-jobs/${jobId}/kontrol-alat/pdf`);
+  if (blob.size === 0) throw new Error("Empty Kontrol Alat PDF");
+  const url = URL.createObjectURL(blob);
+  const tab = window.open(url, "_blank", "noopener,noreferrer");
+  if (!tab) {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `F.MU.08-${jobId}.pdf`;
+    anchor.click();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

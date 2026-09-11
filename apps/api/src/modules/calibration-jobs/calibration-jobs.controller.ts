@@ -654,4 +654,17 @@ export class CalibrationJobsController {
     }
     return this.kontrolAlat.sign(companyId, id, userId, parsed.data);
   }
+
+  @Get(":id/kontrol-alat/pdf")
+  @RequirePermission("calibrationJob", "read")
+  async downloadKontrolAlatPdf(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<StreamableFile> {
+    const pdf = await this.kontrolAlat.buildPdf(companyId, id);
+    return new StreamableFile(pdf.buffer, {
+      type: "application/pdf",
+      disposition: `attachment; filename="${pdf.filename}"`,
+    });
+  }
 }

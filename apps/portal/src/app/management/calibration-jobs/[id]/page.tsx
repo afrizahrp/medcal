@@ -28,6 +28,7 @@ import {
   usePatchPortalKontrolAlat,
   useUpdatePortalKontrolAlatAccessory,
   useSignPortalKontrolAlat,
+  openKontrolAlatPdf,
   type PortalKontrolAlat,
   type PortalKontrolAlatSignature,
   type PortalKontrolAlatSignerKind,
@@ -926,6 +927,8 @@ function KontrolAlatAccordionContent({
   const updateAccessory = useUpdatePortalKontrolAlatAccessory(jobId);
 
   const [certInput, setCertInput] = useState<string | null>(null);
+  const [pdfPending, setPdfPending] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const ka = kontrolAlatQuery.data;
   const isJobApproved = isQualityReviewApproved(job);
@@ -951,21 +954,46 @@ function KontrolAlatAccordionContent({
 
   const completedAt = ka.completedAt;
 
+  async function handleDownloadPdf() {
+    setPdfError(null);
+    setPdfPending(true);
+    try {
+      await openKontrolAlatPdf(jobId);
+    } catch {
+      setPdfError("Gagal membuka PDF F.MU.08. Coba lagi.");
+    } finally {
+      setPdfPending(false);
+    }
+  }
+
   return (
     <div className="mt-3 space-y-5 text-sm">
-      {/* Status */}
-      <div className="flex items-center gap-2">
-        {completedAt ? (
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-        ) : (
-          <Clock className="h-4 w-4 text-amber-500" />
-        )}
-        <span className={completedAt ? "font-medium text-emerald-700" : "font-medium text-amber-700"}>
-          {completedAt
-            ? `Selesai & ditandatangani — ${formatDateTime(completedAt)}`
-            : "Belum lengkap — perlu diisi dan ditandatangani"}
-        </span>
+      {/* Status + Download */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {completedAt ? (
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          ) : (
+            <Clock className="h-4 w-4 text-amber-500" />
+          )}
+          <span className={completedAt ? "font-medium text-emerald-700" : "font-medium text-amber-700"}>
+            {completedAt
+              ? `Selesai & ditandatangani — ${formatDateTime(completedAt)}`
+              : "Belum lengkap — perlu diisi dan ditandatangani"}
+          </span>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pdfPending}
+          onClick={handleDownloadPdf}
+        >
+          <FileDown className="h-3.5 w-3.5" />
+          {pdfPending ? "Membuka…" : "PDF F.MU.08"}
+        </Button>
       </div>
+      {pdfError ? <p className="text-xs text-red-600">{pdfError}</p> : null}
 
       {/* No. Sertifikat — editable only after MT approve */}
       <div>

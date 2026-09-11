@@ -11,6 +11,10 @@ import type {
   KontrolAlatPatchInput,
   KontrolAlatSignatureCreateInput,
 } from "@medcal/shared";
+import {
+  renderKontrolAlatPdf,
+  type KontrolAlatPdfResult,
+} from "./kontrol-alat-pdf";
 
 /**
  * F.MU.08 Kontrol Alat — intake / inspection / signatures for one In Lab unit.
@@ -85,6 +89,131 @@ export class KontrolAlatService {
   async get(companyId: string, calibrationJobId: string): Promise<KontrolAlatDetail> {
     const job = await this.requireSendToLabJob(companyId, calibrationJobId);
     return this.requireKontrolAlat(job.id);
+  }
+
+  async buildPdf(companyId: string, calibrationJobId: string): Promise<KontrolAlatPdfResult> {
+    await this.requireSendToLabJob(companyId, calibrationJobId);
+
+    const [company, fullJob, kontrolAlat, approvedReview] = await Promise.all([
+      prisma.company.findFirst({
+        where: { id: companyId },
+        select: { id: true, name: true, legalName: true },
+      }),
+      prisma.calibrationJob.findFirst({
+        where: { id: calibrationJobId, companyId },
+        select: {
+          unitOrdinal: true,
+          unitTotal: true,
+          startedAt: true,
+          submittedAt: true,
+          device: {
+            select: { brand: true, model: true, serialNumber: true },
+          },
+          calibrationRequestItem: {
+            select: { deviceType: { select: { name: true } } },
+          },
+          purchaseOrderItem: {
+            select: {
+              device: { select: { brand: true, model: true, serialNumber: true } },
+              quotationItem: {
+                select: {
+                  requestItem: { select: { deviceType: { select: { name: true } } } },
+                },
+              },
+            },
+          },
+          workOrder: {
+            select: {
+              number: true,
+              customer: { select: { name: true } },
+              purchaseOrder: { select: { customerPoNumber: true } },
+              requestReviewMethodOk: true,
+              requestReviewEquipmentOk: true,
+              requestReviewPersonnelOk: true,
+              requestReviewConfirmAgree: true,
+              requestReviewConfirmEmail: true,
+              requestReviewConfirmLetter: true,
+              requestReviewConfirmOther: true,
+              requestReviewConfirmOtherText: true,
+              requestReviewCompletedAt: true,
+              requestReviewCompletedBy: { select: { name: true } },
+            },
+          },
+        },
+      }),
+      prisma.kontrolAlat.findUnique({
+        where: { calibrationJobId },
+        include: {
+          accessories: { orderBy: { sortOrder: "asc" } },
+          signatures: { orderBy: { signerKind: "asc" } },
+        },
+      }),
+      prisma.qualityReview.findFirst({
+        where: { companyId, calibrationJobId, status: "APPROVED" },
+        orderBy: { reviewedAt: "desc" },
+        select: { reviewedAt: true },
+      }),
+    ]);
+
+    if (!company) {
+      throw new NotFoundException({ message: "Company not found", code: "COMPANY_NOT_FOUND" });
+    }
+    if (!fullJob) {
+      throw new NotFoundException({
+        message: "Calibration job not found",
+        code: "CALIBRATION_JOB_NOT_FOUND",
+      });
+    }
+    if (!kontrolAlat) {
+      throw new NotFoundException({
+        message: "Kontrol Alat not found",
+        code: "KONTROL_ALAT_NOT_FOUND",
+      });
+    }
+
+    const linkedDevice = fullJob.device ?? fullJob.purchaseOrderItem?.device ?? null;
+    const deviceTypeName =
+      fullJob.calibrationRequestItem?.deviceType.name ??
+      fullJob.purchaseOrderItem?.quotationItem?.requestItem?.deviceType.name ??
+      null;
+
+    return renderKontrolAlatPdf({
+      company,
+      job: {
+        unitOrdinal: fullJob.unitOrdinal,
+        unitTotal: fullJob.unitTotal,
+        startedAt: fullJob.startedAt,
+        submittedAt: fullJob.submittedAt,
+        deviceBrand: linkedDevice?.brand ?? null,
+        deviceModel: linkedDevice?.model ?? null,
+        deviceSerial: linkedDevice?.serialNumber ?? null,
+        deviceTypeName,
+      },
+      workOrder: fullJob.workOrder,
+      kontrolAlat: {
+        workExecuted: kontrolAlat.workExecuted,
+        notExecutedReason: kontrolAlat.notExecutedReason,
+        capacity: kontrolAlat.capacity,
+        visualPowerCable: kontrolAlat.visualPowerCable,
+        visualDisplay: kontrolAlat.visualDisplay,
+        visualButtons: kontrolAlat.visualButtons,
+        functionInitialOk: kontrolAlat.functionInitialOk,
+        functionFinalOk: kontrolAlat.functionFinalOk,
+        certificateNumber: kontrolAlat.certificateNumber,
+        completedAt: kontrolAlat.completedAt,
+        accessories: kontrolAlat.accessories.map((a) => ({
+          label: a.label,
+          present: a.present,
+          sortOrder: a.sortOrder,
+        })),
+        signatures: kontrolAlat.signatures.map((s) => ({
+          signerKind: s.signerKind,
+          signerName: s.signerName ?? "",
+          signedAt: s.signedAt,
+        })),
+      },
+      completedAt: approvedReview?.reviewedAt ?? null,
+    });
   }
 
   async patch(
