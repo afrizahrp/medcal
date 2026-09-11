@@ -3,7 +3,18 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, FileDown, FileText, Save, ShieldAlert, Upload, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  CheckCircle2,
+  Clock,
+  FileDown,
+  FileText,
+  Save,
+  ShieldAlert,
+  Upload,
+  X,
+} from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -12,6 +23,15 @@ import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { AccessDenied } from "../../../../components/access-denied";
 import { SignatureImage } from "../signature-image";
+import {
+  usePortalKontrolAlat,
+  usePatchPortalKontrolAlat,
+  useUpdatePortalKontrolAlatAccessory,
+  useSignPortalKontrolAlat,
+  type PortalKontrolAlat,
+  type PortalKontrolAlatSignature,
+  type PortalKontrolAlatSignerKind,
+} from "../use-kontrol-alat-query";
 import {
   AkdAklStatusBadge,
   ConfirmDialog,
@@ -107,6 +127,10 @@ export default function CalibrationJobDetailPage() {
   const measurementParameters = useMeasurementParameters(params.id);
   const measurementResults = useMeasurementResults(params.id);
   const refEquipment = useReferenceEquipmentUsed(params.id);
+
+  const isWol = query.data?.workOrder.serviceMode === "SEND_TO_LAB";
+  const kontrolAlatQuery = usePortalKontrolAlat(isWol ? params.id : "");
+
   const refCandidates = useReferenceEquipmentCandidates(
     params.id,
     Boolean(capabilities?.calibrationJobRecordReferenceEquipmentUsed),
@@ -141,6 +165,7 @@ export default function CalibrationJobDetailPage() {
   const measurementSectionRef = useRef<HTMLDivElement>(null);
   const correctionsSectionRef = useRef<HTMLDivElement>(null);
   const akdAklSectionRef = useRef<HTMLDivElement>(null);
+  const kontrolAlatSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (didInitExpand.current || !query.data) return;
@@ -349,6 +374,7 @@ export default function CalibrationJobDetailPage() {
   const canDecideCorrection = Boolean(capabilities?.calibrationJobDecideIdentityCorrection);
   const canApproveQualityReview =
     Boolean(capabilities?.calibrationJobDecideQualityReview) && canDecideQualityReview(job);
+  const canRecordKontrolAlat = Boolean(capabilities?.calibrationJobRecordKontrolAlat);
   const canRecordRefEquipment = Boolean(capabilities?.calibrationJobRecordReferenceEquipmentUsed);
   const canOverrideRefEquipment = Boolean(
     capabilities?.calibrationJobOverrideReferenceEquipmentValidity,
@@ -414,6 +440,34 @@ export default function CalibrationJobDetailPage() {
         />
 
         <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="mt-2">
+          {/* Kontrol Alat — WOL only */}
+          {isWol ? (
+            <AccordionItem
+              ref={kontrolAlatSectionRef}
+              value="kontrol-alat"
+              className="border-t border-slate-100"
+            >
+              <AccordionTrigger className="px-0 py-3 text-sm font-semibold text-slate-900 hover:no-underline">
+                <span className="flex items-center gap-2">
+                  Kontrol Alat (F.MU.08)
+                  {job.kontrolAlat?.completedAt ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  ) : (
+                    <Clock className="h-4 w-4 text-amber-500" />
+                  )}
+                </span>
+              </AccordionTrigger>
+              <AccordionContent forceMount>
+                <KontrolAlatAccordionContent
+                  jobId={params.id}
+                  job={job}
+                  kontrolAlatQuery={kontrolAlatQuery}
+                  canRecord={canRecordKontrolAlat}
+                />
+              </AccordionContent>
+            </AccordionItem>
+          ) : null}
+
           <AccordionItem ref={identitySectionRef} value="identity" className="border-t border-slate-100">
             <AccordionTrigger className="px-0 py-3 text-sm font-semibold text-slate-900 hover:no-underline">
               Identitas
@@ -782,6 +836,305 @@ function StatusStrip({
         tone={akdAklPending ? "attention" : job.akdAklApprovalStatus === "APPROVED" ? "ok" : "neutral"}
         onClick={onFocusAkdAkl}
       />
+    </div>
+  );
+}
+
+// ── Kontrol Alat accordion content ────────────────────────────────────────────
+
+const SIGNER_KIND_LABELS: Record<PortalKontrolAlatSignerKind, string> = {
+  ADMINISTRATION: "Administrasi",
+  TECHNICAL_OFFICER: "Petugas Teknis",
+};
+
+function BoolChip({ value }: { value: boolean | null }) {
+  if (value === true)
+    return (
+      <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+        Baik / OK
+      </span>
+    );
+  if (value === false)
+    return (
+      <span className="rounded-md bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-800">
+        Tidak OK
+      </span>
+    );
+  return <span className="text-slate-400">—</span>;
+}
+
+function KontrolAlatSignatureBlock({
+  sig,
+  canRecord,
+  jobId,
+}: {
+  sig: PortalKontrolAlatSignature;
+  canRecord: boolean;
+  jobId: string;
+}) {
+  const signMutation = useSignPortalKontrolAlat(jobId);
+  const signed = sig.signedAt != null;
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50/50 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {SIGNER_KIND_LABELS[sig.signerKind]}
+      </p>
+      {signed ? (
+        <>
+          <p className="mt-1 text-sm font-medium text-emerald-700">Ditandatangani</p>
+          <p className="text-xs text-slate-500">
+            {sig.signerName} · {formatDateTime(sig.signedAt)}
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-slate-500">Belum ditandatangani</p>
+          {canRecord ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              disabled={signMutation.isPending}
+              onClick={() => signMutation.mutate({ signerKind: sig.signerKind })}
+            >
+              {signMutation.isPending ? "Menandatangani…" : "Tandatangani sebagai saya"}
+            </Button>
+          ) : null}
+          {signMutation.isError ? (
+            <p className="mt-1 text-xs text-red-600">Gagal menandatangani.</p>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+function KontrolAlatAccordionContent({
+  jobId,
+  job,
+  kontrolAlatQuery,
+  canRecord,
+}: {
+  jobId: string;
+  job: CalibrationJobRow;
+  kontrolAlatQuery: ReturnType<typeof usePortalKontrolAlat>;
+  canRecord: boolean;
+}) {
+  const patchMutation = usePatchPortalKontrolAlat(jobId);
+  const updateAccessory = useUpdatePortalKontrolAlatAccessory(jobId);
+
+  const [certInput, setCertInput] = useState<string | null>(null);
+
+  const ka = kontrolAlatQuery.data;
+  const isJobApproved = isQualityReviewApproved(job);
+  const jobLocked = job.status !== "PENDING";
+  const canEdit = canRecord && !jobLocked;
+  const canEditCert = canRecord && isJobApproved;
+
+  if (kontrolAlatQuery.isLoading) {
+    return <p className="mt-3 text-sm text-slate-400">Memuat Kontrol Alat…</p>;
+  }
+
+  if (kontrolAlatQuery.isError) {
+    return (
+      <p className="mt-3 text-sm text-red-600">
+        Gagal memuat Kontrol Alat.
+      </p>
+    );
+  }
+
+  if (!ka) {
+    return <p className="mt-3 text-sm text-slate-500">Data Kontrol Alat tidak tersedia.</p>;
+  }
+
+  const completedAt = ka.completedAt;
+
+  return (
+    <div className="mt-3 space-y-5 text-sm">
+      {/* Status */}
+      <div className="flex items-center gap-2">
+        {completedAt ? (
+          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+        ) : (
+          <Clock className="h-4 w-4 text-amber-500" />
+        )}
+        <span className={completedAt ? "font-medium text-emerald-700" : "font-medium text-amber-700"}>
+          {completedAt
+            ? `Selesai & ditandatangani — ${formatDateTime(completedAt)}`
+            : "Belum lengkap — perlu diisi dan ditandatangani"}
+        </span>
+      </div>
+
+      {/* No. Sertifikat — editable only after MT approve */}
+      <div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          No. Sertifikat
+        </p>
+        {canEditCert ? (
+          <div className="flex items-center gap-2">
+            <Input
+              value={certInput ?? ka.certificateNumber ?? ""}
+              onChange={(e) => setCertInput(e.target.value)}
+              maxLength={100}
+              placeholder="Masukkan nomor sertifikat"
+              className="max-w-sm"
+            />
+            <Button
+              type="button"
+              size="sm"
+              disabled={patchMutation.isPending}
+              onClick={() => {
+                const v = (certInput ?? "").trim();
+                patchMutation.mutate(
+                  { certificateNumber: v || null },
+                  { onSuccess: () => setCertInput(null) },
+                );
+              }}
+            >
+              <Save className="h-3.5 w-3.5" />
+              {patchMutation.isPending ? "Menyimpan…" : "Simpan"}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-slate-700">
+            {ka.certificateNumber || (
+              <span className="text-slate-400">
+                {isJobApproved ? "Belum diisi" : "Tersedia setelah MT Approve"}
+              </span>
+            )}
+          </p>
+        )}
+      </div>
+
+      {/* I. Pelaksanaan */}
+      <div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          I. Pelaksanaan Pekerjaan
+        </p>
+        <dl className="space-y-1">
+          <div className="flex items-center justify-between">
+            <dt className="text-slate-500">Pekerjaan dilaksanakan</dt>
+            <dd>
+              <BoolChip value={ka.workExecuted} />
+            </dd>
+          </div>
+          {ka.workExecuted === false && ka.notExecutedReason ? (
+            <div className="text-slate-500">
+              <dt className="text-xs">Alasan:</dt>
+              <dd className="mt-0.5 text-slate-700">{ka.notExecutedReason}</dd>
+            </div>
+          ) : null}
+        </dl>
+      </div>
+
+      {/* III. Uji Visual */}
+      <div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Uji Visual
+        </p>
+        <dl className="space-y-1">
+          {(
+            [
+              { label: "Kabel daya / power supply", field: "visualPowerCable" as const },
+              { label: "Layar / display", field: "visualDisplay" as const },
+              { label: "Tombol / kontrol", field: "visualButtons" as const },
+            ] as const
+          ).map(({ label, field }) => (
+            <div key={field} className="flex items-center justify-between">
+              <dt className="text-slate-500">{label}</dt>
+              <dd>
+                <BoolChip value={ka[field]} />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      {/* Uji Fungsi */}
+      <div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Uji Fungsi
+        </p>
+        <dl className="space-y-1">
+          {(
+            [
+              { label: "Uji fungsi awal (sebelum kalibrasi)", field: "functionInitialOk" as const },
+              { label: "Uji fungsi akhir (setelah kalibrasi)", field: "functionFinalOk" as const },
+            ] as const
+          ).map(({ label, field }) => (
+            <div key={field} className="flex items-center justify-between">
+              <dt className="text-slate-500">{label}</dt>
+              <dd>
+                <BoolChip value={ka[field]} />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      {/* Perlengkapan */}
+      {ka.accessories.length > 0 ? (
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Perlengkapan
+          </p>
+          <ul className="space-y-1">
+            {ka.accessories.map((acc) => (
+              <li key={acc.id} className="flex items-center justify-between gap-2">
+                <span className="text-slate-700">{acc.label}</span>
+                {canEdit ? (
+                  <div className="flex gap-1">
+                    {(
+                      [
+                        { label: "Ada", v: true as boolean | null, cls: "bg-emerald-100 text-emerald-800" },
+                        { label: "Tdk Ada", v: false as boolean | null, cls: "bg-red-100 text-red-800" },
+                        { label: "—", v: null, cls: "bg-slate-100 text-slate-500" },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={String(opt.v)}
+                        type="button"
+                        disabled={updateAccessory.isPending}
+                        onClick={() =>
+                          updateAccessory.mutate({ accessoryId: acc.id, input: { present: opt.v } })
+                        }
+                        className={[
+                          "rounded-md px-2 py-0.5 text-[11px] font-medium",
+                          acc.present === opt.v ? opt.cls : "bg-slate-50 text-slate-400",
+                        ].join(" ")}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <BoolChip value={acc.present} />
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {/* Tanda Tangan */}
+      {ka.signatures.length > 0 ? (
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Tanda Tangan
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {ka.signatures.map((sig) => (
+              <KontrolAlatSignatureBlock key={sig.id} sig={sig} canRecord={canRecord} jobId={jobId} />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {patchMutation.isError ? (
+        <p className="text-xs text-red-600">Gagal menyimpan perubahan Kontrol Alat.</p>
+      ) : null}
     </div>
   );
 }

@@ -20,6 +20,55 @@ export const CALIBRATION_JOB_STATUS_LABELS: Record<CalibrationJobStatus, string>
   ACCEPTED_BY_QA: "Diterima QA",
 };
 
+export type KontrolAlatSignerKind = "ADMINISTRATION" | "TECHNICAL_OFFICER";
+
+/** Summary of Kontrol Alat included on CalibrationJob GET. Null for ON_SITE jobs. */
+export interface TechKontrolAlatSummary {
+  id: string;
+  workExecuted: boolean | null;
+  completedAt: string | null;
+  certificateNumber: string | null;
+}
+
+/** Full Kontrol Alat detail returned by GET /calibration-jobs/:id/kontrol-alat. */
+export interface TechKontrolAlat {
+  id: string;
+  workExecuted: boolean | null;
+  notExecutedReason: string | null;
+  capacity: string | null;
+  visualPowerCable: boolean | null;
+  visualDisplay: boolean | null;
+  visualButtons: boolean | null;
+  functionInitialOk: boolean | null;
+  functionFinalOk: boolean | null;
+  certificateNumber: string | null;
+  completedAt: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  accessories: TechKontrolAlatAccessory[];
+  signatures: TechKontrolAlatSignature[];
+  createdBy: { id: string; name: string | null } | null;
+}
+
+export interface TechKontrolAlatAccessory {
+  id: string;
+  kontrolAlatId: string;
+  label: string;
+  sortOrder: number;
+  present: boolean | null;
+  sourceWorkOrderItemAccessoryId: string | null;
+}
+
+export interface TechKontrolAlatSignature {
+  id: string;
+  kontrolAlatId: string;
+  signerKind: KontrolAlatSignerKind;
+  signerUserId: string | null;
+  signerName: string;
+  signedAt: string | null;
+}
+
 export interface TechCalibrationJob {
   id: string;
   workOrderId: string;
@@ -45,6 +94,10 @@ export interface TechCalibrationJob {
     status?: string;
     customerId: string;
     customer: { id: string; name: string };
+    /** SEND_TO_LAB = WOL (In Lab); ON_SITE = SPK. */
+    serviceMode: "SEND_TO_LAB" | "ON_SITE";
+    purchaseOrder: { customerPoNumber: string } | null;
+    requestReviewCompletedAt: string | null;
   };
   device: { id: string; code: string | null; serialNumber: string | null } | null;
   calibrationRequestItem: { customerDeviceName: string | null; akdAkl: string | null } | null;
@@ -58,6 +111,8 @@ export interface TechCalibrationJob {
   }[];
   /** Latest QualityReview (GET job `reviews` take 1). Empty until MT decides. */
   reviews: TechQualityReview[];
+  /** Kontrol Alat summary. Null for ON_SITE jobs (no KA row created). */
+  kontrolAlat: TechKontrolAlatSummary | null;
 }
 
 export type QualityReviewStatus = "PENDING" | "APPROVED" | "REJECTED";

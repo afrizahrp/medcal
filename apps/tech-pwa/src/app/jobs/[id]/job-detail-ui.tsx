@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { CheckCircle2, Clock } from "lucide-react";
 import { Section, SectionRow } from "../../../components/ui/section";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { JobStatusBadge, AkdAklStatusBadge } from "../jobs-ui";
+import type { TechKontrolAlatSummary } from "../../../lib/calibration/types";
 import type { TechCalibrationJob, TechIdentityCorrection } from "../../../lib/calibration/types";
 import { IDENTITY_CORRECTION_STATUS_LABELS } from "../../../lib/calibration/types";
 import {
@@ -425,21 +427,33 @@ function MeasurementStatusRow({
  * while the job is still PENDING (startedAt === null). On success the job
  * becomes IN_PROGRESS and the "Job belum dimulai" gates in this screen and the
  * reference-equipment screen unlock.
+ *
+ * For SEND_TO_LAB (WOL) jobs: disabled with explanation when Kontrol Alat has
+ * not been completed and dual-signed yet (gate enforced server-side too).
  */
 export function StartCalibrationAction({
   onStart,
   pending,
   error,
+  gateBlocked,
+  gateReason,
 }: {
   onStart: () => void;
   pending: boolean;
   error: string | null;
+  /** True when the server-side Kontrol Alat gate would reject the start. */
+  gateBlocked?: boolean;
+  /** Human-readable reason shown below the disabled button. */
+  gateReason?: string | null;
 }) {
   return (
     <div>
-      <Button fullWidth onClick={onStart} disabled={pending}>
+      <Button fullWidth onClick={onStart} disabled={pending || gateBlocked}>
         {pending ? "Memulai…" : "Mulai Kalibrasi"}
       </Button>
+      {gateBlocked && gateReason ? (
+        <p className="mt-1 text-center text-xs text-amber-700">{gateReason}</p>
+      ) : null}
       {error ? <p className="mt-1 text-center text-xs text-red-600">{error}</p> : null}
     </div>
   );
@@ -499,6 +513,57 @@ export function CompleteJobAction({
       </Button>
       {error ? <p className="mt-1 text-center text-xs text-red-600">{error}</p> : null}
     </div>
+  );
+}
+
+/**
+ * Kontrol Alat (F.MU.08) intake & inspection status for SEND_TO_LAB jobs.
+ * ON_SITE jobs do not have a Kontrol Alat row — this section must not render.
+ */
+export function KontrolAlatSection({
+  jobId,
+  kontrolAlat,
+  canRecord,
+}: {
+  jobId: string;
+  kontrolAlat: TechKontrolAlatSummary | null;
+  canRecord: boolean;
+}) {
+  const completed = kontrolAlat?.completedAt != null;
+
+  return (
+    <Section title="Kontrol Alat (F.MU.08)">
+      <div className="flex items-center gap-2">
+        {completed ? (
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+        ) : (
+          <Clock className="h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />
+        )}
+        <span className={`text-sm font-medium ${completed ? "text-emerald-700" : "text-amber-700"}`}>
+          {completed ? "Selesai & ditandatangani" : "Belum lengkap"}
+        </span>
+      </div>
+
+      {kontrolAlat?.certificateNumber ? (
+        <SectionRow label="No. Sertifikat" value={kontrolAlat.certificateNumber} />
+      ) : null}
+
+      {!completed && canRecord ? (
+        <Link
+          href={`/jobs/${jobId}/kontrol-alat`}
+          className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 active:text-brand-800"
+        >
+          Isi / lengkapi Kontrol Alat
+        </Link>
+      ) : completed && canRecord ? (
+        <Link
+          href={`/jobs/${jobId}/kontrol-alat`}
+          className="mt-3 inline-flex min-h-11 items-center text-sm text-slate-500 active:text-slate-600"
+        >
+          Lihat detail Kontrol Alat
+        </Link>
+      ) : null}
+    </Section>
   );
 }
 

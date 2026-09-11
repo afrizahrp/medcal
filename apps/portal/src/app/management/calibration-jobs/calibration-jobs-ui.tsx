@@ -47,6 +47,13 @@ export interface CalibrationJobDeviceTypeRef {
   name: string;
 }
 
+export interface KontrolAlatSummary {
+  id: string;
+  workExecuted: boolean | null;
+  completedAt: string | null;
+  certificateNumber: string | null;
+}
+
 export interface CalibrationJobRow {
   id: string;
   companyId: string;
@@ -75,7 +82,13 @@ export interface CalibrationJobRow {
     status: string;
     customerId: string;
     customer: { id: string; name: string };
+    /** SEND_TO_LAB = WOL; ON_SITE = SPK. */
+    serviceMode: "SEND_TO_LAB" | "ON_SITE";
+    purchaseOrder: { customerPoNumber: string; number: string } | null;
+    requestReviewCompletedAt: string | null;
   };
+  /** Kontrol Alat summary. Null for ON_SITE jobs. */
+  kontrolAlat: KontrolAlatSummary | null;
   device: {
     id: string;
     code: string | null;

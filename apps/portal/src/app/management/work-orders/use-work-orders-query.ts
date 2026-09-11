@@ -6,6 +6,8 @@ import type {
   WorkOrderAssignInput,
   WorkOrderCreateBody,
   WorkOrderEquipmentReplaceInput,
+  WorkOrderItemAccessoriesReplaceInput,
+  WorkOrderRequestReviewInput,
   WorkOrderUpdateBody,
 } from "@medcal/shared";
 import { PURCHASE_ORDERS_QUERY_KEY } from "../purchase-orders/use-purchase-orders-query";
@@ -299,6 +301,42 @@ export async function fetchWorkOrderPdf(id: string): Promise<Blob> {
     throw new Error("Empty work order PDF");
   }
   return blob;
+}
+
+export function useUpdateWorkOrderRequestReview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: WorkOrderRequestReviewInput }) =>
+      apiFetch<WorkOrderRow>(`/work-orders/${id}/request-review`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (_data, variables) => {
+      invalidateWorkOrderQueries(queryClient, variables.id);
+    },
+  });
+}
+
+export function useReplaceWorkOrderItemAccessories() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      itemId,
+      input,
+    }: {
+      id: string;
+      itemId: string;
+      input: WorkOrderItemAccessoriesReplaceInput;
+    }) =>
+      apiFetch<WorkOrderRow>(`/work-orders/${id}/items/${itemId}/accessories`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (_data, variables) => {
+      invalidateWorkOrderQueries(queryClient, variables.id);
+    },
+  });
 }
 
 export async function openWorkOrderPdf(id: string, filename?: string): Promise<void> {

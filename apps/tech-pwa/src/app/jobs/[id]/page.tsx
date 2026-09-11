@@ -56,6 +56,7 @@ import {
   CorrectionsListSection,
   DeclaredIdentitySection,
   JobHeaderBlock,
+  KontrolAlatSection,
   MeasurementsSection,
   ObservedIdentitySection,
   PhysicalCheckSection,
@@ -110,6 +111,16 @@ export default function JobDetailPage() {
   const canEscalate = canEscalateIdentity(job);
   const showEscalate = Boolean(capabilities?.calibrationJobEscalateIdentity);
   const showSubmitCorrection = Boolean(capabilities?.calibrationJobSubmitIdentityCorrection);
+  const canRecordKontrolAlat = Boolean(capabilities?.calibrationJobRecordKontrolAlat);
+
+  // WOL gate: SEND_TO_LAB jobs require completed & dual-signed Kontrol Alat.
+  const isWol = job.workOrder.serviceMode === "SEND_TO_LAB";
+  const kontrolAlatIncomplete = isWol && (job.kontrolAlat?.completedAt == null);
+  const startGateBlocked = isWol && kontrolAlatIncomplete;
+  const startGateReason = startGateBlocked
+    ? "Kontrol Alat (F.MU.08) harus diisi dan ditandatangani sebelum memulai kalibrasi In Lab."
+    : null;
+
   // "Mulai Kalibrasi" — only while the job has not started yet.
   const showStart = Boolean(capabilities?.calibrationJobStart) && job.status === "PENDING";
   const showSubmitForReview =
@@ -185,6 +196,8 @@ export default function JobDetailPage() {
                     ? formatApiError(startMutation.error, "Gagal memulai kalibrasi.")
                     : null
                 }
+                gateBlocked={startGateBlocked}
+                gateReason={startGateReason}
               />
             ) : null}
             {showResume ? (
@@ -266,6 +279,13 @@ export default function JobDetailPage() {
       }
     >
       <JobHeaderBlock job={job} />
+      {isWol ? (
+        <KontrolAlatSection
+          jobId={id}
+          kontrolAlat={job.kontrolAlat}
+          canRecord={canRecordKontrolAlat}
+        />
+      ) : null}
       <DeclaredIdentitySection job={job} />
       <ObservedIdentitySection job={job} />
       <AssignedDeviceSection job={job} />

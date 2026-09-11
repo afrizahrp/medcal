@@ -32,6 +32,10 @@ import {
 import { useWorkOrderCalibrationJobs } from "../../calibration-jobs/use-calibration-jobs-query";
 import { WorkOrderEquipmentSection } from "../work-order-equipment-section";
 import { WorkOrderDeliveryNoteSection } from "../work-order-delivery-note-section";
+import {
+  WorkOrderRequestReviewSection,
+  WorkOrderItemAccessoriesSection,
+} from "../work-order-request-review-section";
 import { fmtDateOnly } from "@/lib/date-utils";
 import {
   openWorkOrderPdf,
@@ -322,6 +326,16 @@ export default function WorkOrderDetailPage() {
             }
           />
         </div>
+
+        <WorkOrderItemAccessoriesSection
+          workOrder={workOrder}
+          onChanged={() => void query.refetch()}
+        />
+
+        <WorkOrderRequestReviewSection
+          workOrder={workOrder}
+          onChanged={() => void query.refetch()}
+        />
 
         <WorkOrderEquipmentSection
           workOrder={workOrder}

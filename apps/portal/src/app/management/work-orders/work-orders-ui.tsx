@@ -53,12 +53,21 @@ export interface WorkOrderAssignment {
   technician: WorkOrderTechnician;
 }
 
+export interface WorkOrderItemAccessory {
+  id: string;
+  workOrderItemId: string;
+  label: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
 export interface WorkOrderItem {
   id: string;
   purchaseOrderItemId: string;
   description: string;
   qty: MoneyValue;
   createdAt: string;
+  accessories: WorkOrderItemAccessory[];
   purchaseOrderItem: {
     id: string;
     quotationItemId: string;
@@ -186,6 +195,18 @@ export interface WorkOrderRow {
   scheduledEnd: string | null;
   status: WorkOrderStatus;
   equipmentConfirmedAt: string | null;
+  /** II. Kaji Ulang Permintaan (customer request review) — SEND_TO_LAB only. */
+  requestReviewMethodOk: boolean | null;
+  requestReviewEquipmentOk: boolean | null;
+  requestReviewPersonnelOk: boolean | null;
+  requestReviewConfirmAgree: boolean;
+  requestReviewConfirmEmail: boolean;
+  requestReviewConfirmLetter: boolean;
+  requestReviewConfirmOther: boolean;
+  requestReviewConfirmOtherText: string | null;
+  requestReviewCompletedAt: string | null;
+  requestReviewCompletedByUserId: string | null;
+  requestReviewCompletedBy: { id: string; name: string | null } | null;
   createdAt: string;
   updatedAt: string;
   items: WorkOrderItem[];
