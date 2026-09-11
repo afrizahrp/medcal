@@ -312,3 +312,61 @@ export function formatReferenceEquipmentError(err: unknown, fallback: string): s
   }
   return formatCalibrationJobApiError(err, fallback);
 }
+
+// ── Measurement review display (Nilai Normal) ────────────────────────────────
+
+/**
+ * Format snapshot or catalog numeric bounds for display.
+ * Returns null when neither bound is present (caller chooses fallback / "—").
+ */
+export function formatEffectiveToleranceBounds(
+  min: string | null | undefined,
+  max: string | null | undefined,
+): string | null {
+  const hasMin = min != null && min !== "";
+  const hasMax = max != null && max !== "";
+  if (hasMin && hasMax) return `${min}–${max}`;
+  if (hasMin) return `≥ ${min}`;
+  if (hasMax) return `≤ ${max}`;
+  return null;
+}
+
+type CatalogToleranceFields = {
+  toleranceMin: string | null;
+  toleranceMax: string | null;
+  toleranceNote: string | null;
+};
+
+/**
+ * Display "Nilai Normal" for one MeasurementResult on Portal MT review.
+ *
+ * Primary: effectiveToleranceMin/Max snapshotted on the row (audit-locked).
+ * Fallback when both effective bounds are null: catalog toleranceNote (test
+ * point first, then parameter), then structured catalog min/max. Never invents
+ * a range and never uses appliedNominalValue / referenceValue.
+ */
+export function formatMeasurementNormalValue(input: {
+  effectiveToleranceMin: string | null;
+  effectiveToleranceMax: string | null;
+  testPoint?: CatalogToleranceFields | null;
+  parameter?: CatalogToleranceFields | null;
+}): string {
+  const fromEffective = formatEffectiveToleranceBounds(
+    input.effectiveToleranceMin,
+    input.effectiveToleranceMax,
+  );
+  if (fromEffective !== null) return fromEffective;
+
+  const tp = input.testPoint ?? null;
+  const param = input.parameter ?? null;
+  const note = tp?.toleranceNote?.trim() || param?.toleranceNote?.trim();
+  if (note) return note;
+
+  const fromTp = formatEffectiveToleranceBounds(tp?.toleranceMin, tp?.toleranceMax);
+  if (fromTp !== null) return fromTp;
+
+  const fromParam = formatEffectiveToleranceBounds(param?.toleranceMin, param?.toleranceMax);
+  if (fromParam !== null) return fromParam;
+
+  return "—";
+}

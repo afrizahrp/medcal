@@ -7,6 +7,8 @@ import {
   canDecideQualityReview,
   correctionMissingImage,
   formatCalibrationJobApiError,
+  formatEffectiveToleranceBounds,
+  formatMeasurementNormalValue,
   isAwaitingQualityReview,
   isIdentityGateLocked,
   isQualityReviewApproved,
@@ -198,5 +200,108 @@ describe("correction photo helpers", () => {
         signatures: [{ status: "UNAVAILABLE" }, { status: "REFUSED" }],
       }),
     ).toBe(false);
+  });
+});
+
+describe("measurement normal-value display", () => {
+  it("formats min+max, min-only, and max-only effective bounds", () => {
+    expect(formatEffectiveToleranceBounds("20", "30")).toBe("20–30");
+    expect(formatEffectiveToleranceBounds("20", null)).toBe("≥ 20");
+    expect(formatEffectiveToleranceBounds(null, "30")).toBe("≤ 30");
+    expect(formatEffectiveToleranceBounds(null, null)).toBeNull();
+  });
+
+  it("prefers effective snapshot over catalog note or bounds", () => {
+    expect(
+      formatMeasurementNormalValue({
+        effectiveToleranceMin: "20",
+        effectiveToleranceMax: "30",
+        parameter: {
+          toleranceMin: "0",
+          toleranceMax: "100",
+          toleranceNote: "jangan pakai note ini",
+        },
+      }),
+    ).toBe("20–30");
+  });
+
+  it("falls back to toleranceNote when effective bounds are null", () => {
+    expect(
+      formatMeasurementNormalValue({
+        effectiveToleranceMin: null,
+        effectiveToleranceMax: null,
+        parameter: {
+          toleranceMin: "20",
+          toleranceMax: "30",
+          toleranceNote: "20 s/d 30 °C",
+        },
+      }),
+    ).toBe("20 s/d 30 °C");
+  });
+
+  it("prefers test-point note over parameter note when effective is null", () => {
+    expect(
+      formatMeasurementNormalValue({
+        effectiveToleranceMin: null,
+        effectiveToleranceMax: null,
+        testPoint: {
+          toleranceMin: null,
+          toleranceMax: null,
+          toleranceNote: "± 5 mmHg",
+        },
+        parameter: {
+          toleranceMin: null,
+          toleranceMax: null,
+          toleranceNote: "parameter note",
+        },
+      }),
+    ).toBe("± 5 mmHg");
+  });
+
+  it("falls back to structured catalog bounds when note is absent", () => {
+    expect(
+      formatMeasurementNormalValue({
+        effectiveToleranceMin: null,
+        effectiveToleranceMax: null,
+        testPoint: {
+          toleranceMin: "55",
+          toleranceMax: "65",
+          toleranceNote: null,
+        },
+        parameter: {
+          toleranceMin: "0",
+          toleranceMax: "100",
+          toleranceNote: null,
+        },
+      }),
+    ).toBe("55–65");
+  });
+
+  it("uses a neutral placeholder when no range exists", () => {
+    expect(
+      formatMeasurementNormalValue({
+        effectiveToleranceMin: null,
+        effectiveToleranceMax: null,
+        parameter: null,
+      }),
+    ).toBe("—");
+  });
+
+  it("keeps GRID-style per-row effective ranges distinct from parameter catalog", () => {
+    // Simulates two GRID readings whose snapshots differ (e.g. ±5 around 60 vs 120).
+    expect(
+      formatMeasurementNormalValue({
+        effectiveToleranceMin: "55",
+        effectiveToleranceMax: "65",
+        parameter: { toleranceMin: null, toleranceMax: null, toleranceNote: "± 5 mmHg" },
+      }),
+    ).toBe("55–65");
+    expect(
+      formatMeasurementNormalValue({
+        effectiveToleranceMin: "115",
+        effectiveToleranceMax: "125",
+        parameter: { toleranceMin: null, toleranceMax: null, toleranceNote: "± 5 mmHg" },
+      }),
+    ).toBe("115–125");
   });
 });

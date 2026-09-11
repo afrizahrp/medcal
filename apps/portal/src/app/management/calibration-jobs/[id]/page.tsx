@@ -40,6 +40,7 @@ import {
   canDecideQualityReview,
   correctionMissingImage,
   formatCalibrationJobApiError,
+  formatMeasurementNormalValue,
   formatReferenceEquipmentError,
   isAwaitingQualityReview,
   isIdentityGateLocked,
@@ -1204,9 +1205,13 @@ function QualityReviewPanel({
     ...(parametersQuery.data?.parameters ?? []),
     ...(parametersQuery.data?.gridParameters ?? []),
   ];
+  const paramById = new Map(parameters.map((p) => [p.id, p]));
   const nameById = new Map(parameters.map((p) => [p.id, p.name]));
+  const pointById = new Map(
+    parameters.flatMap((p) => (p.testPoints ?? []).map((tp) => [tp.id, tp] as const)),
+  );
   const pointLabelById = new Map(
-    parameters.flatMap((p) => (p.testPoints ?? []).map((tp) => [tp.id, tp.settingLabel] as const)),
+    [...pointById.entries()].map(([id, tp]) => [id, tp.settingLabel] as const),
   );
   const capabilityByParamId = new Map(parameters.map((p) => [p.id, p.capabilityName]));
   const capabilityOrder = new Map(
@@ -1241,12 +1246,14 @@ function QualityReviewPanel({
         <p className="text-sm text-slate-500">Belum ada hasil pengukuran untuk job ini.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[360px] text-xs">
+          <table className="w-full min-w-[520px] text-xs">
             <thead>
               <tr className="text-left text-slate-400">
                 <th className="py-1 pr-3 font-medium">Parameter</th>
-                <th className="py-1 pr-3 font-medium">Replicate</th>
-                <th className="py-1 font-medium">Nilai</th>
+                <th className="py-1 pr-3 font-medium">Pengulangan</th>
+                <th className="py-1 pr-3 font-medium">Hasil</th>
+                <th className="py-1 pr-3 font-medium">Nilai Normal</th>
+                <th className="py-1 font-medium">Satuan</th>
               </tr>
             </thead>
             {groupedRows.map(([capabilityName, capRows]) => {
@@ -1254,7 +1261,7 @@ function QualityReviewPanel({
               return (
                 <tbody key={capabilityName}>
                   <tr className="border-t border-slate-200 bg-slate-100/70">
-                    <td colSpan={3} className="py-1.5 pr-3">
+                    <td colSpan={5} className="py-1.5 pr-3">
                       <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                         {capabilityName}
                         <span className="font-normal normal-case text-slate-400">
@@ -1263,20 +1270,50 @@ function QualityReviewPanel({
                       </span>
                     </td>
                   </tr>
-                  {capRows.map((row) => (
-                    <tr key={row.id} className="border-t border-slate-200">
-                      <td className="py-1 pr-3 text-slate-700">
-                        {nameById.get(row.deviceCalibrationParameterId) ?? row.deviceCalibrationParameterId}
-                        {row.calibrationTestPointId
-                          ? ` · ${pointLabelById.get(row.calibrationTestPointId) ?? row.calibrationTestPointId}`
-                          : ""}
-                      </td>
-                      <td className="py-1 pr-3 font-mono text-slate-500">{row.replicateIndex}</td>
-                      <td className="py-1 font-mono text-slate-800">
-                        {row.measuredValue ?? row.measuredText ?? (row.measuredBool == null ? "—" : String(row.measuredBool))}
-                      </td>
-                    </tr>
-                  ))}
+                  {capRows.map((row) => {
+                    const param = paramById.get(row.deviceCalibrationParameterId);
+                    const testPoint = row.calibrationTestPointId
+                      ? pointById.get(row.calibrationTestPointId)
+                      : undefined;
+                    return (
+                      <tr key={row.id} className="border-t border-slate-200">
+                        <td className="py-1 pr-3 text-slate-700">
+                          {nameById.get(row.deviceCalibrationParameterId) ??
+                            row.deviceCalibrationParameterId}
+                          {row.calibrationTestPointId
+                            ? ` · ${pointLabelById.get(row.calibrationTestPointId) ?? row.calibrationTestPointId}`
+                            : ""}
+                        </td>
+                        <td className="py-1 pr-3 font-mono text-slate-500">{row.replicateIndex}</td>
+                        <td className="py-1 pr-3 font-mono text-slate-800">
+                          {row.measuredValue ??
+                            row.measuredText ??
+                            (row.measuredBool == null ? "—" : String(row.measuredBool))}
+                        </td>
+                        <td className="py-1 pr-3 font-mono text-slate-700">
+                          {formatMeasurementNormalValue({
+                            effectiveToleranceMin: row.effectiveToleranceMin,
+                            effectiveToleranceMax: row.effectiveToleranceMax,
+                            testPoint: testPoint
+                              ? {
+                                  toleranceMin: testPoint.toleranceMin ?? null,
+                                  toleranceMax: testPoint.toleranceMax ?? null,
+                                  toleranceNote: testPoint.toleranceNote ?? null,
+                                }
+                              : null,
+                            parameter: param
+                              ? {
+                                  toleranceMin: param.toleranceMin,
+                                  toleranceMax: param.toleranceMax,
+                                  toleranceNote: param.toleranceNote,
+                                }
+                              : null,
+                          })}
+                        </td>
+                        <td className="py-1 text-slate-600">{param?.uom?.symbol ?? "—"}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               );
             })}

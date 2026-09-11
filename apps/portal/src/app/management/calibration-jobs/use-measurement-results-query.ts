@@ -7,18 +7,37 @@ import { CALIBRATION_JOBS_QUERY_KEY } from "./use-calibration-jobs-query";
 /**
  * Read-only measurement catalog + rows for Portal MT review.
  * GET only — MT must not write MeasurementResult (no PATCH/POST here).
+ *
+ * Types mirror the existing API wire shape from
+ * GET .../measurement-parameters and GET .../measurement-results
+ * (see CalibrationJobDetail_Measurement_NormalValue_Audit.md).
  */
+
+export interface PortalMeasurementTestPoint {
+  id: string;
+  sequence: number;
+  settingLabel: string;
+  settingValue?: string | null;
+  toleranceMin?: string | null;
+  toleranceMax?: string | null;
+  toleranceNote?: string | null;
+}
 
 export interface PortalMeasurementParameter {
   id: string;
   code: string;
   name: string;
+  /** Digits after the decimal for measured values — present on the wire. */
+  decimalPlaces: number | null;
   uom: { code: string; symbol: string } | null;
+  toleranceMin: string | null;
+  toleranceMax: string | null;
+  toleranceNote: string | null;
   /** Capability / capability-item this parameter belongs to — used to group the
    * MT review table the same way the Calibration Parameter catalog is grouped. */
   capabilityName: string;
   capabilityItemName: string;
-  testPoints?: { id: string; sequence: number; settingLabel: string }[];
+  testPoints?: PortalMeasurementTestPoint[];
 }
 
 /** LK-oriented tree from GET .../measurement-parameters — capabilities already
@@ -46,6 +65,10 @@ export interface PortalMeasurementResult {
   measuredBool: boolean | null;
   measuredText: string | null;
   note: string | null;
+  /** Snapshot of the bounds used for isWithinTolerance at write time. */
+  isWithinTolerance: boolean | null;
+  effectiveToleranceMin: string | null;
+  effectiveToleranceMax: string | null;
 }
 
 export function useMeasurementParameters(jobId: string | undefined) {
