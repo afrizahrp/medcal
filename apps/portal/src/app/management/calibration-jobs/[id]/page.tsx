@@ -40,6 +40,7 @@ import {
   canDecideQualityReview,
   correctionMissingImage,
   formatCalibrationJobApiError,
+  formatMeasurementHasilDisplay,
   formatMeasurementNormalValue,
   formatReferenceEquipmentError,
   isAwaitingQualityReview,
@@ -1286,7 +1287,7 @@ function QualityReviewPanel({
                         </td>
                         <td className="py-1 pr-3 font-mono text-slate-500">{row.replicateIndex}</td>
                         <td className="py-1 pr-3 font-mono text-slate-800">
-                          {row.measuredValue ??
+                          {formatMeasurementHasilDisplay(row.measuredValue, param?.decimalPlaces) ??
                             row.measuredText ??
                             (row.measuredBool == null ? "—" : String(row.measuredBool))}
                         </td>

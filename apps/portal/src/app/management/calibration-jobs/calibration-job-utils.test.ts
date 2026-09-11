@@ -8,6 +8,7 @@ import {
   correctionMissingImage,
   formatCalibrationJobApiError,
   formatEffectiveToleranceBounds,
+  formatMeasurementHasilDisplay,
   formatMeasurementNormalValue,
   isAwaitingQualityReview,
   isIdentityGateLocked,
@@ -200,6 +201,47 @@ describe("correction photo helpers", () => {
         signatures: [{ status: "UNAVAILABLE" }, { status: "REFUSED" }],
       }),
     ).toBe(false);
+  });
+});
+
+describe("measurement Hasil display precision", () => {
+  it("formats decimalPlaces = 0 as a whole number", () => {
+    expect(formatMeasurementHasilDisplay("20", 0)).toBe("20");
+    expect(formatMeasurementHasilDisplay("20.4", 0)).toBe("20");
+  });
+
+  it("pads and trims to decimalPlaces = 1", () => {
+    expect(formatMeasurementHasilDisplay("20", 1)).toBe("20.0");
+    expect(formatMeasurementHasilDisplay("20.1", 1)).toBe("20.1");
+    expect(formatMeasurementHasilDisplay("20.10", 1)).toBe("20.1");
+  });
+
+  it("pads and trims to decimalPlaces = 2", () => {
+    expect(formatMeasurementHasilDisplay("20", 2)).toBe("20.00");
+    expect(formatMeasurementHasilDisplay("20.1", 2)).toBe("20.10");
+    expect(formatMeasurementHasilDisplay("20.12", 2)).toBe("20.12");
+  });
+
+  it("preserves raw string when decimalPlaces is null", () => {
+    expect(formatMeasurementHasilDisplay("20", null)).toBe("20");
+    expect(formatMeasurementHasilDisplay("20.123", null)).toBe("20.123");
+    expect(formatMeasurementHasilDisplay("20.10", null)).toBe("20.10");
+  });
+
+  it("formats negative numbers with the same precision rules", () => {
+    expect(formatMeasurementHasilDisplay("-20", 1)).toBe("-20.0");
+    expect(formatMeasurementHasilDisplay("-20.1", 2)).toBe("-20.10");
+  });
+
+  it("does not mutate the source measuredValue string", () => {
+    const stored = "20";
+    expect(formatMeasurementHasilDisplay(stored, 1)).toBe("20.0");
+    expect(stored).toBe("20");
+  });
+
+  it("returns null for empty measuredValue so callers keep text/bool fallback", () => {
+    expect(formatMeasurementHasilDisplay(null, 1)).toBeNull();
+    expect(formatMeasurementHasilDisplay("", 1)).toBeNull();
   });
 });
 

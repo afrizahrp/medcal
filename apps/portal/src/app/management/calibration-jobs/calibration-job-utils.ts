@@ -313,7 +313,30 @@ export function formatReferenceEquipmentError(err: unknown, fallback: string): s
   return formatCalibrationJobApiError(err, fallback);
 }
 
-// ── Measurement review display (Nilai Normal) ────────────────────────────────
+// ── Measurement review display (Hasil / Nilai Normal) ────────────────────────
+
+/**
+ * Display-only format for `MeasurementResult.measuredValue` on Portal review.
+ *
+ * - `decimalPlaces` configured → pad/trim fractional digits with `toFixed` for
+ *   render only (does not mutate the stored/API string).
+ * - `decimalPlaces` null → return the raw stored representation (do not invent
+ *   precision). Differs from tech-pwa `formatMeasuredValue`, which treats null as 0.
+ *
+ * Returns null when there is no numeric measured value so callers can fall back
+ * to measuredText / measuredBool / "—".
+ */
+export function formatMeasurementHasilDisplay(
+  measuredValue: string | null | undefined,
+  decimalPlaces: number | null | undefined,
+): string | null {
+  if (measuredValue == null || measuredValue === "") return null;
+  if (decimalPlaces == null) return measuredValue;
+  const n = Number(measuredValue);
+  if (!Number.isFinite(n)) return measuredValue;
+  const dp = Math.max(0, Math.trunc(decimalPlaces));
+  return n.toFixed(dp);
+}
 
 /**
  * Format snapshot or catalog numeric bounds for display.
