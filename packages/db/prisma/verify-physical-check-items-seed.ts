@@ -39,11 +39,18 @@ async function main(): Promise<void> {
   }
 
   // Intentional zeros
-  for (const code of ["ELECTRIC_BEDS", "PATIENT_MONITOR"] as const) {
+  for (const code of ["ELECTRIC_BEDS"] as const) {
     const count = byType.get(code)?.length ?? 0;
     if (count !== 0) {
       issues.push(`${code}: expected 0, got ${count}`);
     }
+  }
+
+  // PATIENT_MONITOR mirrors BED_SIDE_MONITOR count
+  const bsmCount = byType.get("BED_SIDE_MONITOR")?.length ?? 0;
+  const pmCount = byType.get("PATIENT_MONITOR")?.length ?? 0;
+  if (pmCount !== bsmCount) {
+    issues.push(`PATIENT_MONITOR: expected ${bsmCount} (same as BED_SIDE_MONITOR), got ${pmCount}`);
   }
 
   // Cold chain pair
@@ -106,7 +113,9 @@ async function main(): Promise<void> {
     `[verify] DeviceTypes with items: ${byType.size} (expected ${EXPECTED_PHYSICAL_CHECK_DEVICE_TYPE_COUNT})`,
   );
   console.log(`[verify] ELECTRIC_BEDS: ${byType.get("ELECTRIC_BEDS")?.length ?? 0} (expected 0)`);
-  console.log(`[verify] PATIENT_MONITOR: ${byType.get("PATIENT_MONITOR")?.length ?? 0} (expected 0)`);
+  console.log(
+    `[verify] PATIENT_MONITOR: ${byType.get("PATIENT_MONITOR")?.length ?? 0} (expected ${byType.get("BED_SIDE_MONITOR")?.length ?? 0}, same as BED_SIDE_MONITOR)`,
+  );
   console.log(`[verify] COLD_CHAIN: ${byType.get("COLD_CHAIN")?.length ?? 0} (expected 5)`);
   console.log(`[verify] KULKAS_VAKSIN: ${byType.get("KULKAS_VAKSIN")?.length ?? 0} (expected 5)`);
   console.log(`[verify] unique (deviceTypeId, code): ${seen.size === rows.length ? "OK" : "FAIL"}`);

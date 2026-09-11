@@ -1,5 +1,6 @@
 /**
- * Seeds DevicePhysicalCheckItem (246 rows) from PhysicalInspection_Master_Seed.md.
+ * Seeds DevicePhysicalCheckItem (251 rows) from PhysicalInspection_Master_Seed.md
+ * plus PATIENT_MONITOR checklist copied from BED_SIDE_MONITOR (business lock).
  * Master configuration only — does NOT create PhysicalCheckResult or touch
  * DeviceCalibrationParameter / MeasurementResult / DeviceType.
  *
@@ -23,7 +24,7 @@ interface PhysicalCheckItemSeedRow {
   sortOrder: number;
 }
 
-/** Approved dataset — 246 rows / 44 DeviceTypes. Do not normalize LK wording. */
+/** Approved dataset — 251 rows / 45 DeviceTypes. Do not normalize LK wording. */
 export const PHYSICAL_CHECK_ITEMS: PhysicalCheckItemSeedRow[] = [
   {
     deviceTypeCode: "AUDIOMETER",
@@ -1285,6 +1286,42 @@ export const PHYSICAL_CHECK_ITEMS: PhysicalCheckItemSeedRow[] = [
     inspectionLimit: "Selama pengecekan fungsi, pastikan indicator dan tampilan layer berfungsi baik",
     sortOrder: 30,
   },
+  // PATIENT_MONITOR — exact copy of BED_SIDE_MONITOR checklist (separate rows / codes)
+  {
+    deviceTypeCode: "PATIENT_MONITOR",
+    code: "PATIENT_MONITOR_PHYSICAL_001",
+    name: "Badan / Permukaan",
+    inspectionLimit: "periksa bagian luar unit, pastikan bersih, terpasang ketat satu dan lainnya dan tidak ada bekas tertimpa cairan ataupun gangguan lainnya.",
+    sortOrder: 10,
+  },
+  {
+    deviceTypeCode: "PATIENT_MONITOR",
+    code: "PATIENT_MONITOR_PHYSICAL_002",
+    name: "Kotak kontak alat",
+    inspectionLimit: "periksa apakah ada gangguan pada kotak kontak (AC-Power). Gerak-gerakkan kotak kontak untuk memastikan keamanannya. Goyang-goyangkan kotak kontak untuk memastikan tidak ada baut atau mur yang longgar.",
+    sortOrder: 20,
+  },
+  {
+    deviceTypeCode: "PATIENT_MONITOR",
+    code: "PATIENT_MONITOR_PHYSICAL_003",
+    name: "Kabel catu utama",
+    inspectionLimit: "periksa kabel, apakah terlihat ada kerusakan atau bagian isolasi yang terkelupas.",
+    sortOrder: 30,
+  },
+  {
+    deviceTypeCode: "PATIENT_MONITOR",
+    code: "PATIENT_MONITOR_PHYSICAL_004",
+    name: "Tombol, Saklar dan pengaman",
+    inspectionLimit: "sebelum mempergunakan/mengubah-ubah tombol kontrol, periksa posisinya, jika terlihat tidak berada pada posisinya (periksa dengan menggunakan mode pemeriksaan standar). Bandingkan dengan posisi control. Ingat peraturan tersebut dan jangan lupa untuk mengembalikan pada setting awal jika sudah selesai menggunakan.",
+    sortOrder: 40,
+  },
+  {
+    deviceTypeCode: "PATIENT_MONITOR",
+    code: "PATIENT_MONITOR_PHYSICAL_005",
+    name: "Tampilan dan indikator",
+    inspectionLimit: "selama pengecekan fungsi, pastikan tampilan indicator dan tampilan berfungsi seluruhnya, yakinkan bahwa tampilan digital berfungsi",
+    sortOrder: 50,
+  },
   {
     deviceTypeCode: "PHOTOTHERAPY",
     code: "PHOTOTHERAPY_PHYSICAL_001",
@@ -1749,13 +1786,12 @@ export const PHYSICAL_CHECK_ITEMS: PhysicalCheckItemSeedRow[] = [
   },
 ];
 
-export const EXPECTED_PHYSICAL_CHECK_ITEM_COUNT = 246;
-export const EXPECTED_PHYSICAL_CHECK_DEVICE_TYPE_COUNT = 44;
+export const EXPECTED_PHYSICAL_CHECK_ITEM_COUNT = 251;
+export const EXPECTED_PHYSICAL_CHECK_DEVICE_TYPE_COUNT = 45;
 
 /** Intentional zeros — never invent items for these. */
 export const PHYSICAL_CHECK_INTENTIONAL_ZERO_DEVICE_TYPE_CODES = [
   "ELECTRIC_BEDS",
-  "PATIENT_MONITOR",
 ] as const;
 
 /**
@@ -1819,7 +1855,9 @@ async function seedPhysicalCheckItems(): Promise<void> {
     console.log(
       `[seed] dry-run COLD_CHAIN=${byType.get("COLD_CHAIN") ?? 0}, KULKAS_VAKSIN=${byType.get("KULKAS_VAKSIN") ?? 0}.`,
     );
-    console.log("[seed] dry-run ELECTRIC_BEDS=0, PATIENT_MONITOR=0 (intentional).");
+    console.log(
+      `[seed] dry-run ELECTRIC_BEDS=0 (intentional), PATIENT_MONITOR=${byType.get("PATIENT_MONITOR") ?? 0}.`,
+    );
     return;
   }
 
