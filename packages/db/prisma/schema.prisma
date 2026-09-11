@@ -232,6 +232,13 @@ enum IdentityCorrectionSignerRole {
   CUSTOMER
 }
 
+/// Signer kinds on Kontrol Alat (F.MU.08) — discriminator values only, NOT
+/// Membership roles. Administrasi / Petugas Teknis are existing users.
+enum KontrolAlatSignerKind {
+  ADMINISTRATION
+  TECHNICAL_OFFICER
+}
+
 /// Captures "customer unavailable / refused" as a real state, not just a null
 /// signature. (Decision 7)
 enum SignatureStatus {
@@ -535,6 +542,9 @@ model User {
   jobReferenceEquipmentUsagesOverridden JobReferenceEquipmentUsed[]  @relation("JobReferenceEquipmentOverrider")
   measurementResultsRecorded            MeasurementResult[]          @relation("MeasurementResultRecordedBy")
   physicalCheckResultsRecorded          PhysicalCheckResult[]        @relation("PhysicalCheckResultRecordedBy")
+  workOrdersRequestReviewCompleted      WorkOrder[]                  @relation("WorkOrderRequestReviewCompletedBy")
+  kontrolAlatsCreated                   KontrolAlat[]                @relation("KontrolAlatCreatedBy")
+  kontrolAlatSignatures                 KontrolAlatSignature[]       @relation("KontrolAlatSigner")
 }
 
 // =============================================================================
@@ -1320,16 +1330,16 @@ model DeviceCapabilityItem {
 // toleranceNote keeps the verbatim LK wording. Unique per
 // (deviceTypeId, capabilityItemId, code).
 model DeviceCalibrationParameter {
-  id               String               @id @default(cuid())
+  id               String                         @id @default(cuid())
   deviceTypeId     String
   capabilityItemId String
   code             String
   name             String
   description      String?
-  valueType        CalibrationValueType @default(NUMBER)
+  valueType        CalibrationValueType           @default(NUMBER)
   uomId            String?
-  toleranceMin     Decimal?             @db.Decimal(18, 4)
-  toleranceMax     Decimal?             @db.Decimal(18, 4)
+  toleranceMin     Decimal?                       @db.Decimal(18, 4)
+  toleranceMax     Decimal?                       @db.Decimal(18, 4)
   toleranceNote    String?
   // Digits after the decimal point required for this parameter's measured
   // calibration result. Only meaningful for valueType = NUMBER; NULL for
@@ -1341,16 +1351,16 @@ model DeviceCalibrationParameter {
   // on the calibration-parameter screen and the future generated worksheet.
   // Written in a single transactional pass (multiples of 10); reads tie-break
   // on `name`. Existing rows are seeded by backfill-calibration-ordering.ts.
-  sortOrder        Int                  @default(0)
-  isActive         Boolean              @default(true)
+  sortOrder        Int                            @default(0)
+  isActive         Boolean                        @default(true)
   /// Which entry UI this catalog row needs. Default DIRECT_REPLICATES covers
   /// Pattern A (+ Pattern C-as-A) and Pattern B (which still uses typed
   /// readings; the grid is expressed by CalibrationTestPoint children).
   /// LOGGER_SUMMARY is backfilled for the 9 storage-temperature uniformity
   /// codes in CalibrationTestPoint_Seed_Extraction.md §6.4.
   entryStyle       CalibrationParameterEntryStyle @default(DIRECT_REPLICATES)
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  createdAt        DateTime                       @default(now())
+  updatedAt        DateTime                       @updatedAt
 
   deviceType     DeviceType           @relation(fields: [deviceTypeId], references: [id])
   capabilityItem DeviceCapabilityItem @relation(fields: [capabilityItemId], references: [id])
@@ -1727,20 +1737,37 @@ model WorkOrder {
   /// Required before POST /work-orders/:id/start for ON_SITE work orders.
   /// Always null for SEND_TO_LAB.
   equipmentConfirmedAt DateTime?
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
 
-  company            Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  quotation          Quotation              @relation(fields: [quotationId], references: [id])
-  purchaseOrder      PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
-  customer           Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  items              WorkOrderItem[]
-  assignments        WorkOrderAssignment[]
-  jobs               CalibrationJob[]
-  equipment          WorkOrderEquipment[]
-  deliveryNote       EquipmentDeliveryNote?
+  // ── Customer request review (F.MU.08 II — Kaji Ulang Permintaan Pelanggan) ─
+  // Owned on WorkOrder so one customer/work event (one WOL) shares the same
+  // review across all sibling CalibrationJobs. Meaningful for SEND_TO_LAB only;
+  // ON_SITE stays null / false defaults. Not a hard gate for job.start().
+  requestReviewMethodOk          Boolean?
+  requestReviewEquipmentOk       Boolean?
+  requestReviewPersonnelOk       Boolean?
+  requestReviewConfirmAgree      Boolean   @default(false)
+  requestReviewConfirmEmail      Boolean   @default(false)
+  requestReviewConfirmLetter     Boolean   @default(false)
+  requestReviewConfirmOther      Boolean   @default(false)
+  requestReviewConfirmOtherText  String?
+  requestReviewCompletedAt       DateTime?
+  requestReviewCompletedByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company                  Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  quotation                Quotation              @relation(fields: [quotationId], references: [id])
+  purchaseOrder            PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  customer                 Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  requestReviewCompletedBy User?                  @relation("WorkOrderRequestReviewCompletedBy", fields: [requestReviewCompletedByUserId], references: [id])
+  items                    WorkOrderItem[]
+  assignments              WorkOrderAssignment[]
+  jobs                     CalibrationJob[]
+  equipment                WorkOrderEquipment[]
+  deliveryNote             EquipmentDeliveryNote?
   /// Legacy allocation pointer on PurchaseOrderItem. Unused by WorkOrder MVP.
-  purchaseOrderItems PurchaseOrderItem[]
+  purchaseOrderItems       PurchaseOrderItem[]
   /// Partial unique index `WorkOrder_purchaseOrderId_active_key` (status <> CANCELLED)
   /// is created in SQL. Prisma cannot model it; do not add @@unique([purchaseOrderId]).
 
@@ -1748,6 +1775,7 @@ model WorkOrder {
   @@index([companyId, status])
   @@index([quotationId])
   @@index([purchaseOrderId])
+  @@index([requestReviewCompletedByUserId])
 }
 
 /// Operational snapshot of a PurchaseOrderItem. MVP copies every PO item 1:1.
@@ -1761,12 +1789,29 @@ model WorkOrderItem {
   qty                 Decimal  @default(1) @db.Decimal(18, 4)
   createdAt           DateTime @default(now())
 
-  workOrder         WorkOrder         @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  purchaseOrderItem PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+  workOrder         WorkOrder                @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  purchaseOrderItem PurchaseOrderItem        @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+  accessories       WorkOrderItemAccessory[]
 
   @@unique([workOrderId, purchaseOrderItemId])
   @@index([workOrderId])
   @@index([purchaseOrderItemId])
+}
+
+/// Initial UUT accessory / perlengkapan list entered manually on the Work Order
+/// (F.MU.07). Copied into KontrolAlatAccessory when a SEND_TO_LAB KontrolAlat is
+/// created. Not a master/template catalog. Not WorkOrderEquipment (ON_SITE
+/// reference gear).
+model WorkOrderItemAccessory {
+  id              String   @id @default(cuid())
+  workOrderItemId String
+  label           String
+  sortOrder       Int
+  createdAt       DateTime @default(now())
+
+  workOrderItem WorkOrderItem @relation(fields: [workOrderItemId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderItemId])
 }
 
 model WorkOrderAssignment {
@@ -1974,6 +2019,9 @@ model CalibrationJob {
   reviews                QualityReview[]
   certificate            Certificate?
   identityCorrections    IdentityCorrection[]
+  /// Present 1:1 for SEND_TO_LAB (WOL) jobs after fan-out / backfill.
+  /// Absent for ON_SITE (SPK). Application-enforced; no DB CHECK across WO.
+  kontrolAlat            KontrolAlat?
 
   @@unique([workOrderId, deviceId])
   @@unique([workOrderId, purchaseOrderItemId, unitOrdinal])
@@ -1982,6 +2030,99 @@ model CalibrationJob {
   @@index([calibrationRequestItemId])
   @@index([companyId, akdAklApprovalStatus])
   @@index([akdAklApprovedByUserId])
+}
+
+/// F.MU.08 Kontrol Alat — intake / inspection / signatures for one In Lab unit.
+/// 1:1 with CalibrationJob when parent WorkOrder.serviceMode = SEND_TO_LAB.
+/// Forbidden for ON_SITE (enforced in application). Separate from
+/// PhysicalCheckResult, MeasurementResult, and WorkOrderEquipment.
+///
+/// Derived (NOT stored here): No. Order = PurchaseOrder.customerPoNumber;
+/// Tgl. Terima Alat / Tgl. Kalibrasi = CalibrationJob.startedAt;
+/// Tgl. Selesai = approved QualityReview.reviewedAt ?? CalibrationJob.submittedAt.
+model KontrolAlat {
+  id               String @id @default(cuid())
+  companyId        String
+  calibrationJobId String @unique
+
+  /// I.a Dilaksanakan vs I.b Tidak dilaksanakan
+  workExecuted      Boolean?
+  notExecutedReason String?
+
+  /// III. Kapasitas — optional; never mandatory
+  capacity String?
+
+  // ── Visual inspection ──────────────────────────────────────────────────────
+  visualPowerCable Boolean?
+  visualDisplay    Boolean?
+  visualButtons    Boolean?
+
+  // ── Functional inspection ──────────────────────────────────────────────────
+  /// Kondisi Awal — may participate in completeness before start
+  functionInitialOk Boolean?
+  /// Kondisi Akhir — may be filled after work; NOT required for start gate
+  functionFinalOk   Boolean?
+
+  /// Manual No. Sertifikat after MT APPROVE. No DocumentType / CER allocation.
+  certificateNumber String?
+
+  /// Set when both Administration + Technical Officer signatures are present
+  /// (signedAt set). Start-gate predicate for SEND_TO_LAB.
+  completedAt DateTime?
+
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  calibrationJob CalibrationJob         @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  createdBy      User?                  @relation("KontrolAlatCreatedBy", fields: [createdByUserId], references: [id])
+  accessories    KontrolAlatAccessory[]
+  signatures     KontrolAlatSignature[]
+
+  @@index([companyId])
+  @@index([createdByUserId])
+}
+
+/// Per-unit accessory checklist on Kontrol Alat. Snapshotted from
+/// WorkOrderItemAccessory at create time; technician may add/remove/adjust.
+model KontrolAlatAccessory {
+  id                             String   @id @default(cuid())
+  kontrolAlatId                  String
+  label                          String
+  sortOrder                      Int
+  /// Lab check: null = not yet checked
+  present                        Boolean?
+  /// Soft provenance to the WO accessory row that was copied (may be null if
+  /// added in lab, or if the WO accessory was later deleted).
+  sourceWorkOrderItemAccessoryId String?
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+
+  kontrolAlat KontrolAlat @relation(fields: [kontrolAlatId], references: [id], onDelete: Cascade)
+
+  @@index([kontrolAlatId])
+  @@index([sourceWorkOrderItemAccessoryId])
+}
+
+/// Administration + Technical Officer signatures on Kontrol Alat.
+/// signerName + signerUserId + signedAt only — no signature image in Phase 1.
+model KontrolAlatSignature {
+  id            String                @id @default(cuid())
+  companyId     String
+  kontrolAlatId String
+  signerKind    KontrolAlatSignerKind
+  signerUserId  String?
+  signerName    String
+  signedAt      DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  kontrolAlat KontrolAlat @relation(fields: [kontrolAlatId], references: [id], onDelete: Cascade)
+  signer      User?       @relation("KontrolAlatSigner", fields: [signerUserId], references: [id])
+
+  @@unique([kontrolAlatId, signerKind])
+  @@index([companyId])
+  @@index([signerUserId])
 }
 
 /// Optional master-level child of DeviceCalibrationParameter. Created ONLY for
