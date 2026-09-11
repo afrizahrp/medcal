@@ -22,6 +22,7 @@ import {
   type JobReferenceEquipmentReplaceInput,
   type QualityReviewDecisionInput,
 } from "@medcal/shared";
+
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { DevicesService, type DeviceWithRelations } from "../devices/devices.service";
 import { FilesService } from "../files/files.service";
@@ -49,8 +50,19 @@ const calibrationJobInclude = {
       id: true,
       number: true,
       status: true,
+      serviceMode: true,
       customerId: true,
       customer: { select: { id: true, name: true } },
+      purchaseOrder: { select: { customerPoNumber: true, number: true } },
+      requestReviewCompletedAt: true,
+    },
+  },
+  kontrolAlat: {
+    select: {
+      id: true,
+      completedAt: true,
+      certificateNumber: true,
+      workExecuted: true,
     },
   },
   device: {

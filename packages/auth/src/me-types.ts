@@ -102,6 +102,7 @@ export type MeCapabilities = {
   calibrationJobOverrideReferenceEquipmentValidity: boolean;
   calibrationJobRecordMeasurement: boolean;
   calibrationJobRecordPhysicalCheck: boolean;
+  calibrationJobRecordKontrolAlat: boolean;
   calibrationJobSubmitForReview: boolean;
   calibrationJobDecideQualityReview: boolean;
   calibrationJobResumeAfterRework: boolean;

@@ -1004,6 +1004,140 @@ describe("WorkOrdersService CalibrationJob fan-out on start()", () => {
     const wo = await workOrdersService.findOne(realCompanyId, created.id);
     expect(wo.status).toBe("ASSIGNED");
   });
+
+  it("SEND_TO_LAB fan-out creates one KontrolAlat per job and copies item accessories", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      serviceMode: "SEND_TO_LAB",
+    });
+    const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    await workOrdersService.replaceItemAccessories(realCompanyId, created.id, created.items[0]!.id, {
+      accessories: [
+        { label: "Unit", sortOrder: 10 },
+        { label: "Kabel Power", sortOrder: 20 },
+      ],
+    });
+    await prisma.workOrderItem.update({
+      where: { id: created.items[0]!.id },
+      data: { qty: new Prisma.Decimal(2) },
+    });
+    const technician = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, created.id, {
+      technicians: [{ technicianUserId: technician.id }],
+    });
+    await workOrdersService.start(realCompanyId, created.id);
+
+    const jobs = await prisma.calibrationJob.findMany({
+      where: { workOrderId: created.id },
+      include: { kontrolAlat: { include: { accessories: { orderBy: { sortOrder: "asc" } } } } },
+      orderBy: { unitOrdinal: "asc" },
+    });
+    expect(jobs).toHaveLength(2);
+    for (const job of jobs) {
+      expect(job.kontrolAlat).not.toBeNull();
+      expect(job.kontrolAlat!.accessories.map((row) => row.label)).toEqual(["Unit", "Kabel Power"]);
+      expect(job.kontrolAlat!.accessories[0]!.sourceWorkOrderItemAccessoryId).toBeTruthy();
+    }
+  });
+
+  it("recreates missing KontrolAlat on a later fan-out without duplicating jobs", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      serviceMode: "SEND_TO_LAB",
+    });
+    const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    const technician = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, created.id, {
+      technicians: [{ technicianUserId: technician.id }],
+    });
+    await workOrdersService.start(realCompanyId, created.id);
+
+    const first = await prisma.calibrationJob.findMany({ where: { workOrderId: created.id } });
+    expect(first).toHaveLength(1);
+    await prisma.kontrolAlat.deleteMany({
+      where: { calibrationJobId: { in: first.map((job) => job.id) } },
+    });
+
+    await (
+      workOrdersService as unknown as {
+        fanOutCalibrationJobs: (tx: typeof prisma, wo: unknown) => Promise<void>;
+      }
+    ).fanOutCalibrationJobs(prisma, await workOrdersService.findOne(realCompanyId, created.id));
+
+    const second = await prisma.calibrationJob.findMany({
+      where: { workOrderId: created.id },
+      include: { kontrolAlat: true },
+    });
+    expect(second.map((job) => job.id).sort()).toEqual(first.map((job) => job.id).sort());
+    expect(second[0]!.kontrolAlat).not.toBeNull();
+  });
+
+  it("ON_SITE fan-out does not create KontrolAlat", async () => {
+    const created = await assignedWorkOrderReadyToStart();
+    await workOrdersService.start(realCompanyId, created.id);
+    const jobs = await prisma.calibrationJob.findMany({ where: { workOrderId: created.id } });
+    expect(jobs.length).toBeGreaterThan(0);
+    expect(
+      await prisma.kontrolAlat.count({ where: { calibrationJobId: { in: jobs.map((j) => j.id) } } }),
+    ).toBe(0);
+  });
+});
+
+describe("WorkOrdersService request review + item accessories", () => {
+  it("rejects request review and accessories on ON_SITE work orders", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      serviceMode: "ON_SITE",
+    });
+    const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+
+    await expect(
+      workOrdersService.updateRequestReview(realCompanyId, created.id, staffUserId, {
+        requestReviewMethodOk: true,
+      }),
+    ).rejects.toMatchObject({ response: { code: "KONTROL_ALAT_NOT_APPLICABLE" } });
+
+    await expect(
+      workOrdersService.replaceItemAccessories(realCompanyId, created.id, created.items[0]!.id, {
+        accessories: [{ label: "Unit", sortOrder: 10 }],
+      }),
+    ).rejects.toMatchObject({ response: { code: "KONTROL_ALAT_NOT_APPLICABLE" } });
+  });
+
+  it("stores request review once on the WOL and replaces item accessories", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      serviceMode: "SEND_TO_LAB",
+    });
+    const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+
+    const technician = await createTechnician(realCompanyId);
+    const reviewed = await workOrdersService.updateRequestReview(
+      realCompanyId,
+      created.id,
+      technician.id,
+      {
+        requestReviewMethodOk: true,
+        requestReviewEquipmentOk: true,
+        requestReviewPersonnelOk: true,
+        requestReviewConfirmAgree: true,
+        completed: true,
+      },
+    );
+    expect(reviewed.requestReviewMethodOk).toBe(true);
+    expect(reviewed.requestReviewConfirmAgree).toBe(true);
+    expect(reviewed.requestReviewCompletedAt).toBeInstanceOf(Date);
+    expect(reviewed.requestReviewCompletedByUserId).toBe(technician.id);
+    expect(reviewed.requestReviewCompletedBy).toEqual({
+      id: technician.id,
+      name: technician.name,
+    });
+
+    const withAccessories = await workOrdersService.replaceItemAccessories(
+      realCompanyId,
+      created.id,
+      created.items[0]!.id,
+      { accessories: [{ label: "Rotor", sortOrder: 10 }] },
+    );
+    expect(withAccessories.items[0]!.accessories).toHaveLength(1);
+    expect(withAccessories.items[0]!.accessories[0]!.label).toBe("Rotor");
+  });
 });
 
 describe("WorkOrdersService.buildPdf", () => {

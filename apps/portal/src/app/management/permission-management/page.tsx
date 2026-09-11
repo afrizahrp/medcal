@@ -105,6 +105,7 @@ const ACTION_LABELS: Record<string, string> = {
   overrideReferenceEquipmentValidity: "Override Equipment Validity",
   recordMeasurement: "Record Measurement",
   recordPhysicalCheck: "Record Physical Check",
+  recordKontrolAlat: "Record Kontrol Alat",
   submitForReview: "Submit For Review",
   decideQualityReview: "Decide Quality Review",
   resumeAfterRework: "Resume After Rework",

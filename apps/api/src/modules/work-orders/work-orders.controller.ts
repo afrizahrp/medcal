@@ -19,10 +19,13 @@ import {
   workOrderEquipmentProposalQuerySchema,
   workOrderEquipmentReplaceSchema,
   workOrderListQuerySchema,
+  workOrderRequestReviewSchema,
   workOrderUpdateSchema,
+  workOrderItemAccessoriesReplaceSchema,
 } from "@medcal/shared";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
+import { UserId } from "../../common/decorators/user-id.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   WorkOrdersService,
@@ -123,6 +126,44 @@ export class WorkOrdersController {
     @Param("id") id: string,
   ): Promise<WorkOrderWithItems> {
     return this.service.confirmEquipment(companyId, id);
+  }
+
+  @Patch(":id/request-review")
+  @RequirePermission("workOrder", "update")
+  async updateRequestReview(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<WorkOrderWithItems> {
+    const parsed = workOrderRequestReviewSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid request review payload",
+        code: "INVALID_WORK_ORDER_REQUEST_REVIEW",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.updateRequestReview(companyId, id, userId, parsed.data);
+  }
+
+  @Put(":id/items/:itemId/accessories")
+  @RequirePermission("workOrder", "update")
+  async replaceItemAccessories(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
+    @Body() rawBody: unknown,
+  ): Promise<WorkOrderWithItems> {
+    const parsed = workOrderItemAccessoriesReplaceSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid work order item accessories",
+        code: "INVALID_WORK_ORDER_ITEM_ACCESSORIES",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.replaceItemAccessories(companyId, id, itemId, parsed.data);
   }
 
   @Patch(":id/equipment/order")

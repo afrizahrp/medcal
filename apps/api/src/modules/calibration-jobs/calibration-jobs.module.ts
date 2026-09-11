@@ -7,6 +7,7 @@ import { CalibrationJobsService } from "./calibration-jobs.service";
 import { identityCorrectionFileOwnerPolicy } from "./identity-correction-file-owner-policy";
 import { MeasurementResultsService } from "./measurement-results.service";
 import { PhysicalCheckResultsService } from "./physical-check-results.service";
+import { KontrolAlatService } from "./kontrol-alat.service";
 
 @Module({
   imports: [FilesModule],
@@ -15,9 +16,15 @@ import { PhysicalCheckResultsService } from "./physical-check-results.service";
     CalibrationJobsService,
     MeasurementResultsService,
     PhysicalCheckResultsService,
+    KontrolAlatService,
     CompanyRoleGuard,
   ],
-  exports: [CalibrationJobsService, MeasurementResultsService, PhysicalCheckResultsService],
+  exports: [
+    CalibrationJobsService,
+    MeasurementResultsService,
+    PhysicalCheckResultsService,
+    KontrolAlatService,
+  ],
 })
 export class CalibrationJobsModule implements OnModuleInit {
   constructor(

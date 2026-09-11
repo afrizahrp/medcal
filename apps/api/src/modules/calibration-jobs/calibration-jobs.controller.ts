@@ -29,6 +29,10 @@ import {
   physicalCheckResultCreateSchema,
   physicalCheckResultUpdateSchema,
   qualityReviewDecisionSchema,
+  kontrolAlatAccessoryCreateSchema,
+  kontrolAlatAccessoryUpdateSchema,
+  kontrolAlatPatchSchema,
+  kontrolAlatSignatureCreateSchema,
 } from "@medcal/shared";
 import type { DeviceWithRelations } from "../devices/devices.service";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
@@ -59,6 +63,10 @@ import {
   type DevicePhysicalCheckItemRow,
   type PhysicalCheckResultRow,
 } from "./physical-check-results.service";
+import {
+  KontrolAlatService,
+  type KontrolAlatDetail,
+} from "./kontrol-alat.service";
 
 @Controller("calibration-jobs")
 @UseGuards(CompanyRoleGuard)
@@ -70,6 +78,8 @@ export class CalibrationJobsController {
     private readonly measurements: MeasurementResultsService,
     @Inject(PhysicalCheckResultsService)
     private readonly physicalChecks: PhysicalCheckResultsService,
+    @Inject(KontrolAlatService)
+    private readonly kontrolAlat: KontrolAlatService,
   ) {}
 
   @Get()
@@ -543,5 +553,105 @@ export class CalibrationJobsController {
     @Param("resultId") resultId: string,
   ): Promise<void> {
     await this.physicalChecks.remove(companyId, resultId, id);
+  }
+
+  // ── Kontrol Alat (F.MU.08) ────────────────────────────────────────────────
+  // Nested under the job. GET is read-level; writes use recordKontrolAlat.
+  // ON_SITE is rejected in the service (KONTROL_ALAT_NOT_APPLICABLE).
+
+  @Get(":id/kontrol-alat")
+  @RequirePermission("calibrationJob", "read")
+  async getKontrolAlat(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<KontrolAlatDetail> {
+    return this.kontrolAlat.get(companyId, id);
+  }
+
+  @Patch(":id/kontrol-alat")
+  @RequirePermission("calibrationJob", "recordKontrolAlat")
+  async patchKontrolAlat(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<KontrolAlatDetail> {
+    const parsed = kontrolAlatPatchSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid Kontrol Alat payload",
+        code: "INVALID_KONTROL_ALAT",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.kontrolAlat.patch(companyId, id, userId, parsed.data);
+  }
+
+  @Post(":id/kontrol-alat/accessories")
+  @RequirePermission("calibrationJob", "recordKontrolAlat")
+  async addKontrolAlatAccessory(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<KontrolAlatDetail> {
+    const parsed = kontrolAlatAccessoryCreateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid Kontrol Alat accessory payload",
+        code: "INVALID_KONTROL_ALAT_ACCESSORY",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.kontrolAlat.addAccessory(companyId, id, userId, parsed.data);
+  }
+
+  @Patch(":id/kontrol-alat/accessories/:accessoryId")
+  @RequirePermission("calibrationJob", "recordKontrolAlat")
+  async updateKontrolAlatAccessory(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Param("accessoryId") accessoryId: string,
+    @Body() rawBody: unknown,
+  ): Promise<KontrolAlatDetail> {
+    const parsed = kontrolAlatAccessoryUpdateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid Kontrol Alat accessory update",
+        code: "INVALID_KONTROL_ALAT_ACCESSORY_UPDATE",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.kontrolAlat.updateAccessory(companyId, id, accessoryId, parsed.data);
+  }
+
+  @Delete(":id/kontrol-alat/accessories/:accessoryId")
+  @RequirePermission("calibrationJob", "recordKontrolAlat")
+  @HttpCode(204)
+  async deleteKontrolAlatAccessory(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Param("accessoryId") accessoryId: string,
+  ): Promise<void> {
+    await this.kontrolAlat.removeAccessory(companyId, id, accessoryId);
+  }
+
+  @Post(":id/kontrol-alat/signatures")
+  @RequirePermission("calibrationJob", "recordKontrolAlat")
+  async signKontrolAlat(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<KontrolAlatDetail> {
+    const parsed = kontrolAlatSignatureCreateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid Kontrol Alat signature payload",
+        code: "INVALID_KONTROL_ALAT_SIGNATURE",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.kontrolAlat.sign(companyId, id, userId, parsed.data);
   }
 }

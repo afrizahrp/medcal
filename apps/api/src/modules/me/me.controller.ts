@@ -227,6 +227,11 @@ export class MeController {
         "calibrationJob",
         "recordPhysicalCheck",
       ),
+      calibrationJobRecordKontrolAlat: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "recordKontrolAlat",
+      ),
       calibrationJobSubmitForReview: hasPermission(
         membership.role,
         "calibrationJob",

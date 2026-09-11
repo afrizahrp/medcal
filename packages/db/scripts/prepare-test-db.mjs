@@ -62,5 +62,6 @@ run("npx tsx prisma/seed-role-permissions.ts");
 run("npx tsx prisma/backfill-identity-correction-permissions.ts");
 run("npx tsx prisma/backfill-rework-resume-permissions.ts");
 run("npx tsx prisma/backfill-physical-check-permissions.ts");
+run("npx tsx prisma/backfill-kontrol-alat-permissions.ts");
 run("npx tsx prisma/seed-menu.ts");
 console.log("[prepare-test-db] ready.");

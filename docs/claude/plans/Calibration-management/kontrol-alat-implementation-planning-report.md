@@ -1,6 +1,6 @@
 # Kontrol Alat — Implementation Plan
 
-**Status:** Planning only (no code changes)  
+**Status:** Phase 1 (schema) + Phase 2 (API/domain) implemented 2026-09-11. Phase 3+ (start gate, UI, PDF) not started.  
 **Date:** 2026-09-11  
 **Form authority:** PKM F.MU.08 *Kontrol Alat – Permintaan Pekerjaan In Lab*  
 **Code authority:** current MedCal repository  
@@ -417,4 +417,4 @@ Only items **not** closed by the locked baseline + repository:
 
 ## Strict rule (this document)
 
-This file is an **implementation plan**. It does not authorize schema/API/UI coding by itself. Execute only after explicit implementation go-ahead.
+Phases 1–2 have been executed (schema + API/domain). This file does **not** authorize Phase 3+ (start gate, UI, PDF) by itself.

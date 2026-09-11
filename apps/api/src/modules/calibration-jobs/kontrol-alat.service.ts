@@ -1,0 +1,314 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { Prisma, prisma } from "@medcal/db";
+import type { KontrolAlatSignerKind } from "@medcal/db";
+import type {
+  KontrolAlatAccessoryCreateInput,
+  KontrolAlatAccessoryUpdateInput,
+  KontrolAlatPatchInput,
+  KontrolAlatSignatureCreateInput,
+} from "@medcal/shared";
+
+/**
+ * F.MU.08 Kontrol Alat — intake / inspection / signatures for one In Lab unit.
+ * SEND_TO_LAB only. ON_SITE writes and nested GET are rejected with
+ * KONTROL_ALAT_NOT_APPLICABLE. Do not reuse recordPhysicalCheck / recordMeasurement.
+ */
+export const RECORD_KONTROL_ALAT_PERMISSION = {
+  resource: "calibrationJob",
+  action: "recordKontrolAlat",
+} as const;
+
+const kontrolAlatInclude = {
+  accessories: { orderBy: { sortOrder: "asc" as const } },
+  signatures: { orderBy: { signerKind: "asc" as const } },
+  createdBy: { select: { id: true, name: true } },
+} as const;
+
+export type KontrolAlatDetail = Prisma.KontrolAlatGetPayload<{
+  include: typeof kontrolAlatInclude;
+}>;
+
+interface JobForKontrolAlat {
+  id: string;
+  companyId: string;
+  workOrder: { id: string; serviceMode: string };
+}
+
+@Injectable()
+export class KontrolAlatService {
+  async get(companyId: string, calibrationJobId: string): Promise<KontrolAlatDetail> {
+    const job = await this.requireSendToLabJob(companyId, calibrationJobId);
+    return this.requireKontrolAlat(job.id);
+  }
+
+  async patch(
+    companyId: string,
+    calibrationJobId: string,
+    userId: string,
+    input: KontrolAlatPatchInput,
+  ): Promise<KontrolAlatDetail> {
+    const job = await this.requireSendToLabJob(companyId, calibrationJobId);
+    const existing = await this.requireKontrolAlat(job.id);
+
+    if (input.certificateNumber !== undefined && input.certificateNumber !== null) {
+      await this.assertCertificateNumberAllowed(companyId, job.id);
+    }
+
+    const nextWorkExecuted =
+      input.workExecuted !== undefined ? input.workExecuted : existing.workExecuted;
+    const nextReason =
+      input.notExecutedReason !== undefined
+        ? input.notExecutedReason
+        : existing.notExecutedReason;
+    if (nextWorkExecuted === false && (nextReason == null || nextReason.trim() === "")) {
+      throw new BadRequestException({
+        message: "A reason is required when work is not executed",
+        code: "KONTROL_ALAT_REASON_REQUIRED",
+      });
+    }
+
+    await prisma.kontrolAlat.update({
+      where: { id: existing.id },
+      data: {
+        ...(input.workExecuted !== undefined ? { workExecuted: input.workExecuted } : {}),
+        ...(input.notExecutedReason !== undefined
+          ? { notExecutedReason: input.notExecutedReason }
+          : {}),
+        ...(input.capacity !== undefined ? { capacity: input.capacity } : {}),
+        ...(input.visualPowerCable !== undefined
+          ? { visualPowerCable: input.visualPowerCable }
+          : {}),
+        ...(input.visualDisplay !== undefined ? { visualDisplay: input.visualDisplay } : {}),
+        ...(input.visualButtons !== undefined ? { visualButtons: input.visualButtons } : {}),
+        ...(input.functionInitialOk !== undefined
+          ? { functionInitialOk: input.functionInitialOk }
+          : {}),
+        ...(input.functionFinalOk !== undefined
+          ? { functionFinalOk: input.functionFinalOk }
+          : {}),
+        ...(input.certificateNumber !== undefined
+          ? { certificateNumber: input.certificateNumber }
+          : {}),
+        ...(existing.createdByUserId == null ? { createdByUserId: userId } : {}),
+      },
+    });
+
+    return this.requireKontrolAlat(job.id);
+  }
+
+  async addAccessory(
+    companyId: string,
+    calibrationJobId: string,
+    userId: string,
+    input: KontrolAlatAccessoryCreateInput,
+  ): Promise<KontrolAlatDetail> {
+    const job = await this.requireSendToLabJob(companyId, calibrationJobId);
+    const existing = await this.requireKontrolAlat(job.id);
+
+    let sortOrder = input.sortOrder;
+    if (sortOrder === undefined) {
+      const last = existing.accessories[existing.accessories.length - 1];
+      sortOrder = (last?.sortOrder ?? 0) + 10;
+    }
+
+    await prisma.kontrolAlatAccessory.create({
+      data: {
+        kontrolAlatId: existing.id,
+        label: input.label,
+        sortOrder,
+        present: input.present ?? null,
+      },
+    });
+    await this.stampCreatedBy(existing.id, existing.createdByUserId, userId);
+
+    return this.requireKontrolAlat(job.id);
+  }
+
+  async updateAccessory(
+    companyId: string,
+    calibrationJobId: string,
+    accessoryId: string,
+    input: KontrolAlatAccessoryUpdateInput,
+  ): Promise<KontrolAlatDetail> {
+    const job = await this.requireSendToLabJob(companyId, calibrationJobId);
+    const existing = await this.requireKontrolAlat(job.id);
+    const row = existing.accessories.find((item) => item.id === accessoryId);
+    if (!row) {
+      throw new NotFoundException({
+        message: "Kontrol Alat accessory not found",
+        code: "KONTROL_ALAT_ACCESSORY_NOT_FOUND",
+      });
+    }
+
+    await prisma.kontrolAlatAccessory.update({
+      where: { id: accessoryId },
+      data: {
+        ...(input.label !== undefined ? { label: input.label } : {}),
+        ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+        ...(input.present !== undefined ? { present: input.present } : {}),
+      },
+    });
+
+    return this.requireKontrolAlat(job.id);
+  }
+
+  async removeAccessory(
+    companyId: string,
+    calibrationJobId: string,
+    accessoryId: string,
+  ): Promise<void> {
+    const job = await this.requireSendToLabJob(companyId, calibrationJobId);
+    const existing = await this.requireKontrolAlat(job.id);
+    const row = existing.accessories.find((item) => item.id === accessoryId);
+    if (!row) {
+      throw new NotFoundException({
+        message: "Kontrol Alat accessory not found",
+        code: "KONTROL_ALAT_ACCESSORY_NOT_FOUND",
+      });
+    }
+
+    await prisma.kontrolAlatAccessory.delete({ where: { id: accessoryId } });
+  }
+
+  async sign(
+    companyId: string,
+    calibrationJobId: string,
+    userId: string,
+    input: KontrolAlatSignatureCreateInput,
+  ): Promise<KontrolAlatDetail> {
+    const job = await this.requireSendToLabJob(companyId, calibrationJobId);
+    const existing = await this.requireKontrolAlat(job.id);
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true },
+    });
+    if (!user) {
+      throw new BadRequestException({
+        message: "Signer user was not found",
+        code: "KONTROL_ALAT_SIGNER_NOT_FOUND",
+      });
+    }
+
+    const signerKind = input.signerKind as KontrolAlatSignerKind;
+    const signedAt = new Date();
+
+    await prisma.$transaction(async (tx) => {
+      await tx.kontrolAlatSignature.upsert({
+        where: {
+          kontrolAlatId_signerKind: { kontrolAlatId: existing.id, signerKind },
+        },
+        create: {
+          companyId: job.companyId,
+          kontrolAlatId: existing.id,
+          signerKind,
+          signerUserId: user.id,
+          signerName: user.name,
+          signedAt,
+        },
+        update: {
+          signerUserId: user.id,
+          signerName: user.name,
+          signedAt,
+        },
+      });
+
+      const signatures = await tx.kontrolAlatSignature.findMany({
+        where: { kontrolAlatId: existing.id },
+      });
+      const bothSigned =
+        signatures.some(
+          (row) => row.signerKind === "ADMINISTRATION" && row.signedAt != null,
+        ) &&
+        signatures.some(
+          (row) => row.signerKind === "TECHNICAL_OFFICER" && row.signedAt != null,
+        );
+
+      const data: Prisma.KontrolAlatUpdateInput = {};
+      if (bothSigned && existing.completedAt == null) {
+        data.completedAt = signedAt;
+      }
+      if (existing.createdByUserId == null) {
+        data.createdBy = { connect: { id: user.id } };
+      }
+      if (Object.keys(data).length > 0) {
+        await tx.kontrolAlat.update({ where: { id: existing.id }, data });
+      }
+    });
+
+    return this.requireKontrolAlat(job.id);
+  }
+
+  private async requireSendToLabJob(
+    companyId: string,
+    calibrationJobId: string,
+  ): Promise<JobForKontrolAlat> {
+    const job = await prisma.calibrationJob.findFirst({
+      where: { id: calibrationJobId, companyId },
+      select: {
+        id: true,
+        companyId: true,
+        workOrder: { select: { id: true, serviceMode: true } },
+      },
+    });
+    if (!job) {
+      throw new NotFoundException({
+        message: "Calibration job not found",
+        code: "CALIBRATION_JOB_NOT_FOUND",
+      });
+    }
+    if (job.workOrder.serviceMode !== "SEND_TO_LAB") {
+      throw new BadRequestException({
+        message: "Kontrol Alat is only applicable to In Lab (SEND_TO_LAB) work orders",
+        code: "KONTROL_ALAT_NOT_APPLICABLE",
+      });
+    }
+    return job;
+  }
+
+  private async requireKontrolAlat(calibrationJobId: string): Promise<KontrolAlatDetail> {
+    const row = await prisma.kontrolAlat.findUnique({
+      where: { calibrationJobId },
+      include: kontrolAlatInclude,
+    });
+    if (!row) {
+      throw new NotFoundException({
+        message: "Kontrol Alat not found",
+        code: "KONTROL_ALAT_NOT_FOUND",
+      });
+    }
+    return row;
+  }
+
+  private async stampCreatedBy(
+    kontrolAlatId: string,
+    createdByUserId: string | null,
+    userId: string,
+  ): Promise<void> {
+    if (createdByUserId != null) return;
+    await prisma.kontrolAlat.update({
+      where: { id: kontrolAlatId },
+      data: { createdByUserId: userId },
+    });
+  }
+
+  private async assertCertificateNumberAllowed(
+    companyId: string,
+    calibrationJobId: string,
+  ): Promise<void> {
+    const approved = await prisma.qualityReview.findFirst({
+      where: { companyId, calibrationJobId, status: "APPROVED" },
+      select: { id: true },
+    });
+    if (!approved) {
+      throw new BadRequestException({
+        message: "Certificate number can be entered only after MT approval",
+        code: "KONTROL_ALAT_CERTIFICATE_NOT_ALLOWED",
+      });
+    }
+  }
+}

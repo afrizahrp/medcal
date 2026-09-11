@@ -35,6 +35,7 @@
     "backfill:quality-review-happy-path-permissions": "tsx prisma/backfill-quality-review-happy-path-permissions.ts",
     "backfill:rework-resume-permissions": "tsx prisma/backfill-rework-resume-permissions.ts",
     "backfill:physical-check-permissions": "tsx prisma/backfill-physical-check-permissions.ts",
+    "backfill:kontrol-alat-permissions": "tsx prisma/backfill-kontrol-alat-permissions.ts",
     "backfill:decimal-places-from-results": "tsx prisma/backfill-decimal-places-from-results.ts"
   },
   "dependencies": {

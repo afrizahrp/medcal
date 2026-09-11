@@ -986,6 +986,110 @@ export const physicalCheckResultUpdateSchema = z
 export type PhysicalCheckResultUpdateInput = z.infer<typeof physicalCheckResultUpdateSchema>;
 
 // -----------------------------------------------------------------------------
+// Kontrol Alat (F.MU.08) — In Lab intake / inspection
+// -----------------------------------------------------------------------------
+
+export const KONTROL_ALAT_SIGNER_KIND_VALUES = ["ADMINISTRATION", "TECHNICAL_OFFICER"] as const;
+
+/** PATCH /work-orders/:id/request-review (SEND_TO_LAB only). */
+export const workOrderRequestReviewSchema = z
+  .object({
+    requestReviewMethodOk: z.boolean().nullable().optional(),
+    requestReviewEquipmentOk: z.boolean().nullable().optional(),
+    requestReviewPersonnelOk: z.boolean().nullable().optional(),
+    requestReviewConfirmAgree: z.boolean().optional(),
+    requestReviewConfirmEmail: z.boolean().optional(),
+    requestReviewConfirmLetter: z.boolean().optional(),
+    requestReviewConfirmOther: z.boolean().optional(),
+    requestReviewConfirmOtherText: z
+      .string()
+      .trim()
+      .max(500)
+      .nullable()
+      .optional()
+      .transform((value) => (value === "" ? null : value)),
+    completed: z.boolean().optional(),
+  })
+  .refine((val) => Object.values(val).some((v) => v !== undefined), {
+    message: "At least one field must be provided",
+  });
+
+export type WorkOrderRequestReviewInput = z.infer<typeof workOrderRequestReviewSchema>;
+
+/** PUT /work-orders/:id/items/:itemId/accessories (SEND_TO_LAB only). */
+export const workOrderItemAccessoriesReplaceSchema = z.object({
+  accessories: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(200),
+        sortOrder: z.number().int(),
+      }),
+    )
+    .max(50),
+});
+
+export type WorkOrderItemAccessoriesReplaceInput = z.infer<
+  typeof workOrderItemAccessoriesReplaceSchema
+>;
+
+const optionalNullableText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((value) => (value === "" ? null : value));
+
+/** PATCH /calibration-jobs/:id/kontrol-alat */
+export const kontrolAlatPatchSchema = z
+  .object({
+    workExecuted: z.boolean().nullable().optional(),
+    notExecutedReason: optionalNullableText(2000),
+    capacity: optionalNullableText(200),
+    visualPowerCable: z.boolean().nullable().optional(),
+    visualDisplay: z.boolean().nullable().optional(),
+    visualButtons: z.boolean().nullable().optional(),
+    functionInitialOk: z.boolean().nullable().optional(),
+    functionFinalOk: z.boolean().nullable().optional(),
+    certificateNumber: optionalNullableText(100),
+  })
+  .refine((val) => Object.values(val).some((v) => v !== undefined), {
+    message: "At least one field must be provided",
+  });
+
+export type KontrolAlatPatchInput = z.infer<typeof kontrolAlatPatchSchema>;
+
+/** POST /calibration-jobs/:id/kontrol-alat/accessories */
+export const kontrolAlatAccessoryCreateSchema = z.object({
+  label: z.string().trim().min(1).max(200),
+  sortOrder: z.number().int().optional(),
+  present: z.boolean().nullable().optional(),
+});
+
+export type KontrolAlatAccessoryCreateInput = z.infer<typeof kontrolAlatAccessoryCreateSchema>;
+
+/** PATCH /calibration-jobs/:id/kontrol-alat/accessories/:accessoryId */
+export const kontrolAlatAccessoryUpdateSchema = z
+  .object({
+    label: z.string().trim().min(1).max(200).optional(),
+    sortOrder: z.number().int().optional(),
+    present: z.boolean().nullable().optional(),
+  })
+  .refine((val) => Object.values(val).some((v) => v !== undefined), {
+    message: "At least one field must be provided",
+  });
+
+export type KontrolAlatAccessoryUpdateInput = z.infer<typeof kontrolAlatAccessoryUpdateSchema>;
+
+/** POST /calibration-jobs/:id/kontrol-alat/signatures */
+export const kontrolAlatSignatureCreateSchema = z.object({
+  signerKind: z.enum(KONTROL_ALAT_SIGNER_KIND_VALUES),
+});
+
+export type KontrolAlatSignatureCreateInput = z.infer<typeof kontrolAlatSignatureCreateSchema>;
+
+// -----------------------------------------------------------------------------
 // Calibration Job — Portal management list
 // -----------------------------------------------------------------------------
 

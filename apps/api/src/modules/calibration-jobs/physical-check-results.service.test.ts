@@ -17,6 +17,7 @@ import {
   assertPhysicalCheckRowEditable,
   PhysicalCheckResultsService,
 } from "./physical-check-results.service";
+import { KontrolAlatService } from "./kontrol-alat.service";
 
 const { getSessionMock } = vi.hoisted(() => ({ getSessionMock: vi.fn() }));
 vi.mock("@medcal/auth", async () => {
@@ -30,6 +31,7 @@ const controller = new CalibrationJobsController(
   jobsService,
   new MeasurementResultsService(),
   new PhysicalCheckResultsService(),
+  new KontrolAlatService(),
 );
 const calibrationRequestsService = new CalibrationRequestsService();
 const quotationsService = new QuotationsService();

@@ -189,6 +189,12 @@ const PRESERVED_BASELINE: GrantRow[] = [
   // delete of PhysicalCheckResult rows. TECHNICIAN only — MT is read-only via
   // calibrationJob:read. Do not grant this to TECHNICIAN_MANAGER.
   { role: "TECHNICIAN", resource: "calibrationJob", action: "recordPhysicalCheck" },
+  // Kontrol Alat (F.MU.08, 2026-09-11): recordKontrolAlat gates intake writes +
+  // signatures. TECHNICIAN + TECHNICIAN_MANAGER (lab) and ADMIN (portal
+  // Administrasi). Do not reuse recordPhysicalCheck / recordMeasurement.
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "recordKontrolAlat" },
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "recordKontrolAlat" },
+  { role: "ADMIN", resource: "calibrationJob", action: "recordKontrolAlat" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "submitForReview" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "resumeAfterRework" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "complete" },

@@ -10,7 +10,9 @@ import {
   type WorkOrderAssignInput,
   type WorkOrderCreateInput,
   type WorkOrderEquipmentReplaceInput,
+  type WorkOrderItemAccessoriesReplaceInput,
   type WorkOrderListQuery,
+  type WorkOrderRequestReviewInput,
   type WorkOrderUpdateInput,
 } from "@medcal/shared";
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
@@ -60,6 +62,7 @@ const workOrderInclude = {
           device: { select: { id: true, brand: true, model: true, serialNumber: true } },
         },
       },
+      accessories: { orderBy: { sortOrder: "asc" as const } },
     },
     orderBy: { createdAt: "asc" as const },
   },
@@ -81,6 +84,7 @@ const workOrderInclude = {
     orderBy: { unitOrdinal: "asc" as const },
   },
   customer: { include: { contacts: true } },
+  requestReviewCompletedBy: { select: { id: true, name: true } },
   purchaseOrder: {
     select: {
       id: true,
@@ -577,7 +581,10 @@ export class WorkOrdersService {
     const alreadyFannedOut = await tx.calibrationJob.count({
       where: { workOrderId: workOrder.id },
     });
-    if (alreadyFannedOut > 0) return;
+    if (alreadyFannedOut > 0) {
+      await this.ensureKontrolAlatRows(tx, workOrder);
+      return;
+    }
 
     const rows: Prisma.CalibrationJobCreateManyInput[] = [];
     for (const item of workOrder.items) {
@@ -604,6 +611,171 @@ export class WorkOrdersService {
     if (rows.length > 0) {
       await tx.calibrationJob.createMany({ data: rows });
     }
+
+    await this.ensureKontrolAlatRows(tx, workOrder);
+  }
+
+  /**
+   * 1:1 KontrolAlat for SEND_TO_LAB jobs. Safe to call when jobs already exist
+   * (API deploy after schema backfill, or a deleted row): skips jobs that
+   * already have a row. ON_SITE is a no-op.
+   */
+  private async ensureKontrolAlatRows(
+    tx: Prisma.TransactionClient,
+    workOrder: WorkOrderWithItems,
+  ): Promise<void> {
+    if (workOrder.serviceMode !== "SEND_TO_LAB") return;
+
+    const jobs = await tx.calibrationJob.findMany({
+      where: { workOrderId: workOrder.id, kontrolAlat: { is: null } },
+      select: { id: true, purchaseOrderItemId: true },
+    });
+    if (jobs.length === 0) return;
+
+    const accessories = await tx.workOrderItemAccessory.findMany({
+      where: { workOrderItem: { workOrderId: workOrder.id } },
+      orderBy: { sortOrder: "asc" },
+    });
+    const itemIdByPoItemId = new Map(
+      workOrder.items.map((item) => [item.purchaseOrderItemId, item.id]),
+    );
+    const accessoriesByItemId = new Map<string, typeof accessories>();
+    for (const row of accessories) {
+      const list = accessoriesByItemId.get(row.workOrderItemId) ?? [];
+      list.push(row);
+      accessoriesByItemId.set(row.workOrderItemId, list);
+    }
+
+    for (const job of jobs) {
+      const created = await tx.kontrolAlat.create({
+        data: {
+          companyId: workOrder.companyId,
+          calibrationJobId: job.id,
+        },
+      });
+      const itemId = job.purchaseOrderItemId
+        ? itemIdByPoItemId.get(job.purchaseOrderItemId)
+        : undefined;
+      const copied = itemId ? (accessoriesByItemId.get(itemId) ?? []) : [];
+      if (copied.length === 0) continue;
+      await tx.kontrolAlatAccessory.createMany({
+        data: copied.map((row) => ({
+          kontrolAlatId: created.id,
+          label: row.label,
+          sortOrder: row.sortOrder,
+          sourceWorkOrderItemAccessoryId: row.id,
+        })),
+      });
+    }
+  }
+
+  /**
+   * F.MU.08 II — Kaji Ulang Permintaan Pelanggan. Owned on the WOL so one
+   * customer work event is shared across sibling CalibrationJobs.
+   */
+  async updateRequestReview(
+    companyId: string,
+    id: string,
+    userId: string,
+    input: WorkOrderRequestReviewInput,
+  ): Promise<WorkOrderWithItems> {
+    const existing = await this.findOne(companyId, id);
+    if (existing.serviceMode !== "SEND_TO_LAB") {
+      throw new BadRequestException({
+        message: "Customer request review is only applicable to In Lab (SEND_TO_LAB) work orders",
+        code: "KONTROL_ALAT_NOT_APPLICABLE",
+      });
+    }
+    assertNonTerminal(
+      existing.status,
+      "INVALID_STATUS_FOR_REQUEST_REVIEW",
+      "Cannot update request review on a terminal work order",
+    );
+
+    await prisma.workOrder.update({
+      where: { id },
+      data: {
+        ...(input.requestReviewMethodOk !== undefined
+          ? { requestReviewMethodOk: input.requestReviewMethodOk }
+          : {}),
+        ...(input.requestReviewEquipmentOk !== undefined
+          ? { requestReviewEquipmentOk: input.requestReviewEquipmentOk }
+          : {}),
+        ...(input.requestReviewPersonnelOk !== undefined
+          ? { requestReviewPersonnelOk: input.requestReviewPersonnelOk }
+          : {}),
+        ...(input.requestReviewConfirmAgree !== undefined
+          ? { requestReviewConfirmAgree: input.requestReviewConfirmAgree }
+          : {}),
+        ...(input.requestReviewConfirmEmail !== undefined
+          ? { requestReviewConfirmEmail: input.requestReviewConfirmEmail }
+          : {}),
+        ...(input.requestReviewConfirmLetter !== undefined
+          ? { requestReviewConfirmLetter: input.requestReviewConfirmLetter }
+          : {}),
+        ...(input.requestReviewConfirmOther !== undefined
+          ? { requestReviewConfirmOther: input.requestReviewConfirmOther }
+          : {}),
+        ...(input.requestReviewConfirmOtherText !== undefined
+          ? { requestReviewConfirmOtherText: input.requestReviewConfirmOtherText }
+          : {}),
+        ...(input.completed === true
+          ? {
+              requestReviewCompletedAt: existing.requestReviewCompletedAt ?? new Date(),
+              requestReviewCompletedByUserId: existing.requestReviewCompletedByUserId ?? userId,
+            }
+          : {}),
+      },
+    });
+
+    return this.findOne(companyId, id);
+  }
+
+  /**
+   * Initial UUT accessory list on a WorkOrderItem (F.MU.07). Copied into
+   * KontrolAlatAccessory at fan-out; later WO edits do not rewrite signed lab rows.
+   */
+  async replaceItemAccessories(
+    companyId: string,
+    workOrderId: string,
+    itemId: string,
+    input: WorkOrderItemAccessoriesReplaceInput,
+  ): Promise<WorkOrderWithItems> {
+    const existing = await this.findOne(companyId, workOrderId);
+    if (existing.serviceMode !== "SEND_TO_LAB") {
+      throw new BadRequestException({
+        message: "Work order item accessories are only applicable to In Lab (SEND_TO_LAB) work orders",
+        code: "KONTROL_ALAT_NOT_APPLICABLE",
+      });
+    }
+    assertNonTerminal(
+      existing.status,
+      "INVALID_STATUS_FOR_ACCESSORY_UPDATE",
+      "Cannot change accessories on a terminal work order",
+    );
+
+    const item = existing.items.find((row) => row.id === itemId);
+    if (!item) {
+      throw new NotFoundException({
+        message: "Work order item not found",
+        code: "WORK_ORDER_ITEM_NOT_FOUND",
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.workOrderItemAccessory.deleteMany({ where: { workOrderItemId: itemId } });
+      if (input.accessories.length > 0) {
+        await tx.workOrderItemAccessory.createMany({
+          data: input.accessories.map((row) => ({
+            workOrderItemId: itemId,
+            label: row.label,
+            sortOrder: row.sortOrder,
+          })),
+        });
+      }
+    });
+
+    return this.findOne(companyId, workOrderId);
   }
 
   // ---------------------------------------------------------------------------

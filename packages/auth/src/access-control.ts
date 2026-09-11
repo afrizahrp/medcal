@@ -148,6 +148,10 @@ const ac = createAccessControl({
     // rows (BAIK / TIDAK_BAIK). TECHNICIAN only — do not reuse recordMeasurement.
     // TECHNICIAN_MANAGER remains read-only via calibrationJob:read.
     "recordPhysicalCheck",
+    // recordKontrolAlat: F.MU.08 intake/inspection/signatures for WOL jobs.
+    // TECHNICIAN + TECHNICIAN_MANAGER + ADMIN (portal "Administrasi"). Do not
+    // reuse recordPhysicalCheck / recordMeasurement.
+    "recordKontrolAlat",
     // submitForReview: technician IN_PROGRESS → SUBMITTED + submittedAt.
     // decideQualityReview: TECHNICIAN_MANAGER APPROVE or REJECT (REJECT → REWORK).
     // resumeAfterRework: technician REWORK → IN_PROGRESS (does not increment attempt).

@@ -20,6 +20,7 @@ import { CalibrationJobsService } from "./calibration-jobs.service";
 import { identityCorrectionFileOwnerPolicy } from "./identity-correction-file-owner-policy";
 import { MeasurementResultsService } from "./measurement-results.service";
 import { PhysicalCheckResultsService } from "./physical-check-results.service";
+import { KontrolAlatService } from "./kontrol-alat.service";
 
 const UNAVAILABLE_SIGNATURES = {
   TECHNICIAN: { status: "UNAVAILABLE" as const, unavailableReason: "n/a in test" },
@@ -1981,6 +1982,7 @@ describe("CalibrationJobsService — quality review happy path", () => {
       calibrationJobsService,
       measurementResultsService,
       new PhysicalCheckResultsService(),
+      new KontrolAlatService(),
     );
     const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
     const rejected = await controller.decideQualityReview(realCompanyId, manager.id, job.id, {
@@ -2041,6 +2043,7 @@ describe("CalibrationJobsService — quality review REWORK lifecycle", () => {
       calibrationJobsService,
       measurementResultsService,
       new PhysicalCheckResultsService(),
+      new KontrolAlatService(),
     );
     const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
     await expect(

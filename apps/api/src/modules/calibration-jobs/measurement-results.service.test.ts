@@ -16,6 +16,7 @@ import {
   MeasurementResultsService,
 } from "./measurement-results.service";
 import { PhysicalCheckResultsService } from "./physical-check-results.service";
+import { KontrolAlatService } from "./kontrol-alat.service";
 
 // Only the Better Auth session boundary is mocked; hasPermission stays real,
 // backed by the RolePermission cache primed in vitest.setup.ts.
@@ -30,6 +31,7 @@ const controller = new CalibrationJobsController(
   {} as CalibrationJobsService,
   new MeasurementResultsService(),
   new PhysicalCheckResultsService(),
+  new KontrolAlatService(),
 );
 const calibrationRequestsService = new CalibrationRequestsService();
 const quotationsService = new QuotationsService();
