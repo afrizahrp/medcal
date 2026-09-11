@@ -19,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronRight, Copy, GripVertical, Plus, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, GripVertical, Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -433,13 +433,8 @@ function ChildRows({
                 <Plus className="h-3.5 w-3.5" />
                 Tambah parameter untuk {group.deviceType.name}
               </Link>
-              <Link
-                href={`/device-calibration-parameters/copy?targetDeviceTypeId=${group.deviceType.id}`}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                Copy dari device lain
-              </Link>
+              {/* "Copy dari device lain" hidden for now (nice-to-have, not urgent) —
+                  route/component/backend endpoint kept intact, just no entry point. */}
             </div>
           </td>
         </tr>
