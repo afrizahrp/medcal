@@ -136,6 +136,19 @@ async function makeMember(companyId: string, role: MembershipRole) {
 }
 
 /** Build a WorkOrder that has reached IN_PROGRESS, fanning out its jobs. */
+async function ensureStaffUser() {
+  await prisma.user.upsert({
+    where: { id: staffUserId },
+    create: {
+      id: staffUserId,
+      email: `${staffUserId}@medcal.test`,
+      name: "CJ Staff",
+      status: "ACTIVE",
+    },
+    update: {},
+  });
+}
+
 async function startedWorkOrderJobs(
   companyId: string,
   opts?: {
@@ -146,9 +159,10 @@ async function startedWorkOrderJobs(
   },
 ) {
   await ensureNonPpnTax(companyId);
+  await ensureStaffUser();
   const customer = await createTestCustomer(companyId);
   const deviceTypeId = await createDeviceTypeId();
-  const request = await calibrationRequestsService.create(companyId, {
+  const request = await calibrationRequestsService.create(companyId, staffUserId, {
     customerId: customer.id,
     serviceMode: opts?.serviceMode ?? "SEND_TO_LAB",
     items: [{ deviceTypeId, deviceId: "DEV-1" }],
@@ -207,6 +221,46 @@ async function startedWorkOrderJobs(
     deviceTypeId,
     requestItemId: workOrder.items[0]!.purchaseOrderItem.quotationItem.requestItem!.id,
   };
+}
+
+/** Fixture: WOL start-gate requires executed + dual-signed Kontrol Alat. */
+async function completeKontrolAlatForStart(companyId: string, jobId: string) {
+  const row = await prisma.kontrolAlat.findUniqueOrThrow({
+    where: { calibrationJobId: jobId },
+  });
+  const signedAt = new Date();
+  await prisma.$transaction([
+    prisma.kontrolAlat.update({
+      where: { id: row.id },
+      data: { workExecuted: true, completedAt: signedAt },
+    }),
+    prisma.kontrolAlatSignature.upsert({
+      where: {
+        kontrolAlatId_signerKind: { kontrolAlatId: row.id, signerKind: "ADMINISTRATION" },
+      },
+      create: {
+        companyId,
+        kontrolAlatId: row.id,
+        signerKind: "ADMINISTRATION",
+        signerName: "Test Administrasi",
+        signedAt,
+      },
+      update: { signedAt, signerName: "Test Administrasi" },
+    }),
+    prisma.kontrolAlatSignature.upsert({
+      where: {
+        kontrolAlatId_signerKind: { kontrolAlatId: row.id, signerKind: "TECHNICAL_OFFICER" },
+      },
+      create: {
+        companyId,
+        kontrolAlatId: row.id,
+        signerKind: "TECHNICAL_OFFICER",
+        signerName: "Test Petugas Teknis",
+        signedAt,
+      },
+      update: { signedAt, signerName: "Test Petugas Teknis" },
+    }),
+  ]);
 }
 
 beforeAll(() => {
@@ -404,6 +458,7 @@ describe("CalibrationJobsService — start (Mulai Kalibrasi)", () => {
     const job = jobs[0]!;
     expect(job.status).toBe("PENDING");
     expect(job.startedAt).toBeNull();
+    await completeKontrolAlatForStart(realCompanyId, job.id);
 
     const before = Date.now();
     const started = await calibrationJobsService.start(realCompanyId, job.id);
@@ -415,6 +470,7 @@ describe("CalibrationJobsService — start (Mulai Kalibrasi)", () => {
 
   it("does not touch sibling jobs", async () => {
     const { jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 3 });
+    await completeKontrolAlatForStart(realCompanyId, jobs[1]!.id);
     await calibrationJobsService.start(realCompanyId, jobs[1]!.id);
 
     const after = await prisma.calibrationJob.findMany({
@@ -427,6 +483,7 @@ describe("CalibrationJobsService — start (Mulai Kalibrasi)", () => {
 
   it("rejects starting an already-started job with CALIBRATION_JOB_ALREADY_STARTED", async () => {
     const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
     await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
 
     await expect(calibrationJobsService.start(realCompanyId, jobs[0]!.id)).rejects.toMatchObject({
@@ -484,6 +541,144 @@ describe("CalibrationJobsService — start (Mulai Kalibrasi)", () => {
     await expect(calibrationJobsService.start(realCompanyId, jobs[0]!.id)).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+});
+
+describe("CalibrationJobsService — start Kontrol Alat gate", () => {
+  it("allows ON_SITE start without a Kontrol Alat row", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId, { serviceMode: "ON_SITE" });
+    const job = jobs[0]!;
+    expect(await prisma.kontrolAlat.findUnique({ where: { calibrationJobId: job.id } })).toBeNull();
+
+    const started = await calibrationJobsService.start(realCompanyId, job.id);
+    expect(started.status).toBe("IN_PROGRESS");
+    expect(started.startedAt).not.toBeNull();
+  });
+
+  it("rejects SEND_TO_LAB start when Kontrol Alat is unsigned", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    await expect(calibrationJobsService.start(realCompanyId, jobs[0]!.id)).rejects.toMatchObject({
+      response: { code: "KONTROL_ALAT_INCOMPLETE" },
+    });
+  });
+
+  it("rejects SEND_TO_LAB start when only one signature is present", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const row = await prisma.kontrolAlat.findUniqueOrThrow({
+      where: { calibrationJobId: jobs[0]!.id },
+    });
+    await prisma.kontrolAlat.update({
+      where: { id: row.id },
+      data: { workExecuted: true },
+    });
+    await prisma.kontrolAlatSignature.create({
+      data: {
+        companyId: realCompanyId,
+        kontrolAlatId: row.id,
+        signerKind: "ADMINISTRATION",
+        signerName: "Only Admin",
+        signedAt: new Date(),
+      },
+    });
+
+    await expect(calibrationJobsService.start(realCompanyId, jobs[0]!.id)).rejects.toMatchObject({
+      response: { code: "KONTROL_ALAT_INCOMPLETE" },
+    });
+  });
+
+  it("rejects SEND_TO_LAB start when workExecuted is still null", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const row = await prisma.kontrolAlat.findUniqueOrThrow({
+      where: { calibrationJobId: jobs[0]!.id },
+    });
+    const signedAt = new Date();
+    await prisma.kontrolAlatSignature.createMany({
+      data: [
+        {
+          companyId: realCompanyId,
+          kontrolAlatId: row.id,
+          signerKind: "ADMINISTRATION",
+          signerName: "Admin",
+          signedAt,
+        },
+        {
+          companyId: realCompanyId,
+          kontrolAlatId: row.id,
+          signerKind: "TECHNICAL_OFFICER",
+          signerName: "Tech",
+          signedAt,
+        },
+      ],
+    });
+    await prisma.kontrolAlat.update({
+      where: { id: row.id },
+      data: { completedAt: signedAt },
+    });
+
+    await expect(calibrationJobsService.start(realCompanyId, jobs[0]!.id)).rejects.toMatchObject({
+      response: { code: "KONTROL_ALAT_INCOMPLETE" },
+    });
+  });
+
+  it("rejects SEND_TO_LAB start when workExecuted is false", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const row = await prisma.kontrolAlat.findUniqueOrThrow({
+      where: { calibrationJobId: jobs[0]!.id },
+    });
+    const signedAt = new Date();
+    await prisma.kontrolAlat.update({
+      where: { id: row.id },
+      data: {
+        workExecuted: false,
+        notExecutedReason: "Alat tidak dikirim",
+        completedAt: signedAt,
+      },
+    });
+    await prisma.kontrolAlatSignature.createMany({
+      data: [
+        {
+          companyId: realCompanyId,
+          kontrolAlatId: row.id,
+          signerKind: "ADMINISTRATION",
+          signerName: "Admin",
+          signedAt,
+        },
+        {
+          companyId: realCompanyId,
+          kontrolAlatId: row.id,
+          signerKind: "TECHNICAL_OFFICER",
+          signerName: "Tech",
+          signedAt,
+        },
+      ],
+    });
+
+    await expect(calibrationJobsService.start(realCompanyId, jobs[0]!.id)).rejects.toMatchObject({
+      response: { code: "KONTROL_ALAT_NOT_EXECUTED" },
+    });
+  });
+
+  it("allows SEND_TO_LAB start without functionFinalOk or request review", async () => {
+    const { jobs, workOrder } = await startedWorkOrderJobs(realCompanyId);
+    const wo = await prisma.workOrder.findUniqueOrThrow({ where: { id: workOrder.id } });
+    expect(wo.requestReviewCompletedAt).toBeNull();
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    const row = await prisma.kontrolAlat.findUniqueOrThrow({
+      where: { calibrationJobId: jobs[0]!.id },
+    });
+    expect(row.functionFinalOk).toBeNull();
+
+    const started = await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+    expect(started.status).toBe("IN_PROGRESS");
+  });
+
+  it("rejects SEND_TO_LAB start when the Kontrol Alat row is missing", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    await prisma.kontrolAlat.delete({ where: { calibrationJobId: jobs[0]!.id } });
+
+    await expect(calibrationJobsService.start(realCompanyId, jobs[0]!.id)).rejects.toMatchObject({
+      response: { code: "KONTROL_ALAT_INCOMPLETE" },
+    });
   });
 });
 
@@ -1796,6 +1991,7 @@ describe("CalibrationJobsService — list, assignedToMe (technician scope)", () 
 describe("CalibrationJobsService — quality review happy path", () => {
   async function inProgressJob() {
     const ctx = await startedWorkOrderJobs(realCompanyId);
+    await completeKontrolAlatForStart(realCompanyId, ctx.jobs[0]!.id);
     const started = await calibrationJobsService.start(realCompanyId, ctx.jobs[0]!.id);
     return { ...ctx, job: started };
   }
@@ -2001,6 +2197,7 @@ describe("CalibrationJobsService — quality review happy path", () => {
 describe("CalibrationJobsService — quality review REWORK lifecycle", () => {
   async function inProgressJob() {
     const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
     const started = await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
     return { job: started, deviceTypeId };
   }

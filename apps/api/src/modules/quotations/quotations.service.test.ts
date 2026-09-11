@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Prisma, prisma } from "@medcal/db";
 import { isValidDocumentNumber } from "@medcal/db";
 import {
@@ -14,6 +14,7 @@ import { QuotationsService } from "./quotations.service";
 const quotationsService = new QuotationsService();
 const requestsService = new CalibrationRequestsService();
 const realCompanyId = "PKM";
+const staffUserId = "qt-staff-user";
 
 const createdQuotationIds: string[] = [];
 const createdCalibrationRequestIds: string[] = [];
@@ -26,6 +27,19 @@ const createdPriceListItemIds: string[] = [];
 
 function rand() {
   return randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase();
+}
+
+async function ensureStaffUser() {
+  await prisma.user.upsert({
+    where: { id: staffUserId },
+    create: {
+      id: staffUserId,
+      email: `${staffUserId}@medcal.test`,
+      name: "QT Staff",
+      status: "ACTIVE",
+    },
+    update: {},
+  });
 }
 
 async function cleanupQuotations(ids: string[]) {
@@ -155,10 +169,11 @@ async function createSubmittedRequest(
   companyId: string,
   opts: { deviceTypeId?: string; items?: RequestItemSpec[] } = {},
 ) {
+  await ensureStaffUser();
   const customer = await createTestCustomer(companyId);
   const fallbackTypeId = opts.deviceTypeId ?? (await makeDeviceType()).id;
   const specs = opts.items ?? [{ deviceId: "DEV-1" }];
-  const created = await requestsService.create(companyId, {
+  const created = await requestsService.create(companyId, staffUserId, {
     customerId: customer.id,
     serviceMode: "ON_SITE",
     items: specs.map((spec, index) => ({
@@ -171,6 +186,10 @@ async function createSubmittedRequest(
   const request = await requestsService.submit(companyId, created.id);
   return { customerId: customer.id, request, deviceTypeId: fallbackTypeId };
 }
+
+beforeAll(async () => {
+  await ensureStaffUser();
+});
 
 afterAll(async () => {
   await cleanupQuotations(createdQuotationIds);
@@ -440,7 +459,7 @@ describe("QuotationsService.create — Price List generation", () => {
     await seedPrice(realCompanyId, decoy.id, 999_999); // must NOT be selected
 
     const customer = await createTestCustomer(realCompanyId);
-    const created = await requestsService.create(realCompanyId, {
+    const created = await requestsService.create(realCompanyId, staffUserId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
       items: [{ deviceTypeId: canonical.id, customerDeviceName: "Tensimeter", model: "XYZ" }],
@@ -586,7 +605,7 @@ describe("QuotationsService.create — Price List generation", () => {
     const dt = await makeDeviceType();
     await seedPrice(realCompanyId, dt.id, 100_000);
     const customer = await createTestCustomer(realCompanyId);
-    const draft = await requestsService.create(realCompanyId, {
+    const draft = await requestsService.create(realCompanyId, staffUserId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
       items: [{ deviceTypeId: dt.id, deviceId: "DEV-1" }],
@@ -685,7 +704,7 @@ describe("QuotationsService.create — realistic 5 / 3 / 2 scenario", () => {
     await seedPrice(realCompanyId, pump.id, 175_000);
 
     const customer = await createTestCustomer(realCompanyId);
-    const created = await requestsService.create(realCompanyId, {
+    const created = await requestsService.create(realCompanyId, staffUserId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
       items: [

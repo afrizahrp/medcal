@@ -22,6 +22,48 @@ export const RECORD_KONTROL_ALAT_PERMISSION = {
   action: "recordKontrolAlat",
 } as const;
 
+/**
+ * Hard start-gate for In Lab jobs. ON_SITE / SPK is a no-op.
+ *
+ * SEND_TO_LAB may start only when workExecuted === true and both
+ * ADMINISTRATION + TECHNICAL_OFFICER signatures have signedAt.
+ * functionFinalOk and WorkOrder.requestReviewCompletedAt are not required.
+ */
+export async function assertKontrolAlatReadyForStart(
+  serviceMode: string,
+  calibrationJobId: string,
+): Promise<void> {
+  if (serviceMode !== "SEND_TO_LAB") {
+    return;
+  }
+
+  const row = await prisma.kontrolAlat.findUnique({
+    where: { calibrationJobId },
+    include: { signatures: true },
+  });
+
+  if (row?.workExecuted === false) {
+    throw new BadRequestException({
+      message: "This job cannot be started because work was marked as not executed",
+      code: "KONTROL_ALAT_NOT_EXECUTED",
+    });
+  }
+
+  const adminSigned = row?.signatures.some(
+    (signature) => signature.signerKind === "ADMINISTRATION" && signature.signedAt != null,
+  );
+  const technicalSigned = row?.signatures.some(
+    (signature) => signature.signerKind === "TECHNICAL_OFFICER" && signature.signedAt != null,
+  );
+
+  if (row == null || row.workExecuted !== true || !adminSigned || !technicalSigned) {
+    throw new BadRequestException({
+      message: "Kontrol Alat must be completed and signed before starting this In Lab job",
+      code: "KONTROL_ALAT_INCOMPLETE",
+    });
+  }
+}
+
 const kontrolAlatInclude = {
   accessories: { orderBy: { sortOrder: "asc" as const } },
   signatures: { orderBy: { signerKind: "asc" as const } },

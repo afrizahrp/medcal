@@ -72,6 +72,16 @@ async function makeMember(role: MembershipRole) {
 
 async function startedJob() {
   await ensureNonPpnTax();
+  await prisma.user.upsert({
+    where: { id: staffUserId },
+    create: {
+      id: staffUserId,
+      email: `${staffUserId}@medcal.test`,
+      name: "PC Staff",
+      status: "ACTIVE",
+    },
+    update: {},
+  });
   const category = await prisma.deviceCategory.create({
     data: { code: `PCCAT${randomUUID().slice(0, 8)}`, name: "PC Cat" },
   });
@@ -86,7 +96,7 @@ async function startedJob() {
   });
   createdCustomerIds.push(customer.id);
 
-  const request = await calibrationRequestsService.create(companyId, {
+  const request = await calibrationRequestsService.create(companyId, staffUserId, {
     customerId: customer.id,
     serviceMode: "SEND_TO_LAB",
     items: [{ deviceTypeId: deviceType.id, deviceId: "DEV-1" }],

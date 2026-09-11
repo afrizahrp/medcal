@@ -175,9 +175,19 @@ async function createSubmittedRequest(
   deviceTypeId: string;
   request: Awaited<ReturnType<CalibrationRequestsService["submit"]>>;
 }> {
+  await prisma.user.upsert({
+    where: { id: staffUserId },
+    create: {
+      id: staffUserId,
+      email: `${staffUserId}@medcal.test`,
+      name: "WO Staff",
+      status: "ACTIVE",
+    },
+    update: {},
+  });
   const customer = await createTestCustomer(companyId);
   const deviceTypeId = await getTestDeviceTypeId();
-  const created = await requestsService.create(companyId, {
+  const created = await requestsService.create(companyId, staffUserId, {
     customerId: customer.id,
     serviceMode,
     items: Array.from({ length: itemCount }, (_, index) => ({

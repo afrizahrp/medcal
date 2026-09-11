@@ -43,6 +43,7 @@ import {
   type JobReferenceEquipmentSource,
   type JobReferenceEquipmentUsedDetail,
 } from "./job-reference-equipment";
+import { assertKontrolAlatReadyForStart } from "./kontrol-alat.service";
 
 const calibrationJobInclude = {
   workOrder: {
@@ -702,15 +703,12 @@ export class CalibrationJobsService {
 
   /**
    * Minimal "Mulai Kalibrasi" action — stamps `startedAt` and moves the job
-   * PENDING → IN_PROGRESS. This is the single gate that unblocks the existing
-   * reference-equipment recording feature (CALIBRATION_JOB_NOT_STARTED). It is
-   * deliberately unopinionated: no precondition beyond the job existing and
-   * being PENDING — starting in the field can legitimately happen before
-   * identity is confirmed or AKD/AKL is resolved.
+   * PENDING → IN_PROGRESS. This unblocks reference-equipment recording
+   * (CALIBRATION_JOB_NOT_STARTED). Identity / AKD/AKL may still be unresolved.
    *
-   * Not the full job-execution phase (measurement entry, submit-for-review, QA)
-   * — that is designed separately alongside MeasurementResult and may later
-   * absorb this action.
+   * SEND_TO_LAB (WOL) additionally requires Kontrol Alat complete + dual-signed
+   * and workExecuted === true. ON_SITE (SPK) is not gated by Kontrol Alat.
+   * requestReviewCompletedAt and functionFinalOk are not part of this gate.
    */
   async start(companyId: string, id: string): Promise<CalibrationJobDetail> {
     const job = await this.findOne(companyId, id);
@@ -721,6 +719,8 @@ export class CalibrationJobsService {
         status: job.status,
       });
     }
+
+    await assertKontrolAlatReadyForStart(job.workOrder.serviceMode, job.id);
 
     await prisma.calibrationJob.update({
       where: { id },

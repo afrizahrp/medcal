@@ -74,6 +74,16 @@ async function makeMember(role: MembershipRole) {
 /** WorkOrder → IN_PROGRESS with one fanned-out job, plus a calibration parameter for its DeviceType. */
 async function startedJob() {
   await ensureNonPpnTax();
+  await prisma.user.upsert({
+    where: { id: staffUserId },
+    create: {
+      id: staffUserId,
+      email: `${staffUserId}@medcal.test`,
+      name: "MR Staff",
+      status: "ACTIVE",
+    },
+    update: {},
+  });
   const category = await prisma.deviceCategory.create({
     data: { code: `MRCAT${randomUUID().slice(0, 8)}`, name: "MR Cat" },
   });
@@ -88,7 +98,7 @@ async function startedJob() {
   });
   createdCustomerIds.push(customer.id);
 
-  const request = await calibrationRequestsService.create(companyId, {
+  const request = await calibrationRequestsService.create(companyId, staffUserId, {
     customerId: customer.id,
     serviceMode: "SEND_TO_LAB",
     items: [{ deviceTypeId: deviceType.id, deviceId: "DEV-1" }],

@@ -115,8 +115,22 @@ async function makeMember(role: MembershipRole) {
   return user;
 }
 
+async function ensureStaffUser() {
+  await prisma.user.upsert({
+    where: { id: staffUserId },
+    create: {
+      id: staffUserId,
+      email: `${staffUserId}@medcal.test`,
+      name: "KA Staff",
+      status: "ACTIVE",
+    },
+    update: {},
+  });
+}
+
 async function startedJob(serviceMode: "SEND_TO_LAB" | "ON_SITE" = "SEND_TO_LAB") {
   await ensureNonPpnTax();
+  await ensureStaffUser();
   const category = await prisma.deviceCategory.create({
     data: { code: `KACAT${randomUUID().slice(0, 8)}`, name: "KA Cat" },
   });
@@ -139,7 +153,7 @@ async function startedJob(serviceMode: "SEND_TO_LAB" | "ON_SITE" = "SEND_TO_LAB"
   });
   createdCustomerIds.push(customer.id);
 
-  const request = await calibrationRequestsService.create(companyId, {
+  const request = await calibrationRequestsService.create(companyId, staffUserId, {
     customerId: customer.id,
     serviceMode,
     items: [{ deviceTypeId: deviceType.id, deviceId: "DEV-1" }],
@@ -247,6 +261,10 @@ describe("KontrolAlatService", () => {
       svc.patch(companyId, jobId, technician.id, { certificateNumber: "S.642" }),
     ).rejects.toMatchObject({ response: { code: "KONTROL_ALAT_CERTIFICATE_NOT_ALLOWED" } });
 
+    await svc.patch(companyId, jobId, technician.id, { workExecuted: true });
+    const admin = await makeMember("ADMIN");
+    await svc.sign(companyId, jobId, admin.id, { signerKind: "ADMINISTRATION" });
+    await svc.sign(companyId, jobId, technician.id, { signerKind: "TECHNICAL_OFFICER" });
     await jobsService.start(companyId, jobId);
     await jobsService.submitForReview(companyId, jobId);
     const manager = await makeMember("TECHNICIAN_MANAGER");
