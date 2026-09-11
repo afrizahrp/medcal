@@ -539,6 +539,7 @@ export class CalibrationRequestImportService {
    */
   async confirm(
     companyId: string,
+    userId: string,
     input: CalibrationRequestImportConfirmInput,
   ): Promise<CalibrationRequestWithItems> {
     const items = input.rows.map((row) => ({
@@ -553,7 +554,7 @@ export class CalibrationRequestImportService {
       ...(row.akdAkl ? { akdAkl: row.akdAkl } : {}),
     }));
 
-    return this.requestsService.create(companyId, {
+    return this.requestsService.create(companyId, userId, {
       customerId: input.customerId,
       ...(input.leadId ? { leadId: input.leadId } : {}),
       serviceMode: input.serviceMode,

@@ -545,6 +545,14 @@ model User {
   workOrdersRequestReviewCompleted      WorkOrder[]                  @relation("WorkOrderRequestReviewCompletedBy")
   kontrolAlatsCreated                   KontrolAlat[]                @relation("KontrolAlatCreatedBy")
   kontrolAlatSignatures                 KontrolAlatSignature[]       @relation("KontrolAlatSigner")
+  calibrationRequestsCreated            CalibrationRequest[]         @relation("CalibrationRequestCreatedBy")
+  calibrationRequestsUpdated            CalibrationRequest[]         @relation("CalibrationRequestUpdatedBy")
+  certificatesCreated                   Certificate[]                @relation("CertificateCreatedBy")
+  certificatesUpdated                   Certificate[]                @relation("CertificateUpdatedBy")
+  invoicesCreated                       Invoice[]                    @relation("InvoiceCreatedBy")
+  invoicesUpdated                       Invoice[]                    @relation("InvoiceUpdatedBy")
+  paymentsCreated                       Payment[]                    @relation("PaymentCreatedBy")
+  paymentsUpdated                       Payment[]                    @relation("PaymentUpdatedBy")
 }
 
 // =============================================================================
@@ -1473,14 +1481,18 @@ model CalibrationRequest {
   /// Do not use in new code. Will be removed in a future cleanup revision.
   desiredScheduleNote String?
 
-  status    CalibrationRequestStatus @default(DRAFT)
-  notes     String?
-  createdAt DateTime                 @default(now())
-  updatedAt DateTime                 @updatedAt
+  status          CalibrationRequestStatus @default(DRAFT)
+  notes           String?
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
 
-  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  lead     Lead?    @relation(fields: [leadId], references: [id])
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer  Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+  createdBy User?    @relation("CalibrationRequestCreatedBy", fields: [createdByUserId], references: [id])
+  updatedBy User?    @relation("CalibrationRequestUpdatedBy", fields: [updatedByUserId], references: [id])
 
   items     CalibrationRequestItem[]
   quotation Quotation?
@@ -1488,6 +1500,8 @@ model CalibrationRequest {
   @@unique([companyId, number])
   @@index([companyId, status])
   @@index([customerId])
+  @@index([createdByUserId])
+  @@index([updatedByUserId])
 }
 
 model CalibrationRequestItem {
@@ -2484,6 +2498,8 @@ model Certificate {
   supersedesCertificateId String?
   revokeReason            String?
   pdfFileObjectId         String?
+  createdByUserId         String?
+  updatedByUserId         String?
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
 
@@ -2495,6 +2511,8 @@ model Certificate {
   supersedes     Certificate?         @relation("CertificateSupersede", fields: [supersedesCertificateId], references: [id])
   supersededBy   Certificate[]        @relation("CertificateSupersede")
   pdfFile        FileObject?          @relation("CertificatePdf", fields: [pdfFileObjectId], references: [id])
+  createdBy      User?                @relation("CertificateCreatedBy", fields: [createdByUserId], references: [id])
+  updatedBy      User?                @relation("CertificateUpdatedBy", fields: [updatedByUserId], references: [id])
   invoiceLinks   InvoiceCertificate[]
   invoiceItems   InvoiceItem[]
   creditNotes    CreditNote[]
@@ -2505,6 +2523,8 @@ model Certificate {
   @@index([companyId, status])
   @@index([customerId])
   @@index([validUntil])
+  @@index([createdByUserId])
+  @@index([updatedByUserId])
 }
 
 // =============================================================================
@@ -2529,25 +2549,29 @@ model Tax {
 }
 
 model Invoice {
-  id          String        @id @default(cuid())
-  companyId   String
-  customerId  String
-  number      String
-  status      InvoiceStatus @default(DRAFT)
-  issueDate   DateTime?
-  dueDate     DateTime?
-  subtotal    Decimal       @db.Decimal(18, 2)
-  taxId       String?
-  taxAmount   Decimal?      @db.Decimal(18, 2)
-  totalAmount Decimal       @db.Decimal(18, 2)
-  currency    String        @default("IDR")
-  notes       String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  companyId       String
+  customerId      String
+  number          String
+  status          InvoiceStatus @default(DRAFT)
+  issueDate       DateTime?
+  dueDate         DateTime?
+  subtotal        Decimal       @db.Decimal(18, 2)
+  taxId           String?
+  taxAmount       Decimal?      @db.Decimal(18, 2)
+  totalAmount     Decimal       @db.Decimal(18, 2)
+  currency        String        @default("IDR")
+  notes           String?
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer     Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
   tax          Tax?                 @relation(fields: [taxId], references: [id])
+  createdBy    User?                @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id])
+  updatedBy    User?                @relation("InvoiceUpdatedBy", fields: [updatedByUserId], references: [id])
   certificates InvoiceCertificate[]
   items        InvoiceItem[]
   payments     Payment[]
@@ -2557,6 +2581,8 @@ model Invoice {
   @@index([companyId, status])
   @@index([customerId])
   @@index([taxId])
+  @@index([createdByUserId])
+  @@index([updatedByUserId])
 }
 
 model InvoiceCertificate {
@@ -2591,20 +2617,27 @@ model InvoiceItem {
 }
 
 model Payment {
-  id        String        @id @default(cuid())
-  companyId String
-  invoiceId String
-  amount    Decimal       @db.Decimal(18, 2)
-  method    PaymentMethod @default(TRANSFER)
-  paidAt    DateTime      @default(now())
-  reference String?
-  notes     String?
-  createdAt DateTime      @default(now())
+  id              String        @id @default(cuid())
+  companyId       String
+  invoiceId       String
+  amount          Decimal       @db.Decimal(18, 2)
+  method          PaymentMethod @default(TRANSFER)
+  paidAt          DateTime      @default(now())
+  reference       String?
+  notes           String?
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("PaymentCreatedBy", fields: [createdByUserId], references: [id])
+  updatedBy User?   @relation("PaymentUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([invoiceId])
   @@index([companyId, paidAt])
+  @@index([createdByUserId])
+  @@index([updatedByUserId])
 }
 
 model CreditNote {

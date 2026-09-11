@@ -16,7 +16,9 @@ const createdCustomerIds: string[] = [];
 const createdAliasIds: string[] = [];
 const createdDeviceTypeIds: string[] = [];
 const createdDeviceCategoryIds: string[] = [];
+const createdUserIds: string[] = [];
 const typeIdByName: Record<string, string> = {};
+let testUserId: string;
 
 type Cell = string | number | null;
 
@@ -77,6 +79,15 @@ beforeAll(async () => {
   await makeAlias(sphygId, `Tensimeter ${SUFFIX}`);
   await makeAlias(sphygId, `Tensimeter Digital ${SUFFIX}`);
   await makeAlias(bedsideId, `Patient Monitor ${SUFFIX}`);
+  const user = await prisma.user.create({
+    data: {
+      email: `crq-import-${randomUUID().slice(0, 10)}@x.co`,
+      name: "CRQ Import Test User",
+      status: "ACTIVE",
+    },
+  });
+  createdUserIds.push(user.id);
+  testUserId = user.id;
 });
 
 afterAll(async () => {
@@ -99,6 +110,9 @@ afterAll(async () => {
   }
   if (createdDeviceCategoryIds.length > 0) {
     await prisma.deviceCategory.deleteMany({ where: { id: { in: createdDeviceCategoryIds } } });
+  }
+  if (createdUserIds.length > 0) {
+    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
   }
 });
 
@@ -274,7 +288,7 @@ describe("CalibrationRequestImportService.confirm", () => {
     const preview = await service.preview(asFile(buf));
     expect(preview.rows.every((r) => r.errors.length === 0 && r.match.deviceTypeId)).toBe(true);
 
-    const created = await service.confirm(realCompanyId, {
+    const created = await service.confirm(realCompanyId, testUserId, {
       customerId,
       serviceMode: "ON_SITE",
       rows: preview.rows.map((r) => ({
@@ -326,7 +340,7 @@ describe("CalibrationRequestImportService.confirm", () => {
 
   it("defaults qty to 1 for a row that omits it (matches manual + Requisition)", async () => {
     const customerId = await makeCustomer();
-    const created = await service.confirm(realCompanyId, {
+    const created = await service.confirm(realCompanyId, testUserId, {
       customerId,
       serviceMode: "ON_SITE",
       rows: [{ customerDeviceName: "NoQtyRow", qty: 1, deviceTypeId: typeIdByName[DENTAL]! }],
@@ -345,7 +359,7 @@ describe("CalibrationRequestImportService.confirm", () => {
     const preview = await service.preview(asFile(buf));
     expect(preview.rows.every((r) => r.errors.length === 0 && r.match.deviceTypeId)).toBe(true);
 
-    const created = await service.confirm(realCompanyId, {
+    const created = await service.confirm(realCompanyId, testUserId, {
       customerId,
       serviceMode: "ON_SITE",
       rows: preview.rows.map((r) => ({
@@ -371,7 +385,7 @@ describe("CalibrationRequestImportService.confirm", () => {
 
   it("confirm accepts a Qty > 1 row that carries AKD/AKL/NIE (customer declaration)", async () => {
     const customerId = await makeCustomer();
-    const created = await service.confirm(realCompanyId, {
+    const created = await service.confirm(realCompanyId, testUserId, {
       customerId,
       serviceMode: "ON_SITE",
       rows: [
@@ -393,7 +407,7 @@ describe("CalibrationRequestImportService.confirm", () => {
   it("rolls back entirely when a deviceTypeId is invalid (transaction safety)", async () => {
     const customerId = await makeCustomer();
     await expect(
-      service.confirm(realCompanyId, {
+      service.confirm(realCompanyId, testUserId, {
         customerId,
         serviceMode: "ON_SITE",
         rows: [
@@ -409,7 +423,7 @@ describe("CalibrationRequestImportService.confirm", () => {
 
   it("scopes the created requisition to the caller's company (isolation)", async () => {
     const customerId = await makeCustomer();
-    const created = await service.confirm(realCompanyId, {
+    const created = await service.confirm(realCompanyId, testUserId, {
       customerId,
       serviceMode: "ON_SITE",
       rows: [{ customerDeviceName: "Solo", qty: 1, deviceTypeId: typeIdByName[DENTAL]! }],

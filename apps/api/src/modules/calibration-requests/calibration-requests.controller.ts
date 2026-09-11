@@ -22,6 +22,7 @@ import {
 } from "@medcal/shared";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
+import { UserId } from "../../common/decorators/user-id.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import type { UploadedFile as UploadedFileShape } from "../files/files.constants";
 import {
@@ -65,6 +66,7 @@ export class CalibrationRequestsController {
   @RequirePermission("calibrationRequest", "create")
   async importConfirm(
     @CompanyId() companyId: string,
+    @UserId() userId: string,
     @Body() rawBody: unknown,
   ): Promise<CalibrationRequestWithItems> {
     const parsed = calibrationRequestImportConfirmSchema.safeParse(rawBody);
@@ -75,13 +77,14 @@ export class CalibrationRequestsController {
         issues: parsed.error.flatten(),
       });
     }
-    return this.importService.confirm(companyId, parsed.data);
+    return this.importService.confirm(companyId, userId, parsed.data);
   }
 
   @Post()
   @RequirePermission("calibrationRequest", "create")
   async create(
     @CompanyId() companyId: string,
+    @UserId() userId: string,
     @Body() rawBody: unknown,
   ): Promise<CalibrationRequestWithItems> {
     const parsed = calibrationRequestCreateSchema.safeParse(rawBody);
@@ -92,7 +95,7 @@ export class CalibrationRequestsController {
         issues: parsed.error.flatten(),
       });
     }
-    return this.service.create(companyId, parsed.data);
+    return this.service.create(companyId, userId, parsed.data);
   }
 
   @Get()
@@ -125,6 +128,7 @@ export class CalibrationRequestsController {
   @RequirePermission("calibrationRequest", "update")
   async update(
     @CompanyId() companyId: string,
+    @UserId() userId: string,
     @Param("id") id: string,
     @Body() rawBody: unknown,
   ): Promise<CalibrationRequestWithItems> {
@@ -136,24 +140,26 @@ export class CalibrationRequestsController {
         issues: parsed.error.flatten(),
       });
     }
-    return this.service.update(companyId, id, parsed.data);
+    return this.service.update(companyId, id, userId, parsed.data);
   }
 
   @Post(":id/cancel")
   @RequirePermission("calibrationRequest", "cancel")
   async cancel(
     @CompanyId() companyId: string,
+    @UserId() userId: string,
     @Param("id") id: string,
   ): Promise<CalibrationRequestWithItems> {
-    return this.service.cancel(companyId, id);
+    return this.service.cancel(companyId, id, userId);
   }
 
   @Post(":id/submit")
   @RequirePermission("calibrationRequest", "update")
   async submit(
     @CompanyId() companyId: string,
+    @UserId() userId: string,
     @Param("id") id: string,
   ): Promise<CalibrationRequestWithItems> {
-    return this.service.submit(companyId, id);
+    return this.service.submit(companyId, id, userId);
   }
 }

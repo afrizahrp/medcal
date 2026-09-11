@@ -53,6 +53,7 @@ async function assertDeviceTypesExist(
 export class CalibrationRequestsService {
   async create(
     companyId: string,
+    userId: string,
     input: CalibrationRequestCreateInput,
   ): Promise<CalibrationRequestWithItems> {
     return prisma.$transaction(async (tx) => {
@@ -101,6 +102,7 @@ export class CalibrationRequestsService {
           expectedDate: input.expectedDate,
           status: "DRAFT",
           notes: input.notes,
+          createdByUserId: userId,
         },
       });
 
@@ -187,6 +189,7 @@ export class CalibrationRequestsService {
   async update(
     companyId: string,
     id: string,
+    userId: string,
     input: CalibrationRequestUpdateInput,
   ): Promise<CalibrationRequestWithItems> {
     const existing = await prisma.calibrationRequest.findFirst({
@@ -268,6 +271,7 @@ export class CalibrationRequestsService {
           ...(input.serviceMode !== undefined ? { serviceMode: input.serviceMode } : {}),
           ...(input.expectedDate !== undefined ? { expectedDate: input.expectedDate } : {}),
           ...(input.notes !== undefined ? { notes: input.notes } : {}),
+          updatedByUserId: userId,
         },
       });
 
@@ -278,7 +282,11 @@ export class CalibrationRequestsService {
     });
   }
 
-  async cancel(companyId: string, id: string): Promise<CalibrationRequestWithItems> {
+  async cancel(
+    companyId: string,
+    id: string,
+    userId: string,
+  ): Promise<CalibrationRequestWithItems> {
     const existing = await prisma.calibrationRequest.findFirst({
       where: { id, companyId },
     });
@@ -309,12 +317,16 @@ export class CalibrationRequestsService {
 
     return prisma.calibrationRequest.update({
       where: { id },
-      data: { status: "CANCELLED" },
+      data: { status: "CANCELLED", updatedByUserId: userId },
       include: calibrationRequestInclude,
     });
   }
 
-  async submit(companyId: string, id: string): Promise<CalibrationRequestWithItems> {
+  async submit(
+    companyId: string,
+    id: string,
+    userId: string,
+  ): Promise<CalibrationRequestWithItems> {
     const existing = await prisma.calibrationRequest.findFirst({
       where: { id, companyId },
     });
@@ -334,7 +346,7 @@ export class CalibrationRequestsService {
 
     return prisma.calibrationRequest.update({
       where: { id },
-      data: { status: "SUBMITTED" },
+      data: { status: "SUBMITTED", updatedByUserId: userId },
       include: calibrationRequestInclude,
     });
   }
