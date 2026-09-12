@@ -1,0 +1,10 @@
+Landed on main outside normal PR flow.
+
+Context: same incident as 304e227 — created on docs/reorg-by-content-type by
+a concurrent Cursor session sharing the working directory with a Claude Code
+session that had that branch checked out for an unrelated docs reorg.
+Cherry-picked directly onto main once discovered; never went through a
+dedicated PR.
+
+Status: confirmed by the repo owner (2026-09-13) as tested manually and
+final.
