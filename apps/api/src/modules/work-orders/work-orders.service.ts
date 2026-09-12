@@ -1062,9 +1062,28 @@ export class WorkOrdersService {
     return this.findOne(companyId, id);
   }
 
+  /**
+   * Work Order completion gate: a WorkOrder may only become DONE once every
+   * CalibrationJob fanned out from it has reached ACCEPTED_BY_QA. Read-only —
+   * never mutates CalibrationJob rows, even on rejection.
+   */
   async done(companyId: string, id: string): Promise<WorkOrderWithItems> {
     const existing = await this.findOne(companyId, id);
     assertTransition(existing.status, "DONE");
+
+    const jobs = await prisma.calibrationJob.findMany({
+      where: { workOrderId: id },
+      select: { id: true, status: true },
+    });
+    const notAccepted = jobs.filter((job) => job.status !== "ACCEPTED_BY_QA");
+    if (notAccepted.length > 0) {
+      throw new BadRequestException({
+        message:
+          "Work Order belum dapat diselesaikan karena masih ada Calibration Job yang belum ACCEPTED_BY_QA.",
+        code: "WORK_ORDER_CALIBRATION_JOBS_NOT_ACCEPTED",
+        pendingCalibrationJobIds: notAccepted.map((job) => job.id),
+      });
+    }
 
     return prisma.workOrder.update({
       where: { id },

@@ -275,6 +275,14 @@ async function createTechnician(companyId: string) {
   return user;
 }
 
+/** Marks every CalibrationJob fanned out from a WorkOrder as ACCEPTED_BY_QA, satisfying the done() gate. */
+async function acceptAllJobs(workOrderId: string) {
+  await prisma.calibrationJob.updateMany({
+    where: { workOrderId },
+    data: { status: "ACCEPTED_BY_QA" },
+  });
+}
+
 async function createTrackedWorkOrder(
   companyId: string,
   purchaseOrderId: string,
@@ -661,6 +669,7 @@ describe("WorkOrdersService.update", () => {
       technicians: [{ technicianUserId: technician.id }],
     });
     await workOrdersService.start(realCompanyId, created.id);
+    await acceptAllJobs(created.id);
     await workOrdersService.done(realCompanyId, created.id);
 
     try {
@@ -734,7 +743,7 @@ describe("WorkOrdersService status transitions", () => {
     expect(cancelled.status).toBe("CANCELLED");
   });
 
-  it("fans out one CalibrationJob per unit when reaching IN_PROGRESS, then allows IN_PROGRESS → DONE", async () => {
+  it("fans out one CalibrationJob per unit when reaching IN_PROGRESS, then allows IN_PROGRESS → DONE once that job is ACCEPTED_BY_QA", async () => {
     const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
     const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
     const technician = await createTechnician(realCompanyId);
@@ -743,7 +752,12 @@ describe("WorkOrdersService status transitions", () => {
     });
     await workOrdersService.start(realCompanyId, created.id);
     // A single-quantity WorkOrderItem fans out to exactly one job.
-    expect(await prisma.calibrationJob.count({ where: { workOrderId: created.id } })).toBe(1);
+    const jobs = await prisma.calibrationJob.findMany({ where: { workOrderId: created.id } });
+    expect(jobs).toHaveLength(1);
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { status: "ACCEPTED_BY_QA" },
+    });
     const done = await workOrdersService.done(realCompanyId, created.id);
     expect(done.status).toBe("DONE");
   });
@@ -826,6 +840,7 @@ describe("WorkOrdersService status transitions", () => {
       technicians: [{ technicianUserId: technician.id }],
     });
     await workOrdersService.start(realCompanyId, created.id);
+    await acceptAllJobs(created.id);
     await workOrdersService.done(realCompanyId, created.id);
 
     try {
@@ -927,6 +942,126 @@ describe("WorkOrdersService status transitions", () => {
       expect((err as BadRequestException).getResponse()).toEqual(
         expect.objectContaining({ code: "INVALID_WORK_ORDER_ASSIGNEE" }),
       );
+    }
+  });
+});
+
+describe("WorkOrdersService.done — Work Order Completion Gate", () => {
+  /** IN_PROGRESS WorkOrder with `itemCount` fanned-out CalibrationJobs (one per item, qty 1 each). */
+  async function inProgressWorkOrderWithJobs(itemCount: number) {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount });
+    const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    const technician = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, created.id, {
+      technicians: [{ technicianUserId: technician.id }],
+    });
+    await workOrdersService.start(realCompanyId, created.id);
+    const jobs = await prisma.calibrationJob.findMany({
+      where: { workOrderId: created.id },
+      orderBy: { id: "asc" },
+    });
+    return { workOrderId: created.id, jobs };
+  }
+
+  it("Test 1/6 — completes when all CalibrationJobs are ACCEPTED_BY_QA", async () => {
+    const { workOrderId, jobs } = await inProgressWorkOrderWithJobs(3);
+    expect(jobs).toHaveLength(3);
+    await prisma.calibrationJob.updateMany({
+      where: { id: { in: jobs.map((job) => job.id) } },
+      data: { status: "ACCEPTED_BY_QA" },
+    });
+
+    const done = await workOrdersService.done(realCompanyId, workOrderId);
+    expect(done.status).toBe("DONE");
+  });
+
+  it("Test 2 — rejects completion when one CalibrationJob is not ACCEPTED_BY_QA", async () => {
+    const { workOrderId, jobs } = await inProgressWorkOrderWithJobs(1);
+    // Fan-out default status is PENDING — left untouched.
+    expect(jobs[0]!.status).toBe("PENDING");
+
+    await expect(workOrdersService.done(realCompanyId, workOrderId)).rejects.toMatchObject({
+      response: { code: "WORK_ORDER_CALIBRATION_JOBS_NOT_ACCEPTED" },
+    });
+
+    const wo = await workOrdersService.findOne(realCompanyId, workOrderId);
+    expect(wo.status).not.toBe("DONE");
+    expect(wo.status).toBe("IN_PROGRESS");
+  });
+
+  it("Test 3 — rejects completion with multiple CalibrationJobs in mixed statuses", async () => {
+    const { workOrderId, jobs } = await inProgressWorkOrderWithJobs(3);
+    expect(jobs).toHaveLength(3);
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { status: "ACCEPTED_BY_QA" },
+    });
+    await prisma.calibrationJob.update({
+      where: { id: jobs[1]!.id },
+      data: { status: "IN_PROGRESS" },
+    });
+    await prisma.calibrationJob.update({
+      where: { id: jobs[2]!.id },
+      data: { status: "ACCEPTED_BY_QA" },
+    });
+
+    await expect(workOrdersService.done(realCompanyId, workOrderId)).rejects.toMatchObject({
+      response: { code: "WORK_ORDER_CALIBRATION_JOBS_NOT_ACCEPTED" },
+    });
+    const wo = await workOrdersService.findOne(realCompanyId, workOrderId);
+    expect(wo.status).not.toBe("DONE");
+  });
+
+  it("Test 4 — any non-ACCEPTED_BY_QA status blocks completion (SUBMITTED, REWORK)", async () => {
+    for (const blockingStatus of ["SUBMITTED", "REWORK"] as const) {
+      const { workOrderId, jobs } = await inProgressWorkOrderWithJobs(1);
+      await prisma.calibrationJob.update({
+        where: { id: jobs[0]!.id },
+        data: { status: blockingStatus },
+      });
+
+      await expect(workOrdersService.done(realCompanyId, workOrderId)).rejects.toMatchObject({
+        response: { code: "WORK_ORDER_CALIBRATION_JOBS_NOT_ACCEPTED" },
+      });
+    }
+  });
+
+  it("Test 5 — a rejected completion does not mutate CalibrationJob statuses", async () => {
+    const { workOrderId, jobs } = await inProgressWorkOrderWithJobs(2);
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { status: "ACCEPTED_BY_QA" },
+    });
+    // jobs[1] stays PENDING.
+
+    await expect(workOrdersService.done(realCompanyId, workOrderId)).rejects.toMatchObject({
+      response: { code: "WORK_ORDER_CALIBRATION_JOBS_NOT_ACCEPTED" },
+    });
+
+    const afterJobs = await prisma.calibrationJob.findMany({
+      where: { workOrderId },
+      orderBy: { id: "asc" },
+    });
+    expect(afterJobs.find((job) => job.id === jobs[0]!.id)?.status).toBe("ACCEPTED_BY_QA");
+    expect(afterJobs.find((job) => job.id === jobs[1]!.id)?.status).toBe("PENDING");
+  });
+
+  it("Test 6 — successful completion leaves CalibrationJob statuses as ACCEPTED_BY_QA and does not touch other WorkOrder fields", async () => {
+    const { workOrderId, jobs } = await inProgressWorkOrderWithJobs(2);
+    await prisma.calibrationJob.updateMany({
+      where: { id: { in: jobs.map((job) => job.id) } },
+      data: { status: "ACCEPTED_BY_QA" },
+    });
+
+    const before = await workOrdersService.findOne(realCompanyId, workOrderId);
+    const done = await workOrdersService.done(realCompanyId, workOrderId);
+
+    expect(done.status).toBe("DONE");
+    expect(done.number).toBe(before.number);
+    expect(done.serviceMode).toBe(before.serviceMode);
+    const afterJobs = await prisma.calibrationJob.findMany({ where: { workOrderId } });
+    for (const job of afterJobs) {
+      expect(job.status).toBe("ACCEPTED_BY_QA");
     }
   });
 });
