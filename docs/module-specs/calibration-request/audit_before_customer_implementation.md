@@ -62,7 +62,7 @@ Satu-satunya runtime Customer logic: lookup read-only saat ingest ContactMessage
 
 Canonical creation path
 
-TIDAK ADA. Tidak ada createCustomer(...). Manual creation dan Lead conversion keduanya belum ada, sehingga arsitektur "satu jalur canonical" belum dapat dinilai sebagai sudah diikuti — hanya direncanakan di [docs/cursor/entity-catalog.md](docs/cursor/entity-catalog.md).
+TIDAK ADA. Tidak ada createCustomer(...). Manual creation dan Lead conversion keduanya belum ada, sehingga arsitektur "satu jalur canonical" belum dapat dinilai sebagai sudah diikuti — hanya direncanakan di [docs/cursor/entity-catalog.md](../../architecture/entity-catalog.md).
 
 2. Lead → Customer Conversion
 

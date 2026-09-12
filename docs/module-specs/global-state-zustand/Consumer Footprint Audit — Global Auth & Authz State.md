@@ -255,7 +255,7 @@ useMe()    → 0 consumers
 
 ## 13. Planned Roadmap Consumer Mapping
 
-**PLANNED / NOT YET IMPLEMENTED** — domain operasional dari roadmap produk ([`docs/cursor/business-domain.md`](../../business-domain.md)), bukan consumption aktual.
+**PLANNED / NOT YET IMPLEMENTED** — domain operasional dari roadmap produk ([`docs/cursor/business-domain.md`](../../domain-decisions/business-domain.md)), bukan consumption aktual.
 
 | Planned domain | Auth? | Authz? | Likely pattern |
 |---|---|---|---|

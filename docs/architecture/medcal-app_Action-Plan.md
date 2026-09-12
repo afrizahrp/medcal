@@ -3,11 +3,11 @@
 Dokumen ini adalah **roadmap eksekusi per fase** — bukan sumber kebenaran domain. Keputusan domain & data yang terkunci ada di:
 
 - [`000-project-bootstrap.md`](./000-project-bootstrap.md) (ADR-000)
-- [`business-domain.md`](./business-domain.md)
+- [`business-domain.md`](../domain-decisions/business-domain.md)
 - [`entity-catalog.md`](./entity-catalog.md)
 - [`ERD/README.md`](./ERD/README.md)
 - [`ADR/001-nextjs-version.md`](./ADR/001-nextjs-version.md)
-- [BIPMED → MedCal Architecture Adoption Matrix](../Architecture/01-bipmed-medcal-architecture-adoption-matrix.md) — locked source for Human Chat MVP, FCM push, EmailWhitelist gate
+- [BIPMED → MedCal Architecture Adoption Matrix](./01-bipmed-medcal-architecture-adoption-matrix.md) — locked source for Human Chat MVP, FCM push, EmailWhitelist gate
 
 **Next step saat ini:** lanjut **Fase 1** (Fase 0 scaffold monorepo sudah selesai).
 

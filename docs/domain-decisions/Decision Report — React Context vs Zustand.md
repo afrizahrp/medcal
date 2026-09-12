@@ -4,7 +4,7 @@
 **Mode:** Decision / audit only — tidak ada perubahan kode  
 **Source of truth:** Repository code aktual  
 
-**Referensi:** [Audit Report](./Audit%20Report%20—%20Global%20Auth%20&%20Authz%20State.md) · [Implementation Report](./Implementation%20Report%20—%20Global%20Auth%20&%20Authz%20State.md) · [Forensic Verification Report](./Forensic%20Verification%20Report%20—%20Global%20Auth%20&%20Authz%20Implementation.md) · [Consumer Footprint Audit](./Consumer%20Footprint%20Audit%20—%20Global%20Auth%20&%20Authz%20State.md) · [Migration Window Decision](./Migration%20Window%20Decision%20—%20React%20Context%20vs%20Zustand.md)
+**Referensi:** [Audit Report](../module-specs/global-state-zustand/Audit%20Report%20%E2%80%94%20Global%20Auth%20%26%20Authz%20State.md) · [Implementation Report](../module-specs/global-state-zustand/Implementation%20Report%20%E2%80%94%20Global%20Auth%20%26%20Authz%20State.md) · [Forensic Verification Report](../module-specs/global-state-zustand/Forensic%20Verification%20Report%20%E2%80%94%20Global%20Auth%20%26%20Authz%20Implementation.md) · [Consumer Footprint Audit](../module-specs/global-state-zustand/Consumer%20Footprint%20Audit%20%E2%80%94%20Global%20Auth%20%26%20Authz%20State.md) · [Migration Window Decision](./Migration%20Window%20Decision%20—%20React%20Context%20vs%20Zustand.md)
 
 ---
 
@@ -70,7 +70,7 @@ Tech PWA: AuthProvider → consumers
 | High-leverage consumers | 6 |
 | Management routes via layout | ~20 |
 
-Detail lengkap: [Consumer Footprint Audit](./Consumer%20Footprint%20Audit%20—%20Global%20Auth%20&%20Authz%20State.md)
+Detail lengkap: [Consumer Footprint Audit](../module-specs/global-state-zustand/Consumer%20Footprint%20Audit%20%E2%80%94%20Global%20Auth%20%26%20Authz%20State.md)
 
 ---
 

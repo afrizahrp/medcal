@@ -1,7 +1,7 @@
 # IMPLEMENTATION REPORT — Tech-PWA: Foundation + Job List + Job Detail + Escalate
 
 Task spec: [Implement_TechPWA_Foundation_JobList_Detail_Staged.md](./Implement_TechPWA_Foundation_JobList_Detail_Staged.md)
-Stage 1 proposal + approval log: [running-tasks.md](./running-tasks.md)
+Stage 1 proposal + approval log: [running-tasks.md](../../../meeting-notes-session-logs/running-tasks.md)
 
 ## Status: Stage 2 complete
 

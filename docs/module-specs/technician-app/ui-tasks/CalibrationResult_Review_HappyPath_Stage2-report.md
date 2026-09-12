@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-09  
 **Status:** Stage 2 complete (backend happy path only)  
-**Desain terkunci:** [CalibrationResult_Review_Lifecycle_Design.md](./CalibrationResult_Review_Lifecycle_Design.md)
+**Desain terkunci:** [CalibrationResult_Review_Lifecycle_Design.md](../../../domain-decisions/CalibrationResult_Review_Lifecycle_Design.md)
 
 Tidak ada migrasi Prisma. Tidak ada perubahan Identity Correction. Cabang REJECT / REWORK **tidak** diimplementasi.
 

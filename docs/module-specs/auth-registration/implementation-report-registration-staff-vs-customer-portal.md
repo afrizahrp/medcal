@@ -2,7 +2,7 @@
 
 **Tanggal:** 24 Agustus 2026  
 **Repositori:** `d:\medcal`  
-**Basis:** [Prompt Cursor — Memisahkan Aturan Registrasi Staff dan Customer Portal](./Prompt%20Cursor%20—%20Memisahkan%20Aturan%20Registrasi%20Staff%20dan%20Customer%20Portal.md)
+**Basis:** [Prompt Cursor — Memisahkan Aturan Registrasi Staff dan Customer Portal](../../domain-decisions/Prompt%20Cursor%20%E2%80%94%20Memisahkan%20Aturan%20Registrasi%20Staff%20dan%20Customer%20Portal.md)
 
 ---
 

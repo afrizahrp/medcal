@@ -1,8 +1,8 @@
 # Entity Catalog — medcal (CBMS)
 
 **Status:** Draft for validation  
-**Sources:** [`business-domain.md`](./business-domain.md), [`000-project-bootstrap.md`](./000-project-bootstrap.md)  
-**Related architecture decision:** [BIPMED → MedCal Architecture Adoption Matrix](../Architecture/01-bipmed-medcal-architecture-adoption-matrix.md) — locked source for the Chat MVP status, `ChatSessionToken`, `EmailWhitelist`, and FCM-token corrections below.  
+**Sources:** [`business-domain.md`](../domain-decisions/business-domain.md), [`000-project-bootstrap.md`](./000-project-bootstrap.md)  
+**Related architecture decision:** [BIPMED → MedCal Architecture Adoption Matrix](./01-bipmed-medcal-architecture-adoption-matrix.md) — locked source for the Chat MVP status, `ChatSessionToken`, `EmailWhitelist`, and FCM-token corrections below.  
 **Out of scope:** Prisma schema, SQL DDL, indexes, column types, scaffolding
 
 This document translates locked business domains into **conceptual entities**, relationships, lifecycles, and ownership. It is the bridge before ERD / Prisma.

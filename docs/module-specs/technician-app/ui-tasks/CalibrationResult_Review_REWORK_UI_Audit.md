@@ -3,7 +3,7 @@
 **Date:** 2026-09-10  
 **Mode:** AUDIT ONLY — tidak ada implementasi, tidak ada perubahan kode  
 **Backend:** REWORK PASS ([CalibrationResult_Review_REWORK_Backend-report.md](./CalibrationResult_Review_REWORK_Backend-report.md))  
-**Desain terkunci:** [CalibrationResult_Review_Lifecycle_Design.md](./CalibrationResult_Review_Lifecycle_Design.md)  
+**Desain terkunci:** [CalibrationResult_Review_Lifecycle_Design.md](../../../domain-decisions/CalibrationResult_Review_Lifecycle_Design.md)  
 **Happy path UI (jangan diubah):** [CalibrationResult_Review_HappyPath_Stage3-report.md](./CalibrationResult_Review_HappyPath_Stage3-report.md)
 
 Option A terkunci: tulis `MeasurementResult` hanya jika `CalibrationJob.status === IN_PROGRESS`. `REWORK` bukan state editable. Resume (`REWORK → IN_PROGRESS`) adalah gerbang.

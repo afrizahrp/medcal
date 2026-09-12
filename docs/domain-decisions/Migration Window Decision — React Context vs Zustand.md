@@ -5,7 +5,7 @@
 **Source of truth:** Repository code aktual  
 **Tujuan:** Menentukan **kapan** migration window Global Auth/Authz paling murah dan aman
 
-**Referensi:** [Consumer Footprint Audit](./Consumer%20Footprint%20Audit%20—%20Global%20Auth%20&%20Authz%20State.md) · [Forensic Verification Report](./Forensic%20Verification%20Report%20—%20Global%20Auth%20&%20Authz%20Implementation.md) · [Implementation Report](./Implementation%20Report%20—%20Global%20Auth%20&%20Authz%20State.md)
+**Referensi:** [Consumer Footprint Audit](../module-specs/global-state-zustand/Consumer%20Footprint%20Audit%20%E2%80%94%20Global%20Auth%20%26%20Authz%20State.md) · [Forensic Verification Report](../module-specs/global-state-zustand/Forensic%20Verification%20Report%20%E2%80%94%20Global%20Auth%20%26%20Authz%20Implementation.md) · [Implementation Report](../module-specs/global-state-zustand/Implementation%20Report%20%E2%80%94%20Global%20Auth%20%26%20Authz%20State.md)
 
 ---
 

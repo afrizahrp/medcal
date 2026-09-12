@@ -122,7 +122,7 @@ Quotation.requestId? → optional link ke CalibrationRequest.
 
 QuotationItem.requestItemId? → traceability ke request item.
 
-WorkOrder.quotationId required — dokumentasi [docs/cursor/entity-catalog.md](docs/cursor/entity-catalog.md) & [docs/ERD/overview.md](docs/ERD/overview.md) mensyaratkan quotation approved sebelum WO.
+WorkOrder.quotationId required — dokumentasi [docs/cursor/entity-catalog.md](../../architecture/entity-catalog.md) & [docs/ERD/overview.md](../../architecture/ERD/overview.md) mensyaratkan quotation approved sebelum WO.
 
 Quotation → WorkOrder = 1:N (multi-SP K dari satu quotation).
 
@@ -559,7 +559,7 @@ Extend Customer, Company, Quotation: relasi balik ke PO.
 
 Extend FileOwnerType: PURCHASE_ORDER.
 
-Dokumentasi: update [docs/cursor/entity-catalog.md](docs/cursor/entity-catalog.md) & ERD — sisipkan PO antara Quotation dan WorkOrder.
+Dokumentasi: update [docs/cursor/entity-catalog.md](../../architecture/entity-catalog.md) & ERD — sisipkan PO antara Quotation dan WorkOrder.
 
 Migrasi data (jika ada WO produksi nanti):
 

@@ -4,7 +4,7 @@
 **Scope:** Tech-PWA + Portal UI only. Backend REWORK tidak diubah.  
 **Audit:** [CalibrationResult_Review_REWORK_UI_Audit.md](./CalibrationResult_Review_REWORK_UI_Audit.md)  
 **Backend:** [CalibrationResult_Review_REWORK_Backend-report.md](./CalibrationResult_Review_REWORK_Backend-report.md)  
-**Desain terkunci:** [CalibrationResult_Review_Lifecycle_Design.md](./CalibrationResult_Review_Lifecycle_Design.md)
+**Desain terkunci:** [CalibrationResult_Review_Lifecycle_Design.md](../../../domain-decisions/CalibrationResult_Review_Lifecycle_Design.md)
 
 ---
 

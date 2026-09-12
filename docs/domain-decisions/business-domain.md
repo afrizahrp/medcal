@@ -4,8 +4,8 @@
 **Status:** Aligned with ADR-000 + messaging bi-erp (ContactMessage / GetMessageFrom)  
 **Project path:** `d:\medcal`  
 **Related ADR:** [`docs/000-project-bootstrap.md`](./000-project-bootstrap.md)  
-**Related catalog / ERD:** [`entity-catalog.md`](./entity-catalog.md), [`ERD/`](./ERD/)  
-**Related architecture decision:** [BIPMED → MedCal Architecture Adoption Matrix](../Architecture/01-bipmed-medcal-architecture-adoption-matrix.md) — locked source for Human Chat MVP scope, FCM push, and the `EmailWhitelist` registration gate referenced below.  
+**Related catalog / ERD:** [`entity-catalog.md`](../architecture/entity-catalog.md), [`ERD/`](./ERD/)  
+**Related architecture decision:** [BIPMED → MedCal Architecture Adoption Matrix](../architecture/01-bipmed-medcal-architecture-adoption-matrix.md) — locked source for Human Chat MVP scope, FCM push, and the `EmailWhitelist` registration gate referenced below.  
 **Out of scope in this document:** code, Prisma schema, ERD tables detail, scaffolding
 
 ---
@@ -1084,6 +1084,6 @@ Closed:
 
 ## 8. Next step
 
-- Entity catalog: [`entity-catalog.md`](./entity-catalog.md)  
+- Entity catalog: [`entity-catalog.md`](../architecture/entity-catalog.md)  
 - ERD draft: [`ERD/`](./ERD/)  
 - Setelah approve ERD → Prisma → Fase 0 scaffold

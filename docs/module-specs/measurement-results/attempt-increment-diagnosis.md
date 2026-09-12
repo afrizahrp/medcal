@@ -3,7 +3,7 @@
 **Date:** 2026-09-09
 **Mode:** Stage 1 — PROPOSE ONLY. Tidak ada kode, schema, migrasi, atau data yang diubah.
 **Pemicu:** review desain Stage B (2026-09-09) — guard dan stamp `attemptNumber` sudah ada, increment `currentAttempt` tidak terlihat.
-**Sumber desain terkunci:** [MeasurementResult_Stage1_Design_Finalization.md](../MeasurementResult_Stage1_Design_Finalization.md) §6–§7.
+**Sumber desain terkunci:** [MeasurementResult_Stage1_Design_Finalization.md](../calibration-job/MeasurementResult_Stage1_Design_Finalization.md) §6–§7.
 **HARD STOP** setelah laporan ini — review + persetujuan wajib sebelum Stage 2 (implementasi).
 
 ---

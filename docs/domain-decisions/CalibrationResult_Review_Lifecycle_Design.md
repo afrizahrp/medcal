@@ -4,7 +4,7 @@
 **Mode:** Stage 1 — laporan desain. Tidak ada kode, migrasi, atau perubahan Prisma.
 **HARD STOP:** jangan implementasi sebelum laporan ini disetujui eksplisit.
 **Sumber audit:** percakapan audit Identity Correction vs Calibration Result Review (2026-09-09).
-**Sumber transisi attempt:** [attempt-increment-diagnosis.md](../../Calibration-management/measurement-results/attempt-increment-diagnosis.md).
+**Sumber transisi attempt:** [attempt-increment-diagnosis.md](../module-specs/measurement-results/attempt-increment-diagnosis.md).
 
 ---
 

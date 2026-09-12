@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-09  
 **Status:** Stage 3 complete (UI / end-to-end happy path)  
-**Desain terkunci:** [CalibrationResult_Review_Lifecycle_Design.md](./CalibrationResult_Review_Lifecycle_Design.md)  
+**Desain terkunci:** [CalibrationResult_Review_Lifecycle_Design.md](../../../domain-decisions/CalibrationResult_Review_Lifecycle_Design.md)  
 **Backend Stage 2:** [CalibrationResult_Review_HappyPath_Stage2-report.md](./CalibrationResult_Review_HappyPath_Stage2-report.md)
 
 Tidak ada perubahan backend Stage 2. Tidak ada perubahan Identity Correction. REJECT / REWORK **tidak** diimplementasi.
