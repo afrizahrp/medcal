@@ -1,0 +1,12 @@
+Landed on main outside normal PR flow.
+
+Context: this commit was created on the docs/reorg-by-content-type branch by a
+concurrent Cursor session sharing the same working directory (D:\medcal) while
+a Claude Code session had that branch checked out for an unrelated docs
+reorg. Once discovered, this commit (plus 4 others) was cherry-picked
+directly onto main and the reorg branch was reset to drop them, so this
+feature was never reviewed via a dedicated PR.
+
+Status: confirmed by the repo owner (2026-09-13) as tested manually and
+final — not a rushed/incomplete merge, just one that skipped the normal PR
+step due to the branch-sharing incident above.
