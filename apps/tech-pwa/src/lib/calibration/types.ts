@@ -90,6 +90,15 @@ export interface TechCalibrationJob {
   /** Revision cycle — MeasurementResult rows of earlier attempts are read-only. */
   currentAttempt: number;
   createdAt: string;
+  /**
+   * Extensible per-job "needs action" signals from GET /calibration-jobs/:id
+   * (same shape as the portal list row).
+   */
+  actionSignals: {
+    identityCorrectionPending: boolean;
+    referenceEquipmentNeedsApproval: boolean;
+    identityIncomplete: boolean;
+  };
   workOrder: {
     id: string;
     number: string;

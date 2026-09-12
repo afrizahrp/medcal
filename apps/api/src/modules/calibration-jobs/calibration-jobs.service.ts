@@ -12,6 +12,7 @@ import { DocumentNumberService, Prisma, prisma } from "@medcal/db";
 import type { AkdAklApprovalStatus, MembershipRole } from "@medcal/db";
 import {
   CALIBRATION_JOB_SORTABLE_FIELDS,
+  isIdentityIncomplete,
   jobNeedsAction,
   type CalibrationJobActionSignals,
   type CalibrationJobEscalateIdentityInput,
@@ -543,6 +544,7 @@ export class CalibrationJobsService {
       actionSignals: {
         identityCorrectionPending: row.identityCorrections[0]?.status === "PENDING_REVIEW",
         referenceEquipmentNeedsApproval,
+        identityIncomplete: isIdentityIncomplete(row),
       },
     };
   }

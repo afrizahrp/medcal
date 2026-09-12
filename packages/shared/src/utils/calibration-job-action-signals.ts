@@ -11,6 +11,12 @@ export type CalibrationJobActionSignals = {
   identityCorrectionPending: boolean;
   /** ≥1 confirmed reference-equipment unit is invalid and not yet overridden. */
   referenceEquipmentNeedsApproval: boolean;
+  /**
+   * Warning only: after technician work has started (`startedAt` set), the
+   * confirmed job identity is still missing Device ID and/or observed Serial.
+   * Does not block calibration, BA, or quality review.
+   */
+  identityIncomplete: boolean;
   // Future signals slot in here — e.g. measurementSubmissionPending,
   // certificateReviewPending — without changing any consumer below.
 
@@ -21,7 +27,28 @@ export type CalibrationJobActionSignals = {
 export const EMPTY_CALIBRATION_JOB_ACTION_SIGNALS: CalibrationJobActionSignals = {
   identityCorrectionPending: false,
   referenceEquipmentNeedsApproval: false,
+  identityIncomplete: false,
 };
+
+/**
+ * Pure predicate for `actionSignals.identityIncomplete`.
+ *
+ * Timing: only after technician work has started (`startedAt` set via
+ * "Mulai Kalibrasi"). Newly fanned-out jobs with null identity must not warn.
+ *
+ * Completeness (AKD/AKL intentionally excluded — separate gate):
+ *   Device ID present  → CalibrationJob.deviceId non-null
+ *   Serial present     → technicianObservedSerial non-empty
+ */
+export function isIdentityIncomplete(job: {
+  startedAt: Date | string | null;
+  deviceId: string | null;
+  technicianObservedSerial: string | null;
+}): boolean {
+  if (job.startedAt == null) return false;
+  const serial = job.technicianObservedSerial?.trim() ?? "";
+  return job.deviceId == null || serial.length === 0;
+}
 
 /** Number of active signals in an arbitrary signal map. */
 export function countActiveActionSignals(signals: Record<string, boolean>): number {

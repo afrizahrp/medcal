@@ -438,6 +438,8 @@ function JobChildRow({ row }: { row: CalibrationJobRow }) {
       <td className="px-4 py-2.5">
         {row.actionSignals.identityCorrectionPending ? (
           <ChildActionHint label="Menunggu review" />
+        ) : row.actionSignals.identityIncomplete ? (
+          <ChildActionHint label="Identitas belum lengkap" />
         ) : (
           <span className="text-xs text-slate-400">—</span>
         )}

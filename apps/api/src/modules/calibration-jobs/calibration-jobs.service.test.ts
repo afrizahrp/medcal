@@ -1805,7 +1805,7 @@ describe("CalibrationJobsService — list", () => {
     expect(res.total).toBe(0);
   });
 
-  it("exposes actionSignals on every row (both false by default)", async () => {
+  it("exposes actionSignals on every row (all false before Mulai Kalibrasi)", async () => {
     const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId);
     const res = await calibrationJobsService.findAll(
       realCompanyId,
@@ -1813,10 +1813,131 @@ describe("CalibrationJobsService — list", () => {
       staffUserId,
     );
     const row = res.data.find((j) => j.id === jobs[0]!.id)!;
+    expect(row.startedAt).toBeNull();
     expect(row.actionSignals).toEqual({
       identityCorrectionPending: false,
       referenceEquipmentNeedsApproval: false,
+      identityIncomplete: false,
     });
+  });
+
+  it("sets identityIncomplete after start when Device ID and Serial are both missing", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId);
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+
+    const row = (
+      await calibrationJobsService.findAll(
+        realCompanyId,
+        { workOrderId: workOrder.id },
+        staffUserId,
+      )
+    ).data.find((j) => j.id === jobs[0]!.id)!;
+    expect(row.deviceId).toBeNull();
+    expect(row.technicianObservedSerial).toBeNull();
+    expect(row.actionSignals.identityIncomplete).toBe(true);
+  });
+
+  it("sets identityIncomplete false when Device ID and observed Serial are both present after start", async () => {
+    const { workOrder, jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+    const device = await devicesService.create(realCompanyId, {
+      customerId,
+      deviceTypeId,
+      serialNumber: "SN-COMPLETE-1",
+    });
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { deviceId: device.id, technicianObservedSerial: "SN-COMPLETE-1" },
+    });
+
+    const row = (
+      await calibrationJobsService.findAll(
+        realCompanyId,
+        { workOrderId: workOrder.id },
+        staffUserId,
+      )
+    ).data.find((j) => j.id === jobs[0]!.id)!;
+    expect(row.actionSignals.identityIncomplete).toBe(false);
+  });
+
+  it("sets identityIncomplete false when Device ID equals Serial (allowed)", async () => {
+    const { workOrder, jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+    const device = await devicesService.create(realCompanyId, {
+      customerId,
+      deviceTypeId,
+      serialNumber: "DVC-SAME",
+    });
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { deviceId: device.id, technicianObservedSerial: "DVC-SAME" },
+    });
+
+    const row = (
+      await calibrationJobsService.findAll(
+        realCompanyId,
+        { workOrderId: workOrder.id },
+        staffUserId,
+      )
+    ).data.find((j) => j.id === jobs[0]!.id)!;
+    expect(row.actionSignals.identityIncomplete).toBe(false);
+  });
+
+  it("sets identityIncomplete true when only Device ID is missing after start", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId);
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { technicianObservedSerial: "SN-ONLY" },
+    });
+    const row = (
+      await calibrationJobsService.findAll(
+        realCompanyId,
+        { workOrderId: workOrder.id },
+        staffUserId,
+      )
+    ).data.find((j) => j.id === jobs[0]!.id)!;
+    expect(row.deviceId).toBeNull();
+    expect(row.actionSignals.identityIncomplete).toBe(true);
+  });
+
+  it("sets identityIncomplete true when only Serial is missing after start", async () => {
+    const { workOrder, jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+    const device = await devicesService.create(realCompanyId, {
+      customerId,
+      deviceTypeId,
+      serialNumber: "SN-BOUND",
+    });
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { deviceId: device.id, technicianObservedSerial: null },
+    });
+    const row = (
+      await calibrationJobsService.findAll(
+        realCompanyId,
+        { workOrderId: workOrder.id },
+        staffUserId,
+      )
+    ).data.find((j) => j.id === jobs[0]!.id)!;
+    expect(row.deviceId).toBe(device.id);
+    expect(row.technicianObservedSerial).toBeNull();
+    expect(row.actionSignals.identityIncomplete).toBe(true);
+  });
+
+  it("does not block Mulai Kalibrasi when identity is incomplete (warning only)", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    const started = await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+    expect(started.status).toBe("IN_PROGRESS");
+    expect(started.deviceId).toBeNull();
+    const row = await calibrationJobsService.findOneProp(realCompanyId, jobs[0]!.id);
+    expect(row.actionSignals.identityIncomplete).toBe(true);
   });
 });
 

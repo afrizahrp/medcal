@@ -41,17 +41,24 @@ function job(
     submittedAt: null,
     currentAttempt: 1,
     createdAt: "2026-09-01T00:00:00.000Z",
+    actionSignals: {
+      identityCorrectionPending: false,
+      referenceEquipmentNeedsApproval: false,
+      identityIncomplete: false,
+    },
     workOrder: {
       id: workOrderId,
       number: workOrderNumber,
       customerId,
       customer: { id: customerId, name: customerName },
+      serviceMode: "ON_SITE",
     },
     device: null,
     calibrationRequestItem: null,
     akdAklApprovedBy: null,
     identityCorrections: [],
     reviews: [],
+    kontrolAlat: null,
     ...rest,
   };
 }

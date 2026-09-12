@@ -55,6 +55,7 @@ import {
   AssignedDeviceSection,
   CorrectionsListSection,
   DeclaredIdentitySection,
+  IdentityIncompleteWarning,
   JobHeaderBlock,
   KontrolAlatSection,
   MeasurementsSection,
@@ -279,6 +280,7 @@ export default function JobDetailPage() {
       }
     >
       <JobHeaderBlock job={job} />
+      <IdentityIncompleteWarning job={job} />
       {isWol ? (
         <KontrolAlatSection
           jobId={id}

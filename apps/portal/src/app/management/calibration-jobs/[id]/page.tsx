@@ -174,6 +174,7 @@ export default function CalibrationJobDetailPage() {
     const initial: string[] = [];
     if (query.data.actionSignals.referenceEquipmentNeedsApproval) initial.push("ref-equipment");
     if (query.data.actionSignals.identityCorrectionPending) initial.push("corrections");
+    if (query.data.actionSignals.identityIncomplete) initial.push("identity");
     if (query.data.akdAklApprovalStatus === "PENDING_REVIEW") initial.push("akd-akl");
     setOpenSections(initial);
   }, [query.data]);
@@ -514,6 +515,15 @@ export default function CalibrationJobDetailPage() {
 
               <div className="mt-5 border-t border-slate-100 pt-5">
                 <h4 className="text-sm font-semibold text-slate-900">Assigned Device</h4>
+                {job.actionSignals.identityIncomplete ? (
+                  <p
+                    role="status"
+                    className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+                  >
+                    Identity perangkat belum lengkap. Silakan konfirmasi/koreksi identitas
+                    perangkat.
+                  </p>
+                ) : null}
                 {job.device ? (
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/50 p-3">
                     <div>
@@ -789,13 +799,13 @@ function StatusChip({
 }
 
 /**
- * At-a-glance summary above the accordion sections. `referenceEquipmentNeedsApproval`
- * and `identityCorrectionPending` come straight off `job.actionSignals` — already
- * fetched for this job (GET /calibration-jobs/:id returns the same list-row shape
- * as the Calibration Jobs list), not recomputed client-side. Identitas and Hasil
- * Pengukuran have no "needs attention" signal (a real "measurement complete"
- * signal is deferred to Stage B/C), so their chips stay neutral — pure
- * navigation shortcuts, not verdicts.
+ * At-a-glance summary above the accordion sections. `referenceEquipmentNeedsApproval`,
+ * `identityCorrectionPending`, and `identityIncomplete` come straight off
+ * `job.actionSignals` — already fetched for this job (GET /calibration-jobs/:id
+ * returns the same list-row shape as the Calibration Jobs list), not recomputed
+ * client-side. Hasil Pengukuran has no "needs attention" signal (a real
+ * "measurement complete" signal is deferred to Stage B/C), so that chip stays
+ * neutral — pure navigation shortcut, not a verdict.
  */
 function StatusStrip({
   job,
@@ -812,13 +822,18 @@ function StatusStrip({
   onFocusCorrections: () => void;
   onFocusAkdAkl: () => void;
 }) {
+  const identityIncomplete = job.actionSignals.identityIncomplete;
   const refEquipmentNeedsApproval = job.actionSignals.referenceEquipmentNeedsApproval;
   const identityCorrectionPending = job.actionSignals.identityCorrectionPending;
   const akdAklPending = job.akdAklApprovalStatus === "PENDING_REVIEW";
 
   return (
     <div className="mt-4 flex flex-wrap gap-2">
-      <StatusChip label="Identitas" tone="neutral" onClick={onFocusIdentity} />
+      <StatusChip
+        label={identityIncomplete ? "Identitas · Belum Lengkap" : "Identitas"}
+        tone={identityIncomplete ? "attention" : "neutral"}
+        onClick={onFocusIdentity}
+      />
       <StatusChip
         label={refEquipmentNeedsApproval ? "Alat Referensi · Perlu Persetujuan" : "Alat Referensi"}
         tone={refEquipmentNeedsApproval ? "attention" : "neutral"}

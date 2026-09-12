@@ -134,6 +134,19 @@ export function AssignedDeviceSection({ job }: { job: TechCalibrationJob }) {
   );
 }
 
+/** Warning-only banner driven by `actionSignals.identityIncomplete` — does not block work. */
+export function IdentityIncompleteWarning({ job }: { job: TechCalibrationJob }) {
+  if (!job.actionSignals?.identityIncomplete) return null;
+  return (
+    <div
+      role="status"
+      className="mx-4 mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+    >
+      Identity perangkat belum lengkap. Silakan konfirmasi/koreksi identitas perangkat.
+    </div>
+  );
+}
+
 export function ApprovalStatusSection({ job }: { job: TechCalibrationJob }) {
   const showDetail = job.akdAklApprovalStatus === "APPROVED" || job.akdAklApprovalStatus === "REJECTED";
   return (
