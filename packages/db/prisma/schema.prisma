@@ -476,6 +476,7 @@ model Company {
   documentNumberSequences     DocumentNumberSequence[]
   workOrderEquipment          WorkOrderEquipment[]
   equipmentDeliveryNotes      EquipmentDeliveryNote[]
+  auditLogs                   AuditLog[]
 }
 
 model DocumentNumberSequence {
@@ -556,6 +557,8 @@ model User {
   invoicesUpdated                       Invoice[]                    @relation("InvoiceUpdatedBy")
   paymentsCreated                       Payment[]                    @relation("PaymentCreatedBy")
   paymentsUpdated                       Payment[]                    @relation("PaymentUpdatedBy")
+  auditLogs                             AuditLog[]
+  lkDownloadAuthorizations              LkDownloadAuthorization[]
 }
 
 // =============================================================================
@@ -2039,6 +2042,8 @@ model CalibrationJob {
   /// Present 1:1 for SEND_TO_LAB (WOL) jobs after fan-out / backfill.
   /// Absent for ON_SITE (SPK). Application-enforced; no DB CHECK across WO.
   kontrolAlat            KontrolAlat?
+  /// LK Result PDF Download v1 — short-lived step-up tokens scoped to this job.
+  lkDownloadAuthorizations LkDownloadAuthorization[]
 
   @@unique([workOrderId, deviceId])
   @@unique([workOrderId, purchaseOrderItemId, unitOrdinal])
@@ -2730,4 +2735,72 @@ model FileObject {
   @@unique([storageKey])
   @@index([companyId, ownerType, ownerId])
   @@index([uploadedByUserId])
+}
+
+// =============================================================================
+// Audit / Security Events (LK Result PDF Download v1)
+// =============================================================================
+
+/// Minimal, generic security/activity audit trail. Introduced for the LK
+/// Result PDF download flow (action = "LK_DOWNLOAD" / "LK_DOWNLOAD_REAUTH"),
+/// but deliberately not LK-specific so any future sensitive action can reuse
+/// it instead of growing a bespoke audit table per feature.
+/// `action` is a free-form string (not an enum) so new call sites never need
+/// a schema migration just to record a new action name — validate/constrain
+/// the vocabulary at the call site instead.
+model AuditLog {
+  id         String       @id @default(cuid())
+  companyId  String
+  /// Nullable: a failed re-authentication before a session is fully trusted
+  /// may still want the attempted user's id; a truly anonymous/system event
+  /// (none exist yet) would also have no userId.
+  userId     String?
+  action     String
+  outcome    AuditLogOutcome
+  /// e.g. "CalibrationJob". Free-form, mirrors `action`.
+  targetType String?
+  targetId   String?
+  /// Non-sensitive structured context (e.g. { filename }). NEVER a password
+  /// or other credential — enforced by convention at the call site, not the
+  /// schema.
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime     @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, action, createdAt])
+  @@index([targetType, targetId])
+  @@index([userId])
+}
+
+enum AuditLogOutcome {
+  SUCCESS
+  FAILURE
+}
+
+/// Short-lived, single-use step-up authorization proving the caller re-entered
+/// their password immediately before downloading a LK result PDF. Deliberately
+/// narrow (LK download only, one CalibrationJob) rather than a generic step-up
+/// framework — see "LK Result PDF Download v1" task scope. A token is consumed
+/// (usedAt set) the moment a download succeeds and can never be replayed.
+model LkDownloadAuthorization {
+  id               String    @id @default(cuid())
+  companyId        String
+  userId           String
+  calibrationJobId String
+  /// Opaque random token, unique — this is what apps/portal echoes back as
+  /// ?token= on the actual PDF GET after a successful password re-auth.
+  token            String    @unique
+  expiresAt        DateTime
+  usedAt           DateTime?
+  createdAt        DateTime  @default(now())
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calibrationJob CalibrationJob @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+
+  @@index([userId, calibrationJobId])
+  @@index([expiresAt])
 }

@@ -682,6 +682,17 @@ export type CalibrationJobEscalateIdentityInput = z.infer<
   typeof calibrationJobEscalateIdentitySchema
 >;
 
+// =============================================================================
+// Calibration Job — LK Result PDF Download v1 (password step-up re-auth)
+// =============================================================================
+
+/** POST /calibration-jobs/:id/lk/reauth body */
+export const lkDownloadReauthSchema = z.object({
+  password: z.string().min(1).max(200),
+});
+
+export type LkDownloadReauthInput = z.infer<typeof lkDownloadReauthSchema>;
+
 const akdAklDecisionValues = ["APPROVE", "REJECT"] as const;
 
 /** POST /calibration-jobs/:id/identity-decision body (TECHNICIAN_MANAGER only) */

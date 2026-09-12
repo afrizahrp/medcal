@@ -61,6 +61,9 @@ export class CompanyRoleGuard implements CanActivate {
     request.companyId = membership.companyId;
     request.membershipRole = membership.role;
     request.userId = session.user.id;
+    // Needed by the LK download password re-authentication step
+    // (auth.api.signInEmail requires the email, not just the user id).
+    request.userEmail = session.user.email;
     return true;
   }
 }

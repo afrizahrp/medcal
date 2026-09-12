@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { AccessDenied } from "../../../../components/access-denied";
 import { SignatureImage } from "../signature-image";
+import { LkDownloadButton } from "../lk-download-button";
 import {
   usePortalKontrolAlat,
   usePatchPortalKontrolAlat,
@@ -416,12 +417,15 @@ export default function CalibrationJobDetailPage() {
           </div>
           <div className="flex flex-col items-end gap-2">
             <JobStatusBadge status={job.status} />
-            <Button type="button" variant="outline" size="sm" asChild>
-              <Link href="/calibration-jobs">
-                <ArrowLeft className="h-4 w-4" />
-                Back to List
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              {job.status === "ACCEPTED_BY_QA" ? <LkDownloadButton jobId={job.id} /> : null}
+              <Button type="button" variant="outline" size="sm" asChild>
+                <Link href="/calibration-jobs">
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to List
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
 

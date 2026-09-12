@@ -11,9 +11,11 @@ import {
   Post,
   Put,
   Query,
+  Req,
   StreamableFile,
   UseGuards,
 } from "@nestjs/common";
+import type { Request } from "express";
 import type { MembershipRole } from "@medcal/db";
 import {
   calibrationJobEscalateIdentitySchema,
@@ -22,6 +24,7 @@ import {
   identityCorrectionDecisionSchema,
   identityCorrectionSubmitSchema,
   jobReferenceEquipmentReplaceSchema,
+  lkDownloadReauthSchema,
   measurementResultBatchCreateSchema,
   measurementResultCreateSchema,
   measurementResultUpdateSchema,
@@ -38,8 +41,10 @@ import type { DeviceWithRelations } from "../devices/devices.service";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { MembershipRoleParam } from "../../common/decorators/membership-role.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
+import { UserEmail } from "../../common/decorators/user-email.decorator";
 import { UserId } from "../../common/decorators/user-id.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
+import { LkDownloadService } from "./lk-download.service";
 import {
   CalibrationJobsService,
   type CalibrationJobDetail,
@@ -80,6 +85,8 @@ export class CalibrationJobsController {
     private readonly physicalChecks: PhysicalCheckResultsService,
     @Inject(KontrolAlatService)
     private readonly kontrolAlat: KontrolAlatService,
+    @Inject(LkDownloadService)
+    private readonly lkDownload: LkDownloadService,
   ) {}
 
   @Get()
@@ -662,6 +669,71 @@ export class CalibrationJobsController {
     @Param("id") id: string,
   ): Promise<StreamableFile> {
     const pdf = await this.kontrolAlat.buildPdf(companyId, id);
+    return new StreamableFile(pdf.buffer, {
+      type: "application/pdf",
+      disposition: `attachment; filename="${pdf.filename}"`,
+    });
+  }
+
+  /**
+   * LK Result PDF Download v1 — step 1: re-enter password immediately before
+   * download. Returns a short-lived, single-use, job-scoped token; does NOT
+   * download the PDF itself. `calibrationJob:read` is reused deliberately —
+   * see lk-download.service.ts for why no new permission was added.
+   */
+  @Post(":id/lk/reauth")
+  @RequirePermission("calibrationJob", "read")
+  async requestLkDownloadReauth(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @UserEmail() userEmail: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+    @Req() request: Request,
+  ): Promise<{ token: string; expiresAt: string }> {
+    const parsed = lkDownloadReauthSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid LK download re-authentication payload",
+        code: "INVALID_LK_DOWNLOAD_REAUTH",
+        issues: parsed.error.flatten(),
+      });
+    }
+    const result = await this.lkDownload.requestReauth(
+      companyId,
+      userId,
+      userEmail,
+      id,
+      parsed.data.password,
+      { ipAddress: request.ip ?? null, userAgent: request.headers["user-agent"] ?? null },
+    );
+    return { token: result.token, expiresAt: result.expiresAt.toISOString() };
+  }
+
+  /**
+   * LK Result PDF Download v1 — step 2: consume the step-up token from
+   * `reauth` above and stream the generated PDF. The token is single-use and
+   * job-scoped — see LkDownloadService.consumeToken.
+   */
+  @Get(":id/lk/pdf")
+  @RequirePermission("calibrationJob", "read")
+  async downloadLkResultPdf(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Query("token") token: string | undefined,
+    @Req() request: Request,
+  ): Promise<StreamableFile> {
+    if (!token) {
+      throw new BadRequestException({
+        message: "Missing LK download authorization token",
+        code: "LK_DOWNLOAD_TOKEN_MISSING",
+      });
+    }
+    const pdf = await this.lkDownload.downloadPdf(companyId, userId, id, token, {
+      ipAddress: request.ip ?? null,
+      userAgent: request.headers["user-agent"] ?? null,
+    });
     return new StreamableFile(pdf.buffer, {
       type: "application/pdf",
       disposition: `attachment; filename="${pdf.filename}"`,

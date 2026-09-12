@@ -358,7 +358,7 @@ export class KontrolAlatService {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, email: true },
     });
     if (!user) {
       throw new BadRequestException({
@@ -366,6 +366,10 @@ export class KontrolAlatService {
         code: "KONTROL_ALAT_SIGNER_NOT_FOUND",
       });
     }
+    // KontrolAlatSignature.signerName is required, but User.name is nullable
+    // (a user may not have set a display name yet) — fall back to their
+    // email, which User always has, rather than writing an empty string.
+    const signerName = user.name ?? user.email;
 
     const signerKind = input.signerKind as KontrolAlatSignerKind;
     const signedAt = new Date();
@@ -380,12 +384,12 @@ export class KontrolAlatService {
           kontrolAlatId: existing.id,
           signerKind,
           signerUserId: user.id,
-          signerName: user.name,
+          signerName,
           signedAt,
         },
         update: {
           signerUserId: user.id,
-          signerName: user.name,
+          signerName,
           signedAt,
         },
       });

@@ -8,6 +8,7 @@ import { identityCorrectionFileOwnerPolicy } from "./identity-correction-file-ow
 import { MeasurementResultsService } from "./measurement-results.service";
 import { PhysicalCheckResultsService } from "./physical-check-results.service";
 import { KontrolAlatService } from "./kontrol-alat.service";
+import { LkDownloadService } from "./lk-download.service";
 
 @Module({
   imports: [FilesModule],
@@ -17,6 +18,7 @@ import { KontrolAlatService } from "./kontrol-alat.service";
     MeasurementResultsService,
     PhysicalCheckResultsService,
     KontrolAlatService,
+    LkDownloadService,
     CompanyRoleGuard,
   ],
   exports: [
@@ -24,6 +26,7 @@ import { KontrolAlatService } from "./kontrol-alat.service";
     MeasurementResultsService,
     PhysicalCheckResultsService,
     KontrolAlatService,
+    LkDownloadService,
   ],
 })
 export class CalibrationJobsModule implements OnModuleInit {
