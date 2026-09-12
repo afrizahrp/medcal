@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { CheckCircle2, Clock } from "lucide-react";
 import { Section, SectionRow } from "../../../components/ui/section";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -516,6 +515,36 @@ export function CompleteJobAction({
   );
 }
 
+function StatusCheckIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="M8 12.5l2.5 2.5L16 9.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function StatusClockIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="M12 7v5.5L15.5 15"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /**
  * Kontrol Alat (F.MU.08) intake & inspection status for SEND_TO_LAB jobs.
  * ON_SITE jobs do not have a Kontrol Alat row — this section must not render.
@@ -535,9 +564,9 @@ export function KontrolAlatSection({
     <Section title="Kontrol Alat (F.MU.08)">
       <div className="flex items-center gap-2">
         {completed ? (
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+          <StatusCheckIcon className="h-4 w-4 shrink-0 text-emerald-600" />
         ) : (
-          <Clock className="h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />
+          <StatusClockIcon className="h-4 w-4 shrink-0 text-amber-500" />
         )}
         <span className={`text-sm font-medium ${completed ? "text-emerald-700" : "text-amber-700"}`}>
           {completed ? "Selesai & ditandatangani" : "Belum lengkap"}
