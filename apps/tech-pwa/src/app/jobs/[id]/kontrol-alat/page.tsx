@@ -447,9 +447,8 @@ export default function KontrolAlatPage() {
         </div>
         <Button
           type="button"
-          variant="outline"
-          size="sm"
-          className="w-full"
+          variant="secondary"
+          fullWidth
           onClick={() => void handleDownloadPdf()}
         >
           Unduh PDF
