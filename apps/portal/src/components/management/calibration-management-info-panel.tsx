@@ -11,7 +11,7 @@ import { isNavGroupActive } from "../../app/management/nav-config";
 /**
  * Persistent, collapsible orientation panel shown at the top of every
  * "Calibration Management" page. Condensed from the approved draft in
- * docs/claude/plans/Calibration-management/CalibrationManagement_InfoPanel_Content_Proposal.md §7 —
+ * docs/module-specs/calibration-job/CalibrationManagement_InfoPanel_Content_Proposal.md §7 —
  * one line per menu leaf, aimed at ~15-second orientation, not full docs.
  *
  * Same pattern as DeviceManagementInfoPanel. Expanded/collapsed state is plain

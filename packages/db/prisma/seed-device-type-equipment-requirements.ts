@@ -19,7 +19,7 @@
  * (case-insensitive), with a small set of confident title-variant aliases
  * (e.g. "Sphygmomanometer" → "Sphygmomanometers"). Worksheets with no
  * confident DeviceType match, or an ambiguous one, are NOT seeded — see the
- * report: docs/claude/plans/device-management/equipment/implementation_report_devicetype_equipment_pairing_seed.md
+ * report: docs/module-specs/device-management/equipment/implementation_report_devicetype_equipment_pairing_seed.md
  *
  * Run manually: pnpm --filter @medcal/db run seed:device-type-equipment-requirements
  */

@@ -63,7 +63,7 @@ services:
       # --build` never destroys them. FILES_ROOT (in .env.production) points the
       # app at the container-side path below. Host path is configurable via
       # MEDCAL_FILES_DIR (Compose variable substitution, --env-file
-      # .env.production); default matches docs/Deployment/file-storage-and-backup.md.
+      # .env.production); default matches docs/deployment-ops/file-storage-and-backup.md.
       # This directory + the Postgres dump are ONE evidence set — back them up
       # together (see that doc).
       - "${MEDCAL_FILES_DIR:-/srv/medcal/files}:/data/files"
