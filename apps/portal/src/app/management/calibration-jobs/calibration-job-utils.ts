@@ -1,4 +1,10 @@
-import { ApiError, isCalibrationJobBenchLocked, isIdentityIncomplete } from "@medcal/shared";
+import {
+  ApiError,
+  isCalibrationJobBenchLocked,
+  isIdentityIncomplete,
+  jobNeedsAction,
+  type CalibrationJobActionSignals,
+} from "@medcal/shared";
 import type { JobEquipmentValidityStatus } from "./use-reference-equipment-used-query";
 
 export type AkdAklApprovalStatus = "NOT_REQUIRED" | "PENDING_REVIEW" | "APPROVED" | "REJECTED";
@@ -86,6 +92,17 @@ export function describeMissingIdentityFields(job: {
   if (missing.length === 0) return "identitas perangkat";
   if (missing.length === 1) return missing[0]!;
   return `${missing[0]} dan ${missing[1]}`;
+}
+
+/** Deep-link into an existing detail section (Identity / corrections / ref-eq). */
+export function calibrationJobActionFocusHref(jobId: string): string {
+  return `/calibration-jobs/${jobId}?focus=action`;
+}
+
+export function firstActionableJobId(
+  jobs: { id: string; actionSignals: CalibrationJobActionSignals }[],
+): string | undefined {
+  return jobs.find((job) => jobNeedsAction(job.actionSignals))?.id;
 }
 
 type QualityReviewLike = {

@@ -6,10 +6,13 @@
  * server-side computation and a child-row badge — the counting / aggregation
  * helpers below take an open `Record<string, boolean>` and never change.
  *
- * Contract: every `true` value MUST be actionable right now given the job's
- * lifecycle. Informational facts (e.g. incomplete identity after the identity
- * gate has locked) must NOT appear as active signals — they inflate
- * "N perlu tindakan" without a corresponding action on the detail page.
+ * Contract: every `true` value MUST be a workflow-available remediation given
+ * the job's lifecycle (gate still open). Informational facts (e.g. incomplete
+ * identity after the identity gate has locked) must NOT appear as active
+ * signals — they inflate "N perlu tindakan" even though no remediation exists.
+ *
+ * Signals describe workflow availability, not the current user's role. MT must
+ * not infer a CTA from identityIncomplete; only Technician submits a correction.
  */
 
 /** Job statuses past the bench — identity + reference-equipment gates close. */

@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { ApiError } from "@medcal/shared";
+import { ApiError, buildCalibrationJobActionSignals } from "@medcal/shared";
 import {
   canDecideIdentity,
   canEscalateIdentity,
   canSubmitIdentityCorrection,
   canDecideQualityReview,
+  calibrationJobActionFocusHref,
   correctionMissingImage,
   describeMissingIdentityFields,
+  firstActionableJobId,
   formatCalibrationJobApiError,
   formatEffectiveToleranceBounds,
   formatMeasurementHasilDisplay,
@@ -62,6 +64,49 @@ describe("calibration-job identity gate helpers", () => {
     expect(
       describeMissingIdentityFields({ deviceId: null, technicianObservedSerial: "SN" }),
     ).toBe("Device ID");
+  });
+
+  it("deep-links the first workflow-available job, skipping locked-incomplete siblings", () => {
+    const started = "2026-09-12T00:00:00.000Z";
+    const locked = buildCalibrationJobActionSignals({
+      status: "SUBMITTED",
+      startedAt: started,
+      deviceId: null,
+      technicianObservedSerial: null,
+      hasPendingIdentityCorrection: false,
+      needsReferenceEquipmentApproval: false,
+    });
+    const pending = buildCalibrationJobActionSignals({
+      status: "IN_PROGRESS",
+      startedAt: started,
+      deviceId: "dev-1",
+      technicianObservedSerial: "SN-1",
+      hasPendingIdentityCorrection: true,
+      needsReferenceEquipmentApproval: false,
+    });
+    expect(
+      firstActionableJobId([
+        { id: "job-a", actionSignals: locked },
+        { id: "job-b", actionSignals: pending },
+      ]),
+    ).toBe("job-b");
+    expect(calibrationJobActionFocusHref("job-b")).toBe("/calibration-jobs/job-b?focus=action");
+    expect(
+      firstActionableJobId([
+        { id: "a", actionSignals: locked },
+        {
+          id: "b",
+          actionSignals: buildCalibrationJobActionSignals({
+            status: "ACCEPTED_BY_QA",
+            startedAt: started,
+            deviceId: null,
+            technicianObservedSerial: null,
+            hasPendingIdentityCorrection: false,
+            needsReferenceEquipmentApproval: false,
+          }),
+        },
+      ]),
+    ).toBeUndefined();
   });
 });
 

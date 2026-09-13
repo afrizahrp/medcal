@@ -2017,6 +2017,51 @@ describe("CalibrationJobsService — findAllGroupedByWorkOrder (SPK grouping)", 
     expect(group.jobs.filter((j) => j.actionSignals.identityCorrectionPending)).toHaveLength(1);
   });
 
+  it("counts only the open-gate job when a sibling is locked-incomplete", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await completeKontrolAlatForStart(realCompanyId, jobs[1]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[1]!.id);
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { status: "SUBMITTED", submittedAt: new Date() },
+    });
+
+    const res = await calibrationJobsService.findAllGroupedByWorkOrder(
+      realCompanyId,
+      { workOrderId: workOrder.id },
+      staffUserId,
+    );
+    const group = res.data[0]!;
+    expect(group.actionNeededCount).toBe(1);
+    expect(group.jobs.find((j) => j.id === jobs[0]!.id)!.actionSignals.identityIncomplete).toBe(
+      false,
+    );
+    expect(group.jobs.find((j) => j.id === jobs[1]!.id)!.actionSignals.identityIncomplete).toBe(
+      true,
+    );
+  });
+
+  it("counts zero when every child is locked-incomplete", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await completeKontrolAlatForStart(realCompanyId, jobs[1]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[1]!.id);
+    await prisma.calibrationJob.updateMany({
+      where: { id: { in: [jobs[0]!.id, jobs[1]!.id] } },
+      data: { status: "SUBMITTED", submittedAt: new Date() },
+    });
+
+    const res = await calibrationJobsService.findAllGroupedByWorkOrder(
+      realCompanyId,
+      { workOrderId: workOrder.id },
+      staffUserId,
+    );
+    expect(res.data[0]!.actionNeededCount).toBe(0);
+  });
+
   it("company-scopes the grouped list", async () => {
     const otherCompanyId = `S${randomUUID().slice(0, 2).toUpperCase()}`;
     await prisma.company.create({

@@ -177,4 +177,50 @@ describe("buildCalibrationJobActionSignals", () => {
     expect(isCalibrationJobBenchLocked("SUBMITTED")).toBe(true);
     expect(isCalibrationJobBenchLocked("ACCEPTED_BY_QA")).toBe(true);
   });
+
+  it("does not count locked incomplete identity as perlu tindakan (TEST 1)", () => {
+    for (const status of ["SUBMITTED", "ACCEPTED_BY_QA"] as const) {
+      const signals = buildCalibrationJobActionSignals({ ...incompleteOpen, status });
+      expect(isIdentityIncomplete(incompleteOpen)).toBe(true);
+      expect(signals.identityIncomplete).toBe(false);
+      expect(jobNeedsAction(signals)).toBe(false);
+    }
+  });
+
+  it("counts incomplete identity only while the gate is open (TEST 2)", () => {
+    const signals = buildCalibrationJobActionSignals(incompleteOpen);
+    expect(signals.identityIncomplete).toBe(true);
+    expect(jobNeedsAction(signals)).toBe(true);
+  });
+
+  it("counts one job when a sibling is locked-incomplete and another is actionable (TEST 3)", () => {
+    const jobA = buildCalibrationJobActionSignals({ ...incompleteOpen, status: "SUBMITTED" });
+    const jobB = buildCalibrationJobActionSignals({
+      ...incompleteOpen,
+      deviceId: "dev-1",
+      technicianObservedSerial: "SN-1",
+      hasPendingIdentityCorrection: true,
+    });
+    const jobs = [
+      { id: "job-a", actionSignals: jobA },
+      { id: "job-b", actionSignals: jobB },
+    ];
+    expect(jobNeedsAction(jobA)).toBe(false);
+    expect(jobNeedsAction(jobB)).toBe(true);
+    expect(jobs.filter((j) => jobNeedsAction(j.actionSignals))).toHaveLength(1);
+    expect(jobs.find((j) => jobNeedsAction(j.actionSignals))?.id).toBe("job-b");
+    expect(actionBadgeLabel(1)).toBe("1 perlu tindakan");
+  });
+
+  it("counts zero when every sibling is locked-incomplete (TEST 4)", () => {
+    const jobA = buildCalibrationJobActionSignals({ ...incompleteOpen, status: "SUBMITTED" });
+    const jobB = buildCalibrationJobActionSignals({
+      ...incompleteOpen,
+      status: "ACCEPTED_BY_QA",
+    });
+    expect(jobNeedsAction(jobA)).toBe(false);
+    expect(jobNeedsAction(jobB)).toBe(false);
+    expect([jobA, jobB].filter(jobNeedsAction)).toHaveLength(0);
+    expect(actionBadgeLabel(0)).toBeNull();
+  });
 });

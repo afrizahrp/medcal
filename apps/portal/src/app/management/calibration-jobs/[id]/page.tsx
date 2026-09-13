@@ -15,7 +15,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { ApiError, isForbidden, isIdentityIncomplete, jobNeedsAction } from "@medcal/shared";
+import { ApiError, isForbidden, isIdentityIncomplete } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
@@ -61,7 +61,6 @@ import {
   canSubmitIdentityCorrection,
   canDecideQualityReview,
   correctionMissingImage,
-  describeMissingIdentityFields,
   formatCalibrationJobApiError,
   formatMeasurementHasilDisplay,
   formatMeasurementNormalValue,
@@ -163,7 +162,6 @@ export default function CalibrationJobDetailPage() {
   // every 6s poll would fight the user's manual expand/collapse choices.
   const [openSections, setOpenSections] = useState<string[]>([]);
   const didInitExpand = useRef(false);
-  const actionSummaryRef = useRef<HTMLDivElement>(null);
   const identitySectionRef = useRef<HTMLDivElement>(null);
   const refEquipmentSectionRef = useRef<HTMLDivElement>(null);
   const measurementSectionRef = useRef<HTMLDivElement>(null);
@@ -189,9 +187,16 @@ export default function CalibrationJobDetailPage() {
     }
     setOpenSections(initial);
 
-    if (jobNeedsAction(signals)) {
+    const focusRef = signals.identityCorrectionPending
+      ? correctionsSectionRef
+      : signals.referenceEquipmentNeedsApproval
+        ? refEquipmentSectionRef
+        : signals.identityIncomplete
+          ? identitySectionRef
+          : null;
+    if (focusRef) {
       requestAnimationFrame(() => {
-        actionSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        focusRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
   }, [query.data]);
@@ -446,23 +451,11 @@ export default function CalibrationJobDetailPage() {
         </div>
 
         {gateLocked ? (
-          <p
-            role="status"
-            className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600"
-          >
-            Informasi status: job ini sudah melewati tahap verifikasi identitas — eskalasi,
-            keputusan AKD/AKL, dan koreksi identitas tidak lagi tersedia.
+          <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Job ini sudah melewati tahap verifikasi identitas — eskalasi, keputusan AKD/AKL, dan
+            koreksi identitas tidak lagi tersedia.
           </p>
         ) : null}
-
-        <div ref={actionSummaryRef}>
-          <ActionNeededSummary
-            job={job}
-            onFocusIdentity={() => focusSection("identity", identitySectionRef)}
-            onFocusRefEquipment={() => focusSection("ref-equipment", refEquipmentSectionRef)}
-            onFocusCorrections={() => focusSection("corrections", correctionsSectionRef)}
-          />
-        </div>
 
         <StatusStrip
           job={job}
@@ -550,18 +543,18 @@ export default function CalibrationJobDetailPage() {
                 {job.actionSignals.identityIncomplete ? (
                   <p
                     role="status"
-                    className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+                    className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
                   >
-                    {describeMissingIdentityFields(job)} belum terisi. Ajukan Berita Acara Koreksi
-                    Identitas untuk mengisi data tersebut.
+                    Identity perangkat belum lengkap. Device ID dan/atau serial observasi belum
+                    terisi.
                   </p>
                 ) : isIdentityIncomplete(job) ? (
                   <p
                     role="status"
                     className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600"
                   >
-                    {describeMissingIdentityFields(job)} belum terisi. Koreksi identitas tidak lagi
-                    tersedia karena job sudah melewati tahap verifikasi identitas.
+                    Identity perangkat belum lengkap. Koreksi identitas tidak lagi tersedia karena
+                    job sudah melewati tahap verifikasi identitas.
                   </p>
                 ) : null}
                 {job.device ? (
@@ -640,29 +633,6 @@ export default function CalibrationJobDetailPage() {
               Identity Corrections (Berita Acara)
             </AccordionTrigger>
             <AccordionContent>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {canSubmitCorrection ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={hasPendingCorrection}
-                    onClick={() => {
-                      setError(null);
-                      setSuccess(null);
-                      setDialog("submit-correction");
-                    }}
-                  >
-                    Ajukan Koreksi Identitas
-                  </Button>
-                ) : null}
-              </div>
-              {hasPendingCorrection && canSubmitCorrection ? (
-                <p className="mt-1 text-xs text-amber-600">
-                  Sudah ada BA yang menunggu review — selesaikan dulu sebelum mengajukan yang baru.
-                </p>
-              ) : null}
-
               {corrections.isLoading ? (
                 <p className="mt-3 text-sm text-slate-400">Memuat…</p>
               ) : corrections.isError ? (
@@ -835,116 +805,6 @@ function StatusChip({
       {tone === "attention" ? <ShieldAlert className="h-3.5 w-3.5" /> : null}
       {label}
     </button>
-  );
-}
-
-type ActionNeededItem = {
-  key: string;
-  title: string;
-  problem: string;
-  why: string;
-  action: string;
-  onFocus: () => void;
-  ctaLabel: string;
-};
-
-/**
- * Explicit "PERLU TINDAKAN" panel — one card per actionable signal from
- * `job.actionSignals`. Lifecycle / lock notices stay outside this panel.
- */
-function ActionNeededSummary({
-  job,
-  onFocusIdentity,
-  onFocusRefEquipment,
-  onFocusCorrections,
-}: {
-  job: CalibrationJobRow;
-  onFocusIdentity: () => void;
-  onFocusRefEquipment: () => void;
-  onFocusCorrections: () => void;
-}) {
-  const items: ActionNeededItem[] = [];
-  const { actionSignals: signals } = job;
-
-  if (signals.identityIncomplete) {
-    const missing = describeMissingIdentityFields(job);
-    items.push({
-      key: "identityIncomplete",
-      title: "Identitas perangkat belum lengkap",
-      problem: `${missing} belum terisi.`,
-      why: "Setelah kalibrasi dimulai, Device ID dan Serial observasi harus dikonfirmasi lewat BA koreksi identitas.",
-      action: "Ajukan Berita Acara Koreksi Identitas untuk mengisi data yang kurang.",
-      onFocus: onFocusCorrections,
-      ctaLabel: "Ke Koreksi Identitas",
-    });
-  }
-  if (signals.identityCorrectionPending) {
-    items.push({
-      key: "identityCorrectionPending",
-      title: "BA koreksi identitas menunggu review",
-      problem: "Ada Berita Acara Koreksi Identitas berstatus Menunggu Review.",
-      why: "Keputusan MT diperlukan sebelum identitas job dapat diperbarui.",
-      action: "Buka bagian Koreksi Identitas, lalu setujui atau tolak BA yang pending.",
-      onFocus: onFocusCorrections,
-      ctaLabel: "Ke Koreksi Identitas",
-    });
-  }
-  if (signals.referenceEquipmentNeedsApproval) {
-    items.push({
-      key: "referenceEquipmentNeedsApproval",
-      title: "Alat referensi perlu persetujuan",
-      problem: "Minimal satu alat referensi yang dipakai tidak valid / kedaluwarsa dan belum di-override.",
-      why: "Override validitas oleh TECHNICIAN_MANAGER diperlukan sebelum daftar alat referensi dianggap final.",
-      action: "Buka bagian Alat Referensi untuk override validitas atau mengganti alat.",
-      onFocus: onFocusRefEquipment,
-      ctaLabel: "Ke Alat Referensi",
-    });
-  }
-
-  if (items.length === 0) return null;
-
-  return (
-    <div
-      className="mt-3 rounded-md border border-red-200 bg-red-50/80 px-3 py-3"
-      aria-label="Perlu tindakan"
-    >
-      <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-red-800">
-        <ShieldAlert className="h-4 w-4 shrink-0" />
-        {items.length === 1 ? "1 perlu tindakan" : `${items.length} perlu tindakan`}
-      </div>
-      <ul className="mt-3 space-y-3">
-        {items.map((item) => (
-          <li
-            key={item.key}
-            className="rounded-md border border-red-100 bg-white/80 px-3 py-2.5 text-sm text-slate-700"
-          >
-            <p className="font-semibold text-slate-900">{item.title}</p>
-            <p className="mt-1">
-              <span className="font-medium text-slate-800">Masalah: </span>
-              {item.problem}
-            </p>
-            <p className="mt-0.5">
-              <span className="font-medium text-slate-800">Mengapa perlu tindakan: </span>
-              {item.why}
-            </p>
-            <p className="mt-0.5">
-              <span className="font-medium text-slate-800">Tindakan: </span>
-              {item.action}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={item.onFocus}>
-                {item.ctaLabel}
-              </Button>
-              {item.key === "identityIncomplete" ? (
-                <Button type="button" size="sm" variant="ghost" onClick={onFocusIdentity}>
-                  Lihat Identitas
-                </Button>
-              ) : null}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 

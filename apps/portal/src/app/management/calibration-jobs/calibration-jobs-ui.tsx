@@ -2,11 +2,7 @@
 
 import Link from "next/link";
 import { AlertTriangle, ChevronDown, ChevronRight, Search } from "lucide-react";
-import {
-  actionBadgeLabel,
-  jobNeedsAction,
-  type CalibrationJobActionSignals,
-} from "@medcal/shared";
+import { actionBadgeLabel, jobNeedsAction, type CalibrationJobActionSignals } from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +21,8 @@ import {
   AKD_AKL_APPROVAL_STATUS_VALUES,
   CALIBRATION_JOB_STATUS_LABELS,
   CALIBRATION_JOB_STATUS_VALUES,
+  calibrationJobActionFocusHref,
+  firstActionableJobId,
   isAwaitingQualityReview,
   type AkdAklApprovalStatus,
   type CalibrationJobStatus,
@@ -380,8 +378,9 @@ export function CalibrationJobFilters({
  * .actionNeededCount) — the label is signal-list-agnostic (see actionBadgeLabel
  * in @medcal/shared), so adding a fourth/fifth signal never touches this.
  *
- * When `href` is set (first actionable child job), the badge navigates there
- * without toggling the SPK row — detail page then surfaces the matching CTA.
+ * When `href` is set (first child with a workflow-available signal), the badge
+ * navigates there without toggling the SPK row. Detail focuses an existing
+ * section — it does not add a new action panel.
  */
 export function ActionNeededBadge({ count, href }: { count: number; href?: string }) {
   const label = actionBadgeLabel(count);
@@ -402,17 +401,6 @@ export function ActionNeededBadge({ count, href }: { count: number; href?: strin
       {badge}
     </Link>
   );
-}
-
-/** Deep-link into the detail page's actionable summary. */
-export function calibrationJobActionFocusHref(jobId: string): string {
-  return `/calibration-jobs/${jobId}?focus=action`;
-}
-
-export function firstActionableJobId(
-  jobs: { id: string; actionSignals: CalibrationJobActionSignals }[],
-): string | undefined {
-  return jobs.find((job) => jobNeedsAction(job.actionSignals))?.id;
 }
 
 const JOB_CHILD_HEADER = [
