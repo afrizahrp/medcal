@@ -12,7 +12,10 @@ import type { IdentityCorrectionSubmitInput } from "../../../../../lib/calibrati
 import { useSubmitIdentityCorrection, useUploadIdentityCorrectionPhoto } from "../../use-job-query";
 import { useWizard } from "../layout";
 import {
+  akdAklCorrectionValid,
+  deviceCorrectionValid,
   photoStepValid,
+  serialCorrectionValid,
   signatureValid,
   step1Valid,
   toSignatureInput,
@@ -67,9 +70,9 @@ export default function IdentityCorrectionReviewPage() {
     try {
       const input: IdentityCorrectionSubmitInput = {
         reason: state.reason.trim(),
-        ...(state.attrs.device ? { newDeviceId: state.deviceId } : {}),
-        ...(state.attrs.serial ? { newSerial: state.serial.trim() } : {}),
-        ...(state.attrs.akdAkl ? { newAkdAkl: state.akdAkl.trim() } : {}),
+        ...(deviceCorrectionValid(state) ? { newDeviceId: state.deviceId } : {}),
+        ...(serialCorrectionValid(state) ? { newSerial: state.serial.trim() } : {}),
+        ...(akdAklCorrectionValid(state) ? { newAkdAkl: state.akdAkl.trim() } : {}),
         signatures: {
           TECHNICIAN: toSignatureInput(state.signatures.TECHNICIAN),
           CUSTOMER: toSignatureInput(state.signatures.CUSTOMER),
@@ -119,7 +122,7 @@ export default function IdentityCorrectionReviewPage() {
 
       <Section title="Perubahan">
         <div className="flex flex-col gap-2">
-          {state.attrs.device ? (
+          {deviceCorrectionValid(state) ? (
             <div className="text-sm">
               <p className="text-xs text-slate-500">Alat</p>
               <p className="text-slate-900">
@@ -127,7 +130,15 @@ export default function IdentityCorrectionReviewPage() {
               </p>
             </div>
           ) : null}
-          {state.attrs.serial ? (
+          {state.attrs.device && !deviceCorrectionValid(state) ? (
+            <div className="text-sm">
+              <p className="text-xs text-slate-500">Alat</p>
+              <p className="text-amber-700">
+                Tidak ditemukan — koreksi Alat tidak disertakan dalam pengajuan ini.
+              </p>
+            </div>
+          ) : null}
+          {serialCorrectionValid(state) ? (
             <div className="text-sm">
               <p className="text-xs text-slate-500">Serial</p>
               <p className="text-slate-900">
@@ -136,7 +147,7 @@ export default function IdentityCorrectionReviewPage() {
               </p>
             </div>
           ) : null}
-          {state.attrs.akdAkl ? (
+          {akdAklCorrectionValid(state) ? (
             <div className="text-sm">
               <p className="text-xs text-slate-500">AKD/AKL/NIE</p>
               <p className="text-slate-900">

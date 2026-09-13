@@ -43,14 +43,27 @@ export function signatureValid(v: WizardSignatureValue): boolean {
   return v.unavailableReason.trim().length > 0;
 }
 
+/** Device is only a valid correction once a candidate has actually been resolved — a typed search string is never enough. */
+export function deviceCorrectionValid(state: WizardState): boolean {
+  return state.attrs.device && state.deviceId.length > 0;
+}
+
+export function serialCorrectionValid(state: WizardState): boolean {
+  return state.attrs.serial && state.serial.trim().length > 0;
+}
+
+export function akdAklCorrectionValid(state: WizardState): boolean {
+  return state.attrs.akdAkl && state.akdAkl.trim().length > 0;
+}
+
+/**
+ * At least one checked attribute must be a resolved, valid correction —
+ * but an unresolved/incomplete checked attribute (e.g. Device search with no
+ * match) must not hard-block the other attributes that ARE valid. Missing
+ * identity information is warn/flag territory (MT decides), not a hard stop.
+ */
 export function attrsValid(state: WizardState): boolean {
-  const any = state.attrs.device || state.attrs.serial || state.attrs.akdAkl;
-  return (
-    any &&
-    (!state.attrs.device || state.deviceId.length > 0) &&
-    (!state.attrs.serial || state.serial.trim().length > 0) &&
-    (!state.attrs.akdAkl || state.akdAkl.trim().length > 0)
-  );
+  return deviceCorrectionValid(state) || serialCorrectionValid(state) || akdAklCorrectionValid(state);
 }
 
 export function step1Valid(state: WizardState): boolean {
