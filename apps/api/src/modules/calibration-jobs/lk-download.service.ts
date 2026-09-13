@@ -4,6 +4,8 @@ import { prisma, type CalibrationValueType } from "@medcal/db";
 import { auth } from "@medcal/auth";
 import { jobReferenceEquipmentUsedInclude } from "./job-reference-equipment";
 import { LK_DOWNLOAD_ACTIONS, recordAuditLog } from "./audit-log";
+import { formatDate, text } from "../work-orders/work-order-pdf-shared";
+import { resolveLkManualHeader } from "./lk-manual-header-catalog";
 import {
   renderLkResultPdf,
   type LkResultPdfEquipmentRow,
@@ -12,6 +14,8 @@ import {
   type LkResultPdfRow,
   type LkResultPdfSection,
 } from "./lk-result-pdf";
+import type { LkMeasurementHit, LkTemplateData } from "./lk-template-data";
+import { isBedSideMonitorTemplate } from "./lk-templates/bed-side-monitor";
 
 /** Step-up token TTL — short-lived, single-use (LK Result PDF Download v1 §8). */
 const REAUTH_TOKEN_TTL_MS = 5 * 60 * 1000;
@@ -215,13 +219,34 @@ export class LkDownloadService {
           currentAttempt: true,
           startedAt: true,
           submittedAt: true,
-          device: { select: { deviceTypeId: true, brand: true, model: true, serialNumber: true } },
+          technicianObservedSerial: true,
+          device: {
+            select: {
+              deviceTypeId: true,
+              brand: true,
+              model: true,
+              serialNumber: true,
+              locationText: true,
+            },
+          },
+          certificate: { select: { number: true } },
+          kontrolAlat: { select: { certificateNumber: true, capacity: true } },
+          workOrder: {
+            select: {
+              number: true,
+              customer: { select: { name: true } },
+              assignments: {
+                select: { roleOnJob: true, technician: { select: { name: true } } },
+                orderBy: { roleOnJob: "asc" },
+              },
+            },
+          },
           calibrationRequestItem: {
             select: { deviceTypeId: true, deviceType: { select: { name: true } } },
           },
           purchaseOrderItem: {
             select: {
-              device: { select: { brand: true, model: true, serialNumber: true } },
+              device: { select: { brand: true, model: true, serialNumber: true, locationText: true } },
               quotationItem: {
                 select: {
                   requestItem: {
@@ -233,9 +258,6 @@ export class LkDownloadService {
                 },
               },
             },
-          },
-          workOrder: {
-            select: { number: true, customer: { select: { name: true } } },
           },
           reviews: {
             select: {
@@ -273,19 +295,30 @@ export class LkDownloadService {
       null;
     const linkedDevice = fullJob.device ?? fullJob.purchaseOrderItem?.device ?? null;
 
-    const [equipmentUsedRows, physicalCheckRows, capabilitySections] = await Promise.all([
-      prisma.jobReferenceEquipmentUsed.findMany({
-        where: { calibrationJobId: fullJob.id },
-        include: jobReferenceEquipmentUsedInclude,
-        orderBy: { createdAt: "asc" },
-      }),
-      prisma.physicalCheckResult.findMany({
-        where: { companyId, calibrationJobId: fullJob.id, attemptNumber: fullJob.currentAttempt },
-        include: { devicePhysicalCheckItem: { select: { name: true, sortOrder: true } } },
-        orderBy: [{ devicePhysicalCheckItem: { sortOrder: "asc" } }, { recordedAt: "asc" }],
-      }),
-      deviceTypeId ? this.buildCapabilitySections(companyId, fullJob.id, deviceTypeId, fullJob.currentAttempt) : [],
-    ]);
+    const [equipmentUsedRows, physicalCheckRows, capabilitySections, physicalCatalog, measurementHits] =
+      await Promise.all([
+        prisma.jobReferenceEquipmentUsed.findMany({
+          where: { calibrationJobId: fullJob.id },
+          include: jobReferenceEquipmentUsedInclude,
+          orderBy: { createdAt: "asc" },
+        }),
+        prisma.physicalCheckResult.findMany({
+          where: { companyId, calibrationJobId: fullJob.id, attemptNumber: fullJob.currentAttempt },
+          include: { devicePhysicalCheckItem: { select: { name: true, sortOrder: true } } },
+          orderBy: [{ devicePhysicalCheckItem: { sortOrder: "asc" } }, { recordedAt: "asc" }],
+        }),
+        deviceTypeId
+          ? this.buildCapabilitySections(companyId, fullJob.id, deviceTypeId, fullJob.currentAttempt)
+          : [],
+        deviceTypeId
+          ? prisma.devicePhysicalCheckItem.findMany({
+              where: { deviceTypeId, isActive: true },
+              select: { id: true, name: true, inspectionLimit: true, sortOrder: true },
+              orderBy: { sortOrder: "asc" },
+            })
+          : Promise.resolve([]),
+        this.loadTemplateMeasurements(companyId, fullJob.id, fullJob.currentAttempt),
+      ]);
 
     const equipmentUsed: LkResultPdfEquipmentRow[] = equipmentUsedRows.map((row) => ({
       equipmentTypeName: row.equipment.equipmentType.name,
@@ -302,9 +335,53 @@ export class LkDownloadService {
     }));
 
     const latestReview = fullJob.reviews[0] ?? null;
+    const formHeader = resolveLkManualHeader(deviceTypeName);
+    const lead = fullJob.workOrder.assignments.find((a) => a.roleOnJob === "LEAD") ?? fullJob.workOrder.assignments[0];
+    const dataEntry = measurementHits.find((m) => m.recordedByName)?.recordedByName ?? null;
+
+    const templateData: LkTemplateData | undefined = isBedSideMonitorTemplate(formHeader.sourceFile)
+      ? {
+          identity: {
+            certificateNumber:
+              text(fullJob.certificate?.number) ?? text(fullJob.kontrolAlat?.certificateNumber) ?? "",
+            deviceName: text(deviceTypeName) ?? "",
+            assetNumber: "",
+            brand: text(linkedDevice?.brand) ?? "",
+            owner: fullJob.workOrder.customer.name,
+            model: text(linkedDevice?.model) ?? "",
+            room: text(fullJob.device?.locationText) ?? text(linkedDevice?.locationText) ?? "",
+            serial: text(fullJob.technicianObservedSerial) ?? text(linkedDevice?.serialNumber) ?? "",
+            receivedDate: fullJob.startedAt ? formatDate(fullJob.startedAt) : "",
+            calibrationDate: fullJob.startedAt ? formatDate(fullJob.startedAt) : "",
+            capacity: text(fullJob.kontrolAlat?.capacity) ?? "",
+            resolution: "",
+          },
+          equipmentUsed: equipmentUsedRows.map((row) => ({
+            name: row.equipment.equipmentType.name,
+            brand: row.equipment.brand ?? "",
+            model: row.equipment.model ?? "",
+            serialNumber: row.equipment.serialNumber ?? "",
+          })),
+          physicalItems: physicalCatalog.map((item) => {
+            const result = physicalCheckRows.find(
+              (row) => row.devicePhysicalCheckItem.name === item.name,
+            );
+            return {
+              name: item.name,
+              inspectionLimit: result?.inspectionLimitSnapshot || item.inspectionLimit,
+              verdict: result?.verdict ?? null,
+            };
+          }),
+          measurements: measurementHits.map(({ recordedByName: _n, ...hit }) => hit),
+          technicianName: text(lead?.technician.name) ?? "",
+          dataEntryName: text(dataEntry) ?? "",
+        }
+      : undefined;
 
     return renderLkResultPdf({
       company,
+      formHeader,
+      templateData,
       job: {
         id: fullJob.id,
         unitOrdinal: fullJob.unitOrdinal,
@@ -459,6 +536,34 @@ export class LkDownloadService {
     return Array.from(sectionsById.values())
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((section) => ({ capabilityName: section.name, rows: section.rows }));
+  }
+
+  private async loadTemplateMeasurements(
+    companyId: string,
+    calibrationJobId: string,
+    attemptNumber: number,
+  ): Promise<Array<LkMeasurementHit & { recordedByName: string | null }>> {
+    const rows = await prisma.measurementResult.findMany({
+      where: { companyId, calibrationJobId, attemptNumber },
+      select: {
+        replicateIndex: true,
+        measuredValue: true,
+        measuredBool: true,
+        measuredText: true,
+        recordedBy: { select: { name: true } },
+        parameter: { select: { code: true, valueType: true, decimalPlaces: true } },
+        testPoint: { select: { settingLabel: true, settingValue: true } },
+      },
+      orderBy: { replicateIndex: "asc" },
+    });
+    return rows.map((row) => ({
+      parameterCode: row.parameter.code,
+      settingLabel: row.testPoint?.settingLabel ?? "",
+      settingValue: toNum(row.testPoint?.settingValue),
+      replicateIndex: row.replicateIndex,
+      formattedValue: formatMeasuredValue(row, row.parameter.valueType, row.parameter.decimalPlaces) ?? "",
+      recordedByName: row.recordedBy?.name ?? null,
+    }));
   }
 }
 
