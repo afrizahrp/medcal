@@ -56,6 +56,10 @@ ENV NODE_ENV=production
 RUN addgroup -S medcal && adduser -S medcal -G medcal
 WORKDIR /app
 COPY --from=builder /app .
+# Next.js Image Optimization writes to .next/cache/images at runtime; without
+# this chown the non-root `medcal` user hits EACCES on mkdir (portal's image
+# already does the same).
+RUN chown -R medcal:medcal /app
 USER medcal
 WORKDIR /app/apps/web
 EXPOSE 3000
