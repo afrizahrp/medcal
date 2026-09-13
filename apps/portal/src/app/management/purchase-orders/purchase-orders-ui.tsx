@@ -181,12 +181,7 @@ export function StatusBadge({ status }: { status: string }) {
   const label = STATUS_LABELS[known] ?? status;
   const badgeClass = STATUS_BADGE_CLASS[known] ?? STATUS_BADGE_CLASS.DRAFT;
   return (
-    <Badge
-      className={cn(
-        "rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
-        badgeClass,
-      )}
-    >
+    <Badge variant="status" className={cn(badgeClass)}>
       {label}
     </Badge>
   );

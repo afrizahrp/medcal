@@ -292,12 +292,7 @@ export function StatusBadge({ status }: { status: string }) {
   const label = known ? STATUS_LABELS[known] : status;
   const badgeClass = known ? STATUS_BADGE_CLASS[known] : STATUS_BADGE_CLASS.PLANNED;
   return (
-    <Badge
-      className={cn(
-        "rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
-        badgeClass,
-      )}
-    >
+    <Badge variant="status" className={badgeClass}>
       {label}
     </Badge>
   );

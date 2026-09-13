@@ -12,6 +12,12 @@ const badgeVariants = cva(
         secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
         destructive: "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
         outline: "text-foreground",
+        /**
+         * Compact status label (table/detail chips) — sized like ServiceModeBadge,
+         * single-line, no shadow so it does not read as a button.
+         */
+        status:
+          "border-transparent px-2 py-0.5 text-[11px] font-semibold leading-none uppercase tracking-wide shadow-none whitespace-nowrap",
       },
     },
     defaultVariants: {

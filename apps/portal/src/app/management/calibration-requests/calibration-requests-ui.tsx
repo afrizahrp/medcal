@@ -128,12 +128,7 @@ export { PageHeader, Surface, selectClassName, PaginationBar };
 
 export function StatusBadge({ status }: { status: CalibrationRequestStatus }) {
   return (
-    <Badge
-      className={cn(
-        "rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
-        STATUS_BADGE_CLASS[status],
-      )}
-    >
+    <Badge variant="status" className={cn(STATUS_BADGE_CLASS[status])}>
       {STATUS_LABELS[status]}
     </Badge>
   );

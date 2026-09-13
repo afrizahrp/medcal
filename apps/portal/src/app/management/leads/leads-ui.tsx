@@ -243,13 +243,7 @@ export function ContactStatusBadge({
 
 export function LeadStatusBadge({ status, className }: { status: LeadStatus; className?: string }) {
   return (
-    <Badge
-      className={cn(
-        "rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
-        LEAD_STATUS_BADGE_CLASS[status],
-        className,
-      )}
-    >
+    <Badge variant="status" className={cn(LEAD_STATUS_BADGE_CLASS[status], className)}>
       {LEAD_STATUS_LABELS[status]}
     </Badge>
   );
