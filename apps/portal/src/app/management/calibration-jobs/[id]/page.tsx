@@ -15,7 +15,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { ApiError, isForbidden } from "@medcal/shared";
+import { ApiError, isForbidden, isIdentityIncomplete, jobNeedsAction } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,7 @@ import {
   canSubmitIdentityCorrection,
   canDecideQualityReview,
   correctionMissingImage,
+  describeMissingIdentityFields,
   formatCalibrationJobApiError,
   formatMeasurementHasilDisplay,
   formatMeasurementNormalValue,
@@ -162,6 +163,7 @@ export default function CalibrationJobDetailPage() {
   // every 6s poll would fight the user's manual expand/collapse choices.
   const [openSections, setOpenSections] = useState<string[]>([]);
   const didInitExpand = useRef(false);
+  const actionSummaryRef = useRef<HTMLDivElement>(null);
   const identitySectionRef = useRef<HTMLDivElement>(null);
   const refEquipmentSectionRef = useRef<HTMLDivElement>(null);
   const measurementSectionRef = useRef<HTMLDivElement>(null);
@@ -172,12 +174,26 @@ export default function CalibrationJobDetailPage() {
   useEffect(() => {
     if (didInitExpand.current || !query.data) return;
     didInitExpand.current = true;
+    const job = query.data;
+    const signals = job.actionSignals;
+    const gateLocked = isIdentityGateLocked(job);
     const initial: string[] = [];
-    if (query.data.actionSignals.referenceEquipmentNeedsApproval) initial.push("ref-equipment");
-    if (query.data.actionSignals.identityCorrectionPending) initial.push("corrections");
-    if (query.data.actionSignals.identityIncomplete) initial.push("identity");
-    if (query.data.akdAklApprovalStatus === "PENDING_REVIEW") initial.push("akd-akl");
+    // Only open sections that still have an actionable remediation.
+    if (signals.referenceEquipmentNeedsApproval) initial.push("ref-equipment");
+    if (signals.identityCorrectionPending || signals.identityIncomplete) {
+      initial.push("corrections");
+    }
+    if (signals.identityIncomplete) initial.push("identity");
+    if (job.akdAklApprovalStatus === "PENDING_REVIEW" && !gateLocked) {
+      initial.push("akd-akl");
+    }
     setOpenSections(initial);
+
+    if (jobNeedsAction(signals)) {
+      requestAnimationFrame(() => {
+        actionSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
   }, [query.data]);
 
   function focusSection(value: string, ref: RefObject<HTMLDivElement | null>) {
@@ -430,11 +446,23 @@ export default function CalibrationJobDetailPage() {
         </div>
 
         {gateLocked ? (
-          <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Job ini sudah melewati tahap verifikasi identitas — eskalasi, keputusan AKD/AKL, dan
-            koreksi identitas tidak lagi tersedia.
+          <p
+            role="status"
+            className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600"
+          >
+            Informasi status: job ini sudah melewati tahap verifikasi identitas — eskalasi,
+            keputusan AKD/AKL, dan koreksi identitas tidak lagi tersedia.
           </p>
         ) : null}
+
+        <div ref={actionSummaryRef}>
+          <ActionNeededSummary
+            job={job}
+            onFocusIdentity={() => focusSection("identity", identitySectionRef)}
+            onFocusRefEquipment={() => focusSection("ref-equipment", refEquipmentSectionRef)}
+            onFocusCorrections={() => focusSection("corrections", correctionsSectionRef)}
+          />
+        </div>
 
         <StatusStrip
           job={job}
@@ -522,10 +550,18 @@ export default function CalibrationJobDetailPage() {
                 {job.actionSignals.identityIncomplete ? (
                   <p
                     role="status"
-                    className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+                    className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
                   >
-                    Identity perangkat belum lengkap. Silakan konfirmasi/koreksi identitas
-                    perangkat.
+                    {describeMissingIdentityFields(job)} belum terisi. Ajukan Berita Acara Koreksi
+                    Identitas untuk mengisi data tersebut.
+                  </p>
+                ) : isIdentityIncomplete(job) ? (
+                  <p
+                    role="status"
+                    className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600"
+                  >
+                    {describeMissingIdentityFields(job)} belum terisi. Koreksi identitas tidak lagi
+                    tersedia karena job sudah melewati tahap verifikasi identitas.
                   </p>
                 ) : null}
                 {job.device ? (
@@ -802,14 +838,120 @@ function StatusChip({
   );
 }
 
+type ActionNeededItem = {
+  key: string;
+  title: string;
+  problem: string;
+  why: string;
+  action: string;
+  onFocus: () => void;
+  ctaLabel: string;
+};
+
 /**
- * At-a-glance summary above the accordion sections. `referenceEquipmentNeedsApproval`,
- * `identityCorrectionPending`, and `identityIncomplete` come straight off
- * `job.actionSignals` — already fetched for this job (GET /calibration-jobs/:id
- * returns the same list-row shape as the Calibration Jobs list), not recomputed
- * client-side. Hasil Pengukuran has no "needs attention" signal (a real
- * "measurement complete" signal is deferred to Stage B/C), so that chip stays
- * neutral — pure navigation shortcut, not a verdict.
+ * Explicit "PERLU TINDAKAN" panel — one card per actionable signal from
+ * `job.actionSignals`. Lifecycle / lock notices stay outside this panel.
+ */
+function ActionNeededSummary({
+  job,
+  onFocusIdentity,
+  onFocusRefEquipment,
+  onFocusCorrections,
+}: {
+  job: CalibrationJobRow;
+  onFocusIdentity: () => void;
+  onFocusRefEquipment: () => void;
+  onFocusCorrections: () => void;
+}) {
+  const items: ActionNeededItem[] = [];
+  const { actionSignals: signals } = job;
+
+  if (signals.identityIncomplete) {
+    const missing = describeMissingIdentityFields(job);
+    items.push({
+      key: "identityIncomplete",
+      title: "Identitas perangkat belum lengkap",
+      problem: `${missing} belum terisi.`,
+      why: "Setelah kalibrasi dimulai, Device ID dan Serial observasi harus dikonfirmasi lewat BA koreksi identitas.",
+      action: "Ajukan Berita Acara Koreksi Identitas untuk mengisi data yang kurang.",
+      onFocus: onFocusCorrections,
+      ctaLabel: "Ke Koreksi Identitas",
+    });
+  }
+  if (signals.identityCorrectionPending) {
+    items.push({
+      key: "identityCorrectionPending",
+      title: "BA koreksi identitas menunggu review",
+      problem: "Ada Berita Acara Koreksi Identitas berstatus Menunggu Review.",
+      why: "Keputusan MT diperlukan sebelum identitas job dapat diperbarui.",
+      action: "Buka bagian Koreksi Identitas, lalu setujui atau tolak BA yang pending.",
+      onFocus: onFocusCorrections,
+      ctaLabel: "Ke Koreksi Identitas",
+    });
+  }
+  if (signals.referenceEquipmentNeedsApproval) {
+    items.push({
+      key: "referenceEquipmentNeedsApproval",
+      title: "Alat referensi perlu persetujuan",
+      problem: "Minimal satu alat referensi yang dipakai tidak valid / kedaluwarsa dan belum di-override.",
+      why: "Override validitas oleh TECHNICIAN_MANAGER diperlukan sebelum daftar alat referensi dianggap final.",
+      action: "Buka bagian Alat Referensi untuk override validitas atau mengganti alat.",
+      onFocus: onFocusRefEquipment,
+      ctaLabel: "Ke Alat Referensi",
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div
+      className="mt-3 rounded-md border border-red-200 bg-red-50/80 px-3 py-3"
+      aria-label="Perlu tindakan"
+    >
+      <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-red-800">
+        <ShieldAlert className="h-4 w-4 shrink-0" />
+        {items.length === 1 ? "1 perlu tindakan" : `${items.length} perlu tindakan`}
+      </div>
+      <ul className="mt-3 space-y-3">
+        {items.map((item) => (
+          <li
+            key={item.key}
+            className="rounded-md border border-red-100 bg-white/80 px-3 py-2.5 text-sm text-slate-700"
+          >
+            <p className="font-semibold text-slate-900">{item.title}</p>
+            <p className="mt-1">
+              <span className="font-medium text-slate-800">Masalah: </span>
+              {item.problem}
+            </p>
+            <p className="mt-0.5">
+              <span className="font-medium text-slate-800">Mengapa perlu tindakan: </span>
+              {item.why}
+            </p>
+            <p className="mt-0.5">
+              <span className="font-medium text-slate-800">Tindakan: </span>
+              {item.action}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={item.onFocus}>
+                {item.ctaLabel}
+              </Button>
+              {item.key === "identityIncomplete" ? (
+                <Button type="button" size="sm" variant="ghost" onClick={onFocusIdentity}>
+                  Lihat Identitas
+                </Button>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * At-a-glance summary above the accordion sections. Attention tones follow
+ * `job.actionSignals` (actionable only) plus AKD/AKL pending while the identity
+ * gate is still open. Hasil Pengukuran stays navigational.
  */
 function StatusStrip({
   job,
@@ -829,7 +971,8 @@ function StatusStrip({
   const identityIncomplete = job.actionSignals.identityIncomplete;
   const refEquipmentNeedsApproval = job.actionSignals.referenceEquipmentNeedsApproval;
   const identityCorrectionPending = job.actionSignals.identityCorrectionPending;
-  const akdAklPending = job.akdAklApprovalStatus === "PENDING_REVIEW";
+  const gateLocked = isIdentityGateLocked(job);
+  const akdAklActionable = job.akdAklApprovalStatus === "PENDING_REVIEW" && !gateLocked;
 
   return (
     <div className="mt-4 flex flex-wrap gap-2">
@@ -843,8 +986,6 @@ function StatusStrip({
         tone={refEquipmentNeedsApproval ? "attention" : "neutral"}
         onClick={onFocusRefEquipment}
       />
-      {/* Purely navigational — no "measurement complete" signal exists yet
-          (deferred to Stage B/C), so this stays neutral like Identitas. */}
       <StatusChip label="Hasil Pengukuran" tone="neutral" onClick={onFocusMeasurement} />
       <StatusChip
         label={identityCorrectionPending ? "Koreksi Identitas · Menunggu Review" : "Koreksi Identitas"}
@@ -853,7 +994,13 @@ function StatusStrip({
       />
       <StatusChip
         label={`AKD/AKL · ${AKD_AKL_APPROVAL_STATUS_LABELS[job.akdAklApprovalStatus]}`}
-        tone={akdAklPending ? "attention" : job.akdAklApprovalStatus === "APPROVED" ? "ok" : "neutral"}
+        tone={
+          akdAklActionable
+            ? "attention"
+            : job.akdAklApprovalStatus === "APPROVED"
+              ? "ok"
+              : "neutral"
+        }
         onClick={onFocusAkdAkl}
       />
     </div>

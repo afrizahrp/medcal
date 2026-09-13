@@ -1936,8 +1936,35 @@ describe("CalibrationJobsService — list", () => {
     const started = await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
     expect(started.status).toBe("IN_PROGRESS");
     expect(started.deviceId).toBeNull();
-    const row = await calibrationJobsService.findOneProp(realCompanyId, jobs[0]!.id);
+    const row = await calibrationJobsService.findOneRow(realCompanyId, jobs[0]!.id);
     expect(row.actionSignals.identityIncomplete).toBe(true);
+  });
+
+  it("clears identityIncomplete action signal once the identity gate is locked", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId);
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { status: "SUBMITTED", submittedAt: new Date() },
+    });
+
+    const row = await calibrationJobsService.findOneRow(realCompanyId, jobs[0]!.id);
+    expect(row.deviceId).toBeNull();
+    expect(row.technicianObservedSerial).toBeNull();
+    expect(row.actionSignals.identityIncomplete).toBe(false);
+    expect(row.actionSignals).toEqual({
+      identityCorrectionPending: false,
+      referenceEquipmentNeedsApproval: false,
+      identityIncomplete: false,
+    });
+
+    const grouped = await calibrationJobsService.findAllGroupedByWorkOrder(
+      realCompanyId,
+      { workOrderId: workOrder.id },
+      staffUserId,
+    );
+    expect(grouped.data[0]!.actionNeededCount).toBe(0);
   });
 });
 

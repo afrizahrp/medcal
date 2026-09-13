@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { AlertTriangle, ChevronDown, ChevronRight, Search } from "lucide-react";
-import { actionBadgeLabel, type CalibrationJobActionSignals } from "@medcal/shared";
+import {
+  actionBadgeLabel,
+  jobNeedsAction,
+  type CalibrationJobActionSignals,
+} from "@medcal/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -208,12 +212,9 @@ const JOB_STATUS_BADGE_CLASS: Record<CalibrationJobStatus, string> = {
   ACCEPTED_BY_QA: "border-transparent bg-emerald-600 text-white hover:bg-emerald-600",
 };
 
-const badgeBase =
-  "whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide";
-
 export function AkdAklStatusBadge({ status }: { status: AkdAklApprovalStatus }) {
   return (
-    <Badge className={cn(badgeBase, AKD_AKL_BADGE_CLASS[status])}>
+    <Badge variant="status" className={AKD_AKL_BADGE_CLASS[status]}>
       {AKD_AKL_APPROVAL_STATUS_LABELS[status]}
     </Badge>
   );
@@ -221,7 +222,7 @@ export function AkdAklStatusBadge({ status }: { status: AkdAklApprovalStatus }) 
 
 export function JobStatusBadge({ status }: { status: CalibrationJobStatus }) {
   return (
-    <Badge className={cn(badgeBase, JOB_STATUS_BADGE_CLASS[status])}>
+    <Badge variant="status" className={JOB_STATUS_BADGE_CLASS[status]}>
       {CALIBRATION_JOB_STATUS_LABELS[status]}
     </Badge>
   );
@@ -257,7 +258,7 @@ const IDENTITY_CORRECTION_STATUS_LABELS: Record<IdentityCorrectionStatus, string
 
 export function IdentityCorrectionStatusBadge({ status }: { status: IdentityCorrectionStatus }) {
   return (
-    <Badge className={cn(badgeBase, IDENTITY_CORRECTION_BADGE_CLASS[status])}>
+    <Badge variant="status" className={IDENTITY_CORRECTION_BADGE_CLASS[status]}>
       {IDENTITY_CORRECTION_STATUS_LABELS[status]}
     </Badge>
   );
@@ -272,12 +273,12 @@ export function IdentityCorrectionStatusBadge({ status }: { status: IdentityCorr
 export function JobReferenceEquipmentValidityBadge({ overridden }: { overridden: boolean }) {
   return (
     <Badge
-      className={cn(
-        badgeBase,
+      variant="status"
+      className={
         overridden
           ? "border-transparent bg-amber-500 text-white hover:bg-amber-500"
-          : "border-transparent bg-emerald-600 text-white hover:bg-emerald-600",
-      )}
+          : "border-transparent bg-emerald-600 text-white hover:bg-emerald-600"
+      }
     >
       {overridden ? "Validitas di-override" : "Valid"}
     </Badge>
@@ -291,7 +292,7 @@ export function JobReferenceEquipmentValidityBadge({ overridden }: { overridden:
  */
 export function ReferenceEquipmentReviewBadge() {
   return (
-    <Badge className={cn(badgeBase, "border-transparent bg-red-600 text-white hover:bg-red-600")}>
+    <Badge variant="status" className="border-transparent bg-red-600 text-white hover:bg-red-600">
       Perlu Persetujuan Alat
     </Badge>
   );
@@ -375,18 +376,43 @@ export function CalibrationJobFilters({
 
 /**
  * Parent (SPK) aggregate: "N perlu tindakan" when ≥1 child job carries any
- * action signal. `count` is computed server-side (CalibrationJobWorkOrderGroup
+ * actionable signal. `count` is computed server-side (CalibrationJobWorkOrderGroup
  * .actionNeededCount) — the label is signal-list-agnostic (see actionBadgeLabel
  * in @medcal/shared), so adding a fourth/fifth signal never touches this.
+ *
+ * When `href` is set (first actionable child job), the badge navigates there
+ * without toggling the SPK row — detail page then surfaces the matching CTA.
  */
-export function ActionNeededBadge({ count }: { count: number }) {
+export function ActionNeededBadge({ count, href }: { count: number; href?: string }) {
   const label = actionBadgeLabel(count);
   if (!label) return null;
-  return (
-    <Badge className={cn(badgeBase, "border-transparent bg-red-600 text-white hover:bg-red-600")}>
+  const badge = (
+    <Badge variant="status" className="border-transparent bg-red-600 text-white hover:bg-red-600">
       {label}
     </Badge>
   );
+  if (!href) return badge;
+  return (
+    <Link
+      href={href}
+      onClick={(e) => e.stopPropagation()}
+      className="inline-flex"
+      title="Buka job yang memerlukan tindakan"
+    >
+      {badge}
+    </Link>
+  );
+}
+
+/** Deep-link into the detail page's actionable summary. */
+export function calibrationJobActionFocusHref(jobId: string): string {
+  return `/calibration-jobs/${jobId}?focus=action`;
+}
+
+export function firstActionableJobId(
+  jobs: { id: string; actionSignals: CalibrationJobActionSignals }[],
+): string | undefined {
+  return jobs.find((job) => jobNeedsAction(job.actionSignals))?.id;
 }
 
 const JOB_CHILD_HEADER = [
@@ -460,7 +486,13 @@ function JobChildRow({ row }: { row: CalibrationJobRow }) {
         </div>
       </td>
       <td className="px-4 py-2.5 text-right">
-        <Link href={`/calibration-jobs/${row.id}`}>
+        <Link
+          href={
+            jobNeedsAction(row.actionSignals)
+              ? calibrationJobActionFocusHref(row.id)
+              : `/calibration-jobs/${row.id}`
+          }
+        >
           <Button variant="ghost" size="sm">
             View
           </Button>
@@ -524,7 +556,13 @@ function SpkGroupBody({
               {group.workOrder.number}
             </span>
             <span className="text-xs text-slate-400">{group.jobCount} perangkat</span>
-            <ActionNeededBadge count={group.actionNeededCount} />
+            <ActionNeededBadge
+              count={group.actionNeededCount}
+              href={(() => {
+                const jobId = firstActionableJobId(group.jobs);
+                return jobId ? calibrationJobActionFocusHref(jobId) : undefined;
+              })()}
+            />
           </div>
         </td>
       </tr>

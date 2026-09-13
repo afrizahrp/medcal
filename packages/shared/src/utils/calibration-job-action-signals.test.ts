@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   actionBadgeLabel,
+  buildCalibrationJobActionSignals,
   countActiveActionSignals,
   EMPTY_CALIBRATION_JOB_ACTION_SIGNALS,
+  isCalibrationJobBenchLocked,
   isIdentityIncomplete,
   jobNeedsAction,
 } from "./calibration-job-action-signals";
@@ -113,5 +115,66 @@ describe("isIdentityIncomplete", () => {
         technicianObservedSerial: null,
       }),
     ).toBe(false);
+  });
+});
+
+describe("buildCalibrationJobActionSignals", () => {
+  const started = "2026-09-12T00:00:00.000Z";
+  const incompleteOpen = {
+    status: "IN_PROGRESS",
+    startedAt: started,
+    deviceId: null as string | null,
+    technicianObservedSerial: null as string | null,
+    hasPendingIdentityCorrection: false,
+    needsReferenceEquipmentApproval: false,
+  };
+
+  it("sets identityIncomplete only while the identity gate is open", () => {
+    expect(buildCalibrationJobActionSignals(incompleteOpen).identityIncomplete).toBe(true);
+    expect(
+      buildCalibrationJobActionSignals({ ...incompleteOpen, status: "REWORK" }).identityIncomplete,
+    ).toBe(true);
+    expect(
+      buildCalibrationJobActionSignals({ ...incompleteOpen, status: "SUBMITTED" })
+        .identityIncomplete,
+    ).toBe(false);
+    expect(
+      buildCalibrationJobActionSignals({ ...incompleteOpen, status: "ACCEPTED_BY_QA" })
+        .identityIncomplete,
+    ).toBe(false);
+  });
+
+  it("keeps factual incomplete true when locked, but actionable signal false", () => {
+    const locked = { ...incompleteOpen, status: "SUBMITTED" };
+    expect(isIdentityIncomplete(locked)).toBe(true);
+    expect(buildCalibrationJobActionSignals(locked).identityIncomplete).toBe(false);
+    expect(jobNeedsAction(buildCalibrationJobActionSignals(locked))).toBe(false);
+  });
+
+  it("suppresses pending-correction and ref-equipment signals once the bench is locked", () => {
+    const raw = {
+      ...incompleteOpen,
+      deviceId: "dev-1",
+      technicianObservedSerial: "SN-1",
+      hasPendingIdentityCorrection: true,
+      needsReferenceEquipmentApproval: true,
+    };
+    expect(buildCalibrationJobActionSignals(raw)).toEqual({
+      identityCorrectionPending: true,
+      referenceEquipmentNeedsApproval: true,
+      identityIncomplete: false,
+    });
+    expect(buildCalibrationJobActionSignals({ ...raw, status: "SUBMITTED" })).toEqual({
+      identityCorrectionPending: false,
+      referenceEquipmentNeedsApproval: false,
+      identityIncomplete: false,
+    });
+  });
+
+  it("isCalibrationJobBenchLocked matches SUBMITTED / ACCEPTED_BY_QA only", () => {
+    expect(isCalibrationJobBenchLocked("IN_PROGRESS")).toBe(false);
+    expect(isCalibrationJobBenchLocked("REWORK")).toBe(false);
+    expect(isCalibrationJobBenchLocked("SUBMITTED")).toBe(true);
+    expect(isCalibrationJobBenchLocked("ACCEPTED_BY_QA")).toBe(true);
   });
 });

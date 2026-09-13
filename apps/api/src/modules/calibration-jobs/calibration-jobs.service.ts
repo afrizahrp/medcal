@@ -12,7 +12,7 @@ import { DocumentNumberService, Prisma, prisma } from "@medcal/db";
 import type { AkdAklApprovalStatus, MembershipRole } from "@medcal/db";
 import {
   CALIBRATION_JOB_SORTABLE_FIELDS,
-  isIdentityIncomplete,
+  buildCalibrationJobActionSignals,
   jobNeedsAction,
   type CalibrationJobActionSignals,
   type CalibrationJobEscalateIdentityInput,
@@ -222,11 +222,13 @@ const AKD_AKL_GATE_STAMP_RESET = {
  * List row = the job detail payload plus computed state:
  *  - `needsReferenceEquipmentReview` drives the "Perlu Persetujuan Alat" badge on
  *    the Work Order items table (kept for that consumer).
- *  - `actionSignals` is the extensible per-job signal map (Identity Correction
- *    pending, Reference Equipment needs approval, …future phases) — the
- *    Calibration Jobs list groups by SPK and shows an aggregate count of child
- *    jobs with ≥1 signal. Both are computed state; see
- *    jobNeedsReferenceEquipmentReview and toListRow.
+ *  - `actionSignals` is the extensible per-job signal map of *actionable*
+ *    remediations only (Identity Correction pending, Reference Equipment needs
+ *    approval, incomplete identity while the gate is open, …future phases).
+ *    Lifecycle-locked facts must not appear here — see
+ *    buildCalibrationJobActionSignals. The Calibration Jobs list groups by SPK
+ *    and shows an aggregate count of child jobs with ≥1 signal. Both are
+ *    computed state; see jobNeedsReferenceEquipmentReview and toListRow.
  */
 export type CalibrationJobListRow = CalibrationJobDetail & {
   needsReferenceEquipmentReview: boolean;
@@ -537,15 +539,19 @@ export class CalibrationJobsService {
     row: CalibrationJobDetail,
     reviewFlags: Map<string, boolean>,
   ): CalibrationJobListRow {
-    const referenceEquipmentNeedsApproval = reviewFlags.get(row.id) ?? false;
+    const needsReferenceEquipmentApproval = reviewFlags.get(row.id) ?? false;
     return {
       ...row,
-      needsReferenceEquipmentReview: referenceEquipmentNeedsApproval,
-      actionSignals: {
-        identityCorrectionPending: row.identityCorrections[0]?.status === "PENDING_REVIEW",
-        referenceEquipmentNeedsApproval,
-        identityIncomplete: isIdentityIncomplete(row),
-      },
+      needsReferenceEquipmentReview: needsReferenceEquipmentApproval,
+      // Only actionable signals — locked-stage facts must not inflate "perlu tindakan".
+      actionSignals: buildCalibrationJobActionSignals({
+        status: row.status,
+        startedAt: row.startedAt,
+        deviceId: row.deviceId,
+        technicianObservedSerial: row.technicianObservedSerial,
+        hasPendingIdentityCorrection: row.identityCorrections[0]?.status === "PENDING_REVIEW",
+        needsReferenceEquipmentApproval,
+      }),
     };
   }
 

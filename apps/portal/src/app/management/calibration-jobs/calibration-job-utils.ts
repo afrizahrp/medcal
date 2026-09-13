@@ -1,4 +1,4 @@
-import { ApiError } from "@medcal/shared";
+import { ApiError, isCalibrationJobBenchLocked, isIdentityIncomplete } from "@medcal/shared";
 import type { JobEquipmentValidityStatus } from "./use-reference-equipment-used-query";
 
 export type AkdAklApprovalStatus = "NOT_REQUIRED" | "PENDING_REVIEW" | "APPROVED" | "REJECTED";
@@ -36,20 +36,20 @@ export const CALIBRATION_JOB_STATUS_LABELS: Record<CalibrationJobStatus, string>
   ACCEPTED_BY_QA: "Accepted by QA",
 };
 
-/**
- * Mirrors IDENTITY_LOCKED_JOB_STATUSES in calibration-jobs.service.ts — once the
- * job has advanced past the bench, the identity gate (escalate / decide AKD-AKL /
- * submit or decide an identity correction) is closed server-side.
- */
-const IDENTITY_LOCKED_JOB_STATUSES: readonly string[] = ["SUBMITTED", "ACCEPTED_BY_QA"];
+export { isIdentityIncomplete };
 
 type IdentityGateJob = {
   status: string;
   akdAklApprovalStatus: string;
 };
 
+/**
+ * Once the job has advanced past the bench, the identity gate (escalate /
+ * decide AKD-AKL / submit or decide an identity correction) is closed
+ * server-side. Shared with `@medcal/shared` action-signal builders.
+ */
 export function isIdentityGateLocked(job: Pick<IdentityGateJob, "status">): boolean {
-  return IDENTITY_LOCKED_JOB_STATUSES.includes(job.status);
+  return isCalibrationJobBenchLocked(job.status);
 }
 
 /** NOT_REQUIRED / REJECTED → PENDING_REVIEW is the only escalation transition. */
@@ -72,6 +72,20 @@ export function canDecideIdentity(job: IdentityGateJob): boolean {
  */
 export function canSubmitIdentityCorrection(job: Pick<IdentityGateJob, "status">): boolean {
   return !isIdentityGateLocked(job);
+}
+
+/** Human-readable list of missing identity fields (Device ID / Serial). */
+export function describeMissingIdentityFields(job: {
+  deviceId: string | null;
+  technicianObservedSerial: string | null;
+}): string {
+  const missing: string[] = [];
+  if (job.deviceId == null) missing.push("Device ID");
+  const serial = job.technicianObservedSerial?.trim() ?? "";
+  if (serial.length === 0) missing.push("Serial observasi teknisi");
+  if (missing.length === 0) return "identitas perangkat";
+  if (missing.length === 1) return missing[0]!;
+  return `${missing[0]} dan ${missing[1]}`;
 }
 
 type QualityReviewLike = {

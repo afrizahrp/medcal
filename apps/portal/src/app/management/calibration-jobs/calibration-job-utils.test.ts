@@ -6,6 +6,7 @@ import {
   canSubmitIdentityCorrection,
   canDecideQualityReview,
   correctionMissingImage,
+  describeMissingIdentityFields,
   formatCalibrationJobApiError,
   formatEffectiveToleranceBounds,
   formatMeasurementHasilDisplay,
@@ -49,6 +50,18 @@ describe("calibration-job identity gate helpers", () => {
       expect(canDecideIdentity(job)).toBe(false);
       expect(canSubmitIdentityCorrection(job)).toBe(false);
     }
+  });
+
+  it("describeMissingIdentityFields lists Device ID and/or Serial", () => {
+    expect(
+      describeMissingIdentityFields({ deviceId: null, technicianObservedSerial: null }),
+    ).toBe("Device ID dan Serial observasi teknisi");
+    expect(
+      describeMissingIdentityFields({ deviceId: "d1", technicianObservedSerial: null }),
+    ).toBe("Serial observasi teknisi");
+    expect(
+      describeMissingIdentityFields({ deviceId: null, technicianObservedSerial: "SN" }),
+    ).toBe("Device ID");
   });
 });
 
