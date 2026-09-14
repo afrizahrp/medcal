@@ -3,7 +3,6 @@
 import { useParams } from "next/navigation";
 import { useAuthz } from "@medcal/auth/client";
 import { Screen } from "../../../../components/layout/screen";
-import { StickyActionBar } from "../../../../components/layout/sticky-action-bar";
 import { Section, SectionRow } from "../../../../components/ui/section";
 import { Button } from "../../../../components/ui/button";
 import { LoadingState, ErrorState } from "../../../../components/ui/state-views";
@@ -16,6 +15,11 @@ import {
   useSignKontrolAlat,
   openKontrolAlatPdfPwa,
 } from "./use-kontrol-alat-query";
+import {
+  buildKontrolAlatSignatureSlots,
+  canEditKontrolAlat,
+  KONTROL_ALAT_SIGNER_KIND_LABELS,
+} from "../../../../lib/calibration/kontrol-alat";
 import type {
   TechKontrolAlat,
   TechKontrolAlatAccessory,
@@ -270,14 +274,10 @@ function AccessoriesSection({
 
 // ── Signatures ────────────────────────────────────────────────────────────────
 
-const SIGNER_KIND_LABELS: Record<KontrolAlatSignerKind, string> = {
-  ADMINISTRATION: "Administrasi",
-  TECHNICAL_OFFICER: "Petugas Teknis",
-};
-
 function SignatureBlock({
   sig,
   canSign,
+  kind,
   jobId,
 }: {
   sig: TechKontrolAlatSignature | undefined;
@@ -286,20 +286,19 @@ function SignatureBlock({
   jobId: string;
 }) {
   const signMutation = useSignKontrolAlat(jobId);
-
-  if (!sig) return null;
-
-  const signed = sig.signedAt != null;
+  const signed = Boolean(sig?.signedAt);
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {SIGNER_KIND_LABELS[sig.signerKind]}
+        {KONTROL_ALAT_SIGNER_KIND_LABELS[kind]}
       </p>
-      {signed ? (
+      {signed && sig ? (
         <>
           <p className="mt-1 text-sm font-medium text-emerald-700">Ditandatangani</p>
-          <p className="text-xs text-slate-500">{sig.signerName} · {formatDate(sig.signedAt)}</p>
+          <p className="text-xs text-slate-500">
+            {sig.signerName} · {formatDate(sig.signedAt)}
+          </p>
         </>
       ) : (
         <>
@@ -309,7 +308,7 @@ function SignatureBlock({
               variant="secondary"
               className="mt-2 text-sm"
               disabled={signMutation.isPending}
-              onClick={() => signMutation.mutate({ signerKind: sig.signerKind })}
+              onClick={() => signMutation.mutate({ signerKind: kind })}
             >
               {signMutation.isPending ? "Menandatangani…" : "Tandatangani sebagai saya"}
             </Button>
@@ -334,18 +333,21 @@ function SignaturesSection({
   canSign: boolean;
   jobId: string;
 }) {
-  const adminSig = ka.signatures.find((s) => s.signerKind === "ADMINISTRATION");
-  const techSig = ka.signatures.find((s) => s.signerKind === "TECHNICAL_OFFICER");
+  const slots = buildKontrolAlatSignatureSlots(ka.signatures);
 
   return (
     <Section title="Tanda Tangan">
       <div className="space-y-3">
-        <SignatureBlock sig={adminSig} kind="ADMINISTRATION" canSign={canSign} jobId={jobId} />
-        <SignatureBlock sig={techSig} kind="TECHNICAL_OFFICER" canSign={canSign} jobId={jobId} />
+        {slots.map((slot) => (
+          <SignatureBlock
+            key={slot.kind}
+            sig={slot.signature}
+            kind={slot.kind}
+            canSign={canSign}
+            jobId={jobId}
+          />
+        ))}
       </div>
-      {!adminSig && !techSig ? (
-        <p className="text-sm text-slate-500">Tidak ada baris tanda tangan — hubungi admin.</p>
-      ) : null}
     </Section>
   );
 }
@@ -416,8 +418,7 @@ export default function KontrolAlatPage() {
   }
 
   const canRecord = Boolean(capabilities?.calibrationJobRecordKontrolAlat);
-  const isLocked = job.status !== "PENDING";
-  const canEdit = canRecord && !isLocked;
+  const canEdit = canEditKontrolAlat(canRecord, job.status);
 
   const completed = ka.completedAt != null;
 
@@ -466,7 +467,7 @@ export default function KontrolAlatPage() {
         {ka.certificateNumber ? (
           <SectionRow label="No. Sertifikat" value={ka.certificateNumber} />
         ) : null}
-        {isLocked && !canEdit ? (
+        {job.status !== "PENDING" ? (
           <p className="mt-2 text-xs text-slate-400">
             Job sudah dimulai — formulir Kontrol Alat terkunci (hanya baca).
           </p>

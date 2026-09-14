@@ -199,6 +199,7 @@ describe("KontrolAlatService", () => {
     expect(got.calibrationJobId).toBe(jobId);
     expect(got.number).toMatch(/^KAL\/\d{4}\/\d{2}\/\d{5}$/);
     expect(got.completedAt).toBeNull();
+    expect(got.signatures).toEqual([]);
 
     const patched = await svc.patch(companyId, jobId, technician.id, {
       workExecuted: true,
@@ -236,6 +237,36 @@ describe("KontrolAlatService", () => {
     await svc.removeAccessory(companyId, jobId, accessoryId);
     const after = await svc.get(companyId, jobId);
     expect(after.accessories).toHaveLength(0);
+  });
+
+  it("upserts both signer kinds from zero signature rows and then start succeeds", async () => {
+    const { jobId, technician } = await startedJob("SEND_TO_LAB");
+    const before = await svc.get(companyId, jobId);
+    expect(before.signatures).toEqual([]);
+    expect(before.completedAt).toBeNull();
+
+    await svc.patch(companyId, jobId, technician.id, { workExecuted: true });
+    const afterAdmin = await svc.sign(companyId, jobId, technician.id, {
+      signerKind: "ADMINISTRATION",
+    });
+    expect(afterAdmin.signatures).toHaveLength(1);
+    expect(afterAdmin.signatures[0]!.signerKind).toBe("ADMINISTRATION");
+    expect(afterAdmin.signatures[0]!.signedAt).toBeInstanceOf(Date);
+    expect(afterAdmin.completedAt).toBeNull();
+
+    const afterTech = await svc.sign(companyId, jobId, technician.id, {
+      signerKind: "TECHNICAL_OFFICER",
+    });
+    expect(afterTech.signatures).toHaveLength(2);
+    expect(afterTech.signatures.map((row) => row.signerKind).sort()).toEqual([
+      "ADMINISTRATION",
+      "TECHNICAL_OFFICER",
+    ]);
+    expect(afterTech.completedAt).toBeInstanceOf(Date);
+
+    const started = await jobsService.start(companyId, jobId);
+    expect(started.status).toBe("IN_PROGRESS");
+    expect(started.startedAt).not.toBeNull();
   });
 
   it("sets completedAt when both signatures are present", async () => {

@@ -5,6 +5,7 @@ import { useAuthz } from "@medcal/auth/client";
 import { Screen } from "../../../components/layout/screen";
 import { StickyActionBar } from "../../../components/layout/sticky-action-bar";
 import { Button, LinkButton } from "../../../components/ui/button";
+import { shouldShowLengkapiKontrolAlatCta } from "../../../lib/calibration/kontrol-alat";
 import { LoadingState, ErrorState } from "../../../components/ui/state-views";
 import { formatApiError } from "../../../lib/api-errors";
 import {
@@ -121,6 +122,12 @@ export default function JobDetailPage() {
   const startGateReason = startGateBlocked
     ? "Kontrol Alat (F.MU.08) harus diisi dan ditandatangani sebelum memulai kalibrasi In Lab."
     : null;
+  const showLengkapiKontrolAlat = shouldShowLengkapiKontrolAlatCta({
+    serviceMode: job.workOrder.serviceMode,
+    jobStatus: job.status,
+    completedAt: job.kontrolAlat?.completedAt,
+    canRecord: canRecordKontrolAlat,
+  });
 
   // "Mulai Kalibrasi" — only while the job has not started yet.
   const showStart = Boolean(capabilities?.calibrationJobStart) && job.status === "PENDING";
@@ -181,6 +188,7 @@ export default function JobDetailPage() {
       title={job.workOrder.number}
       showBack
       footer={
+        showLengkapiKontrolAlat ||
         showStart ||
         showResume ||
         showEscalate ||
@@ -188,6 +196,11 @@ export default function JobDetailPage() {
         showSubmitForReview ||
         showComplete ? (
           <StickyActionBar>
+            {showLengkapiKontrolAlat ? (
+              <LinkButton href={`/jobs/${id}/kontrol-alat`} fullWidth>
+                Lengkapi Kontrol Alat
+              </LinkButton>
+            ) : null}
             {showStart ? (
               <StartCalibrationAction
                 onStart={() => startMutation.mutate()}

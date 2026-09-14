@@ -52,6 +52,8 @@ function job(
       customerId,
       customer: { id: customerId, name: customerName },
       serviceMode: "ON_SITE",
+      purchaseOrder: null,
+      requestReviewCompletedAt: null,
     },
     device: null,
     calibrationRequestItem: null,
