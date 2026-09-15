@@ -100,6 +100,8 @@ export type MeCapabilities = {
   calibrationJobDecideIdentityCorrection: boolean;
   calibrationJobRecordReferenceEquipmentUsed: boolean;
   calibrationJobOverrideReferenceEquipmentValidity: boolean;
+  calibrationJobSubmitReferenceEquipmentApproval: boolean;
+  calibrationJobDecideReferenceEquipmentApproval: boolean;
   calibrationJobRecordMeasurement: boolean;
   calibrationJobRecordPhysicalCheck: boolean;
   calibrationJobRecordKontrolAlat: boolean;

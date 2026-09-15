@@ -103,6 +103,8 @@ const ACTION_LABELS: Record<string, string> = {
   decideIdentityCorrection: "Decide Identity Correction",
   recordReferenceEquipmentUsed: "Record Reference Equipment",
   overrideReferenceEquipmentValidity: "Override Equipment Validity",
+  submitReferenceEquipmentApproval: "Submit Reference Equipment Approval",
+  decideReferenceEquipmentApproval: "Decide Reference Equipment Approval",
   recordMeasurement: "Record Measurement",
   recordPhysicalCheck: "Record Physical Check",
   recordKontrolAlat: "Record Kontrol Alat",

@@ -125,10 +125,18 @@ export interface CalibrationJobRow {
   /** Latest QualityReview from GET job `reviews` take 1. Empty until MT decides. */
   reviews: CalibrationJobQualityReview[];
   currentAttempt: number;
+  /** Latest Reference Equipment Approval (GET job take 1). */
+  referenceEquipmentApprovals: {
+    id: string;
+    status: "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+    createdAt: string;
+    submittedByUserId: string;
+    submittedBy: { id: string; name: string | null };
+  }[];
   /**
-   * Computed server-side: at least one confirmed reference-equipment unit for
-   * this job is currently invalid (expired / no certificate) and not yet
-   * overridden by a TECHNICIAN_MANAGER. Drives the "Perlu Persetujuan Alat" badge.
+   * Computed server-side: selected invalid reference equipment is not yet
+   * overridden, or a PENDING_REVIEW approval exists. Unselected WO units do
+   * not count.
    */
   needsReferenceEquipmentReview: boolean;
   /**

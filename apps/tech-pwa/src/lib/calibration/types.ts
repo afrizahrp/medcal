@@ -120,6 +120,8 @@ export interface TechCalibrationJob {
     status: IdentityCorrectionStatus;
     createdAt: string;
   }[];
+  /** Latest Reference Equipment Approval (GET job take 1). */
+  referenceEquipmentApprovals: TechReferenceEquipmentApprovalSummary[];
   /** Latest QualityReview (GET job `reviews` take 1). Empty until MT decides. */
   reviews: TechQualityReview[];
   /** Kontrol Alat summary. Null for ON_SITE jobs (no KA row created). */
@@ -149,6 +151,16 @@ export interface TechJobListResponse {
 }
 
 export type IdentityCorrectionStatus = "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+
+export type ReferenceEquipmentApprovalStatus = "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+
+export interface TechReferenceEquipmentApprovalSummary {
+  id: string;
+  status: ReferenceEquipmentApprovalStatus;
+  createdAt: string;
+  submittedByUserId: string;
+  submittedBy: { id: string; name: string | null };
+}
 export type IdentityCorrectionSignerRole = "TECHNICIAN" | "CUSTOMER";
 export type SignatureStatus = "SIGNED" | "UNAVAILABLE" | "REFUSED";
 

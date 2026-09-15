@@ -226,6 +226,26 @@ enum IdentityCorrectionStatus {
   REJECTED
 }
 
+/// Technician request for MT to accept invalid/expired reference equipment on a
+/// job. Orthogonal to CalibrationJobStatus and QualityReview — never stamped by
+/// submitForReview(). A row enters at PENDING_REVIEW; TECHNICIAN_MANAGER moves
+/// it to APPROVED (invalid lines get JobReferenceEquipmentUsed.validityOverridden)
+/// or REJECTED. Override is line-level, not a header status.
+enum JobReferenceEquipmentApprovalStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+/// Snapshot of resolveJobEquipmentValidity at request time (not re-derived later).
+enum JobReferenceEquipmentValiditySnapshot {
+  VALID
+  EXPIRED
+  NOT_YET_VALID
+  NO_RECORD
+  NOT_ACCEPTED_FOR_USE
+}
+
 /// Signer roles on an identity correction BA (shared model + discriminator).
 enum IdentityCorrectionSignerRole {
   TECHNICIAN
@@ -544,6 +564,8 @@ model User {
   identityCorrectionsSubmitted          IdentityCorrection[]         @relation("IdentityCorrectionSubmitter")
   identityCorrectionsDecided            IdentityCorrection[]         @relation("IdentityCorrectionDecider")
   jobReferenceEquipmentUsagesOverridden JobReferenceEquipmentUsed[]  @relation("JobReferenceEquipmentOverrider")
+  referenceEquipmentApprovalsSubmitted  JobReferenceEquipmentApproval[] @relation("JobReferenceEquipmentApprovalSubmitter")
+  referenceEquipmentApprovalsDecided    JobReferenceEquipmentApproval[] @relation("JobReferenceEquipmentApprovalDecider")
   measurementResultsRecorded            MeasurementResult[]          @relation("MeasurementResultRecordedBy")
   physicalCheckResultsRecorded          PhysicalCheckResult[]        @relation("PhysicalCheckResultRecordedBy")
   workOrdersRequestReviewCompleted      WorkOrder[]                  @relation("WorkOrderRequestReviewCompletedBy")
@@ -1185,6 +1207,7 @@ model Equipment {
   calibrationRecords  EquipmentCalibrationRecord[]
   workOrderSelections WorkOrderEquipment[]
   jobReferenceUsages  JobReferenceEquipmentUsed[]
+  referenceEquipmentApprovalItems JobReferenceEquipmentApprovalItem[]
 
   @@unique([companyId, code])
   @@index([companyId, isActive])
@@ -1237,6 +1260,7 @@ model EquipmentCalibrationRecord {
   createdBy  User?     @relation("EquipmentCalibrationCreatedBy", fields: [createdByUserId], references: [id])
 
   jobReferenceUsages JobReferenceEquipmentUsed[]
+  referenceEquipmentApprovalItems JobReferenceEquipmentApprovalItem[]
 
   @@index([equipmentId, calibrationDate])
   @@index([equipmentId, validUntil])
@@ -2034,7 +2058,8 @@ model CalibrationJob {
   results                MeasurementResult[]
   physicalCheckResults   PhysicalCheckResult[]
   evidences              JobEvidence[]
-  referenceEquipmentUsed JobReferenceEquipmentUsed[]
+  referenceEquipmentUsed        JobReferenceEquipmentUsed[]
+  referenceEquipmentApprovals   JobReferenceEquipmentApproval[]
   signature              CustomerSignature?
   reviews                QualityReview[]
   certificate            Certificate?
@@ -2367,6 +2392,55 @@ model JobReferenceEquipmentUsed {
   @@index([companyId, equipmentId])
   @@index([equipmentCalibrationRecordId])
   @@index([overriddenByUserId])
+}
+
+/// One technician-submitted request for MT to accept the job's recorded
+/// reference-equipment set when ≥1 unit is not VALID. Not a numbered document
+/// (not BAI, not KAL). History is append-only: REJECTED rows stay; a later
+/// request is a new row. At most one PENDING_REVIEW per job (service-enforced).
+model JobReferenceEquipmentApproval {
+  id                String                              @id @default(cuid())
+  companyId         String
+  calibrationJobId  String
+  status            JobReferenceEquipmentApprovalStatus @default(PENDING_REVIEW)
+  submittedByUserId String
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  decision          ReviewDecision?
+  decisionNote      String?
+  createdAt         DateTime                            @default(now())
+  updatedAt         DateTime                            @updatedAt
+
+  calibrationJob CalibrationJob                      @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  submittedBy    User                                @relation("JobReferenceEquipmentApprovalSubmitter", fields: [submittedByUserId], references: [id])
+  decidedBy      User?                               @relation("JobReferenceEquipmentApprovalDecider", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  items          JobReferenceEquipmentApprovalItem[]
+
+  @@index([companyId, status])
+  @@index([calibrationJobId])
+  @@index([submittedByUserId])
+  @@index([decidedByUserId])
+}
+
+model JobReferenceEquipmentApprovalItem {
+  id                           String                                 @id @default(cuid())
+  companyId                    String
+  approvalId                   String
+  equipmentId                  String
+  equipmentCalibrationRecordId String?
+  validityStatus               JobReferenceEquipmentValiditySnapshot
+  requiresOverride             Boolean
+  overrideReason               String?
+  createdAt                    DateTime                               @default(now())
+
+  approval                   JobReferenceEquipmentApproval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  equipment                  Equipment                     @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  equipmentCalibrationRecord EquipmentCalibrationRecord?   @relation(fields: [equipmentCalibrationRecordId], references: [id], onDelete: Restrict)
+
+  @@unique([approvalId, equipmentId])
+  @@index([companyId])
+  @@index([equipmentId])
+  @@index([equipmentCalibrationRecordId])
 }
 
 model CustomerSignature {

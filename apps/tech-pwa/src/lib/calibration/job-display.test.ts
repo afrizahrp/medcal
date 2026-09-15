@@ -59,6 +59,7 @@ function job(
     calibrationRequestItem: null,
     akdAklApprovedBy: null,
     identityCorrections: [],
+    referenceEquipmentApprovals: [],
     reviews: [],
     kontrolAlat: null,
     ...rest,

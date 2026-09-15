@@ -14,8 +14,7 @@ import {
   canSubmitIdentityCorrection,
 } from "../../../lib/calibration/identity-gate";
 import {
-  canRecordReferenceEquipment,
-  isReferenceEquipmentLocked,
+  isReferenceEquipmentApprovalPending,
 } from "../../../lib/calibration/reference-equipment";
 import { markWizardEntryIntent } from "./identity-correction/wizard-nav";
 import {
@@ -42,7 +41,7 @@ import {
   useStartCalibration,
   useSubmitForReview,
 } from "./use-job-query";
-import { useReferenceEquipmentUsed } from "./use-reference-equipment-query";
+import { useReferenceEquipmentUsed, useSubmitReferenceEquipmentApproval } from "./use-reference-equipment-query";
 import {
   useMeasurementParameters,
   useMeasurementResults,
@@ -88,6 +87,7 @@ export default function JobDetailPage() {
   const submitMutation = useSubmitForReview(id);
   const resumeMutation = useResumeAfterRework(id);
   const completeMutation = useCompleteJob(id);
+  const submitRefApprovalMutation = useSubmitReferenceEquipmentApproval(id);
 
   if (jobQuery.isPending) {
     return (
@@ -133,6 +133,8 @@ export default function JobDetailPage() {
   const showStart = Boolean(capabilities?.calibrationJobStart) && job.status === "PENDING";
   const showSubmitForReview =
     Boolean(capabilities?.calibrationJobSubmitForReview) && canSubmitForReview(job);
+  const referenceApprovalUnresolved =
+    isReferenceEquipmentApprovalPending(job) || job.actionSignals.referenceEquipmentNeedsApproval;
   const showResume = canShowResumeAfterRework(
     job,
     Boolean(capabilities?.calibrationJobResumeAfterRework),
@@ -141,12 +143,6 @@ export default function JobDetailPage() {
   const showRecordReferenceEquipment = Boolean(
     capabilities?.calibrationJobRecordReferenceEquipmentUsed,
   );
-  const referenceEquipmentLockedReason =
-    job.startedAt === null
-      ? "Job belum dimulai — alat referensi dicatat setelah kalibrasi berjalan."
-      : isReferenceEquipmentLocked(job)
-        ? "Job sudah dikirim — daftar alat referensi terkunci."
-        : null;
 
   const measurementParams = measurementParametersQuery.data;
   const measurementRowsByParameter = new Map<
@@ -229,6 +225,12 @@ export default function JobDetailPage() {
               <SubmitForReviewAction
                 onSubmit={() => submitMutation.mutate()}
                 pending={submitMutation.isPending}
+                disabled={referenceApprovalUnresolved}
+                disabledReason={
+                  referenceApprovalUnresolved
+                    ? "Selesaikan persetujuan alat referensi sebelum mengirim hasil ke review mutu."
+                    : null
+                }
                 error={
                   submitMutation.isError
                     ? formatApiError(submitMutation.error, "Gagal mengirim.")
@@ -314,11 +316,17 @@ export default function JobDetailPage() {
         />
       ) : (
         <ReferenceEquipmentSection
-          jobId={id}
+          job={job}
           used={referenceEquipmentQuery.data ?? []}
           canRecord={showRecordReferenceEquipment}
-          gateOpen={canRecordReferenceEquipment(job)}
-          lockedReason={referenceEquipmentLockedReason}
+          canSubmitApproval={Boolean(capabilities?.calibrationJobSubmitReferenceEquipmentApproval)}
+          submittingApproval={submitRefApprovalMutation.isPending}
+          approvalError={
+            submitRefApprovalMutation.isError
+              ? formatApiError(submitRefApprovalMutation.error, "Gagal mengajukan persetujuan.")
+              : null
+          }
+          onSubmitApproval={() => submitRefApprovalMutation.mutate()}
         />
       )}
       {showRecordPhysicalCheck ? (

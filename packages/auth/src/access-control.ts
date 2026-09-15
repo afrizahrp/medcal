@@ -124,6 +124,10 @@ const ac = createAccessControl({
   //   inline in the service, since both roles share the same replace endpoint
   //   and only some items in one request may need the override.
   //   TECHNICIAN_MANAGER only.
+  // submitReferenceEquipmentApproval: technician asks MT to accept a recorded
+  //   set that includes invalid units. Does NOT submit the CalibrationJob.
+  // decideReferenceEquipmentApproval: TECHNICIAN_MANAGER APPROVE (override
+  //   invalid lines) or REJECT. Sole decider — not ADMIN.
   calibrationJob: [
     "read",
     "create",
@@ -140,6 +144,8 @@ const ac = createAccessControl({
     "decideIdentityCorrection",
     "recordReferenceEquipmentUsed",
     "overrideReferenceEquipmentValidity",
+    "submitReferenceEquipmentApproval",
+    "decideReferenceEquipmentApproval",
     // recordMeasurement: technician enters/edits/deletes MeasurementResult rows
     // for the job's current attempt. TECHNICIAN only — TECHNICIAN_MANAGER is the
     // reviewer and must not write measurement values (happy-path lifecycle).
@@ -153,6 +159,8 @@ const ac = createAccessControl({
     // reuse recordPhysicalCheck / recordMeasurement.
     "recordKontrolAlat",
     // submitForReview: technician IN_PROGRESS → SUBMITTED + submittedAt.
+    // Blocked while selected invalid reference equipment is unresolved or a
+    // reference-equipment approval is PENDING_REVIEW.
     // decideQualityReview: TECHNICIAN_MANAGER APPROVE or REJECT (REJECT → REWORK).
     // resumeAfterRework: technician REWORK → IN_PROGRESS (does not increment attempt).
     // complete: technician SUBMITTED + QualityReview APPROVED → ACCEPTED_BY_QA.

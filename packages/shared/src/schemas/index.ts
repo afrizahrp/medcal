@@ -827,6 +827,41 @@ export const jobReferenceEquipmentReplaceSchema = z.object({
 
 export type JobReferenceEquipmentReplaceInput = z.infer<typeof jobReferenceEquipmentReplaceSchema>;
 
+const referenceEquipmentApprovalDecisionValues = ["APPROVE", "REJECT"] as const;
+
+export const jobReferenceEquipmentApprovalItemOverrideSchema = z.object({
+  equipmentId: z.string().min(1),
+  overrideReason: z.string().trim().min(1).max(2000),
+});
+
+/** POST /calibration-jobs/:id/reference-equipment-approvals/:approvalId/decision */
+export const jobReferenceEquipmentApprovalDecisionSchema = z
+  .object({
+    decision: z.enum(referenceEquipmentApprovalDecisionValues),
+    decisionNote: z.string().trim().max(2000).optional(),
+    items: z.array(jobReferenceEquipmentApprovalItemOverrideSchema).max(50).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.decision === "REJECT" && !val.decisionNote) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["decisionNote"],
+        message: "A decision note is required when rejecting",
+      });
+    }
+    if (val.decision === "APPROVE" && (val.items == null || val.items.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["items"],
+        message: "Override reasons are required for every invalid line when approving",
+      });
+    }
+  });
+
+export type JobReferenceEquipmentApprovalDecisionInput = z.infer<
+  typeof jobReferenceEquipmentApprovalDecisionSchema
+>;
+
 const identityCorrectionDecisionValues = ["APPROVE", "REJECT"] as const;
 
 /** POST /calibration-jobs/:id/identity-corrections/:correctionId/decision body (TECHNICIAN_MANAGER only) */

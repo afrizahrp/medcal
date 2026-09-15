@@ -90,6 +90,30 @@ export type JobReferenceEquipmentUsedDetail = Prisma.JobReferenceEquipmentUsedGe
   include: typeof jobReferenceEquipmentUsedInclude;
 }>;
 
+export const jobReferenceEquipmentApprovalInclude = {
+  submittedBy: { select: { id: true, name: true } },
+  decidedBy: { select: { id: true, name: true } },
+  items: {
+    include: {
+      equipment: {
+        select: {
+          id: true,
+          code: true,
+          brand: true,
+          model: true,
+          serialNumber: true,
+          equipmentType: { select: { id: true, code: true, name: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
+} as const;
+
+export type JobReferenceEquipmentApprovalDetail = Prisma.JobReferenceEquipmentApprovalGetPayload<{
+  include: typeof jobReferenceEquipmentApprovalInclude;
+}>;
+
 interface JobDeviceTypeSource {
   calibrationRequestItem: { deviceTypeId: string } | null;
   purchaseOrderItem: {
@@ -229,6 +253,11 @@ export const jobReferenceEquipmentReviewInclude = {
     },
   },
   referenceEquipmentUsed: { select: { equipmentId: true, validityOverridden: true } },
+  referenceEquipmentApprovals: {
+    where: { status: "PENDING_REVIEW" },
+    select: { id: true },
+    take: 1,
+  },
 } as const;
 
 export type JobReferenceEquipmentReviewSource = Prisma.CalibrationJobGetPayload<{
@@ -275,29 +304,42 @@ export async function requiredEquipmentTypeIdsByDeviceType(
 
 /**
  * Whether a job still needs TECHNICIAN_MANAGER attention on reference equipment:
- * at least one confirmed, active WorkOrderEquipment unit whose type is required
- * for the job's DeviceType is currently not VALID (per resolveJobEquipmentValidity
- * — the exact check the record/override endpoint enforces) AND is not yet in the
- * job's recorded set with a validity override. `requiredTypeIds === null` means
- * the job's DeviceType could not be resolved — every confirmed unit then counts,
- * matching validateJobReferenceEquipmentSelection's own fallback.
+ * a PENDING_REVIEW approval exists, OR at least one *selected* (recorded)
+ * JobReferenceEquipmentUsed unit is not VALID and not yet overridden.
+ * Unselected WorkOrderEquipment units do not count (they must not block
+ * submitForReview either).
  */
 export function jobNeedsReferenceEquipmentReview(
   job: JobReferenceEquipmentReviewSource,
-  requiredTypeIds: Set<string> | null,
+  _requiredTypeIds: Set<string> | null,
   asOf: Date,
 ): boolean {
-  const overridden = new Set(
-    job.referenceEquipmentUsed
-      .filter((row) => row.validityOverridden)
-      .map((row) => row.equipmentId),
+  if (job.referenceEquipmentApprovals.length > 0) return true;
+
+  const byEquipmentId = new Map(
+    job.workOrder.equipment.map((row) => [row.equipmentId, row.equipment] as const),
   );
-  return job.workOrder.equipment.some(({ equipmentId, equipment: unit }) => {
-    if (!unit.isActive) return false;
-    if (requiredTypeIds && !requiredTypeIds.has(unit.equipmentTypeId)) return false;
-    if (overridden.has(equipmentId)) return false;
+  return job.referenceEquipmentUsed.some((row) => {
+    if (row.validityOverridden) return false;
+    const unit = byEquipmentId.get(row.equipmentId);
+    if (!unit) return false;
     return resolveJobEquipmentValidity(unit.calibrationRecords, asOf).status !== "VALID";
   });
+}
+
+export function usedRowRequiresOverride(
+  row: { equipmentId: string; validityOverridden: boolean },
+  job: JobReferenceEquipmentSource,
+  asOf: Date,
+): { requiresOverride: boolean; validity: JobEquipmentValidityResult } {
+  const unit = job.workOrder.equipment.find((e) => e.equipmentId === row.equipmentId)?.equipment;
+  const validity = unit
+    ? resolveJobEquipmentValidity(unit.calibrationRecords, asOf)
+    : { status: "NO_RECORD" as const, recordId: null, validUntil: null };
+  return {
+    requiresOverride: !row.validityOverridden && validity.status !== "VALID",
+    validity,
+  };
 }
 
 export interface ValidatedJobReferenceEquipmentRow {
@@ -315,9 +357,9 @@ export interface ValidatedJobReferenceEquipmentRow {
  *   - the unit is isActive
  *   - the unit's type is one of the job's required EquipmentTypes (skipped, not
  *     failed, when the job's DeviceType cannot be resolved)
- *   - calibration validity — VALID required unless the item carries an
- *     override AND the caller holds overrideReferenceEquipmentValidity
- *     (ForbiddenException otherwise)
+ *   - calibration validity — VALID is recorded as usable. Invalid units may be
+ *     recorded without override (not usable until MT approval). Sending
+ *     `override` still requires overrideReferenceEquipmentValidity.
  */
 export async function validateJobReferenceEquipmentSelection(
   job: JobReferenceEquipmentSource,
@@ -364,14 +406,6 @@ export async function validateJobReferenceEquipmentSelection(
 
     const validity = resolveJobEquipmentValidity(unit.calibrationRecords, asOf);
     const isValid = validity.status === "VALID";
-    if (!isValid && !item.override) {
-      throw new BadRequestException({
-        message: `Equipment calibration is not valid (${validity.status})`,
-        code: "EQUIPMENT_CALIBRATION_INVALID",
-        equipmentId: item.equipmentId,
-        validityStatus: validity.status,
-      });
-    }
     if (!isValid && item.override && !canOverride) {
       throw new ForbiddenException({ code: "FORBIDDEN", message: "Forbidden" });
     }
@@ -379,8 +413,8 @@ export async function validateJobReferenceEquipmentSelection(
     return {
       equipmentId: item.equipmentId,
       equipmentCalibrationRecordId: validity.recordId,
-      validityOverridden: !isValid,
-      overrideReason: !isValid ? (item.override?.reason ?? null) : null,
+      validityOverridden: !isValid && Boolean(item.override),
+      overrideReason: !isValid && item.override ? (item.override.reason ?? null) : null,
     };
   });
 }

@@ -180,6 +180,17 @@ const PRESERVED_BASELINE: GrantRow[] = [
     resource: "calibrationJob",
     action: "overrideReferenceEquipmentValidity",
   },
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "submitReferenceEquipmentApproval" },
+  {
+    role: "TECHNICIAN_MANAGER",
+    resource: "calibrationJob",
+    action: "submitReferenceEquipmentApproval",
+  },
+  {
+    role: "TECHNICIAN_MANAGER",
+    resource: "calibrationJob",
+    action: "decideReferenceEquipmentApproval",
+  },
   // MeasurementResult (Stage 2b, 2026-09-08): recordMeasurement gates create/
   // update/delete of measurement readings for the job's current attempt.
   // Happy-path review (2026-09-09): TECHNICIAN only — MT reviews via

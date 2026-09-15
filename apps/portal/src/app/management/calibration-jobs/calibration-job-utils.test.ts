@@ -5,6 +5,8 @@ import {
   canEscalateIdentity,
   canSubmitIdentityCorrection,
   canDecideQualityReview,
+  canReplaceReferenceEquipment,
+  isReferenceEquipmentApprovalPending,
   calibrationJobActionFocusHref,
   correctionMissingImage,
   describeMissingIdentityFields,
@@ -403,5 +405,44 @@ describe("measurement normal-value display", () => {
         parameter: { toleranceMin: null, toleranceMax: null, toleranceNote: "± 5 mmHg" },
       }),
     ).toBe("115–125");
+  });
+});
+
+describe("reference equipment replace vs pending approval", () => {
+  const started = "2026-09-14T00:00:00.000Z";
+
+  it("allows replace while IN_PROGRESS without a pending approval", () => {
+    expect(
+      canReplaceReferenceEquipment({
+        status: "IN_PROGRESS",
+        startedAt: started,
+        referenceEquipmentApprovals: [],
+      }),
+    ).toBe(true);
+  });
+
+  it("blocks replace while an approval is PENDING_REVIEW", () => {
+    expect(
+      isReferenceEquipmentApprovalPending({
+        referenceEquipmentApprovals: [{ status: "PENDING_REVIEW" }],
+      }),
+    ).toBe(true);
+    expect(
+      canReplaceReferenceEquipment({
+        status: "IN_PROGRESS",
+        startedAt: started,
+        referenceEquipmentApprovals: [{ status: "PENDING_REVIEW" }],
+      }),
+    ).toBe(false);
+  });
+
+  it("does not treat SUBMITTED as a pending approval", () => {
+    expect(
+      canReplaceReferenceEquipment({
+        status: "SUBMITTED",
+        startedAt: started,
+        referenceEquipmentApprovals: [{ status: "PENDING_REVIEW" }],
+      }),
+    ).toBe(false);
   });
 });

@@ -1391,6 +1391,9 @@ describe("CalibrationJobsService — Reference Equipment Used", () => {
   }
 
   afterAll(async () => {
+    await prisma.jobReferenceEquipmentApprovalItem.deleteMany({
+      where: { equipmentId: { in: createdEquipmentIds } },
+    });
     await prisma.jobReferenceEquipmentUsed.deleteMany({
       where: { equipmentId: { in: createdEquipmentIds } },
     });
@@ -1488,23 +1491,22 @@ describe("CalibrationJobsService — Reference Equipment Used", () => {
     ["NOT_ACCEPTED_FOR_USE", { acceptedForUse: false }, false],
     ["NO_RECORD", undefined, true],
   ] as const)(
-    "rejects invalid calibration (%s) without an override",
-    async (expectedStatus, calibrationOverrides, skipCalibrationRecord) => {
+    "lets a technician save invalid calibration (%s) without making it usable",
+    async (_expectedStatus, calibrationOverrides, skipCalibrationRecord) => {
       const { jobs, units } = await onSiteJobWithEquipmentUnits([
         { calibrationOverrides, skipCalibrationRecord },
       ]);
 
-      await expect(
-        calibrationJobsService.replaceReferenceEquipmentUsed(
-          realCompanyId,
-          jobs[0]!.id,
-          staffUserId,
-          "TECHNICIAN",
-          { items: [{ equipmentId: units[0]!.id }] },
-        ),
-      ).rejects.toMatchObject({
-        response: { code: "EQUIPMENT_CALIBRATION_INVALID", validityStatus: expectedStatus },
-      });
+      const result = await calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [{ equipmentId: units[0]!.id }] },
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0]!.validityOverridden).toBe(false);
+      expect(result[0]!.overriddenByUserId).toBeNull();
     },
   );
 
@@ -1672,17 +1674,38 @@ describe("CalibrationJobsService — Reference Equipment Used", () => {
       expect((await listRow(workOrder.id, jobs[0]!.id)).needsReferenceEquipmentReview).toBe(false);
     });
 
-    it("is true when a required unit is expired and not yet overridden", async () => {
+    it("is false when a required WO unit is expired but not selected on the job", async () => {
       const { workOrder, jobs } = await onSiteJobWithConfirmedEquipment({
         validUntil: new Date("2020-01-01T00:00:00.000Z"),
       });
+      expect((await listRow(workOrder.id, jobs[0]!.id)).needsReferenceEquipmentReview).toBe(false);
+    });
+
+    it("is true when a selected required unit is expired and not yet overridden", async () => {
+      const { workOrder, jobs, unit } = await onSiteJobWithConfirmedEquipment({
+        validUntil: new Date("2020-01-01T00:00:00.000Z"),
+      });
+      await calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [{ equipmentId: unit.id }] },
+      );
       expect((await listRow(workOrder.id, jobs[0]!.id)).needsReferenceEquipmentReview).toBe(true);
     });
 
-    it("is true when a required unit has no calibration record", async () => {
-      const { workOrder, jobs } = await onSiteJobWithEquipmentUnits([
+    it("is true when a selected required unit has no calibration record", async () => {
+      const { workOrder, jobs, units } = await onSiteJobWithEquipmentUnits([
         { skipCalibrationRecord: true },
       ]);
+      await calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [{ equipmentId: units[0]!.id }] },
+      );
       expect((await listRow(workOrder.id, jobs[0]!.id)).needsReferenceEquipmentReview).toBe(true);
     });
 
@@ -1692,6 +1715,13 @@ describe("CalibrationJobsService — Reference Equipment Used", () => {
       });
       const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
 
+      await calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [{ equipmentId: unit.id }] },
+      );
       expect((await listRow(workOrder.id, jobs[0]!.id)).needsReferenceEquipmentReview).toBe(true);
 
       await calibrationJobsService.replaceReferenceEquipmentUsed(
@@ -1728,9 +1758,16 @@ describe("CalibrationJobsService — Reference Equipment Used", () => {
     });
 
     it("feeds the grouped list's actionSignals + actionNeededCount", async () => {
-      const { workOrder, jobs } = await onSiteJobWithConfirmedEquipment({
+      const { workOrder, jobs, unit } = await onSiteJobWithConfirmedEquipment({
         validUntil: new Date("2020-01-01T00:00:00.000Z"),
       });
+      await calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [{ equipmentId: unit.id }] },
+      );
 
       const res = await calibrationJobsService.findAllGroupedByWorkOrder(
         realCompanyId,
@@ -1742,6 +1779,233 @@ describe("CalibrationJobsService — Reference Equipment Used", () => {
       expect(
         group.jobs.find((j) => j.id === jobs[0]!.id)!.actionSignals.referenceEquipmentNeedsApproval,
       ).toBe(true);
+    });
+  });
+
+  describe("reference equipment approval workflow", () => {
+    async function markInProgress(jobId: string) {
+      await prisma.calibrationJob.update({
+        where: { id: jobId },
+        data: { status: "IN_PROGRESS" },
+      });
+    }
+
+    it("does not change CalibrationJob.status when a technician requests approval", async () => {
+      const { jobs, units } = await onSiteJobWithEquipmentUnits([
+        {},
+        { calibrationOverrides: { validUntil: new Date("2020-01-01T00:00:00.000Z") } },
+      ]);
+      const jobId = jobs[0]!.id;
+      await markInProgress(jobId);
+      const before = await prisma.calibrationJob.findUniqueOrThrow({
+        where: { id: jobId },
+        select: { status: true, submittedAt: true },
+      });
+      expect(before.status).toBe("IN_PROGRESS");
+      expect(before.submittedAt).toBeNull();
+
+      await calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobId,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [{ equipmentId: units[0]!.id }, { equipmentId: units[1]!.id }] },
+      );
+      const tech = await makeMember(realCompanyId, "TECHNICIAN");
+      const approval = await calibrationJobsService.submitReferenceEquipmentApproval(
+        realCompanyId,
+        jobId,
+        tech.id,
+      );
+
+      expect(approval.status).toBe("PENDING_REVIEW");
+      expect(approval.items.some((i) => i.requiresOverride)).toBe(true);
+      const after = await prisma.calibrationJob.findUniqueOrThrow({
+        where: { id: jobId },
+        select: { status: true, submittedAt: true },
+      });
+      expect(after.status).toBe("IN_PROGRESS");
+      expect(after.submittedAt).toBeNull();
+    });
+
+    it("blocks replace and submitForReview while approval is pending, then allows submit after MT approve", async () => {
+      const { jobs, units } = await onSiteJobWithEquipmentUnits([
+        {},
+        { calibrationOverrides: { validUntil: new Date("2020-01-01T00:00:00.000Z") } },
+      ]);
+      const jobId = jobs[0]!.id;
+      await markInProgress(jobId);
+      await calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobId,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [{ equipmentId: units[0]!.id }, { equipmentId: units[1]!.id }] },
+      );
+      const tech = await makeMember(realCompanyId, "TECHNICIAN");
+      const approval = await calibrationJobsService.submitReferenceEquipmentApproval(
+        realCompanyId,
+        jobId,
+        tech.id,
+      );
+
+      await expect(
+        calibrationJobsService.replaceReferenceEquipmentUsed(
+          realCompanyId,
+          jobId,
+          staffUserId,
+          "TECHNICIAN",
+          { items: [{ equipmentId: units[0]!.id }] },
+        ),
+      ).rejects.toMatchObject({
+        response: { code: "REFERENCE_EQUIPMENT_APPROVAL_ALREADY_PENDING" },
+      });
+      await expect(calibrationJobsService.submitForReview(realCompanyId, jobId)).rejects.toMatchObject(
+        { response: { code: "REFERENCE_EQUIPMENT_APPROVAL_UNRESOLVED" } },
+      );
+      const stillOpen = await prisma.calibrationJob.findUniqueOrThrow({
+        where: { id: jobId },
+        select: { status: true, submittedAt: true },
+      });
+      expect(stillOpen.status).toBe("IN_PROGRESS");
+      expect(stillOpen.submittedAt).toBeNull();
+
+      const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+      const decided = await calibrationJobsService.decideReferenceEquipmentApproval(
+        realCompanyId,
+        jobId,
+        approval.id,
+        manager.id,
+        {
+          decision: "APPROVE",
+          items: [{ equipmentId: units[1]!.id, overrideReason: "Visual check OK" }],
+        },
+      );
+      expect(decided.status).toBe("APPROVED");
+      const used = await calibrationJobsService.listReferenceEquipmentUsed(realCompanyId, jobId);
+      const invalidRow = used.find((row) => row.equipmentId === units[1]!.id)!;
+      expect(invalidRow.validityOverridden).toBe(true);
+      expect(invalidRow.overrideReason).toBe("Visual check OK");
+      const validRow = used.find((row) => row.equipmentId === units[0]!.id)!;
+      expect(validRow.validityOverridden).toBe(false);
+
+      const submitted = await calibrationJobsService.submitForReview(realCompanyId, jobId);
+      expect(submitted.status).toBe("SUBMITTED");
+      expect(submitted.submittedAt).not.toBeNull();
+    });
+
+    it("does not block submitForReview for an invalid WO unit that was not selected", async () => {
+      const { jobs } = await onSiteJobWithEquipmentUnits([
+        {},
+        { calibrationOverrides: { validUntil: new Date("2020-01-01T00:00:00.000Z") } },
+      ]);
+      await markInProgress(jobs[0]!.id);
+      const submitted = await calibrationJobsService.submitForReview(realCompanyId, jobs[0]!.id);
+      expect(submitted.status).toBe("SUBMITTED");
+    });
+
+    it("blocks submitForReview when invalid equipment is selected but not yet requested", async () => {
+      const { jobs, units } = await onSiteJobWithEquipmentUnits([
+        { calibrationOverrides: { validUntil: new Date("2020-01-01T00:00:00.000Z") } },
+      ]);
+      await markInProgress(jobs[0]!.id);
+      await calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [{ equipmentId: units[0]!.id }] },
+      );
+      await expect(
+        calibrationJobsService.submitForReview(realCompanyId, jobs[0]!.id),
+      ).rejects.toMatchObject({ response: { code: "REFERENCE_EQUIPMENT_APPROVAL_UNRESOLVED" } });
+    });
+
+    it("rejects an approval request when every selected unit is valid", async () => {
+      const { jobs, unit } = await onSiteJobWithConfirmedEquipment();
+      await calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [{ equipmentId: unit.id }] },
+      );
+      const tech = await makeMember(realCompanyId, "TECHNICIAN");
+      await expect(
+        calibrationJobsService.submitReferenceEquipmentApproval(realCompanyId, jobs[0]!.id, tech.id),
+      ).rejects.toMatchObject({ response: { code: "REFERENCE_EQUIPMENT_APPROVAL_NOT_REQUIRED" } });
+    });
+
+    it("requires overrideReason on every invalid line and decisionNote on REJECT", async () => {
+      const { jobs, units } = await onSiteJobWithEquipmentUnits([
+        { calibrationOverrides: { validUntil: new Date("2020-01-01T00:00:00.000Z") } },
+      ]);
+      await markInProgress(jobs[0]!.id);
+      await calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [{ equipmentId: units[0]!.id }] },
+      );
+      const tech = await makeMember(realCompanyId, "TECHNICIAN");
+      const approval = await calibrationJobsService.submitReferenceEquipmentApproval(
+        realCompanyId,
+        jobs[0]!.id,
+        tech.id,
+      );
+      const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+      await expect(
+        calibrationJobsService.decideReferenceEquipmentApproval(
+          realCompanyId,
+          jobs[0]!.id,
+          approval.id,
+          manager.id,
+          { decision: "APPROVE", items: [] },
+        ),
+      ).rejects.toMatchObject({
+        response: { code: "INVALID_REFERENCE_EQUIPMENT_APPROVAL_DECISION" },
+      });
+      await expect(
+        calibrationJobsService.decideReferenceEquipmentApproval(
+          realCompanyId,
+          jobs[0]!.id,
+          approval.id,
+          manager.id,
+          { decision: "REJECT" },
+        ),
+      ).rejects.toMatchObject({
+        response: { code: "INVALID_REFERENCE_EQUIPMENT_APPROVAL_DECISION" },
+      });
+
+      const rejected = await calibrationJobsService.decideReferenceEquipmentApproval(
+        realCompanyId,
+        jobs[0]!.id,
+        approval.id,
+        manager.id,
+        { decision: "REJECT", decisionNote: "Gunakan alat cadangan" },
+      );
+      expect(rejected.status).toBe("REJECTED");
+      const used = await calibrationJobsService.listReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+      );
+      expect(used[0]!.validityOverridden).toBe(false);
+
+      await calibrationJobsService.replaceReferenceEquipmentUsed(
+        realCompanyId,
+        jobs[0]!.id,
+        staffUserId,
+        "TECHNICIAN",
+        { items: [{ equipmentId: units[0]!.id }] },
+      );
+      const second = await calibrationJobsService.submitReferenceEquipmentApproval(
+        realCompanyId,
+        jobs[0]!.id,
+        tech.id,
+      );
+      expect(second.id).not.toBe(approval.id);
+      expect(second.status).toBe("PENDING_REVIEW");
     });
   });
 });
@@ -2887,8 +3151,40 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     const finance = await makeMember(realCompanyId, "FINANCE");
     getSessionMock.mockResolvedValueOnce({ user: { id: finance.id, email: "req-f@x.co" } });
 
+    await expect(guard.canActivate(contextFor("replaceReferenceEquipmentUsed"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("allows a TECHNICIAN to submit a reference-equipment approval", async () => {
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "rea-t@x.co" } });
+    await expect(guard.canActivate(contextFor("submitReferenceEquipmentApproval"))).resolves.toBe(
+      true,
+    );
+  });
+
+  it("blocks a TECHNICIAN from deciding a reference-equipment approval (403)", async () => {
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "rea-td@x.co" } });
     await expect(
-      guard.canActivate(contextFor("replaceReferenceEquipmentUsed")),
+      guard.canActivate(contextFor("decideReferenceEquipmentApproval")),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("allows a TECHNICIAN_MANAGER to decide a reference-equipment approval", async () => {
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "rea-m@x.co" } });
+    await expect(guard.canActivate(contextFor("decideReferenceEquipmentApproval"))).resolves.toBe(
+      true,
+    );
+  });
+
+  it("blocks ADMIN from deciding a reference-equipment approval (403)", async () => {
+    const admin = await makeMember(realCompanyId, "ADMIN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: admin.id, email: "rea-a@x.co" } });
+    await expect(
+      guard.canActivate(contextFor("decideReferenceEquipmentApproval")),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 

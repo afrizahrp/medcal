@@ -15,6 +15,7 @@ import {
   measurementLockedReason,
 } from "../../../../lib/calibration/measurement";
 import { canSubmitForReview } from "../../../../lib/calibration/quality-review";
+import { isReferenceEquipmentApprovalPending } from "../../../../lib/calibration/reference-equipment";
 import { useJobQuery, useSubmitForReview } from "../use-job-query";
 import { JobHeaderBlock } from "../job-detail-ui";
 import { useMeasurementParameters, useMeasurementResults } from "./use-measurements-query";
@@ -124,6 +125,8 @@ export default function MeasurementsPage() {
     : parameters.length === 0 && gridParameters.length === 0;
   const showSubmit =
     Boolean(capabilities?.calibrationJobSubmitForReview) && canSubmitForReview(job);
+  const unresolved =
+    isReferenceEquipmentApprovalPending(job) || job.actionSignals.referenceEquipmentNeedsApproval;
   const pending = submitMutation.isPending;
 
   async function handleSubmit() {
@@ -143,9 +146,14 @@ export default function MeasurementsPage() {
       footer={
         showSubmit ? (
           <StickyActionBar>
-            <Button fullWidth disabled={pending} onClick={() => void handleSubmit()}>
-              {pending ? "Mengirim…" : "Kirim"}
+            <Button fullWidth disabled={pending || unresolved} onClick={() => void handleSubmit()}>
+              {pending ? "Mengirim…" : "Kirim hasil ke review mutu"}
             </Button>
+            {unresolved ? (
+              <p className="mt-1 text-center text-xs text-amber-700">
+                Selesaikan persetujuan alat referensi sebelum mengirim hasil ke review mutu.
+              </p>
+            ) : null}
           </StickyActionBar>
         ) : undefined
       }

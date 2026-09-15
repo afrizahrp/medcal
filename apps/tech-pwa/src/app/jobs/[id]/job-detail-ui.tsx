@@ -14,6 +14,11 @@ import {
 } from "../../../lib/calibration/quality-review";
 import type { TechReferenceEquipmentUsed } from "../../../lib/calibration/reference-equipment";
 import {
+  canReplaceReferenceEquipment,
+  isReferenceEquipmentApprovalPending,
+  isReferenceEquipmentLocked,
+} from "../../../lib/calibration/reference-equipment";
+import {
   capabilityGroupSections,
   expectedReplicateCount,
   gridEntryStatus,
@@ -172,25 +177,47 @@ export function ApprovalStatusSection({ job }: { job: TechCalibrationJob }) {
 }
 
 export function ReferenceEquipmentSection({
-  jobId,
+  job,
   used,
   canRecord,
-  gateOpen,
-  lockedReason,
+  canSubmitApproval,
+  submittingApproval,
+  approvalError,
+  onSubmitApproval,
 }: {
-  jobId: string;
+  job: TechCalibrationJob;
   used: TechReferenceEquipmentUsed[];
   canRecord: boolean;
-  gateOpen: boolean;
-  lockedReason: string | null;
+  canSubmitApproval: boolean;
+  submittingApproval: boolean;
+  approvalError: string | null;
+  onSubmitApproval: () => void;
 }) {
+  const pending = isReferenceEquipmentApprovalPending(job);
+  const replaceOpen = canReplaceReferenceEquipment(job);
+  const needsRequest =
+    job.actionSignals.referenceEquipmentNeedsApproval && !pending && canSubmitApproval;
+  const lockedReason =
+    job.startedAt === null
+      ? "Job belum dimulai — alat referensi dicatat setelah kalibrasi berjalan."
+      : isReferenceEquipmentLocked(job)
+        ? "Job sudah dikirim — daftar alat referensi terkunci."
+        : pending
+          ? null
+          : null;
+
   return (
     <Section title="Alat Referensi Digunakan">
+      {pending ? (
+        <p className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Menunggu Persetujuan MT
+        </p>
+      ) : null}
       <RecordedReferenceEquipmentList used={used} />
       {canRecord ? (
-        gateOpen ? (
+        replaceOpen ? (
           <Link
-            href={`/jobs/${jobId}/reference-equipment`}
+            href={`/jobs/${job.id}/reference-equipment`}
             className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 active:text-brand-800"
           >
             Catat alat referensi
@@ -198,6 +225,14 @@ export function ReferenceEquipmentSection({
         ) : lockedReason ? (
           <p className="mt-2 text-xs text-slate-500">{lockedReason}</p>
         ) : null
+      ) : null}
+      {needsRequest ? (
+        <div className="mt-3">
+          <Button fullWidth onClick={onSubmitApproval} disabled={submittingApproval}>
+            {submittingApproval ? "Mengirim…" : "Ajukan Persetujuan Alat Referensi"}
+          </Button>
+          {approvalError ? <p className="mt-1 text-center text-xs text-red-600">{approvalError}</p> : null}
+        </div>
       ) : null}
     </Section>
   );
@@ -475,16 +510,23 @@ export function SubmitForReviewAction({
   onSubmit,
   pending,
   error,
+  disabled,
+  disabledReason,
 }: {
   onSubmit: () => void;
   pending: boolean;
   error: string | null;
+  disabled?: boolean;
+  disabledReason?: string | null;
 }) {
   return (
     <div>
-      <Button fullWidth disabled={pending} onClick={onSubmit}>
-        {pending ? "Mengirim…" : "Kirim"}
+      <Button fullWidth disabled={pending || disabled} onClick={onSubmit}>
+        {pending ? "Mengirim…" : "Kirim hasil ke review mutu"}
       </Button>
+      {disabled && disabledReason ? (
+        <p className="mt-1 text-center text-xs text-amber-700">{disabledReason}</p>
+      ) : null}
       {error ? <p className="mt-1 text-center text-xs text-red-600">{error}</p> : null}
     </div>
   );

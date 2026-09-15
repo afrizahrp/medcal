@@ -217,6 +217,16 @@ export class MeController {
         "calibrationJob",
         "overrideReferenceEquipmentValidity",
       ),
+      calibrationJobSubmitReferenceEquipmentApproval: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "submitReferenceEquipmentApproval",
+      ),
+      calibrationJobDecideReferenceEquipmentApproval: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "decideReferenceEquipmentApproval",
+      ),
       calibrationJobRecordMeasurement: hasPermission(
         membership.role,
         "calibrationJob",

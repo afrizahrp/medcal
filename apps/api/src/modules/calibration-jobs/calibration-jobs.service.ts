@@ -20,6 +20,7 @@ import {
   type CalibrationJobListQuery,
   type IdentityCorrectionDecisionInput,
   type IdentityCorrectionSubmitInput,
+  type JobReferenceEquipmentApprovalDecisionInput,
   type JobReferenceEquipmentReplaceInput,
   type QualityReviewDecisionInput,
 } from "@medcal/shared";
@@ -34,12 +35,15 @@ import {
 import {
   buildReferenceEquipmentCandidates,
   jobNeedsReferenceEquipmentReview,
+  jobReferenceEquipmentApprovalInclude,
   jobReferenceEquipmentReviewInclude,
   jobReferenceEquipmentSourceInclude,
   jobReferenceEquipmentUsedInclude,
   requiredEquipmentTypeIdsByDeviceType,
   reviewSourceDeviceTypeId,
+  usedRowRequiresOverride,
   validateJobReferenceEquipmentSelection,
+  type JobReferenceEquipmentApprovalDetail,
   type JobReferenceEquipmentCandidate,
   type JobReferenceEquipmentSource,
   type JobReferenceEquipmentUsedDetail,
@@ -100,6 +104,19 @@ const calibrationJobInclude = {
   // at most one PENDING_REVIEW can exist per job (enforced on submit).
   identityCorrections: {
     select: { id: true, number: true, status: true, createdAt: true },
+    orderBy: { createdAt: "desc" as const },
+    take: 1,
+  },
+  // Latest Reference Equipment Approval (any status). At most one PENDING_REVIEW
+  // per job (enforced on submit). Drives Tech PWA / Portal pending banner.
+  referenceEquipmentApprovals: {
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      submittedByUserId: true,
+      submittedBy: { select: { id: true, name: true } },
+    },
     orderBy: { createdAt: "desc" as const },
     take: 1,
   },
@@ -760,6 +777,8 @@ export class CalibrationJobsService {
         status: job.status,
       });
     }
+
+    await this.assertReferenceEquipmentResolvedForSubmit(companyId, id);
 
     const updated = await prisma.calibrationJob.updateMany({
       where: { id, companyId, status: "IN_PROGRESS" },
@@ -1637,6 +1656,15 @@ export class CalibrationJobsService {
       });
     }
 
+    const pending = await this.findPendingReferenceEquipmentApproval(jobId);
+    if (pending) {
+      throw new ConflictException({
+        message: "Reference equipment cannot be replaced while an approval request is pending",
+        code: "REFERENCE_EQUIPMENT_APPROVAL_ALREADY_PENDING",
+        approvalId: pending.id,
+      });
+    }
+
     const canOverride = hasPermission(role, "calibrationJob", "overrideReferenceEquipmentValidity");
     const rows = await validateJobReferenceEquipmentSelection(
       job,
@@ -1664,6 +1692,250 @@ export class CalibrationJobsService {
     });
 
     return this.listReferenceEquipmentUsed(companyId, jobId);
+  }
+
+  async listReferenceEquipmentApprovals(
+    companyId: string,
+    jobId: string,
+  ): Promise<JobReferenceEquipmentApprovalDetail[]> {
+    await this.findOne(companyId, jobId);
+    return prisma.jobReferenceEquipmentApproval.findMany({
+      where: { companyId, calibrationJobId: jobId },
+      include: jobReferenceEquipmentApprovalInclude,
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  /**
+   * Technician (or MT) asks MT to accept the recorded set. Does not change
+   * CalibrationJob.status / submittedAt and does not call submitForReview.
+   */
+  async submitReferenceEquipmentApproval(
+    companyId: string,
+    jobId: string,
+    userId: string,
+  ): Promise<JobReferenceEquipmentApprovalDetail> {
+    const job = await this.loadReferenceEquipmentSource(companyId, jobId);
+    if (job.startedAt === null) {
+      throw new BadRequestException({
+        message: "Record reference equipment only after the job has started",
+        code: "CALIBRATION_JOB_NOT_STARTED",
+      });
+    }
+    if (REFERENCE_EQUIPMENT_LOCKED_JOB_STATUSES.has(job.status)) {
+      throw new BadRequestException({
+        message: "Calibration job has advanced past the reference-equipment recording stage",
+        code: "CALIBRATION_JOB_REFERENCE_EQUIPMENT_LOCKED",
+        status: job.status,
+      });
+    }
+
+    const existingPending = await this.findPendingReferenceEquipmentApproval(jobId);
+    if (existingPending) {
+      throw new ConflictException({
+        message: "This job already has a reference-equipment approval awaiting review",
+        code: "REFERENCE_EQUIPMENT_APPROVAL_ALREADY_PENDING",
+        approvalId: existingPending.id,
+      });
+    }
+
+    const used = await prisma.jobReferenceEquipmentUsed.findMany({
+      where: { calibrationJobId: jobId },
+      orderBy: { createdAt: "asc" },
+    });
+    const asOf = job.startedAt;
+    const items = used.map((row) => {
+      const { requiresOverride, validity } = usedRowRequiresOverride(row, job, asOf);
+      return {
+        companyId,
+        equipmentId: row.equipmentId,
+        equipmentCalibrationRecordId: validity.recordId,
+        validityStatus: validity.status,
+        requiresOverride,
+      };
+    });
+    if (!items.some((item) => item.requiresOverride)) {
+      throw new BadRequestException({
+        message: "No selected reference equipment requires manager approval",
+        code: "REFERENCE_EQUIPMENT_APPROVAL_NOT_REQUIRED",
+      });
+    }
+
+    const created = await prisma.jobReferenceEquipmentApproval.create({
+      data: {
+        companyId,
+        calibrationJobId: jobId,
+        submittedByUserId: userId,
+        items: { create: items },
+      },
+      include: jobReferenceEquipmentApprovalInclude,
+    });
+    return created;
+  }
+
+  async decideReferenceEquipmentApproval(
+    companyId: string,
+    jobId: string,
+    approvalId: string,
+    userId: string,
+    input: JobReferenceEquipmentApprovalDecisionInput,
+  ): Promise<JobReferenceEquipmentApprovalDetail> {
+    const job = await this.loadReferenceEquipmentSource(companyId, jobId);
+    if (REFERENCE_EQUIPMENT_LOCKED_JOB_STATUSES.has(job.status)) {
+      throw new BadRequestException({
+        message: "Calibration job has advanced past the reference-equipment recording stage",
+        code: "CALIBRATION_JOB_REFERENCE_EQUIPMENT_LOCKED",
+        status: job.status,
+      });
+    }
+
+    const approval = await prisma.jobReferenceEquipmentApproval.findFirst({
+      where: { id: approvalId, companyId, calibrationJobId: jobId },
+      include: jobReferenceEquipmentApprovalInclude,
+    });
+    if (!approval) {
+      throw new NotFoundException({
+        message: "Reference equipment approval not found",
+        code: "REFERENCE_EQUIPMENT_APPROVAL_NOT_FOUND",
+      });
+    }
+    if (approval.status !== "PENDING_REVIEW") {
+      throw new BadRequestException({
+        message: `Reference equipment approval is already ${approval.status}`,
+        code: "REFERENCE_EQUIPMENT_APPROVAL_ALREADY_DECIDED",
+        status: approval.status,
+      });
+    }
+
+    const decidedAt = new Date();
+
+    if (input.decision === "REJECT") {
+      if (!input.decisionNote?.trim()) {
+        throw new BadRequestException({
+          message: "A decision note is required when rejecting",
+          code: "INVALID_REFERENCE_EQUIPMENT_APPROVAL_DECISION",
+        });
+      }
+      await prisma.jobReferenceEquipmentApproval.update({
+        where: { id: approvalId },
+        data: {
+          status: "REJECTED",
+          decision: "REJECT",
+          decisionNote: input.decisionNote ?? null,
+          decidedByUserId: userId,
+          decidedAt,
+        },
+      });
+      return this.getReferenceEquipmentApproval(companyId, jobId, approvalId);
+    }
+
+    const required = approval.items.filter((item) => item.requiresOverride);
+    const reasons = new Map((input.items ?? []).map((item) => [item.equipmentId, item.overrideReason]));
+    for (const item of required) {
+      if (!reasons.get(item.equipmentId)) {
+        throw new BadRequestException({
+          message: "Override reasons are required for every invalid line when approving",
+          code: "INVALID_REFERENCE_EQUIPMENT_APPROVAL_DECISION",
+          equipmentId: item.equipmentId,
+        });
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.jobReferenceEquipmentApproval.update({
+        where: { id: approvalId },
+        data: {
+          status: "APPROVED",
+          decision: "APPROVE",
+          decisionNote: input.decisionNote ?? null,
+          decidedByUserId: userId,
+          decidedAt,
+        },
+      });
+      for (const item of required) {
+        const reason = reasons.get(item.equipmentId)!;
+        await tx.jobReferenceEquipmentApprovalItem.update({
+          where: { id: item.id },
+          data: { overrideReason: reason },
+        });
+        await tx.jobReferenceEquipmentUsed.update({
+          where: {
+            calibrationJobId_equipmentId: {
+              calibrationJobId: jobId,
+              equipmentId: item.equipmentId,
+            },
+          },
+          data: {
+            validityOverridden: true,
+            overrideReason: reason,
+            overriddenByUserId: userId,
+            overriddenAt: decidedAt,
+          },
+        });
+      }
+    });
+
+    return this.getReferenceEquipmentApproval(companyId, jobId, approvalId);
+  }
+
+  private async getReferenceEquipmentApproval(
+    companyId: string,
+    jobId: string,
+    approvalId: string,
+  ): Promise<JobReferenceEquipmentApprovalDetail> {
+    const approval = await prisma.jobReferenceEquipmentApproval.findFirst({
+      where: { id: approvalId, companyId, calibrationJobId: jobId },
+      include: jobReferenceEquipmentApprovalInclude,
+    });
+    if (!approval) {
+      throw new NotFoundException({
+        message: "Reference equipment approval not found",
+        code: "REFERENCE_EQUIPMENT_APPROVAL_NOT_FOUND",
+      });
+    }
+    return approval;
+  }
+
+  private async findPendingReferenceEquipmentApproval(
+    jobId: string,
+  ): Promise<{ id: string } | null> {
+    return prisma.jobReferenceEquipmentApproval.findFirst({
+      where: { calibrationJobId: jobId, status: "PENDING_REVIEW" },
+      select: { id: true },
+    });
+  }
+
+  /**
+   * submitForReview prerequisite: no PENDING approval, and no *selected* used
+   * row that is currently invalid without an override. Unselected WO units
+   * do not count.
+   */
+  private async assertReferenceEquipmentResolvedForSubmit(
+    companyId: string,
+    jobId: string,
+  ): Promise<void> {
+    const pending = await this.findPendingReferenceEquipmentApproval(jobId);
+    if (pending) {
+      throw new ConflictException({
+        message: "Resolve the pending reference-equipment approval before submitting results",
+        code: "REFERENCE_EQUIPMENT_APPROVAL_UNRESOLVED",
+        approvalId: pending.id,
+      });
+    }
+
+    const job = await this.loadReferenceEquipmentSource(companyId, jobId);
+    const used = await prisma.jobReferenceEquipmentUsed.findMany({
+      where: { calibrationJobId: jobId },
+    });
+    const asOf = job.startedAt ?? new Date();
+    const unresolved = used.find((row) => usedRowRequiresOverride(row, job, asOf).requiresOverride);
+    if (unresolved) {
+      throw new ConflictException({
+        message: "Selected invalid reference equipment must be approved before submitting results",
+        code: "REFERENCE_EQUIPMENT_APPROVAL_UNRESOLVED",
+        equipmentId: unresolved.equipmentId,
+      });
+    }
   }
 }
 

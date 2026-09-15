@@ -110,3 +110,17 @@ export function canRecordReferenceEquipment(job: {
 }): boolean {
   return job.startedAt !== null && !isReferenceEquipmentLocked(job);
 }
+
+export function isReferenceEquipmentApprovalPending(job: {
+  referenceEquipmentApprovals?: { status: string }[] | null;
+}): boolean {
+  return job.referenceEquipmentApprovals?.[0]?.status === "PENDING_REVIEW";
+}
+
+export function canReplaceReferenceEquipment(job: {
+  status: CalibrationJobStatus;
+  startedAt: string | null;
+  referenceEquipmentApprovals?: { status: string }[] | null;
+}): boolean {
+  return canRecordReferenceEquipment(job) && !isReferenceEquipmentApprovalPending(job);
+}

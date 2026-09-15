@@ -58,7 +58,9 @@ import {
   canDecideIdentity,
   canEscalateIdentity,
   canRecordReferenceEquipment,
+  canReplaceReferenceEquipment,
   canSubmitIdentityCorrection,
+  isReferenceEquipmentApprovalPending,
   canDecideQualityReview,
   correctionMissingImage,
   formatCalibrationJobApiError,
@@ -97,6 +99,8 @@ import {
   type SignatureStatus,
 } from "../use-identity-corrections-query";
 import {
+  useDecideReferenceEquipmentApproval,
+  useReferenceEquipmentApprovals,
   useReferenceEquipmentCandidates,
   useReferenceEquipmentUsed,
   useReplaceReferenceEquipmentUsed,
@@ -403,6 +407,9 @@ export default function CalibrationJobDetailPage() {
   const canOverrideRefEquipment = Boolean(
     capabilities?.calibrationJobOverrideReferenceEquipmentValidity,
   );
+  const canDecideRefApproval = Boolean(
+    capabilities?.calibrationJobDecideReferenceEquipmentApproval,
+  );
   const correctionRows = corrections.data ?? [];
   const hasPendingCorrection = correctionRows.some((c) => c.status === "PENDING_REVIEW");
   const gateReopenedBy = correctionRows.find(
@@ -596,6 +603,7 @@ export default function CalibrationJobDetailPage() {
                 candidates={refCandidates}
                 canRecord={canRecordRefEquipment}
                 canOverride={canOverrideRefEquipment}
+                canDecideApproval={canDecideRefApproval}
                 submitting={replaceRefEquipment.isPending}
                 notice={refEquipmentNotice}
                 onSubmit={handleReplaceReferenceEquipment}
@@ -1221,6 +1229,7 @@ function ReferenceEquipmentSection({
   candidates,
   canRecord,
   canOverride,
+  canDecideApproval,
   submitting,
   notice,
   onSubmit,
@@ -1230,6 +1239,7 @@ function ReferenceEquipmentSection({
   candidates: RefEquipmentQueryLike<ReferenceEquipmentCandidate[]>;
   canRecord: boolean;
   canOverride: boolean;
+  canDecideApproval: boolean;
   submitting: boolean;
   notice: { ok: boolean; text: string } | null;
   onSubmit: (items: JobReferenceEquipmentReplaceItem[]) => void | Promise<void>;
@@ -1243,6 +1253,7 @@ function ReferenceEquipmentSection({
   }
 
   const usedRows = used.data ?? [];
+  const pending = isReferenceEquipmentApprovalPending(job);
 
   const readOnlyList =
     usedRows.length === 0 ? (
@@ -1257,25 +1268,36 @@ function ReferenceEquipmentSection({
       </ul>
     );
 
-  // Users without the record capability (office / admin / supervisor) only ever
-  // see the recorded set.
-  if (!canRecord) return readOnlyList;
+  if (!canRecord) {
+    return (
+      <div className="mt-3 space-y-3">
+        {pending ? (
+          <ReferenceEquipmentApprovalPanel jobId={job.id} canDecide={canDecideApproval} />
+        ) : null}
+        {readOnlyList}
+      </div>
+    );
+  }
 
-  const gateOpen = canRecordReferenceEquipment(job);
+  const replaceOpen = canReplaceReferenceEquipment(job);
   const hasRecordedOverride = usedRows.some((u) => u.validityOverridden);
-  // Full-set replace + the API's FORBIDDEN-on-override rule mean anyone without
-  // override permission cannot re-save a set that already contains an override.
   const lockedByOverride = hasRecordedOverride && !canOverride;
 
-  if (!gateOpen || lockedByOverride) {
-    const notice = !gateOpen
+  if (!replaceOpen || lockedByOverride) {
+    const noticeText = !canRecordReferenceEquipment(job)
       ? job.startedAt === null
         ? "Job belum dimulai — alat referensi baru dapat dicatat setelah kalibrasi berjalan."
         : "Job sudah dikirim — daftar alat referensi tidak dapat diubah lagi."
-      : "Daftar alat referensi berisi alat yang disetujui manajer teknis. Hanya manajer teknis yang dapat mengubahnya.";
+      : pending
+        ? null
+        : "Daftar alat referensi berisi alat yang disetujui manajer teknis. Hanya manajer teknis yang dapat mengubahnya.";
     return (
       <div className="mt-3 space-y-3">
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">{notice}</p>
+        {pending ? (
+          <ReferenceEquipmentApprovalPanel jobId={job.id} canDecide={canDecideApproval} />
+        ) : noticeText ? (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">{noticeText}</p>
+        ) : null}
         {readOnlyList}
       </div>
     );
@@ -1306,6 +1328,124 @@ function ReferenceEquipmentSection({
 interface SelRow {
   checked: boolean;
   reason: string;
+}
+
+function ReferenceEquipmentApprovalPanel({
+  jobId,
+  canDecide,
+}: {
+  jobId: string;
+  canDecide: boolean;
+}) {
+  const approvals = useReferenceEquipmentApprovals(jobId);
+  const decide = useDecideReferenceEquipmentApproval(jobId);
+  const pending = (approvals.data ?? []).find((row) => row.status === "PENDING_REVIEW") ?? null;
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [rejectNote, setRejectNote] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  if (approvals.isLoading) {
+    return <p className="text-sm text-slate-400">Memuat permintaan persetujuan…</p>;
+  }
+  if (!pending) {
+    return (
+      <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        Menunggu Persetujuan MT
+      </p>
+    );
+  }
+
+  const request = pending;
+  const invalidItems = request.items.filter((item) => item.requiresOverride);
+  const missingReasons = invalidItems.some((item) => !(reasons[item.equipmentId] ?? "").trim());
+
+  async function onApprove() {
+    setLocalError(null);
+    try {
+      await decide.mutateAsync({
+        approvalId: request.id,
+        decision: "APPROVE",
+        items: invalidItems.map((item) => ({
+          equipmentId: item.equipmentId,
+          overrideReason: (reasons[item.equipmentId] ?? "").trim(),
+        })),
+      });
+    } catch (err) {
+      setLocalError(formatCalibrationJobApiError(err, "Gagal menyetujui alat referensi."));
+    }
+  }
+
+  async function onReject() {
+    setLocalError(null);
+    try {
+      await decide.mutateAsync({
+        approvalId: request.id,
+        decision: "REJECT",
+        decisionNote: rejectNote.trim(),
+      });
+    } catch (err) {
+      setLocalError(formatCalibrationJobApiError(err, "Gagal menolak permintaan."));
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3">
+      <p className="text-sm font-semibold text-amber-900">Menunggu Persetujuan MT</p>
+      <p className="text-xs text-amber-800">
+        Diajukan {pending.submittedBy.name ?? "teknisi"} · {formatDateTime(pending.createdAt)}
+      </p>
+      <ul className="space-y-2">
+        {pending.items.map((item) => (
+          <li key={item.id} className="rounded-md border border-amber-100 bg-white px-3 py-2 text-sm">
+            <span className="font-mono font-medium">{item.equipment.code}</span>
+            <span className="ml-2 text-xs text-slate-500">{item.validityStatus}</span>
+            {item.requiresOverride && canDecide ? (
+              <textarea
+                className="mt-2 w-full rounded-md border border-amber-300 px-2 py-1 text-sm"
+                rows={2}
+                placeholder="Alasan override (wajib)"
+                value={reasons[item.equipmentId] ?? ""}
+                onChange={(e) =>
+                  setReasons((prev) => ({ ...prev, [item.equipmentId]: e.target.value }))
+                }
+              />
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {canDecide ? (
+        <div className="space-y-2">
+          <textarea
+            className="w-full rounded-md border border-slate-200 px-2 py-1 text-sm"
+            rows={2}
+            placeholder="Catatan penolakan (wajib jika menolak)"
+            value={rejectNote}
+            onChange={(e) => setRejectNote(e.target.value)}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={decide.isPending || missingReasons}
+              onClick={() => void onApprove()}
+            >
+              Setujui / Override
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={decide.isPending || rejectNote.trim().length === 0}
+              onClick={() => void onReject()}
+            >
+              Tolak
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {localError ? <p className="text-xs text-red-600">{localError}</p> : null}
+    </div>
+  );
 }
 
 function ReferenceEquipmentEditor({
@@ -1348,11 +1488,13 @@ function ReferenceEquipmentEditor({
   const setReason = (equipmentId: string, reason: string) =>
     setSelection((prev) => ({ ...prev, [equipmentId]: { ...prev[equipmentId], reason } }));
 
-  const missingOverrideReason = sorted.some((c) => {
-    const row = selection[c.equipmentId];
-    if (!row?.checked || isReferenceEquipmentUsable(c.validity.status)) return false;
-    return row.reason.trim().length === 0;
-  });
+  const missingOverrideReason =
+    canOverride &&
+    sorted.some((c) => {
+      const row = selection[c.equipmentId];
+      if (!row?.checked || isReferenceEquipmentUsable(c.validity.status)) return false;
+      return row.reason.trim().length === 0;
+    });
 
   function handleSubmit() {
     const items: JobReferenceEquipmentReplaceItem[] = sorted
@@ -1360,10 +1502,12 @@ function ReferenceEquipmentEditor({
       .map((c) =>
         isReferenceEquipmentUsable(c.validity.status)
           ? { equipmentId: c.equipmentId }
-          : {
-              equipmentId: c.equipmentId,
-              override: { reason: selection[c.equipmentId].reason.trim() },
-            },
+          : canOverride
+            ? {
+                equipmentId: c.equipmentId,
+                override: { reason: selection[c.equipmentId].reason.trim() },
+              }
+            : { equipmentId: c.equipmentId },
       );
     void onSubmit(items);
   }
@@ -1448,8 +1592,7 @@ function CandidateRow({
   const usable = isReferenceEquipmentUsable(c.validity.status);
   const inactive = !c.isActive;
   const needsOverride = !usable && !inactive;
-  const blockedForNonManager = needsOverride && !canOverride;
-  const checkboxDisabled = inactive || blockedForNonManager;
+  const checkboxDisabled = inactive;
   const brandModel = [c.brand, c.model].filter(Boolean).join(" ");
 
   return (
@@ -1490,10 +1633,10 @@ function CandidateRow({
                 : "Tidak wajib untuk jenis alat ini"}
             </span>
           </span>
-          {blockedForNonManager ? (
+          {needsOverride && !canOverride ? (
             <span className="mt-1 block text-xs text-amber-700">
-              Hanya manajer teknis yang dapat menyetujui penggunaan alat dengan kalibrasi tidak
-              valid.
+              Kalibrasi tidak valid — simpan lalu ajukan persetujuan. Belum dapat dipakai sampai
+              manajer teknis menyetujui.
             </span>
           ) : null}
         </span>

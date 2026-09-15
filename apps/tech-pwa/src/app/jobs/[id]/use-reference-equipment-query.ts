@@ -52,3 +52,15 @@ export function useReplaceReferenceEquipmentUsed(id: string) {
     },
   });
 }
+
+export function useSubmitReferenceEquipmentApproval(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch(`/calibration-jobs/${id}/reference-equipment-approvals`, { method: "POST" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["job", id] });
+    },
+  });
+}

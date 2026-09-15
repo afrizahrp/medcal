@@ -262,6 +262,17 @@ export function formatCalibrationJobApiError(err: unknown, fallback: string): st
         "Job belum dimulai — alat referensi baru dapat dicatat setelah kalibrasi berjalan.",
       CALIBRATION_JOB_REFERENCE_EQUIPMENT_LOCKED:
         "Job sudah dikirim — daftar alat referensi tidak dapat diubah lagi.",
+      REFERENCE_EQUIPMENT_APPROVAL_ALREADY_PENDING:
+        "Permintaan persetujuan alat referensi sedang menunggu review.",
+      REFERENCE_EQUIPMENT_APPROVAL_NOT_REQUIRED:
+        "Tidak ada alat referensi yang memerlukan persetujuan manajer teknis.",
+      REFERENCE_EQUIPMENT_APPROVAL_ALREADY_DECIDED:
+        "Permintaan persetujuan alat referensi ini sudah diputuskan.",
+      REFERENCE_EQUIPMENT_APPROVAL_NOT_FOUND: "Permintaan persetujuan alat referensi tidak ditemukan.",
+      REFERENCE_EQUIPMENT_APPROVAL_UNRESOLVED:
+        "Selesaikan persetujuan alat referensi sebelum mengirim hasil ke review mutu.",
+      INVALID_REFERENCE_EQUIPMENT_APPROVAL_DECISION:
+        "Data keputusan persetujuan alat referensi tidak valid.",
       EQUIPMENT_NOT_CONFIRMED_ON_WORK_ORDER:
         "Alat ini tidak ada pada daftar work order job. Muat ulang halaman.",
       EQUIPMENT_INACTIVE: "Alat referensi ini berstatus nonaktif dan tidak dapat dipakai.",
@@ -304,6 +315,26 @@ export function canRecordReferenceEquipment(job: {
   startedAt: string | null;
 }): boolean {
   return job.startedAt !== null && !REFERENCE_EQUIPMENT_LOCKED_JOB_STATUSES.includes(job.status);
+}
+
+export function latestReferenceEquipmentApproval<
+  T extends { status: string },
+>(job: { referenceEquipmentApprovals?: T[] | null }): T | null {
+  return job.referenceEquipmentApprovals?.[0] ?? null;
+}
+
+export function isReferenceEquipmentApprovalPending(job: {
+  referenceEquipmentApprovals?: { status: string }[] | null;
+}): boolean {
+  return latestReferenceEquipmentApproval(job)?.status === "PENDING_REVIEW";
+}
+
+export function canReplaceReferenceEquipment(job: {
+  status: string;
+  startedAt: string | null;
+  referenceEquipmentApprovals?: { status: string }[] | null;
+}): boolean {
+  return canRecordReferenceEquipment(job) && !isReferenceEquipmentApprovalPending(job);
 }
 
 export const REFERENCE_EQUIPMENT_VALIDITY_LABELS: Record<JobEquipmentValidityStatus, string> = {

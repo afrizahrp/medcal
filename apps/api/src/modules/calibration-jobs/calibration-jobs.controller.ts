@@ -23,6 +23,7 @@ import {
   calibrationJobListQuerySchema,
   identityCorrectionDecisionSchema,
   identityCorrectionSubmitSchema,
+  jobReferenceEquipmentApprovalDecisionSchema,
   jobReferenceEquipmentReplaceSchema,
   lkDownloadReauthSchema,
   measurementResultBatchCreateSchema,
@@ -56,6 +57,7 @@ import {
   type JobMeasurementParametersResult,
 } from "./calibration-jobs.service";
 import type {
+  JobReferenceEquipmentApprovalDetail,
   JobReferenceEquipmentCandidate,
   JobReferenceEquipmentUsedDetail,
 } from "./job-reference-equipment";
@@ -362,6 +364,51 @@ export class CalibrationJobsController {
       });
     }
     return this.service.replaceReferenceEquipmentUsed(companyId, id, userId, role, parsed.data);
+  }
+
+  @Get(":id/reference-equipment-approvals")
+  @RequirePermission("calibrationJob", "read")
+  async listReferenceEquipmentApprovals(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<JobReferenceEquipmentApprovalDetail[]> {
+    return this.service.listReferenceEquipmentApprovals(companyId, id);
+  }
+
+  @Post(":id/reference-equipment-approvals")
+  @RequirePermission("calibrationJob", "submitReferenceEquipmentApproval")
+  async submitReferenceEquipmentApproval(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+  ): Promise<JobReferenceEquipmentApprovalDetail> {
+    return this.service.submitReferenceEquipmentApproval(companyId, id, userId);
+  }
+
+  @Post(":id/reference-equipment-approvals/:approvalId/decision")
+  @RequirePermission("calibrationJob", "decideReferenceEquipmentApproval")
+  async decideReferenceEquipmentApproval(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Param("approvalId") approvalId: string,
+    @Body() rawBody: unknown,
+  ): Promise<JobReferenceEquipmentApprovalDetail> {
+    const parsed = jobReferenceEquipmentApprovalDecisionSchema.safeParse(rawBody ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid reference equipment approval decision",
+        code: "INVALID_REFERENCE_EQUIPMENT_APPROVAL_DECISION",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.decideReferenceEquipmentApproval(
+      companyId,
+      id,
+      approvalId,
+      userId,
+      parsed.data,
+    );
   }
 
   // ── MeasurementResult (Stage 2c) ──────────────────────────────────────────

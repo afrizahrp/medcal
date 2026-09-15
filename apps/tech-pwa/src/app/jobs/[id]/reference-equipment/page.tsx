@@ -11,6 +11,8 @@ import { LoadingState, ErrorState } from "../../../../components/ui/state-views"
 import { formatApiError, formatReferenceEquipmentError } from "../../../../lib/api-errors";
 import {
   canRecordReferenceEquipment,
+  canReplaceReferenceEquipment,
+  isReferenceEquipmentApprovalPending,
   isReferenceEquipmentLocked,
   isReferenceEquipmentUsable,
   type JobReferenceEquipmentReplaceItem,
@@ -142,20 +144,23 @@ export default function ReferenceEquipmentPage() {
     );
   }
 
-  const gateOpen = canRecordReferenceEquipment(job);
+  const replaceOpen = canReplaceReferenceEquipment(job);
   const hasRecordedOverride = used.some((u) => u.validityOverridden);
-  // Full-set replace + the API's FORBIDDEN-on-override rule mean a plain
-  // technician cannot re-save any set that already contains a manager override.
   const technicianReadOnly = hasRecordedOverride && !canOverride;
+  const pendingApproval = isReferenceEquipmentApprovalPending(job);
 
-  if (!gateOpen || technicianReadOnly) {
-    const notice = !gateOpen
+  if (!replaceOpen || technicianReadOnly) {
+    const notice = !canRecordReferenceEquipment(job)
       ? job.startedAt === null
         ? "Job belum dimulai — alat referensi baru dapat dicatat setelah kalibrasi berjalan."
-        : "Job sudah dikirim — daftar alat referensi tidak dapat diubah lagi."
-      : technicianReadOnly
-        ? "Daftar alat referensi berisi alat yang disetujui manajer teknis. Hanya manajer teknis yang dapat mengubahnya."
-        : null;
+        : isReferenceEquipmentLocked(job)
+          ? "Job sudah dikirim — daftar alat referensi tidak dapat diubah lagi."
+          : null
+      : pendingApproval
+        ? "Menunggu Persetujuan MT"
+        : technicianReadOnly
+          ? "Daftar alat referensi berisi alat yang disetujui manajer teknis. Hanya manajer teknis yang dapat mengubahnya."
+          : null;
 
     return (
       <GuardScreen>
@@ -197,11 +202,13 @@ export default function ReferenceEquipmentPage() {
       prev ? { ...prev, [equipmentId]: { ...prev[equipmentId], reason } } : prev,
     );
 
-  const missingOverrideReason = sortedCandidates.some((c) => {
-    const row = selection[c.equipmentId];
-    if (!row?.checked || isReferenceEquipmentUsable(c.validity.status)) return false;
-    return row.reason.trim().length === 0;
-  });
+  const missingOverrideReason =
+    canOverride &&
+    sortedCandidates.some((c) => {
+      const row = selection[c.equipmentId];
+      if (!row?.checked || isReferenceEquipmentUsable(c.validity.status)) return false;
+      return row.reason.trim().length === 0;
+    });
 
   function handleSubmit() {
     if (!selection) return;
@@ -211,10 +218,12 @@ export default function ReferenceEquipmentPage() {
       .map((c) =>
         isReferenceEquipmentUsable(c.validity.status)
           ? { equipmentId: c.equipmentId }
-          : {
-              equipmentId: c.equipmentId,
-              override: { reason: selection[c.equipmentId].reason.trim() },
-            },
+          : canOverride
+            ? {
+                equipmentId: c.equipmentId,
+                override: { reason: selection[c.equipmentId].reason.trim() },
+              }
+            : { equipmentId: c.equipmentId },
       );
     mutation.mutate(items, {
       onSuccess: () => router.back(),
@@ -281,8 +290,7 @@ function CandidateRow({
   const usable = isReferenceEquipmentUsable(c.validity.status);
   const inactive = !c.isActive;
   const needsOverride = !usable && !inactive;
-  const blockedForTechnician = needsOverride && !canOverride;
-  const checkboxDisabled = inactive || blockedForTechnician;
+  const checkboxDisabled = inactive;
   const bm = brandModel(c);
 
   return (
@@ -323,10 +331,10 @@ function CandidateRow({
               Tidak wajib untuk jenis alat ini.
             </span>
           ) : null}
-          {blockedForTechnician ? (
+          {needsOverride && !canOverride ? (
             <span className="mt-1 block text-xs text-amber-700">
-              Hanya manajer teknis yang dapat menyetujui penggunaan alat dengan kalibrasi tidak
-              valid. Hubungi manajer teknis — ia dapat menyetujuinya dari aplikasi ini.
+              Kalibrasi tidak valid — simpan lalu ajukan persetujuan manajer teknis. Alat ini belum
+              dapat dipakai sampai disetujui.
             </span>
           ) : null}
         </span>

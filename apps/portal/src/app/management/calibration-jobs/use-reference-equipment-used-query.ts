@@ -128,3 +128,73 @@ export function useReplaceReferenceEquipmentUsed(jobId: string) {
     },
   });
 }
+
+export interface ReferenceEquipmentApprovalItem {
+  id: string;
+  equipmentId: string;
+  validityStatus: JobEquipmentValidityStatus;
+  requiresOverride: boolean;
+  overrideReason: string | null;
+  equipment: {
+    id: string;
+    code: string;
+    brand: string | null;
+    model: string | null;
+    serialNumber: string | null;
+    equipmentType: { id: string; code: string; name: string };
+  };
+}
+
+export interface ReferenceEquipmentApproval {
+  id: string;
+  status: "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+  decision: "APPROVE" | "REJECT" | null;
+  decisionNote: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+  submittedBy: { id: string; name: string | null };
+  decidedBy: { id: string; name: string | null } | null;
+  items: ReferenceEquipmentApprovalItem[];
+}
+
+const approvalsKey = (jobId: string) =>
+  [CALIBRATION_JOBS_QUERY_KEY, jobId, "reference-equipment-approvals"] as const;
+
+export function useReferenceEquipmentApprovals(jobId: string | undefined) {
+  return useQuery({
+    queryKey: approvalsKey(jobId ?? ""),
+    queryFn: () =>
+      apiFetch<ReferenceEquipmentApproval[]>(
+        `/calibration-jobs/${jobId}/reference-equipment-approvals`,
+      ),
+    enabled: Boolean(jobId),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useDecideReferenceEquipmentApproval(jobId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      approvalId: string;
+      decision: "APPROVE" | "REJECT";
+      decisionNote?: string;
+      items?: { equipmentId: string; overrideReason: string }[];
+    }) =>
+      apiFetch<ReferenceEquipmentApproval>(
+        `/calibration-jobs/${jobId}/reference-equipment-approvals/${input.approvalId}/decision`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            decision: input.decision,
+            decisionNote: input.decisionNote,
+            items: input.items,
+          }),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CALIBRATION_JOBS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: [CALIBRATION_JOBS_QUERY_KEY, jobId] });
+    },
+  });
+}
