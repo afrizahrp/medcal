@@ -4,17 +4,22 @@ import {
   capabilityGroupSections,
   expectedReplicateCount,
   formatMeasuredValue,
+  formatReadingDisplay,
   gridEntryStatus,
   hasCapabilityGroups,
   isMeasurementLocked,
+  isReadingFilled,
   isValidMeasuredValue,
+  measuredReadingPayload,
   measuredValueInputStep,
   measurementLockedReason,
   parameterEntryStatus,
+  readingDisplayValue,
   shouldShowMeasurementSection,
   passFailChip,
   toleranceText,
   usesDirection,
+  validateMeasuredDraft,
   validateMeasuredValue,
 } from "./measurement";
 
@@ -92,6 +97,74 @@ describe("isValidMeasuredValue / validateMeasuredValue", () => {
   });
 });
 
+describe("validateMeasuredDraft / measuredReadingPayload", () => {
+  it("routes numeric drafts to measuredValue and clears measuredText", () => {
+    expect(validateMeasuredDraft("120.5", 1)).toEqual({
+      ok: true,
+      kind: "numeric",
+      payload: { measuredValue: "120.5", measuredText: null },
+    });
+    expect(measuredReadingPayload(validateMeasuredDraft("120.5", 1))).toEqual({
+      measuredValue: "120.5",
+      measuredText: null,
+    });
+  });
+
+  it("routes non-numeric drafts to measuredText and clears measuredValue", () => {
+    expect(validateMeasuredDraft("OL", 1)).toEqual({
+      ok: true,
+      kind: "symbol",
+      payload: { measuredValue: null, measuredText: "OL" },
+    });
+    expect(validateMeasuredDraft("√", null)).toEqual({
+      ok: true,
+      kind: "symbol",
+      payload: { measuredValue: null, measuredText: "√" },
+    });
+    expect(measuredReadingPayload(validateMeasuredDraft("—", 0))).toEqual({
+      measuredValue: null,
+      measuredText: "—",
+    });
+  });
+
+  it("still rejects numeric shape that exceeds decimalPlaces", () => {
+    expect(validateMeasuredDraft("23.23", 1)).toEqual({
+      ok: false,
+      reason: "decimal_places_exceeded",
+      decimalPlaces: 1,
+    });
+    expect(measuredReadingPayload(validateMeasuredDraft("23.23", 1))).toBeNull();
+  });
+
+  it("treats blank as empty (nothing to save)", () => {
+    expect(validateMeasuredDraft("   ", 1)).toEqual({ ok: true, kind: "empty" });
+    expect(measuredReadingPayload(validateMeasuredDraft("", 1))).toBeNull();
+  });
+});
+
+describe("readingDisplayValue / isReadingFilled / formatReadingDisplay", () => {
+  it("hydrates numeric first, then symbol, then empty", () => {
+    expect(readingDisplayValue({ measuredValue: "12.0", measuredText: null })).toBe("12.0");
+    expect(readingDisplayValue({ measuredValue: null, measuredText: "OL" })).toBe("OL");
+    expect(readingDisplayValue({ measuredValue: "", measuredText: "√" })).toBe("√");
+    expect(readingDisplayValue({ measuredValue: null, measuredText: null })).toBe("");
+    expect(readingDisplayValue(undefined)).toBe("");
+  });
+
+  it("counts either numeric or symbol as filled", () => {
+    expect(isReadingFilled({ measuredValue: "10", measuredText: null })).toBe(true);
+    expect(isReadingFilled({ measuredValue: null, measuredText: "OL" })).toBe(true);
+    expect(isReadingFilled({ measuredValue: null, measuredText: "  " })).toBe(false);
+    expect(isReadingFilled({ measuredValue: null, measuredText: null })).toBe(false);
+  });
+
+  it("formats numeric with precision and shows symbol text as-is", () => {
+    expect(formatReadingDisplay({ measuredValue: "36.58", measuredText: null }, 1)).toBe("36.6");
+    expect(formatReadingDisplay({ measuredValue: null, measuredText: "OL" }, 1)).toBe("OL");
+    expect(formatReadingDisplay(null, 1)).toBe("—");
+  });
+});
+
 describe("toleranceText", () => {
   const uom = { symbol: "lux" };
   it("prefers the verbatim LK note", () => {
@@ -166,15 +239,29 @@ describe("lock helpers", () => {
 });
 
 describe("parameterEntryStatus", () => {
-  const row = (replicateIndex: number, measuredValue: string | null, isWithinTolerance: boolean | null) => ({
+  const row = (
+    replicateIndex: number,
+    measuredValue: string | null,
+    isWithinTolerance: boolean | null,
+    measuredText: string | null = null,
+  ) => ({
     replicateIndex,
     measuredValue,
+    measuredText,
     isWithinTolerance,
   });
 
   it("counts filled replicates against the seeded default of 5", () => {
     const s = parameterEntryStatus([row(1, "10", true), row(2, "11", true), row(3, null, null)]);
     expect(s).toMatchObject({ filled: 2, total: 5, complete: false, anyFail: false });
+  });
+  it("counts symbol-only rows as filled", () => {
+    const s = parameterEntryStatus([
+      row(1, null, null, "OL"),
+      row(2, "11", true),
+      row(3, null, null, null),
+    ]);
+    expect(s).toMatchObject({ filled: 2, total: 5, complete: false });
   });
   it("is complete once every seeded row has a value", () => {
     const rows = [1, 2, 3, 4, 5].map((i) => row(i, String(i), true));
@@ -205,15 +292,25 @@ describe("expectedReplicateCount / usesDirection", () => {
 });
 
 describe("gridEntryStatus", () => {
-  const cell = (replicateIndex: number, measuredValue: string | null, isWithinTolerance: boolean | null) => ({
+  const cell = (
+    replicateIndex: number,
+    measuredValue: string | null,
+    isWithinTolerance: boolean | null,
+    measuredText: string | null = null,
+  ) => ({
     replicateIndex,
     measuredValue,
+    measuredText,
     isWithinTolerance,
   });
 
   it("counts filled cells against points × expected replicates", () => {
     const s = gridEntryStatus([cell(1, "30", true), cell(2, "31", true)], 4, 5, 1);
     expect(s).toMatchObject({ filled: 2, total: 20, complete: false, anyFail: false });
+  });
+  it("counts symbol-only cells as filled", () => {
+    const s = gridEntryStatus([cell(1, null, null, "OL"), cell(2, "31", true)], 4, 5, 1);
+    expect(s).toMatchObject({ filled: 2, total: 20, complete: false });
   });
   it("is complete once every cell has a value", () => {
     const rows = [1, 2, 3, 4, 5].flatMap((i) => [

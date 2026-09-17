@@ -1,4 +1,5 @@
 import {
+  isMeasuredValueNumericShape,
   measuredValueDecimalPlacesExceededMessage,
   validateMeasuredValuePrecision,
   type MeasuredValuePrecisionResult,
@@ -6,10 +7,14 @@ import {
 import type { CalibrationJobStatus } from "./types";
 
 export {
+  isMeasuredValueNumericShape,
   measuredValueDecimalPlacesExceededMessage,
   validateMeasuredValuePrecision,
   type MeasuredValuePrecisionResult,
 };
+
+/** Zod caps measuredText at 500; keep the client gate aligned. */
+export const MEASURED_TEXT_MAX_LENGTH = 500;
 
 /**
  * Measurement entry — Pattern A (direct replicates) + Pattern B (test-point grid).
@@ -158,12 +163,89 @@ export interface MeasurementBatchItem {
   calibrationTestPointId?: string | null;
   replicateIndex: number;
   direction?: MeasurementDirection;
-  measuredValue: string;
+  measuredValue: string | null;
+  measuredText?: string | null;
 }
 
 /** The editable subset for `PATCH .../measurement-results/:id`. */
 export interface MeasurementUpdateInput {
-  measuredValue: string;
+  measuredValue: string | null;
+  measuredText?: string | null;
+}
+
+/** Display / hydrate value for a saved reading (numeric preferred, else symbol). */
+export function readingDisplayValue(
+  row: Pick<TechMeasurementResult, "measuredValue" | "measuredText"> | null | undefined,
+): string {
+  if (!row) return "";
+  if (row.measuredValue !== null && row.measuredValue !== "") return row.measuredValue;
+  if (row.measuredText !== null && row.measuredText !== "") return row.measuredText;
+  return "";
+}
+
+/** True when a saved row has either a numeric or symbol reading. */
+export function isReadingFilled(
+  row: Pick<TechMeasurementResult, "measuredValue" | "measuredText">,
+): boolean {
+  return (
+    (row.measuredValue !== null && row.measuredValue !== "") ||
+    (row.measuredText !== null && row.measuredText.trim() !== "")
+  );
+}
+
+export type MeasuredReadingPayload = {
+  measuredValue: string | null;
+  measuredText: string | null;
+};
+
+export type MeasuredDraftValidation =
+  | { ok: true; kind: "empty" }
+  | { ok: true; kind: "numeric"; payload: MeasuredReadingPayload }
+  | { ok: true; kind: "symbol"; payload: MeasuredReadingPayload }
+  | { ok: false; reason: "invalid_format" }
+  | { ok: false; reason: "decimal_places_exceeded"; decimalPlaces: number }
+  | { ok: false; reason: "symbol_too_long"; maxLength: number };
+
+/**
+ * Validate a draft cell and route it to measuredValue vs measuredText.
+ * Numeric shape keeps the existing precision rules; any other non-empty
+ * trimmed string is a symbol/text reading (sibling field cleared).
+ */
+export function validateMeasuredDraft(
+  raw: string,
+  decimalPlaces?: number | null,
+): MeasuredDraftValidation {
+  const trimmed = raw.trim();
+  if (trimmed === "") return { ok: true, kind: "empty" };
+
+  if (isMeasuredValueNumericShape(trimmed)) {
+    const precision = validateMeasuredValuePrecision(trimmed, decimalPlaces);
+    if (!precision.ok) return precision;
+    return {
+      ok: true,
+      kind: "numeric",
+      payload: { measuredValue: trimmed, measuredText: null },
+    };
+  }
+
+  if (trimmed.length > MEASURED_TEXT_MAX_LENGTH) {
+    return { ok: false, reason: "symbol_too_long", maxLength: MEASURED_TEXT_MAX_LENGTH };
+  }
+
+  return {
+    ok: true,
+    kind: "symbol",
+    payload: { measuredValue: null, measuredText: trimmed },
+  };
+}
+
+/** Payload for create/update when the draft is a saveable numeric or symbol reading. */
+export function measuredReadingPayload(
+  validation: MeasuredDraftValidation,
+): MeasuredReadingPayload | null {
+  if (!validation.ok) return null;
+  if (validation.kind === "empty") return null;
+  return validation.payload;
 }
 
 // ── Replicate-count soft default ─────────────────────────────────────────────
@@ -360,10 +442,13 @@ export interface ParameterEntryStatus {
  * and however many replicates already exist.
  */
 export function parameterEntryStatus(
-  rows: Pick<TechMeasurementResult, "replicateIndex" | "measuredValue" | "isWithinTolerance">[],
+  rows: Pick<
+    TechMeasurementResult,
+    "replicateIndex" | "measuredValue" | "measuredText" | "isWithinTolerance"
+  >[],
   defaultCount = DEFAULT_REPLICATE_COUNT,
 ): ParameterEntryStatus {
-  const withValue = rows.filter((r) => r.measuredValue !== null && r.measuredValue !== "");
+  const withValue = rows.filter(isReadingFilled);
   const maxIndex = rows.reduce((m, r) => Math.max(m, r.replicateIndex), 0);
   const total = Math.max(defaultCount, maxIndex);
   return {
@@ -380,12 +465,15 @@ export function parameterEntryStatus(
  * × directions (1 or 2).
  */
 export function gridEntryStatus(
-  rows: Pick<TechMeasurementResult, "replicateIndex" | "measuredValue" | "isWithinTolerance">[],
+  rows: Pick<
+    TechMeasurementResult,
+    "replicateIndex" | "measuredValue" | "measuredText" | "isWithinTolerance"
+  >[],
   testPointCount: number,
   expectedReplicates: number,
   directionCount = 1,
 ): ParameterEntryStatus {
-  const withValue = rows.filter((r) => r.measuredValue !== null && r.measuredValue !== "");
+  const withValue = rows.filter(isReadingFilled);
   const maxIndex = rows.reduce((m, r) => Math.max(m, r.replicateIndex), 0);
   const replicateCount = Math.max(expectedReplicates, maxIndex);
   const total = Math.max(0, testPointCount) * replicateCount * Math.max(1, directionCount);
@@ -395,4 +483,18 @@ export function gridEntryStatus(
     complete: total > 0 && withValue.length >= total,
     anyFail: withValue.some((r) => r.isWithinTolerance === false),
   };
+}
+
+/** Read-only cell: format numeric precision, else show symbol text, else em dash. */
+export function formatReadingDisplay(
+  row: Pick<TechMeasurementResult, "measuredValue" | "measuredText"> | null | undefined,
+  decimalPlaces: number | null | undefined,
+): string {
+  if (!row) return "—";
+  if (row.measuredValue !== null && row.measuredValue !== "") {
+    return formatMeasuredValue(row.measuredValue, decimalPlaces);
+  }
+  const text = row.measuredText?.trim();
+  if (text) return text;
+  return "—";
 }

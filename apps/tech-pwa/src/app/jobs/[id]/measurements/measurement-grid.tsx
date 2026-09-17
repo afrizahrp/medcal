@@ -8,14 +8,17 @@ import { ErrorBanner } from "../../../../components/feedback/error-banner";
 import { formatApiError } from "../../../../lib/api-errors";
 import {
   expectedReplicateCount,
-  formatMeasuredValue,
+  formatReadingDisplay,
   measuredValueDecimalPlacesExceededMessage,
   measuredValueInputStep,
+  readingDisplayValue,
   toleranceText,
   usesDirection,
-  validateMeasuredValue,
+  validateMeasuredDraft,
+  measuredReadingPayload,
   type MeasurementBatchItem,
   type MeasurementDirection,
+  type MeasurementUpdateInput,
   type TechMeasurementParameter,
   type TechMeasurementResult,
 } from "../../../../lib/calibration/measurement";
@@ -42,7 +45,7 @@ type GridEntryProps = {
   editable: boolean;
   lockedReason: string | null;
   onBatchCreate: (items: MeasurementBatchItem[]) => Promise<unknown>;
-  onUpdate: (args: { measurementId: string; input: { measuredValue: string } }) => Promise<unknown>;
+  onUpdate: (args: { measurementId: string; input: MeasurementUpdateInput }) => Promise<unknown>;
   onRefetch: () => Promise<unknown>;
 };
 
@@ -84,7 +87,7 @@ export function MeasurementGridEntry({
 
   const draftFor = (key: string, existing: TechMeasurementResult | undefined): string => {
     if (key in drafts) return drafts[key]!;
-    return existing?.measuredValue ?? "";
+    return readingDisplayValue(existing);
   };
 
   const setDraft = (key: string, value: string) => {
@@ -104,36 +107,53 @@ export function MeasurementGridEntry({
     ),
   ).filter(({ key, value, existing }) => {
     if (!(key in drafts)) return false;
-    const stored = existing?.measuredValue ?? "";
-    return value !== stored.trim();
+    const stored = readingDisplayValue(existing).trim();
+    return value !== stored;
   });
 
-  const invalidDirty = dirtyCells
+  const dirtyValidated = dirtyCells
     .filter(({ value }) => value !== "")
-    .map(({ value }) => validateMeasuredValue(value, dp))
-    .filter((result) => !result.ok);
+    .map((cell) => ({
+      ...cell,
+      validation: validateMeasuredDraft(cell.value, dp),
+    }));
+  const invalidDirty = dirtyValidated.filter((row) => !row.validation.ok);
   const hasInvalid = invalidDirty.length > 0;
-  const precisionError = invalidDirty.find((result) => result.reason === "decimal_places_exceeded");
+  const precisionError = invalidDirty.find(
+    (row) => !row.validation.ok && row.validation.reason === "decimal_places_exceeded",
+  );
   const footerValidationMessage =
-    precisionError && precisionError.reason === "decimal_places_exceeded"
-      ? measuredValueDecimalPlacesExceededMessage(precisionError.decimalPlaces)
+    precisionError &&
+    !precisionError.validation.ok &&
+    precisionError.validation.reason === "decimal_places_exceeded"
+      ? measuredValueDecimalPlacesExceededMessage(precisionError.validation.decimalPlaces)
       : hasInvalid
-        ? `Ada nilai yang tidak valid — gunakan angka (mis. ${exampleHint}).`
+        ? `Ada nilai yang tidak valid — gunakan angka (mis. ${exampleHint}) atau simbol dari alat.`
         : null;
-  const newItems: MeasurementBatchItem[] = dirtyCells
-    .filter(({ value, existing }) => value !== "" && !existing)
-    .map(({ tp, direction, index, value }) => ({
+
+  const saveable = dirtyValidated.flatMap(({ tp, direction, index, existing, validation }) => {
+    const payload = measuredReadingPayload(validation);
+    if (!payload) return [];
+    return [{ tp, direction, index, existing, payload }];
+  });
+  const newItems: MeasurementBatchItem[] = saveable
+    .filter(({ existing }) => !existing)
+    .map(({ tp, direction, index, payload }) => ({
       deviceCalibrationParameterId: parameterId,
       calibrationTestPointId: tp.id,
       replicateIndex: index,
       direction,
-      measuredValue: value,
+      measuredValue: payload.measuredValue,
+      measuredText: payload.measuredText,
     }));
-  const updates = dirtyCells
-    .filter(({ value, existing }) => existing && value !== "")
-    .map(({ value, existing }) => ({
+  const updates = saveable
+    .filter(({ existing }) => Boolean(existing))
+    .map(({ existing, payload }) => ({
       measurementId: existing!.id,
-      input: { measuredValue: value },
+      input: {
+        measuredValue: payload.measuredValue,
+        measuredText: payload.measuredText,
+      },
     }));
   const nothingToSave = newItems.length === 0 && updates.length === 0;
 
@@ -243,7 +263,7 @@ export function MeasurementGridEntry({
                         const trimmed = value.trim();
                         const validation =
                           touched && trimmed !== ""
-                            ? validateMeasuredValue(trimmed, dp)
+                            ? validateMeasuredDraft(trimmed, dp)
                             : { ok: true as const };
                         const invalid = !validation.ok;
                         return (
@@ -252,7 +272,7 @@ export function MeasurementGridEntry({
                               <input
                                 inputMode="decimal"
                                 step={measuredValueInputStep(dp)}
-                                type="number"
+                                type="text"
                                 value={value}
                                 onChange={(e) => setDraft(key, e.target.value)}
                                 className={[
@@ -263,7 +283,7 @@ export function MeasurementGridEntry({
                               />
                             ) : (
                               <span className="block text-base text-slate-900">
-                                {formatMeasuredValue(existing?.measuredValue ?? null, dp)}
+                                {formatReadingDisplay(existing, dp)}
                               </span>
                             )}
                             <span className="mt-1 block">

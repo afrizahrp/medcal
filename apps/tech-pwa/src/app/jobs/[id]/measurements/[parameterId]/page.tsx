@@ -12,12 +12,14 @@ import { formatApiError } from "../../../../../lib/api-errors";
 import {
   DEFAULT_REPLICATE_COUNT,
   canRecordMeasurement,
-  formatMeasuredValue,
+  formatReadingDisplay,
   measuredValueDecimalPlacesExceededMessage,
   measuredValueInputStep,
   measurementLockedReason,
+  readingDisplayValue,
   toleranceText,
-  validateMeasuredValue,
+  validateMeasuredDraft,
+  measuredReadingPayload,
   type MeasurementBatchItem,
   type TechMeasurementResult,
 } from "../../../../../lib/calibration/measurement";
@@ -174,7 +176,7 @@ export default function MeasurementParameterEntryPage() {
 
   const draftFor = (index: number): string => {
     if (index in drafts) return drafts[index]!;
-    return rowByIndex.get(index)?.measuredValue ?? "";
+    return readingDisplayValue(rowByIndex.get(index));
   };
   const setDraft = (index: number, value: string) => {
     setTouched(true);
@@ -186,32 +188,54 @@ export default function MeasurementParameterEntryPage() {
     .map((index) => ({ index, value: draftFor(index).trim(), existing: rowByIndex.get(index) }))
     .filter(({ index, value, existing }) => {
       if (!(index in drafts)) return false;
-      const stored = existing?.measuredValue ?? "";
-      return value !== stored.trim();
+      const stored = readingDisplayValue(existing).trim();
+      return value !== stored;
     });
 
-  const invalidDirty = dirtyValues
+  const dirtyValidated = dirtyValues
     .filter(({ value }) => value !== "")
-    .map(({ value }) => validateMeasuredValue(value, dp))
-    .filter((result) => !result.ok);
+    .map(({ index, value, existing }) => ({
+      index,
+      value,
+      existing,
+      validation: validateMeasuredDraft(value, dp),
+    }));
+  const invalidDirty = dirtyValidated.filter((row) => !row.validation.ok);
   const hasInvalid = invalidDirty.length > 0;
-  const precisionError = invalidDirty.find((result) => result.reason === "decimal_places_exceeded");
+  const precisionError = invalidDirty.find(
+    (row) => !row.validation.ok && row.validation.reason === "decimal_places_exceeded",
+  );
   const footerValidationMessage =
-    precisionError && precisionError.reason === "decimal_places_exceeded"
-      ? measuredValueDecimalPlacesExceededMessage(precisionError.decimalPlaces)
+    precisionError &&
+    !precisionError.validation.ok &&
+    precisionError.validation.reason === "decimal_places_exceeded"
+      ? measuredValueDecimalPlacesExceededMessage(precisionError.validation.decimalPlaces)
       : hasInvalid
-        ? `Ada nilai yang tidak valid — gunakan angka (mis. ${exampleHint}).`
+        ? `Ada nilai yang tidak valid — gunakan angka (mis. ${exampleHint}) atau simbol dari alat.`
         : null;
-  const newItems: MeasurementBatchItem[] = dirtyValues
-    .filter(({ value, existing }) => value !== "" && !existing)
-    .map(({ index, value }) => ({
+
+  const saveable = dirtyValidated.flatMap(({ index, existing, validation }) => {
+    const payload = measuredReadingPayload(validation);
+    if (!payload) return [];
+    return [{ index, existing, payload }];
+  });
+  const newItems: MeasurementBatchItem[] = saveable
+    .filter(({ existing }) => !existing)
+    .map(({ index, payload }) => ({
       deviceCalibrationParameterId: parameterId,
       replicateIndex: index,
-      measuredValue: value,
+      measuredValue: payload.measuredValue,
+      measuredText: payload.measuredText,
     }));
-  const updates = dirtyValues
-    .filter(({ value, existing }) => existing && value !== "")
-    .map(({ value, existing }) => ({ measurementId: existing!.id, input: { measuredValue: value } }));
+  const updates = saveable
+    .filter(({ existing }) => Boolean(existing))
+    .map(({ existing, payload }) => ({
+      measurementId: existing!.id,
+      input: {
+        measuredValue: payload.measuredValue,
+        measuredText: payload.measuredText,
+      },
+    }));
   const nothingToSave = newItems.length === 0 && updates.length === 0;
   const saving = batchMutation.isPending || updateMutation.isPending;
 
@@ -277,7 +301,7 @@ export default function MeasurementParameterEntryPage() {
             const value = draftFor(index);
             const trimmed = value.trim();
             const validation =
-              touched && trimmed !== "" ? validateMeasuredValue(trimmed, dp) : { ok: true as const };
+              touched && trimmed !== "" ? validateMeasuredDraft(trimmed, dp) : { ok: true as const };
             const invalid = !validation.ok;
             return (
               <li
@@ -291,7 +315,7 @@ export default function MeasurementParameterEntryPage() {
                   <input
                     inputMode="decimal"
                     step={measuredValueInputStep(dp)}
-                    type="number"
+                    type="text"
                     value={value}
                     onChange={(e) => setDraft(index, e.target.value)}
                     className={[
@@ -302,7 +326,7 @@ export default function MeasurementParameterEntryPage() {
                   />
                 ) : (
                   <span className="min-w-0 flex-1 text-base text-slate-900">
-                    {formatMeasuredValue(existing?.measuredValue ?? null, dp)}
+                    {formatReadingDisplay(existing, dp)}
                   </span>
                 )}
                 {existing ? (
