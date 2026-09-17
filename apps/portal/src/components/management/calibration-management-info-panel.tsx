@@ -73,7 +73,7 @@ function findGroup(items: NavItem[], label: string): NavItem | undefined {
 
 export function CalibrationManagementInfoPanel({ nav }: { nav: NavItem[] }) {
   const pathname = usePathname() ?? "/";
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   const group = findGroup(nav, GROUP_LABEL);
   if (!group || !isNavGroupActive(pathname, group)) return null;
