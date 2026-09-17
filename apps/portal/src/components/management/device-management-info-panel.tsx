@@ -74,7 +74,7 @@ function findGroup(items: NavItem[], label: string): NavItem | undefined {
 
 export function DeviceManagementInfoPanel({ nav }: { nav: NavItem[] }) {
   const pathname = usePathname() ?? "/";
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   const group = findGroup(nav, GROUP_LABEL);
   if (!group || !isNavGroupActive(pathname, group)) return null;
@@ -111,7 +111,9 @@ export function DeviceManagementInfoPanel({ nav }: { nav: NavItem[] }) {
             <ul className="space-y-2">
               {ITEMS.map((item) => (
                 <li key={item.term} className="sm:flex sm:gap-3">
-                  <span className="font-medium text-slate-800 sm:w-44 sm:shrink-0">{item.term}</span>
+                  <span className="font-medium text-slate-800 sm:w-44 sm:shrink-0">
+                    {item.term}
+                  </span>
                   <span>{item.desc}</span>
                 </li>
               ))}
@@ -119,8 +121,8 @@ export function DeviceManagementInfoPanel({ nav }: { nav: NavItem[] }) {
 
             <p className="text-slate-500">
               <span className="font-medium text-slate-700">Menyiapkan jenis alat baru:</span>{" "}
-              {SETUP_SEQUENCE} Calibration Parameters dan Physical Inspection dapat disiapkan terpisah
-              setelah Device Name tersedia.
+              {SETUP_SEQUENCE} Calibration Parameters dan Physical Inspection dapat disiapkan
+              terpisah setelah Device Name tersedia.
             </p>
           </div>
         ) : null}
