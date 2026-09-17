@@ -7,6 +7,7 @@ import { ArrowLeft, Edit, FileText, Plus, Send, X } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
+import { deviceDisplayNames } from "@/lib/device-name-display";
 import { AccessDenied } from "../../../../components/access-denied";
 import {
   PageHeader,
@@ -247,40 +248,37 @@ export default function CalibrationRequestDetailPage() {
         <div className="mt-5 border-t border-slate-100 pt-5">
           <h3 className="text-sm font-semibold text-slate-900">Devices ({request.items.length})</h3>
           <div className="mt-3 space-y-2">
-            {request.items.map((item) => (
+            {request.items.map((item) => {
+              // Alias on top, master name below (MoM #3).
+              const names = deviceDisplayNames({
+                customerDeviceName: item.customerDeviceName,
+                deviceTypeName: item.deviceType.name,
+              });
+              return (
               <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-medium text-slate-900">
-                      {item.deviceType.name}
+                      {names.primary}
                       <span className="ml-2 text-sm font-normal text-slate-500">× {item.qty}</span>
                     </p>
-                    {item.customerDeviceName ? (
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        Customer name: {item.customerDeviceName}
-                      </p>
+                    {names.secondary ? (
+                      <p className="mt-0.5 text-xs text-slate-500">{names.secondary}</p>
                     ) : null}
                     {item.model ? (
                       <p className="mt-0.5 text-xs text-slate-500">Model: {item.model}</p>
                     ) : null}
                     <p className="mt-0.5 font-mono text-xs text-slate-500">
-                      Device ID:{" "}
+                      Serial No:{" "}
                       {item.deviceId ? (
                         item.deviceId
                       ) : (
                         <span className="text-slate-400">Not provided</span>
                       )}
                     </p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      AKD/AKL/NIE (deklarasi customer):{" "}
-                      {item.akdAklDeclaration === "CUSTOMER_PROVIDED" ? (
-                        <span className="font-mono">{item.akdAkl ?? "—"}</span>
-                      ) : item.akdAklDeclaration === "CUSTOMER_DECLARED_NONE" ? (
-                        <span className="text-slate-400">Customer menyatakan tidak ada</span>
-                      ) : (
-                        <span className="text-slate-400">Belum diberikan</span>
-                      )}
-                    </p>
+                    {/* AKD/AKL/NIE is never displayed at Requisition (MoM #4) — no label, no
+                        value, not even for historical rows. `akdAkl` / `akdAklDeclaration` stay
+                        untouched in the database; this is a display-only change. */}
                     {item.deviceType.category?.name ? (
                       <p className="mt-0.5 text-xs text-slate-400">
                         {item.deviceType.category.name}
@@ -292,7 +290,8 @@ export default function CalibrationRequestDetailPage() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

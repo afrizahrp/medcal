@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { deviceDisplayNames } from "@/lib/device-name-display";
 import { PaginationBar, Surface, formatRelativeTime, selectClassName } from "../leads/leads-ui";
 import { ConfirmDialog, DetailField } from "../calibration-requests/calibration-requests-ui";
 import {
@@ -49,6 +50,8 @@ export interface PurchaseOrderItem {
   quotationItem: {
     requestItem: {
       deviceId: string;
+      /** Customer's own wording for the device — displayed above the master name (MoM #3). */
+      customerDeviceName: string | null;
       deviceType: { id: string; code: string; name: string };
     } | null;
   } | null;
@@ -104,6 +107,9 @@ export interface PurchaseOrderListResponse {
 export type SnapshotLine = {
   id: string;
   description: string;
+  /** Alias when the customer gave one, otherwise the master device name (MoM #3). */
+  deviceName: string | null;
+  /** Master device name, shown under `deviceName` — null when it IS `deviceName`. */
   deviceTypeName: string | null;
   deviceId: string | null;
   qty: MoneyValue;
@@ -151,23 +157,35 @@ export function snapshotLinesFromQuotation(quotation: QuotationRow): SnapshotLin
 }
 
 export function snapshotLinesFromPurchaseOrder(purchaseOrder: PurchaseOrderRow): SnapshotLine[] {
-  return purchaseOrder.items.map((item) => ({
-    id: item.id,
-    description: item.description,
-    deviceTypeName: item.quotationItem?.requestItem?.deviceType.name ?? item.device?.model ?? null,
-    deviceId: item.quotationItem?.requestItem?.deviceId ?? item.deviceId,
-    qty: item.qty,
-    unitPrice: item.unitPrice,
-    discountAmount: item.discountAmount,
-    lineTotal: item.lineTotal,
-  }));
+  return purchaseOrder.items.map((item) => {
+    const names = deviceDisplayNames({
+      customerDeviceName: item.quotationItem?.requestItem?.customerDeviceName,
+      deviceTypeName: item.quotationItem?.requestItem?.deviceType.name ?? item.device?.model,
+    });
+    return {
+      id: item.id,
+      description: item.description,
+      deviceName: names.primary,
+      deviceTypeName: names.secondary,
+      deviceId: item.quotationItem?.requestItem?.deviceId ?? item.deviceId,
+      qty: item.qty,
+      unitPrice: item.unitPrice,
+      discountAmount: item.discountAmount,
+      lineTotal: item.lineTotal,
+    };
+  });
 }
 
 function snapshotLineFromQuotationItem(item: QuotationItem): SnapshotLine {
+  const names = deviceDisplayNames({
+    customerDeviceName: item.requestItem?.customerDeviceName,
+    deviceTypeName: item.requestItem?.deviceType.name,
+  });
   return {
     id: item.id,
     description: item.description,
-    deviceTypeName: item.requestItem?.deviceType.name ?? null,
+    deviceName: names.primary,
+    deviceTypeName: names.secondary,
     deviceId: item.requestItem?.deviceId ?? item.deviceId,
     qty: item.qty,
     unitPrice: item.unitPrice,
@@ -385,6 +403,9 @@ export function PurchaseOrderSnapshot({
                 <tr key={item.id}>
                   <td className="px-3 py-3">
                     <p className="text-sm text-slate-900">{item.description}</p>
+                    {item.deviceName && item.deviceName !== item.description ? (
+                      <p className="text-xs text-slate-600">{item.deviceName}</p>
+                    ) : null}
                     {item.deviceTypeName ? (
                       <p className="text-xs text-slate-500">{item.deviceTypeName}</p>
                     ) : null}

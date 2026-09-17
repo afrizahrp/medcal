@@ -128,8 +128,12 @@ async function makeCustomer(): Promise<string> {
   return customer.id;
 }
 
-const HEADER = ["Nama Alat", "Model", "Qty", "Device ID"];
-const HEADER_AKD = ["Nama Alat", "Model", "Qty", "Device ID", "AKD/AKL/NIE"];
+const HEADER = ["Nama Alat", "Model", "Qty", "Serial No"];
+// AKD/AKL/NIE was dropped from the published template (MoM #4); an already-downloaded
+// older file may still carry the column, and must keep importing exactly as before.
+const HEADER_AKD = ["Nama Alat", "Model", "Qty", "Serial No", "AKD/AKL/NIE"];
+// Templates downloaded before the "Serial No" relabel still carry the old header.
+const HEADER_LEGACY = ["Nama Alat", "Model", "Qty", "Device ID"];
 
 describe("CalibrationRequestImportService.preview", () => {
   it("rejects a non-xlsx file", async () => {
@@ -198,19 +202,26 @@ describe("CalibrationRequestImportService.preview", () => {
     expect(preview.summary.rowsWithErrors).toBe(4);
   });
 
-  it("rejects multiple Device IDs in one cell", async () => {
+  it("rejects multiple Serial No values in one cell", async () => {
     const buf = await buildXlsx(HEADER, [[`Tensimeter ${SUFFIX}`, "AB-123", 3, "TEN-001,TEN-002"]]);
     const preview = await service.preview(asFile(buf));
-    expect(preview.rows[0]?.errors.some((e) => /satu Device ID/i.test(e))).toBe(true);
+    expect(preview.rows[0]?.errors.some((e) => /satu Serial No/i.test(e))).toBe(true);
   });
 
-  it("blank Device ID becomes NULL (no placeholder)", async () => {
+  it('still accepts the legacy "Device ID" header from older templates', async () => {
+    const buf = await buildXlsx(HEADER_LEGACY, [[`Tensimeter ${SUFFIX}`, "AB-123", 1, "TEN-009"]]);
+    const preview = await service.preview(asFile(buf));
+    expect(preview.rows[0]?.deviceId).toBe("TEN-009");
+    expect(preview.rows[0]?.errors).toEqual([]);
+  });
+
+  it("blank Serial No becomes NULL (no placeholder)", async () => {
     const buf = await buildXlsx(HEADER, [[`Tensimeter ${SUFFIX}`, "AB-123", 1, "   "]]);
     const preview = await service.preview(asFile(buf));
     expect(preview.rows[0]?.deviceId).toBeNull();
   });
 
-  it("Qty > 1 with a single Device ID is a clean aggregate row (no warning, no error)", async () => {
+  it("Qty > 1 with a single Serial No is a clean aggregate row (no warning, no error)", async () => {
     const buf = await buildXlsx(HEADER, [[`Tensimeter ${SUFFIX}`, "AB-123", 5, "TEN-001"]]);
     const preview = await service.preview(asFile(buf));
     expect(preview.rows[0]?.qty).toBe(5);

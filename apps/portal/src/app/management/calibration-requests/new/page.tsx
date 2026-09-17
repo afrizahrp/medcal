@@ -21,8 +21,6 @@ import {
   selectClassName,
   SERVICE_MODE_OPTIONS,
   SERVICE_MODE_LABELS,
-  AKD_AKL_DECLARATION_OPTIONS,
-  AKD_AKL_DECLARATION_LABELS,
   CustomerCommandSelect,
   DeviceTypeItemSelect,
   type ServiceMode,
@@ -246,7 +244,7 @@ export default function NewCalibrationRequestPage() {
                   <h2 className="text-base font-semibold text-slate-900">Devices</h2>
                   <p className="mt-0.5 text-sm text-slate-500">
                     {customerId
-                      ? "Pilih device name. Nama alat customer, model, dan Device ID bersifat opsional."
+                      ? "Pilih device name. Nama alat customer, model, dan Serial No bersifat opsional."
                       : "Select a customer first to add devices."}
                   </p>
                 </div>
@@ -313,7 +311,7 @@ export default function NewCalibrationRequestPage() {
                             </div>
                             <div>
                               <label className="mb-1 block text-xs font-medium text-slate-600">
-                                Device ID{" "}
+                                Serial No{" "}
                                 <span className="font-normal text-slate-400">(opsional)</span>
                               </label>
                               <Input
@@ -323,40 +321,9 @@ export default function NewCalibrationRequestPage() {
                                 maxLength={120}
                               />
                             </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium text-slate-600">
-                                AKD / AKL / NIE — Status{" "}
-                                <span className="font-normal text-slate-400">
-                                  (deklarasi customer)
-                                </span>
-                              </label>
-                              <select
-                                value={item.akdAklDeclaration}
-                                onChange={(e) =>
-                                  updateItem(index, "akdAklDeclaration", e.target.value)
-                                }
-                                className={cn(selectClassName, "w-full")}
-                              >
-                                {AKD_AKL_DECLARATION_OPTIONS.map((opt) => (
-                                  <option key={opt} value={opt}>
-                                    {AKD_AKL_DECLARATION_LABELS[opt]}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            {item.akdAklDeclaration === "CUSTOMER_PROVIDED" ? (
-                              <div>
-                                <label className="mb-1 block text-xs font-medium text-slate-600">
-                                  Nomor AKD / AKL / NIE
-                                </label>
-                                <Input
-                                  value={item.akdAkl}
-                                  onChange={(e) => updateItem(index, "akdAkl", e.target.value)}
-                                  placeholder="Nomor Izin Edar dari customer"
-                                  maxLength={120}
-                                />
-                              </div>
-                            ) : null}
+                            {/* AKD/AKL/NIE is no longer collected here (MoM #4): the input is gone so it can
+                                never block submission. The item still carries the unchanged defaults
+                                (`akdAkl` empty, `akdAklDeclaration` NOT_PROVIDED) into the payload. */}
                             <div>
                               <label className="mb-1 block text-xs font-medium text-slate-600">
                                 Notes

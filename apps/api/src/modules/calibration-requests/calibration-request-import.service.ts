@@ -37,7 +37,21 @@ const HEADER_ALIASES = {
   customerDeviceName: ["nama alat", "nama alat customer", "device name", "customer device name"],
   model: ["model"],
   qty: ["qty", "quantity", "jumlah"],
-  deviceId: ["device id", "deviceid", "id device"],
+  deviceId: [
+    "serial no",
+    "serial no.",
+    "serialno",
+    "serial number",
+    "no serial",
+    "nomor seri",
+    // Legacy header from templates downloaded before the "Serial No" relabel.
+    "device id",
+    "deviceid",
+    "id device",
+  ],
+  // AKD/AKL/NIE is no longer part of the published template (MoM #4) and is not
+  // advertised anywhere in the UI. The aliases stay so an already-downloaded older
+  // template still imports without error — the value is simply stored as before.
   akdAkl: [
     "akd/akl/nie",
     "akd / akl / nie",
@@ -112,7 +126,7 @@ function parseQty(value: ExcelJS.CellValue | undefined): { qty: number | null; e
   return { qty: n };
 }
 
-// ── Device ID parsing (spec §13 / §14 / D2) ─────────────────────────────────
+// ── Serial No parsing (spec §13 / §14 / D2) ─────────────────────────────────
 function parseDeviceId(value: ExcelJS.CellValue | undefined): {
   deviceId: string | null;
   error?: string;
@@ -120,7 +134,7 @@ function parseDeviceId(value: ExcelJS.CellValue | undefined): {
   const text = cellToText(value);
   if (!text) return { deviceId: null };
   if (/[,;\n\r]/.test(text)) {
-    return { deviceId: null, error: "Satu baris hanya boleh memiliki satu Device ID" };
+    return { deviceId: null, error: "Satu baris hanya boleh memiliki satu Serial No" };
   }
   return { deviceId: text };
 }

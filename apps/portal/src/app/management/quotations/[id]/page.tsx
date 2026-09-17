@@ -26,7 +26,9 @@ import {
   quotationPdfFilenameForRow,
   type QuotationRow,
 } from "../quotations-ui";
+import { deviceDisplayNames } from "@/lib/device-name-display";
 import { useQuotationEmailCompose } from "../use-quotation-email-compose";
+import { useTaxes } from "../use-taxes-query";
 import {
   openQuotationPdf,
   useApproveQuotation,
@@ -69,6 +71,12 @@ export default function QuotationDetailPage() {
   const [printPending, setPrintPending] = useState(false);
 
   const quotation = query.data;
+  // `Tax.isExclude` is read live from the Tax master via the quotation's `taxCode`
+  // — nothing about the tax mode is snapshotted on the quotation itself.
+  const taxesQuery = useTaxes();
+  const quotationTax = quotation
+    ? (taxesQuery.data?.data.find((tax) => tax.taxCode === quotation.taxCode) ?? null)
+    : null;
 
   if (isForbidden(query.error)) {
     return <AccessDenied />;
@@ -266,13 +274,20 @@ export default function QuotationDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {quotation.items.map((item) => (
+                {quotation.items.map((item) => {
+                  // Alias on top, master name below (MoM #3).
+                  const names = deviceDisplayNames({
+                    customerDeviceName: item.requestItem?.customerDeviceName,
+                    deviceTypeName: item.requestItem?.deviceType.name,
+                  });
+                  return (
                   <tr key={item.id}>
                     <td className="px-3 py-3 text-sm text-slate-900">{item.description}</td>
                     <td className="px-3 py-3">
-                      <p className="text-sm text-slate-700">
-                        {item.requestItem?.deviceType.name ?? "—"}
-                      </p>
+                      <p className="text-sm text-slate-700">{names.primary ?? "—"}</p>
+                      {names.secondary ? (
+                        <p className="text-xs text-slate-500">{names.secondary}</p>
+                      ) : null}
                       {item.requestItem?.deviceId ? (
                         <p className="font-mono text-xs text-slate-400">
                           {item.requestItem.deviceId}
@@ -292,7 +307,8 @@ export default function QuotationDetailPage() {
                       {formatIdr(item.lineTotal)}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -303,6 +319,7 @@ export default function QuotationDetailPage() {
               taxCode={quotation.taxCode}
               taxRate={quotation.taxRate}
               taxAmount={quotation.taxAmount}
+              taxIsExclude={quotationTax?.isExclude ?? null}
               totalAmount={quotation.totalAmount}
             />
           </div>

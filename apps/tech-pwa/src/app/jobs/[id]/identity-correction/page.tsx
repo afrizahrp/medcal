@@ -153,26 +153,6 @@ export default function IdentityCorrectionStep1Page() {
               className="min-h-11 w-full rounded-lg border border-slate-300 px-3 text-base"
             />
           ) : null}
-
-          <label className="flex min-h-11 items-center gap-3 text-base text-slate-700">
-            <input
-              type="checkbox"
-              className="h-5 w-5"
-              checked={state.attrs.akdAkl}
-              onChange={(e) => update({ attrs: { ...state.attrs, akdAkl: e.target.checked } })}
-            />
-            AKD/AKL/NIE
-          </label>
-          {state.attrs.akdAkl ? (
-            <input
-              type="text"
-              maxLength={120}
-              value={state.akdAkl}
-              onChange={(e) => update({ akdAkl: e.target.value })}
-              placeholder="AKD/AKL/NIE yang benar"
-              className="min-h-11 w-full rounded-lg border border-slate-300 px-3 text-base"
-            />
-          ) : null}
         </fieldset>
       </div>
     </Screen>

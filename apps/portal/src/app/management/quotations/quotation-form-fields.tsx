@@ -134,6 +134,9 @@ export function QuotationFormFields({
                   <tr key={item.requestItemId}>
                     <td className="px-3 py-3 align-top">
                       <p className="text-sm font-medium text-slate-900">{item.deviceLabel}</p>
+                      {item.deviceTypeLabel ? (
+                        <p className="text-xs text-slate-500">{item.deviceTypeLabel}</p>
+                      ) : null}
                       <p className="font-mono text-xs text-slate-400">{item.deviceIdLabel}</p>
                     </td>
                     <td className="px-3 py-3 align-top">
@@ -249,6 +252,7 @@ export function QuotationFormFields({
           taxCode={selectedTax?.taxCode ?? null}
           taxRate={selectedTax?.taxRate ?? null}
           taxAmount={totals.taxAmount}
+          taxIsExclude={selectedTax?.isExclude ?? null}
           totalAmount={totals.totalAmount}
         />
       </section>

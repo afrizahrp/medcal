@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import {
   PKM_LETTERHEAD_ADDRESS_LINES,
+  deviceNameCell,
   formatDate,
   primaryContact,
   resolvePkmLogoPath,
@@ -225,7 +226,12 @@ function equipmentTable(
   items.forEach((item, index) => {
     const device = item.purchaseOrderItem.device;
     const requestItem = item.purchaseOrderItem.quotationItem.requestItem;
-    const name = text(requestItem?.deviceType.name) ?? text(item.description) ?? "—";
+    // Alias on top, master name below, inside the one "Nama Alat" cell (MoM #3).
+    const name = deviceNameCell({
+      customerDeviceName: requestItem?.customerDeviceName,
+      deviceTypeName: requestItem?.deviceType.name,
+      fallback: item.description,
+    });
     const merk = text(device?.brand) ?? "—";
     const tipe = text(device?.model) ?? "—";
     const seri = text(device?.serialNumber) ?? text(requestItem?.deviceId) ?? "—";

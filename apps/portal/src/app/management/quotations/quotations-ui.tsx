@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "../../../components/management/page-header";
 import { PaginationBar, Surface, selectClassName, formatRelativeTime } from "../leads/leads-ui";
 import { ConfirmDialog, DetailField } from "../calibration-requests/calibration-requests-ui";
+import { shouldShowTaxLine } from "./quotation-tax-display";
+import { deviceDisplayNames } from "@/lib/device-name-display";
 
 export type QuotationStatus = "DRAFT" | "SENT" | "APPROVED" | "REJECTED" | "EXPIRED" | "CANCELLED";
 
@@ -61,6 +63,8 @@ export interface QuotationItemDeviceType {
 export interface QuotationItemRequestItem {
   id: string;
   deviceId: string;
+  /** Customer's own wording for the device — displayed above the master name (MoM #3). */
+  customerDeviceName: string | null;
   notes: string | null;
   deviceType: QuotationItemDeviceType;
 }
@@ -336,6 +340,7 @@ export function QuotationTotals({
   taxCode,
   taxRate,
   taxAmount,
+  taxIsExclude,
   totalAmount,
 }: {
   subtotal: MoneyValue;
@@ -345,8 +350,17 @@ export function QuotationTotals({
   taxCode?: string | null;
   taxRate?: MoneyValue | null;
   taxAmount: MoneyValue | null;
+  /**
+   * `Tax.isExclude` of the document's tax, read live from the Tax master via
+   * `taxCode` (never snapshotted on the document). `false` = Include: the tax is
+   * already baked into Total, so the separate breakdown line is suppressed.
+   * `true` = Exclude, and `null`/undefined (tax unknown, e.g. a code that is no
+   * longer active) both keep the line visible exactly as before.
+   */
+  taxIsExclude?: boolean | null;
   totalAmount: MoneyValue;
 }) {
+  const showTaxLine = shouldShowTaxLine({ taxCode, taxAmount, taxIsExclude });
   return (
     <dl className="ml-auto w-full max-w-sm space-y-2 text-sm">
       <div className="flex justify-between gap-4">
@@ -371,7 +385,7 @@ export function QuotationTotals({
           )}
         </dd>
       </div>
-      {taxCode || taxAmount != null ? (
+      {showTaxLine ? (
         <div className="flex justify-between gap-4">
           <dt className="text-slate-500">
             Tax
@@ -387,7 +401,7 @@ export function QuotationTotals({
           </dt>
           <dd className="font-medium text-slate-900">{formatIdr(taxAmount)}</dd>
         </div>
-      ) : (
+      ) : taxIsExclude === false ? null : (
         <div className="flex justify-between gap-4">
           <dt className="text-slate-500">Tax</dt>
           <dd className="text-slate-400">—</dd>
@@ -407,7 +421,10 @@ export type QuotationFormItem = {
   qty: string;
   unitPrice: string;
   discountAmount: string;
+  /** Alias when the customer gave one, otherwise the master device name. */
   deviceLabel: string;
+  /** Master device name, shown under `deviceLabel` — null when it IS `deviceLabel`. */
+  deviceTypeLabel: string | null;
   deviceIdLabel: string;
   /**
    * New-quotation flow only: the server-resolved Price List tariff is missing
@@ -421,33 +438,49 @@ export function itemsFromRequest(
   items: Array<{
     id: string;
     deviceId: string | null;
+    customerDeviceName?: string | null;
     qty?: number | string | null;
     deviceType: { name: string };
   }>,
 ): QuotationFormItem[] {
-  return items.map((item) => ({
-    requestItemId: item.id,
-    description: item.deviceType.name,
-    // Carry the requisition's commercial quantity verbatim — never default to 1
-    // when a real value is available (Price List Phase 1, BR-03 / QTY BUG fix).
-    qty: item.qty != null ? String(item.qty) : "1",
-    unitPrice: "",
-    discountAmount: "0",
-    deviceLabel: item.deviceType.name,
-    deviceIdLabel: item.deviceId ?? "—",
-  }));
+  return items.map((item) => {
+    const names = deviceDisplayNames({
+      customerDeviceName: item.customerDeviceName,
+      deviceTypeName: item.deviceType.name,
+    });
+    return {
+      requestItemId: item.id,
+      description: item.deviceType.name,
+      // Carry the requisition's commercial quantity verbatim — never default to 1
+      // when a real value is available (Price List Phase 1, BR-03 / QTY BUG fix).
+      qty: item.qty != null ? String(item.qty) : "1",
+      unitPrice: "",
+      discountAmount: "0",
+      deviceLabel: names.primary ?? item.deviceType.name,
+      deviceTypeLabel: names.secondary,
+      deviceIdLabel: item.deviceId ?? "—",
+    };
+  });
 }
 
 export function itemsFromQuotation(quotation: QuotationRow): QuotationFormItem[] {
-  return quotation.items.map((item) => ({
-    requestItemId: item.requestItemId ?? "",
-    description: item.description,
-    qty: formatQty(item.qty),
-    unitPrice: String(item.unitPrice),
-    discountAmount: String(item.discountAmount ?? 0),
-    deviceLabel: item.requestItem?.deviceType.name ?? item.description,
-    deviceIdLabel: item.requestItem?.deviceId ?? "—",
-  }));
+  return quotation.items.map((item) => {
+    const names = deviceDisplayNames({
+      customerDeviceName: item.requestItem?.customerDeviceName,
+      deviceTypeName: item.requestItem?.deviceType.name,
+      fallback: item.description,
+    });
+    return {
+      requestItemId: item.requestItemId ?? "",
+      description: item.description,
+      qty: formatQty(item.qty),
+      unitPrice: String(item.unitPrice),
+      discountAmount: String(item.discountAmount ?? 0),
+      deviceLabel: names.primary ?? item.description,
+      deviceTypeLabel: names.secondary,
+      deviceIdLabel: item.requestItem?.deviceId ?? "—",
+    };
+  });
 }
 
 export function previewTotals(

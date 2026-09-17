@@ -310,8 +310,9 @@ const calibrationRequestItemInputSchema = z
     /** Customer-provided equipment model, if available. Optional. */
     model: z.string().trim().max(120).optional(),
     /**
-     * Customer-provided device/inventory identifier. Free text, intentionally
-     * optional — a missing customer Device ID is a valid business state and must
+     * Customer-provided device/inventory identifier, displayed as "Serial No"
+     * in the Portal/UI and on Quotation/PO PDFs. Free text, intentionally
+     * optional — a missing customer Serial No is a valid business state and must
      * be stored as NULL, never a placeholder. NOT the CalibrationJob Device.id.
      */
     deviceId: z.string().trim().max(120).optional(),

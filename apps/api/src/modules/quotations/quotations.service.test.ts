@@ -437,7 +437,7 @@ describe("QuotationsService.create — Price List generation", () => {
     expect(Number(result.items[0]?.lineTotal)).toBe(500_000);
   });
 
-  it("test 13 — a NULL customer Device ID does not prevent pricing", async () => {
+  it("test 13 — a NULL customer Serial No does not prevent pricing", async () => {
     const dt = await makeDeviceType();
     await seedPrice(realCompanyId, dt.id, 100_000);
     const { request } = await createSubmittedRequest(realCompanyId, {

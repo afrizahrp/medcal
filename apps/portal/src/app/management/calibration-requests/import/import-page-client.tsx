@@ -247,7 +247,7 @@ export default function ImportCalibrationRequestPageClient() {
             <p className="text-sm text-slate-500">
               Format kolom: <span className="font-mono">Nama Alat</span> (wajib),{" "}
               <span className="font-mono">Model</span>, <span className="font-mono">Qty</span>{" "}
-              (wajib, bilangan bulat positif), <span className="font-mono">Device ID</span>{" "}
+              (wajib, bilangan bulat positif), <span className="font-mono">Serial No</span>{" "}
               (opsional). Setiap baris Excel menjadi 1 item requisition; Qty adalah jumlah unit
               untuk item tersebut.{" "}
               <a
@@ -308,8 +308,7 @@ export default function ImportCalibrationRequestPageClient() {
                       <th className="px-3 py-2">Nama Alat Customer</th>
                       <th className="px-3 py-2">Model</th>
                       <th className="px-3 py-2">Qty</th>
-                      <th className="px-3 py-2">Device ID</th>
-                      <th className="px-3 py-2">AKD/AKL/NIE</th>
+                      <th className="px-3 py-2">Serial No</th>
                       <th className="px-3 py-2">Device Name</th>
                       <th className="px-3 py-2">Match</th>
                     </tr>
@@ -347,9 +346,6 @@ export default function ImportCalibrationRequestPageClient() {
                           </td>
                           <td className="px-3 py-2 align-top font-mono text-xs text-slate-600">
                             {row.deviceId ?? <span className="text-slate-400">NULL</span>}
-                          </td>
-                          <td className="px-3 py-2 align-top font-mono text-xs text-slate-600">
-                            {row.akdAkl ?? <span className="text-slate-400">NOT_PROVIDED</span>}
                           </td>
                           <td className="px-3 py-2 align-top">
                             {row.errors.length > 0 ? (

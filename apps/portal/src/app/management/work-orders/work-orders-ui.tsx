@@ -79,6 +79,8 @@ export interface WorkOrderItem {
       requestItemId: string | null;
       requestItem: {
         deviceId: string;
+        /** Customer's own wording for the device — displayed above the master name (MoM #3). */
+        customerDeviceName: string | null;
         deviceType: { id: string; code: string; name: string };
       } | null;
     };
@@ -477,8 +479,11 @@ export function WorkOrderItemsTable({
                     <p className="text-sm text-slate-900">{item.description}</p>
                   </td>
                   <td className="px-3 py-3">
+                    {device.deviceName ? (
+                      <p className="text-sm text-slate-700">{device.deviceName}</p>
+                    ) : null}
                     {device.deviceTypeName ? (
-                      <p className="text-sm text-slate-700">{device.deviceTypeName}</p>
+                      <p className="text-xs text-slate-500">{device.deviceTypeName}</p>
                     ) : null}
                     <p className="font-mono text-xs text-slate-500">{device.identifier ?? "—"}</p>
                   </td>

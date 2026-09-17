@@ -169,6 +169,22 @@ async function resolveDocumentTax(
   return { taxCode: tax.taxCode, taxRate: tax.taxRate, isExclude: tax.isExclude };
 }
 
+/**
+ * Display-only lookup of the tax mode for a document that is being rendered.
+ * Unlike resolveDocumentTax this never throws: a quotation may reference a tax
+ * code that has since been deactivated or removed, and printing it must still
+ * work — the caller then falls back to the previous "always show the tax line"
+ * behaviour.
+ */
+async function findTaxIsExclude(companyId: string, taxCode: string): Promise<boolean | null> {
+  if (!taxCode) return null;
+  const tax = await prisma.tax.findFirst({
+    where: { companyId, taxCode },
+    select: { isExclude: true },
+  });
+  return tax?.isExclude ?? null;
+}
+
 async function assertTariffsExist(
   tx: Prisma.TransactionClient,
   companyId: string,
@@ -563,7 +579,8 @@ export class QuotationsService {
         code: "COMPANY_NOT_FOUND",
       });
     }
-    return renderQuotationPdf({ quotation, company });
+    const taxIsExclude = await findTaxIsExclude(companyId, quotation.taxCode);
+    return renderQuotationPdf({ quotation: { ...quotation, taxIsExclude }, company });
   }
 
   async update(

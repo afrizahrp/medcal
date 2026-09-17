@@ -10,6 +10,7 @@ function item(overrides: Partial<QuotationFormItem>): QuotationFormItem {
     unitPrice: "",
     discountAmount: "0",
     deviceLabel: "Bio Safety Cabinet",
+    deviceTypeLabel: null,
     deviceIdLabel: "—",
     ...overrides,
   };

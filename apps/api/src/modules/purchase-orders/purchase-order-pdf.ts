@@ -4,6 +4,7 @@ import PDFDocument from "pdfkit";
 import type { Company, Prisma } from "@medcal/db";
 import {
   QUOTATION_LETTERHEAD_ADDRESS_LINES,
+  deviceDescriptionLines,
   quotationAddresseeLine,
   quotationPdfFilename,
 } from "../quotations/quotation-pdf";
@@ -59,6 +60,8 @@ export type PurchaseOrderPdfSource = {
     quotationItem: {
       requestItem: {
         deviceId: string | null;
+        /** Customer's own wording for the device — printed above the master name (MoM #3). */
+        customerDeviceName?: string | null;
         deviceType: { name: string };
       } | null;
     } | null;
@@ -208,11 +211,13 @@ export function renderPurchaseOrderPdf(input: {
 
     doc.fillColor("#0f172a").font("Helvetica").fontSize(9);
     for (const item of purchaseOrder.items) {
-      const deviceName = item.quotationItem?.requestItem?.deviceType.name;
       const deviceId = item.quotationItem?.requestItem?.deviceId;
-      const descLines = [item.description];
-      if (deviceName && deviceName !== item.description) descLines.push(deviceName);
-      if (deviceId) descLines.push(`Device ID: ${deviceId}`);
+      const descLines = deviceDescriptionLines({
+        description: item.description,
+        customerDeviceName: item.quotationItem?.requestItem?.customerDeviceName,
+        deviceTypeName: item.quotationItem?.requestItem?.deviceType.name,
+      });
+      if (deviceId) descLines.push(`Serial No: ${deviceId}`);
 
       const descHeight = doc.heightOfString(descLines.join("\n"), { width: 195 });
       if (y + descHeight > doc.page.height - 80) {

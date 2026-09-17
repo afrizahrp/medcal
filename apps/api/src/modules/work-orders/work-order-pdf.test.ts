@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Company } from "@medcal/db";
 import { renderWorkOrderPdf, workOrderPdfFilename } from "./work-order-pdf";
-import type { WorkOrderPdfSource } from "./work-order-pdf-shared";
+import { deviceNameCell, type WorkOrderPdfSource } from "./work-order-pdf-shared";
 
 describe("workOrderPdfFilename", () => {
   it("formats PKM-SPK-YYYYMMDD-sequence from the WorkOrder number and issue date", () => {
@@ -165,5 +165,33 @@ describe("renderWorkOrderPdf", () => {
 
     const result = await renderWorkOrderPdf({ workOrder: bare, company });
     expect(result.buffer.subarray(0, 5).toString()).toBe("%PDF-");
+  });
+});
+
+describe("deviceNameCell", () => {
+  it("prints the customer alias on the first line and the master name below it", () => {
+    expect(
+      deviceNameCell({
+        customerDeviceName: "tensimeter digital",
+        deviceTypeName: "Blood Pressure Monitor",
+      }),
+    ).toBe("tensimeter digital\nBlood Pressure Monitor");
+  });
+
+  it("prints the master name alone when the customer gave no alias", () => {
+    expect(deviceNameCell({ deviceTypeName: "Blood Pressure Monitor" })).toBe(
+      "Blood Pressure Monitor",
+    );
+  });
+
+  it("never prints the same name twice", () => {
+    expect(
+      deviceNameCell({ customerDeviceName: "Dental Unit", deviceTypeName: "Dental Unit" }),
+    ).toBe("Dental Unit");
+  });
+
+  it("falls back to the line description, then to a dash", () => {
+    expect(deviceNameCell({ fallback: "Kalibrasi alat medis" })).toBe("Kalibrasi alat medis");
+    expect(deviceNameCell({})).toBe("—");
   });
 });

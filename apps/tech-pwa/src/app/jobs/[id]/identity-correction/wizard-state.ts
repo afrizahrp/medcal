@@ -12,11 +12,10 @@ export interface WizardSignatureValue {
 
 export interface WizardState {
   reason: string;
-  attrs: { device: boolean; serial: boolean; akdAkl: boolean };
+  attrs: { device: boolean; serial: boolean };
   deviceId: string;
   deviceLabel: string;
   serial: string;
-  akdAkl: string;
   signatures: { TECHNICIAN: WizardSignatureValue; CUSTOMER: WizardSignatureValue };
   photo: File | null;
 }
@@ -28,11 +27,10 @@ function emptySignature(): WizardSignatureValue {
 export function initialWizardState(job: TechCalibrationJob): WizardState {
   return {
     reason: "",
-    attrs: { device: false, serial: false, akdAkl: false },
+    attrs: { device: false, serial: false },
     deviceId: "",
     deviceLabel: "",
     serial: job.technicianObservedSerial ?? "",
-    akdAkl: job.technicianObservedAkdAkl ?? "",
     signatures: { TECHNICIAN: emptySignature(), CUSTOMER: emptySignature() },
     photo: null,
   };
@@ -52,10 +50,6 @@ export function serialCorrectionValid(state: WizardState): boolean {
   return state.attrs.serial && state.serial.trim().length > 0;
 }
 
-export function akdAklCorrectionValid(state: WizardState): boolean {
-  return state.attrs.akdAkl && state.akdAkl.trim().length > 0;
-}
-
 /**
  * At least one checked attribute must be a resolved, valid correction —
  * but an unresolved/incomplete checked attribute (e.g. Device search with no
@@ -63,7 +57,7 @@ export function akdAklCorrectionValid(state: WizardState): boolean {
  * identity information is warn/flag territory (MT decides), not a hard stop.
  */
 export function attrsValid(state: WizardState): boolean {
-  return deviceCorrectionValid(state) || serialCorrectionValid(state) || akdAklCorrectionValid(state);
+  return deviceCorrectionValid(state) || serialCorrectionValid(state);
 }
 
 export function step1Valid(state: WizardState): boolean {

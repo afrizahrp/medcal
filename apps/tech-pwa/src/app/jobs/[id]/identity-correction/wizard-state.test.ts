@@ -3,7 +3,7 @@ import { attrsValid, initialWizardState, step1Valid, type WizardState } from "./
 import type { TechCalibrationJob } from "../../../../lib/calibration/types";
 
 function baseState(overrides: Partial<WizardState> = {}): WizardState {
-  const job = { technicianObservedSerial: null, technicianObservedAkdAkl: null } as TechCalibrationJob;
+  const job = { technicianObservedSerial: null } as TechCalibrationJob;
   return { ...initialWizardState(job), reason: "Label alat sudah luntur", ...overrides };
 }
 
@@ -14,19 +14,10 @@ describe("attrsValid / step1Valid", () => {
     expect(step1Valid(state)).toBe(false);
   });
 
-  it("Serial checked + filled is valid on its own (Device/AKD-AKL untouched)", () => {
+  it("Serial checked + filled is valid on its own (Device untouched)", () => {
     const state = baseState({
-      attrs: { device: false, serial: true, akdAkl: false },
+      attrs: { device: false, serial: true },
       serial: "SN-001",
-    });
-    expect(attrsValid(state)).toBe(true);
-    expect(step1Valid(state)).toBe(true);
-  });
-
-  it("AKD/AKL checked + filled is valid on its own", () => {
-    const state = baseState({
-      attrs: { device: false, serial: false, akdAkl: true },
-      akdAkl: "AKL-12345",
     });
     expect(attrsValid(state)).toBe(true);
     expect(step1Valid(state)).toBe(true);
@@ -34,7 +25,7 @@ describe("attrsValid / step1Valid", () => {
 
   it("Device checked + resolved (deviceId set) is valid on its own", () => {
     const state = baseState({
-      attrs: { device: true, serial: false, akdAkl: false },
+      attrs: { device: true, serial: false },
       deviceId: "device-1",
       deviceLabel: "SN-001 — Brand Model",
     });
@@ -42,14 +33,13 @@ describe("attrsValid / step1Valid", () => {
     expect(step1Valid(state)).toBe(true);
   });
 
-  it("Device checked but unresolved (no candidate match) does NOT block otherwise-valid Serial + AKD/AKL", () => {
+  it("Device checked but unresolved (no candidate match) does NOT block an otherwise-valid Serial", () => {
     // Exact reported repro: Reason filled, Device checked with no match,
-    // Serial checked+filled, AKD/AKL checked+filled — must be ENABLED.
+    // Serial checked+filled — must be ENABLED.
     const state = baseState({
-      attrs: { device: true, serial: true, akdAkl: true },
+      attrs: { device: true, serial: true },
       deviceId: "",
       serial: "SN-001",
-      akdAkl: "AKL-12345",
     });
     expect(attrsValid(state)).toBe(true);
     expect(step1Valid(state)).toBe(true);
@@ -57,7 +47,7 @@ describe("attrsValid / step1Valid", () => {
 
   it("Device checked but unresolved, and it is the ONLY checked attribute, stays invalid", () => {
     const state = baseState({
-      attrs: { device: true, serial: false, akdAkl: false },
+      attrs: { device: true, serial: false },
       deviceId: "",
     });
     expect(attrsValid(state)).toBe(false);
@@ -67,7 +57,7 @@ describe("attrsValid / step1Valid", () => {
   it("reason left blank keeps the step invalid even with a valid attribute", () => {
     const state = baseState({
       reason: "",
-      attrs: { device: false, serial: true, akdAkl: false },
+      attrs: { device: false, serial: true },
       serial: "SN-001",
     });
     expect(attrsValid(state)).toBe(true);
@@ -76,9 +66,9 @@ describe("attrsValid / step1Valid", () => {
 
   it("a checked attribute left empty does not count as valid, but does not block a different valid attribute", () => {
     const state = baseState({
-      attrs: { device: false, serial: true, akdAkl: true },
+      attrs: { device: true, serial: true },
+      deviceId: "device-1",
       serial: "   ",
-      akdAkl: "AKL-12345",
     });
     expect(attrsValid(state)).toBe(true);
     expect(step1Valid(state)).toBe(true);

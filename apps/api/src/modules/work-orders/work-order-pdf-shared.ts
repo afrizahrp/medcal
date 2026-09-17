@@ -113,6 +113,8 @@ export type WorkOrderPdfSource = {
       quotationItem: {
         requestItem: {
           deviceId: string | null;
+          /** Customer's own wording for the device — printed above the master name (MoM #3). */
+          customerDeviceName?: string | null;
           deviceType: { name: string };
         } | null;
       };
@@ -158,6 +160,26 @@ export function formatDateTime(value: Date | string | null | undefined): string 
 export function text(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+/**
+ * "Nama Alat" cell content for one printed device row: the customer-given alias
+ * on the first line, the MEDCAL master name underneath it (MoM #3). Duplicates
+ * are dropped, and when neither name exists the caller's fallback (the line
+ * description) is printed alone — never an empty cell.
+ */
+export function deviceNameCell(input: {
+  customerDeviceName?: string | null;
+  deviceTypeName?: string | null;
+  fallback?: string | null;
+}): string {
+  const lines: string[] = [];
+  for (const name of [input.customerDeviceName, input.deviceTypeName]) {
+    const trimmed = text(name);
+    if (trimmed && !lines.includes(trimmed)) lines.push(trimmed);
+  }
+  if (lines.length === 0) return text(input.fallback) ?? "—";
+  return lines.join("\n");
 }
 
 /** Primary contact for the customer, falling back to the first listed contact. */

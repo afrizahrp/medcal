@@ -12,7 +12,6 @@ import type { IdentityCorrectionSubmitInput } from "../../../../../lib/calibrati
 import { useSubmitIdentityCorrection, useUploadIdentityCorrectionPhoto } from "../../use-job-query";
 import { useWizard } from "../layout";
 import {
-  akdAklCorrectionValid,
   deviceCorrectionValid,
   photoStepValid,
   serialCorrectionValid,
@@ -72,7 +71,6 @@ export default function IdentityCorrectionReviewPage() {
         reason: state.reason.trim(),
         ...(deviceCorrectionValid(state) ? { newDeviceId: state.deviceId } : {}),
         ...(serialCorrectionValid(state) ? { newSerial: state.serial.trim() } : {}),
-        ...(akdAklCorrectionValid(state) ? { newAkdAkl: state.akdAkl.trim() } : {}),
         signatures: {
           TECHNICIAN: toSignatureInput(state.signatures.TECHNICIAN),
           CUSTOMER: toSignatureInput(state.signatures.CUSTOMER),
@@ -144,15 +142,6 @@ export default function IdentityCorrectionReviewPage() {
               <p className="text-slate-900">
                 {dash(job.technicianObservedSerial)} <span className="text-slate-400">→</span>{" "}
                 {dash(state.serial)}
-              </p>
-            </div>
-          ) : null}
-          {akdAklCorrectionValid(state) ? (
-            <div className="text-sm">
-              <p className="text-xs text-slate-500">AKD/AKL/NIE</p>
-              <p className="text-slate-900">
-                {dash(job.technicianObservedAkdAkl)} <span className="text-slate-400">→</span>{" "}
-                {dash(state.akdAkl)}
               </p>
             </div>
           ) : null}

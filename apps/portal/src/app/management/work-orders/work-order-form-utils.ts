@@ -1,5 +1,6 @@
 import { ApiError } from "@medcal/shared";
 import type { WorkOrderAssignInput, WorkOrderCreateBody, WorkOrderUpdateBody } from "@medcal/shared";
+import { deviceDisplayNames } from "../../../lib/device-name-display";
 
 export type WorkOrderStatus = "PLANNED" | "ASSIGNED" | "IN_PROGRESS" | "DONE" | "CANCELLED";
 export type AssignmentRole = "LEAD" | "ASSIST";
@@ -182,10 +183,14 @@ export function deviceIdentifierFromItem(item: {
     deviceId?: string | null;
     device?: { serialNumber?: string | null; brand?: string | null; model?: string | null } | null;
     quotationItem?: {
-      requestItem?: { deviceId?: string | null; deviceType?: { name?: string | null } | null } | null;
+      requestItem?: {
+        deviceId?: string | null;
+        customerDeviceName?: string | null;
+        deviceType?: { name?: string | null } | null;
+      } | null;
     } | null;
   } | null;
-}): { identifier: string | null; deviceTypeName: string | null } {
+}): { identifier: string | null; deviceName: string | null; deviceTypeName: string | null } {
   const requestItem = item.purchaseOrderItem?.quotationItem?.requestItem;
   const device = item.purchaseOrderItem?.device;
   const identifier =
@@ -193,8 +198,12 @@ export function deviceIdentifierFromItem(item: {
     device?.serialNumber?.trim() ||
     item.purchaseOrderItem?.deviceId?.trim() ||
     null;
-  const deviceTypeName = requestItem?.deviceType?.name?.trim() || null;
-  return { identifier, deviceTypeName };
+  // Alias on top, master name below (MoM #3).
+  const names = deviceDisplayNames({
+    customerDeviceName: requestItem?.customerDeviceName,
+    deviceTypeName: requestItem?.deviceType?.name,
+  });
+  return { identifier, deviceName: names.primary, deviceTypeName: names.secondary };
 }
 
 export function formatWorkOrderApiError(

@@ -242,7 +242,29 @@ describe("deviceIdentifierFromItem", () => {
           },
         },
       }),
-    ).toEqual({ identifier: "DEV-1", deviceTypeName: "Infusion Pump" });
+    ).toEqual({ identifier: "DEV-1", deviceName: "Infusion Pump", deviceTypeName: null });
+  });
+
+  it("puts the customer alias on top and the master device name below it", () => {
+    expect(
+      deviceIdentifierFromItem({
+        purchaseOrderItem: {
+          deviceId: "device-fk",
+          device: { serialNumber: "SN-1", brand: "Brand", model: "Model" },
+          quotationItem: {
+            requestItem: {
+              deviceId: "DEV-1",
+              customerDeviceName: "pompa infus ruang 3",
+              deviceType: { name: "Infusion Pump" },
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      identifier: "DEV-1",
+      deviceName: "pompa infus ruang 3",
+      deviceTypeName: "Infusion Pump",
+    });
   });
 });
 

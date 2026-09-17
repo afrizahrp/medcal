@@ -8,7 +8,9 @@ import * as ExcelJS from "exceljs";
  *
  * The column headers here MUST stay in lock-step with the importer's contract in
  * calibration-request-import.service.ts (HEADER_ALIASES) — "Nama Alat" and "Qty"
- * are required, "Model", "Device ID" and "AKD/AKL/NIE" are optional. Run after
+ * are required, "Model" and "Serial No" are optional. AKD/AKL/NIE is deliberately
+ * NOT part of the template any more (MoM #4); the importer still tolerates the
+ * column in older downloaded files, it is simply no longer advertised. Run after
  * any change to that contract:
  *
  *   pnpm --filter @medcal/api run template:requisition
@@ -26,8 +28,7 @@ async function main() {
     { header: "Nama Alat", key: "namaAlat", width: 32 },
     { header: "Model", key: "model", width: 20 },
     { header: "Qty", key: "qty", width: 10 },
-    { header: "Device ID", key: "deviceId", width: 22 },
-    { header: "AKD/AKL/NIE", key: "akdAkl", width: 24 },
+    { header: "Serial No", key: "deviceId", width: 22 },
   ];
   data.getRow(1).font = { bold: true };
   data.getRow(1).fill = {
@@ -42,28 +43,25 @@ async function main() {
     model: "AB-123",
     qty: 5,
     deviceId: "",
-    akdAkl: "",
   });
   data.addRow({
     namaAlat: "Contoh: Bed Side Monitor",
     model: "BSM-501",
     qty: 3,
     deviceId: "BSM001",
-    akdAkl: "",
   });
   data.addRow({
     namaAlat: "Contoh: Dental Unit",
     model: "",
     qty: 1,
-    deviceId: "",
-    akdAkl: "AKD 20403012345",
+    deviceId: "DU001",
   });
 
   const note = data.addRow({
     namaAlat: "Hapus baris contoh di atas, lalu isi data alat customer mulai dari sini.",
   });
   note.font = { italic: true, color: { argb: "FF7A7A7A" } };
-  data.mergeCells(`A${note.number}:E${note.number}`);
+  data.mergeCells(`A${note.number}:D${note.number}`);
 
   // ── Sheet 2: "Petunjuk" ───────────────────────────────────────────────────
   const guide = workbook.addWorksheet("Petunjuk");
@@ -81,14 +79,8 @@ async function main() {
     },
     {
       text:
-        "• Device ID  : OPSIONAL. Isi hanya jika customer memberikan Device ID. " +
-        "Satu baris hanya boleh berisi satu Device ID.",
-    },
-    {
-      text:
-        "• AKD/AKL/NIE: OPSIONAL. Nomor Izin Edar yang diberikan customer " +
-        "(maks. 120 karakter). Boleh diisi untuk Qty berapa pun. " +
-        "Kosongkan jika customer belum memberikan.",
+        "• Serial No  : OPSIONAL. Isi hanya jika customer memberikan Serial No. " +
+        "Satu baris hanya boleh berisi satu Serial No.",
     },
     { text: "" },
     { text: "Aturan penting:", bold: true },
@@ -97,15 +89,10 @@ async function main() {
         "• Setiap baris Excel menjadi 1 item requisition. Qty tetap tersimpan sebagai jumlah " +
         "unit pada item tersebut — baris TIDAK dipecah menjadi beberapa item.",
     },
+    { text: "• Jangan invent/membuat placeholder Serial No." },
     {
       text:
-        "• AKD/AKL/NIE yang diisi adalah deklarasi customer, bukan hasil verifikasi teknis " +
-        "per unit fisik. Verifikasi final per unit dilakukan kemudian oleh Teknisi.",
-    },
-    { text: "• Jangan invent/membuat placeholder Device ID." },
-    {
-      text:
-        '• Jangan gunakan "000", "-", "N/A", atau nilai dummy lain untuk Device ID ' +
+        '• Jangan gunakan "000", "-", "N/A", atau nilai dummy lain untuk Serial No ' +
         "yang tidak diberikan customer — biarkan kosong.",
     },
     { text: "" },

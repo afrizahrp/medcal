@@ -32,6 +32,14 @@ export type QuotationPdfSource = {
   totalAmount: Prisma.Decimal | string | number;
   taxCode: string;
   taxRate: Prisma.Decimal | string | number;
+  /**
+   * `Tax.isExclude` of the document's tax, resolved live from the Tax master via
+   * `taxCode` (never snapshotted on the Quotation). `false` = Include: the tax is
+   * already inside Total, so the separate tax line is not printed. `true` =
+   * Exclude, and `null`/undefined (tax no longer resolvable) both print the line
+   * exactly as before.
+   */
+  taxIsExclude?: boolean | null;
   customer: {
     name: string;
     number: string;
@@ -54,6 +62,8 @@ export type QuotationPdfSource = {
     lineTotal: Prisma.Decimal | string | number;
     requestItem: {
       deviceId: string | null;
+      /** Customer's own wording for the device — printed above the master name (MoM #3). */
+      customerDeviceName?: string | null;
       deviceType: { name: string };
     } | null;
   }>;
@@ -124,6 +134,39 @@ export function quotationPdfFilename(input: {
 
   const fallback = input.number.replace(/[/\\]+/g, "-");
   return `${companyId}-${fallback}.pdf`;
+}
+
+/**
+ * Device name block for one printed line: the customer-given alias reads first,
+ * the MEDCAL master name underneath it (MoM #3). A name equal to a line already
+ * in the block is dropped, so the same wording is never printed twice on a row.
+ */
+export function deviceDescriptionLines(input: {
+  description: string;
+  customerDeviceName?: string | null;
+  deviceTypeName?: string | null;
+}): string[] {
+  const lines = [input.description];
+  for (const name of [input.customerDeviceName, input.deviceTypeName]) {
+    const trimmed = name?.trim();
+    if (trimmed && !lines.includes(trimmed)) lines.push(trimmed);
+  }
+  return lines;
+}
+
+/**
+ * The tax breakdown line is printed unless the document's tax is in Include mode
+ * (`Tax.isExclude === false`), where the tax already sits inside Total and a
+ * separate line would double-state it. An unknown tax mode (`null`/undefined)
+ * keeps the previous behaviour.
+ */
+export function shouldRenderTaxLine(quotation: {
+  taxCode?: string | null;
+  taxAmount?: Prisma.Decimal | string | number | null;
+  taxIsExclude?: boolean | null;
+}): boolean {
+  if (quotation.taxIsExclude === false) return false;
+  return Boolean(quotation.taxCode) || quotation.taxAmount != null;
 }
 
 export function renderQuotationPdf(input: {
@@ -218,11 +261,13 @@ export function renderQuotationPdf(input: {
 
     doc.fillColor("#0f172a").font("Helvetica").fontSize(9);
     for (const item of quotation.items) {
-      const deviceName = item.requestItem?.deviceType.name;
       const deviceId = item.requestItem?.deviceId;
-      const descLines = [item.description];
-      if (deviceName && deviceName !== item.description) descLines.push(deviceName);
-      if (deviceId) descLines.push(`Device ID: ${deviceId}`);
+      const descLines = deviceDescriptionLines({
+        description: item.description,
+        customerDeviceName: item.requestItem?.customerDeviceName,
+        deviceTypeName: item.requestItem?.deviceType.name,
+      });
+      if (deviceId) descLines.push(`Serial No: ${deviceId}`);
 
       const descHeight = doc.heightOfString(descLines.join("\n"), { width: 195 });
       if (y + descHeight > doc.page.height - 80) {
@@ -259,7 +304,7 @@ export function renderQuotationPdf(input: {
     });
     y = doc.y + 4;
 
-    if (quotation.taxCode || quotation.taxAmount != null) {
+    if (shouldRenderTaxLine(quotation)) {
       const rate = moneyNumber(quotation.taxRate);
       const rateLabel =
         quotation.taxCode && rate > 0
