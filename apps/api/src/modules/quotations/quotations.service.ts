@@ -38,6 +38,10 @@ const quotationInclude = {
   },
   customer: { include: { contacts: true } },
   request: { select: { id: true, number: true, status: true, customerId: true } },
+  // Who approved the quotation, resolved for display — `name` is nullable, so
+  // `email` is carried as the fallback. Not rendered anywhere yet; this closes
+  // the same missing-relation gap that PurchaseOrder had.
+  approvedBy: { select: { id: true, name: true, email: true } },
 } as const;
 
 export type QuotationWithItems = Prisma.QuotationGetPayload<{

@@ -231,7 +231,7 @@ export default function PurchaseOrderDetailPage() {
                 {formatDateTime(purchaseOrder.confirmedAt)}
               </DetailField>
               <DetailField label="Approved By">
-                {purchaseOrder.confirmedByUserId ?? "—"}
+                {purchaseOrder.confirmedBy?.name ?? purchaseOrder.confirmedBy?.email ?? "—"}
               </DetailField>
             </div>
           ) : null}

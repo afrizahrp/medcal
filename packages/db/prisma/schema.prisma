@@ -579,6 +579,8 @@ model User {
   invoicesUpdated                       Invoice[]                    @relation("InvoiceUpdatedBy")
   paymentsCreated                       Payment[]                    @relation("PaymentCreatedBy")
   paymentsUpdated                       Payment[]                    @relation("PaymentUpdatedBy")
+  quotationsApproved                    Quotation[]                  @relation("QuotationApprovedBy")
+  purchaseOrdersConfirmed               PurchaseOrder[]              @relation("PurchaseOrderConfirmedBy")
   auditLogs                             AuditLog[]
   lkDownloadAuthorizations              LkDownloadAuthorization[]
 }
@@ -1659,6 +1661,7 @@ model Quotation {
   company        Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer       Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
   request        CalibrationRequest @relation(fields: [requestId], references: [id])
+  approvedBy     User?              @relation("QuotationApprovedBy", fields: [approvedByUserId], references: [id])
   items          QuotationItem[]
   purchaseOrders PurchaseOrder[]
   workOrders     WorkOrder[]
@@ -1719,11 +1722,12 @@ model PurchaseOrder {
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
-  company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer   Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  quotation  Quotation           @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-  items      PurchaseOrderItem[]
-  workOrders WorkOrder[]
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  quotation   Quotation           @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  confirmedBy User?               @relation("PurchaseOrderConfirmedBy", fields: [confirmedByUserId], references: [id])
+  items       PurchaseOrderItem[]
+  workOrders  WorkOrder[]
 
   @@unique([companyId, number])
   @@unique([companyId, customerId, customerPoNumber])

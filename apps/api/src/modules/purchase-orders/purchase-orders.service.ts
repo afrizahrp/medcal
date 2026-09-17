@@ -45,6 +45,9 @@ const purchaseOrderInclude = {
       request: { select: { number: true } },
     },
   },
+  // Who approved the PO, resolved for display — `name` is nullable, so `email`
+  // is carried as the fallback the UI falls back to before "—".
+  confirmedBy: { select: { id: true, name: true, email: true } },
 } as const;
 
 export type PurchaseOrderWithItems = Prisma.PurchaseOrderGetPayload<{

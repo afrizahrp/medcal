@@ -786,9 +786,9 @@ describe("QuotationsService lifecycle", () => {
   it("approves a SENT quotation and records timestamps", async () => {
     const created = await draft();
     await quotationsService.send(realCompanyId, created.id);
-    const approved = await quotationsService.approve(realCompanyId, created.id, "user-1");
+    const approved = await quotationsService.approve(realCompanyId, created.id, staffUserId);
     expect(approved.status).toBe("APPROVED");
-    expect(approved.approvedByUserId).toBe("user-1");
+    expect(approved.approvedByUserId).toBe(staffUserId);
   });
 
   it("cancels a DRAFT quotation", async () => {
@@ -800,7 +800,7 @@ describe("QuotationsService lifecycle", () => {
   it("rejects cancelling an approved quotation", async () => {
     const created = await draft();
     await quotationsService.send(realCompanyId, created.id);
-    await quotationsService.approve(realCompanyId, created.id, "user-1");
+    await quotationsService.approve(realCompanyId, created.id, staffUserId);
     await expect(quotationsService.cancel(realCompanyId, created.id)).rejects.toMatchObject({
       response: expect.objectContaining({ code: "CANNOT_CANCEL_APPROVED" }),
     });

@@ -89,6 +89,8 @@ export interface PurchaseOrderRow {
   notes: string | null;
   confirmedAt: string | null;
   confirmedByUserId: string | null;
+  /** Approver resolved from `confirmedByUserId`; `name` may be null, hence the email fallback. */
+  confirmedBy: { id: string; name: string | null; email: string } | null;
   createdAt: string;
   updatedAt: string;
   items: PurchaseOrderItem[];

@@ -113,6 +113,8 @@ export interface QuotationRow {
   currency: string;
   approvedAt: string | null;
   approvedByUserId: string | null;
+  /** Approver resolved from `approvedByUserId`; `name` may be null, hence the email fallback. */
+  approvedBy: { id: string; name: string | null; email: string } | null;
   customerApprovedAt: string | null;
   createdAt: string;
   updatedAt: string;
