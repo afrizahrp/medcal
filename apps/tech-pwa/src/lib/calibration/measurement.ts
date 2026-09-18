@@ -339,10 +339,46 @@ export interface MeasurementEntryTarget {
   param: TechMeasurementParameter;
 }
 
+function namedTestPointsOf(
+  param: TechMeasurementParameter | undefined,
+): TechMeasurementTestPoint[] {
+  return param?.testPoints?.length ? [...param.testPoints] : [];
+}
+
+/**
+ * Collect every copy of this parameter from the measurement-parameters payload.
+ * Named points may live on `gridParameters`, `capabilityGroups`, or (defensively)
+ * `parameters[]` — Pattern B is `testPoints.length > 0` on any of them, not
+ * `kind === "GRID"` alone and not result `replicateIndex`.
+ */
+export function parameterViewsFromMeasurementPayload(
+  data: TechMeasurementParametersResponse,
+  parameterId: string,
+): TechMeasurementParameter[] {
+  const views: TechMeasurementParameter[] = [];
+  for (const param of data.gridParameters ?? []) {
+    if (param.id === parameterId) views.push(param);
+  }
+  if (hasCapabilityGroups(data.capabilityGroups)) {
+    for (const group of data.capabilityGroups) {
+      for (const param of group.parameters) {
+        if (param.id === parameterId) views.push(param);
+      }
+    }
+  }
+  for (const param of data.parameters ?? []) {
+    if (param.id === parameterId) views.push(param);
+  }
+  return views;
+}
+
 /**
  * Pattern B iff the job payload has one or more named measurement points for
  * this parameter (snapshot count > 0). Zero points → Pattern A, including
  * historical jobs whose readings have null calibrationTestPointId.
+ *
+ * Prefers the first view that actually carries `testPoints`, regardless of
+ * which array it came from. Does not invent labels from replicateIndex.
  */
 export function resolveMeasurementEntryTarget(
   data: TechMeasurementParametersResponse | null | undefined,
@@ -350,38 +386,62 @@ export function resolveMeasurementEntryTarget(
 ): MeasurementEntryTarget | null {
   if (!data) return null;
 
-  const hasNamedPoints = (param: TechMeasurementParameter | undefined): boolean =>
-    (param?.testPoints?.length ?? 0) > 0;
-
-  const fromGrid = data.gridParameters?.find((p) => p.id === parameterId);
-  if (hasNamedPoints(fromGrid)) return { kind: "GRID", param: fromGrid! };
-
-  if (hasCapabilityGroups(data.capabilityGroups)) {
-    for (const group of data.capabilityGroups) {
-      const grouped = group.parameters.find((p) => p.id === parameterId);
-      if (grouped && grouped.kind === "GRID" && grouped.testPoints.length > 0) {
-        return { kind: "GRID", param: grouped };
-      }
-    }
+  const views = parameterViewsFromMeasurementPayload(data, parameterId);
+  const withNamedPoints = views.find((param) => namedTestPointsOf(param).length > 0);
+  if (withNamedPoints) {
+    return {
+      kind: "GRID",
+      param: {
+        ...withNamedPoints,
+        testPoints: sortNamedMeasurementPoints(namedTestPointsOf(withNamedPoints)),
+      },
+    };
   }
+  const fallback = views[0];
+  return fallback ? { kind: "DIRECT", param: fallback } : null;
+}
 
-  const fromDirect = data.parameters.find((p) => p.id === parameterId);
-  if (fromDirect) return { kind: "DIRECT", param: fromDirect };
+export interface PatternBResultRef {
+  calibrationTestPointId: string | null;
+  replicateIndex: number;
+  measuredValue: string | null;
+  measuredText?: string | null;
+}
 
-  if (hasCapabilityGroups(data.capabilityGroups)) {
-    for (const group of data.capabilityGroups) {
-      const grouped = group.parameters.find((p) => p.id === parameterId);
-      if (grouped) {
-        return {
-          kind: grouped.kind === "GRID" && grouped.testPoints.length > 0 ? "GRID" : "DIRECT",
-          param: grouped,
-        };
-      }
-    }
-  }
+export interface PatternBEntrySlotView extends NamedPointSlotView {
+  measuredValue: string | null;
+}
 
-  if (fromGrid) return { kind: "DIRECT", param: fromGrid };
-  return null;
+export interface PatternBEntryGroupView extends NamedPointGroupView {
+  slots: PatternBEntrySlotView[];
+}
+
+/**
+ * Pattern B grouping: named point identity is `calibrationTestPointId` +
+ * `sequence`/`settingLabel` from the job payload. `replicateIndex` is only the
+ * repetition inside that point. NULL TP ids are ignored (historical Pattern A).
+ */
+export function patternBEntryPresentation(
+  testPoints: readonly TechMeasurementTestPoint[],
+  results: readonly PatternBResultRef[],
+  extraByPoint: Readonly<Record<string, number>> = {},
+): PatternBEntryGroupView[] {
+  return sortNamedMeasurementPoints(testPoints).map((tp) => {
+    const pointResults = results.filter((row) => row.calibrationTestPointId === tp.id);
+    const maxExisting = pointResults.reduce((max, row) => Math.max(max, row.replicateIndex), 0);
+    const view = namedPointGroupView({
+      testPoint: tp,
+      maxExistingReplicateIndex: maxExisting,
+      extraSlots: extraByPoint[tp.id] ?? 0,
+    });
+    return {
+      ...view,
+      slots: view.slots.map((slot) => {
+        const hit = pointResults.find((row) => row.replicateIndex === slot.replicateIndex);
+        return { ...slot, measuredValue: hit?.measuredValue ?? null };
+      }),
+    };
+  });
 }
 
 const DIRECTION_PARAMETER_CODES = new Set(["SPHYG_PRESSURE_ACC"]);

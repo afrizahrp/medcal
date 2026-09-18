@@ -11,6 +11,7 @@ import {
   measuredValueDecimalPlacesExceededMessage,
   measuredValueInputStep,
   namedPointGroupView,
+  patternBEntryPresentation,
   readingDisplayValue,
   sortNamedMeasurementPoints,
   toleranceText,
@@ -80,25 +81,25 @@ export function MeasurementGridEntry({
     return map;
   }, [existingRows]);
 
-  const maxIndexByGroup = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const r of existingRows) {
-      if (r.calibrationTestPointId === null) continue;
-      const key = extraKey(r.calibrationTestPointId, r.direction);
-      map.set(key, Math.max(map.get(key) ?? 0, r.replicateIndex));
-    }
-    return map;
-  }, [existingRows]);
-
   const groups = testPoints.flatMap((tp) =>
     directions.map((direction) => {
       const groupKey = extraKey(tp.id, direction);
-      const view = namedPointGroupView({
-        testPoint: tp,
-        maxExistingReplicateIndex: maxIndexByGroup.get(groupKey) ?? 0,
-        extraSlots: extraByGroup[groupKey] ?? 0,
-      });
-      return { tp, direction, groupKey, view };
+      const extra = extraByGroup[groupKey] ?? 0;
+      const [view] = patternBEntryPresentation(
+        [tp],
+        existingRows.filter((row) => row.direction === direction),
+        { [tp.id]: extra },
+      );
+      return {
+        tp,
+        direction,
+        groupKey,
+        view: view ?? namedPointGroupView({
+          testPoint: tp,
+          maxExistingReplicateIndex: 0,
+          extraSlots: extra,
+        }),
+      };
     }),
   );
 
