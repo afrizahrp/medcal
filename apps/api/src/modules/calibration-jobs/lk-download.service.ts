@@ -15,6 +15,7 @@ import {
   type LkResultPdfSection,
 } from "./lk-result-pdf";
 import type { LkMeasurementHit, LkTemplateData } from "./lk-template-data";
+import { mapCapabilityMeasurementRows } from "./lk-measurement-mapping";
 import { isBedSideMonitorTemplate } from "./lk-templates/bed-side-monitor";
 
 /** Step-up token TTL — short-lived, single-use (LK Result PDF Download v1 §8). */
@@ -219,6 +220,7 @@ export class LkDownloadService {
           currentAttempt: true,
           startedAt: true,
           submittedAt: true,
+          measurementTestPointsSnapshottedAt: true,
           technicianObservedSerial: true,
           device: {
             select: {
@@ -308,7 +310,13 @@ export class LkDownloadService {
           orderBy: [{ devicePhysicalCheckItem: { sortOrder: "asc" } }, { recordedAt: "asc" }],
         }),
         deviceTypeId
-          ? this.buildCapabilitySections(companyId, fullJob.id, deviceTypeId, fullJob.currentAttempt)
+          ? this.buildCapabilitySections(
+              companyId,
+              fullJob.id,
+              deviceTypeId,
+              fullJob.currentAttempt,
+              fullJob.measurementTestPointsSnapshottedAt,
+            )
           : [],
         deviceTypeId
           ? prisma.devicePhysicalCheckItem.findMany({
@@ -317,7 +325,12 @@ export class LkDownloadService {
               orderBy: { sortOrder: "asc" },
             })
           : Promise.resolve([]),
-        this.loadTemplateMeasurements(companyId, fullJob.id, fullJob.currentAttempt),
+        this.loadTemplateMeasurements(
+          companyId,
+          fullJob.id,
+          fullJob.currentAttempt,
+          fullJob.measurementTestPointsSnapshottedAt,
+        ),
       ]);
 
     const equipmentUsed: LkResultPdfEquipmentRow[] = equipmentUsedRows.map((row) => ({
@@ -422,12 +435,9 @@ export class LkDownloadService {
     calibrationJobId: string,
     deviceTypeId: string,
     attemptNumber: number,
+    snapshottedAt: Date | null,
   ): Promise<LkResultPdfSection[]> {
-    const [jobFreeze, parameters, capabilityOrders, results] = await Promise.all([
-      prisma.calibrationJob.findFirst({
-        where: { id: calibrationJobId, companyId },
-        select: { measurementTestPointsSnapshottedAt: true },
-      }),
+    const [parameters, capabilityOrders, results, snapshotRows] = await Promise.all([
       prisma.deviceCalibrationParameter.findMany({
         where: { deviceTypeId, isActive: true },
         select: {
@@ -473,11 +483,8 @@ export class LkDownloadService {
         },
         orderBy: { replicateIndex: "asc" },
       }),
-    ]);
-
-    const frozenPoints =
-      jobFreeze?.measurementTestPointsSnapshottedAt != null
-        ? await prisma.jobCalibrationTestPoint.findMany({
+      snapshottedAt != null
+        ? prisma.jobCalibrationTestPoint.findMany({
             where: { calibrationJobId },
             orderBy: { sequence: "asc" },
             select: {
@@ -490,87 +497,53 @@ export class LkDownloadService {
               toleranceNote: true,
             },
           })
-        : null;
-    const frozenByParameterId = new Map<string, NonNullable<typeof frozenPoints>>();
-    if (frozenPoints) {
-      for (const row of frozenPoints) {
-        const list = frozenByParameterId.get(row.deviceCalibrationParameterId) ?? [];
-        list.push(row);
-        frozenByParameterId.set(row.deviceCalibrationParameterId, list);
-      }
-    }
+        : Promise.resolve(null),
+    ]);
 
     const sortOrderByCapabilityId = new Map(
       capabilityOrders.map((row) => [row.capabilityId, row.sortOrder] as const),
     );
 
-    const resultsByKey = new Map<string, typeof results>();
-    for (const result of results) {
-      const key = `${result.deviceCalibrationParameterId}:${result.calibrationTestPointId ?? "none"}`;
-      const bucket = resultsByKey.get(key);
-      if (bucket) bucket.push(result);
-      else resultsByKey.set(key, [result]);
-    }
+    const parameterById = new Map(parameters.map((parameter) => [parameter.id, parameter] as const));
+    const formatted = mapCapabilityMeasurementRows({
+      parameters: parameters.map((parameter) => ({
+        id: parameter.id,
+        name: parameter.name,
+        valueType: parameter.valueType,
+        decimalPlaces: parameter.decimalPlaces,
+        toleranceMin: parameter.toleranceMin,
+        toleranceMax: parameter.toleranceMax,
+        toleranceNote: parameter.toleranceNote,
+        uomSymbol: parameter.uom?.symbol ?? parameter.uom?.code ?? null,
+        capabilityId: parameter.capabilityItem.capability.id,
+        capabilityName: parameter.capabilityItem.capability.name,
+        liveTestPoints: parameter.testPoints,
+      })),
+      snapshotRows,
+      results: results.map((result) => {
+        const parameter = parameterById.get(result.deviceCalibrationParameterId);
+        return {
+          deviceCalibrationParameterId: result.deviceCalibrationParameterId,
+          calibrationTestPointId: result.calibrationTestPointId,
+          formattedValue: parameter
+            ? formatMeasuredValue(result, parameter.valueType, parameter.decimalPlaces)
+            : null,
+        };
+      }),
+      formatToleranceText,
+    });
 
     const sectionsById = new Map<string, { name: string; sortOrder: number; rows: LkResultPdfRow[] }>();
-
-    for (const parameter of parameters) {
-      const capability = parameter.capabilityItem.capability;
-      const unit = parameter.uom?.symbol ?? parameter.uom?.code ?? null;
-
-      const catalogPoints =
-        frozenPoints != null
-          ? (frozenByParameterId.get(parameter.id) ?? []).map((tp) => ({
-              id: tp.sourceCalibrationTestPointId,
-              sequence: tp.sequence,
-              settingLabel: tp.settingLabel,
-              toleranceMin: tp.toleranceMin,
-              toleranceMax: tp.toleranceMax,
-              toleranceNote: tp.toleranceNote,
-            }))
-          : parameter.testPoints;
-
-      const points =
-        catalogPoints.length > 0
-          ? catalogPoints.map((tp) => ({
-              key: `${parameter.id}:${tp.id}`,
-              label: `${parameter.name} — ${tp.settingLabel}`,
-              toleranceMin: tp.toleranceMin ?? parameter.toleranceMin,
-              toleranceMax: tp.toleranceMax ?? parameter.toleranceMax,
-              toleranceNote: tp.toleranceNote ?? parameter.toleranceNote,
-            }))
-          : [
-              {
-                key: `${parameter.id}:none`,
-                label: unit ? `${parameter.name} (${unit})` : parameter.name,
-                toleranceMin: parameter.toleranceMin,
-                toleranceMax: parameter.toleranceMax,
-                toleranceNote: parameter.toleranceNote,
-              },
-            ];
-
-      for (const point of points) {
-        const matched = resultsByKey.get(point.key) ?? [];
-        const values = matched
-          .map((r) => formatMeasuredValue(r, parameter.valueType, parameter.decimalPlaces))
-          .filter((v): v is string => v !== null);
-
-        const row: LkResultPdfRow = {
-          label: point.label,
-          value: values.length > 0 ? values.join(", ") : "—",
-          toleranceText: formatToleranceText(point.toleranceMin, point.toleranceMax, point.toleranceNote),
-        };
-
-        const existing = sectionsById.get(capability.id);
-        if (existing) {
-          existing.rows.push(row);
-        } else {
-          sectionsById.set(capability.id, {
-            name: capability.name,
-            sortOrder: sortOrderByCapabilityId.get(capability.id) ?? Number.MAX_SAFE_INTEGER,
-            rows: [row],
-          });
-        }
+    for (const item of formatted) {
+      const existing = sectionsById.get(item.capabilityId);
+      if (existing) {
+        existing.rows.push(item.row);
+      } else {
+        sectionsById.set(item.capabilityId, {
+          name: item.capabilityName,
+          sortOrder: sortOrderByCapabilityId.get(item.capabilityId) ?? Number.MAX_SAFE_INTEGER,
+          rows: [item.row],
+        });
       }
     }
 
@@ -583,28 +556,70 @@ export class LkDownloadService {
     companyId: string,
     calibrationJobId: string,
     attemptNumber: number,
+    snapshottedAt: Date | null,
   ): Promise<Array<LkMeasurementHit & { recordedByName: string | null }>> {
-    const rows = await prisma.measurementResult.findMany({
-      where: { companyId, calibrationJobId, attemptNumber },
-      select: {
-        replicateIndex: true,
-        measuredValue: true,
-        measuredBool: true,
-        measuredText: true,
-        recordedBy: { select: { name: true } },
-        parameter: { select: { code: true, valueType: true, decimalPlaces: true } },
-        testPoint: { select: { settingLabel: true, settingValue: true } },
-      },
-      orderBy: { replicateIndex: "asc" },
+    const [rows, snapshotRows] = await Promise.all([
+      prisma.measurementResult.findMany({
+        where: { companyId, calibrationJobId, attemptNumber },
+        select: {
+          calibrationTestPointId: true,
+          replicateIndex: true,
+          measuredValue: true,
+          measuredBool: true,
+          measuredText: true,
+          recordedBy: { select: { name: true } },
+          parameter: { select: { code: true, valueType: true, decimalPlaces: true } },
+          testPoint: { select: { settingLabel: true, settingValue: true } },
+        },
+        orderBy: { replicateIndex: "asc" },
+      }),
+      snapshottedAt != null
+        ? prisma.jobCalibrationTestPoint.findMany({
+            where: { calibrationJobId },
+            select: {
+              sourceCalibrationTestPointId: true,
+              settingLabel: true,
+              settingValue: true,
+            },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    const snapshotBySourceId =
+      snapshotRows == null
+        ? null
+        : new Map(
+            snapshotRows.map((row) => [
+              row.sourceCalibrationTestPointId,
+              { settingLabel: row.settingLabel, settingValue: toNum(row.settingValue) },
+            ]),
+          );
+
+    return rows.map((row) => {
+      if (snapshotBySourceId != null) {
+        const frozen = row.calibrationTestPointId
+          ? snapshotBySourceId.get(row.calibrationTestPointId)
+          : undefined;
+        return {
+          parameterCode: row.parameter.code,
+          settingLabel: frozen?.settingLabel ?? "",
+          settingValue: frozen ? frozen.settingValue : null,
+          replicateIndex: row.replicateIndex,
+          formattedValue:
+            formatMeasuredValue(row, row.parameter.valueType, row.parameter.decimalPlaces) ?? "",
+          recordedByName: row.recordedBy?.name ?? null,
+        };
+      }
+      return {
+        parameterCode: row.parameter.code,
+        settingLabel: row.testPoint?.settingLabel ?? "",
+        settingValue: toNum(row.testPoint?.settingValue),
+        replicateIndex: row.replicateIndex,
+        formattedValue:
+          formatMeasuredValue(row, row.parameter.valueType, row.parameter.decimalPlaces) ?? "",
+        recordedByName: row.recordedBy?.name ?? null,
+      };
     });
-    return rows.map((row) => ({
-      parameterCode: row.parameter.code,
-      settingLabel: row.testPoint?.settingLabel ?? "",
-      settingValue: toNum(row.testPoint?.settingValue),
-      replicateIndex: row.replicateIndex,
-      formattedValue: formatMeasuredValue(row, row.parameter.valueType, row.parameter.decimalPlaces) ?? "",
-      recordedByName: row.recordedBy?.name ?? null,
-    }));
   }
 }
 
@@ -633,7 +648,10 @@ export function formatMeasuredValue(
     return num !== null ? String(num) : null;
   }
   const num = toNum(row.measuredValue);
-  if (num === null) return null;
+  if (num === null) {
+    const text = row.measuredText?.trim();
+    return text ? text : null;
+  }
   return decimalPlaces != null ? num.toFixed(decimalPlaces) : String(num);
 }
 

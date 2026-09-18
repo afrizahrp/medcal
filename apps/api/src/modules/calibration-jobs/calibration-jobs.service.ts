@@ -50,6 +50,11 @@ import {
 } from "./job-reference-equipment";
 import { assertKontrolAlatReadyForStart } from "./kontrol-alat.service";
 import { copyActiveTestPointsIntoJobSnapshot } from "./job-calibration-test-point-snapshot";
+import {
+  CALIBRATION_MEASUREMENTS_INCOMPLETE,
+  evaluateMeasurementCompleteness,
+  MEASUREMENT_WORKSHEET_EXCLUDED_PARAMETER_CODES,
+} from "./measurement-completeness";
 
 const calibrationJobInclude = {
   workOrder: {
@@ -209,7 +214,7 @@ const IDENTITY_LOCKED_JOB_STATUSES = new Set<string>(["SUBMITTED", "ACCEPTED_BY_
 const REFERENCE_EQUIPMENT_LOCKED_JOB_STATUSES = new Set<string>(["SUBMITTED", "ACCEPTED_BY_QA"]);
 
 /** Pattern D generic-slot — needs suppliedNominalValue, not a Stage B setpoint grid. */
-const GRID_EXCLUDED_PARAMETER_CODES: readonly string[] = ["SUCT_VACUUM_GAUGE"];
+const GRID_EXCLUDED_PARAMETER_CODES = MEASUREMENT_WORKSHEET_EXCLUDED_PARAMETER_CODES;
 
 function assertAkdAklTransition(from: AkdAklApprovalStatus, to: AkdAklApprovalStatus): void {
   if (!AKD_AKL_TRANSITIONS[from].includes(to)) {
@@ -798,6 +803,8 @@ export class CalibrationJobsService {
         status: job.status,
       });
     }
+
+    await this.assertMeasurementsCompleteForSubmit(companyId, job);
 
     await this.assertReferenceEquipmentResolvedForSubmit(companyId, id);
 
@@ -1956,6 +1963,66 @@ export class CalibrationJobsService {
     return prisma.jobReferenceEquipmentApproval.findFirst({
       where: { calibrationJobId: jobId, status: "PENDING_REVIEW" },
       select: { id: true },
+    });
+  }
+
+  /**
+   * submitForReview prerequisite: eligible worksheet parameters for the current
+   * attempt are complete. Pattern A/B comes from JobCalibrationTestPoint only
+   * (live catalog must not expand a started job). Physical checks are not gated.
+   */
+  private async assertMeasurementsCompleteForSubmit(
+    companyId: string,
+    job: CalibrationJobDetail,
+  ): Promise<void> {
+    const deviceTypeId = this.resolveJobDeviceTypeId(job);
+    if (deviceTypeId === null) return;
+
+    const excluded = new Set<string>(MEASUREMENT_WORKSHEET_EXCLUDED_PARAMETER_CODES);
+    const [eligible, snapshotRows, results] = await Promise.all([
+      prisma.deviceCalibrationParameter.findMany({
+        where: {
+          deviceTypeId,
+          isActive: true,
+          valueType: "NUMBER",
+          entryStyle: "DIRECT_REPLICATES",
+        },
+        select: { id: true, code: true },
+      }),
+      prisma.jobCalibrationTestPoint.findMany({
+        where: { calibrationJobId: job.id },
+        select: {
+          deviceCalibrationParameterId: true,
+          sourceCalibrationTestPointId: true,
+        },
+      }),
+      prisma.measurementResult.findMany({
+        where: {
+          companyId,
+          calibrationJobId: job.id,
+          attemptNumber: job.currentAttempt,
+        },
+        select: {
+          deviceCalibrationParameterId: true,
+          calibrationTestPointId: true,
+          measuredValue: true,
+          measuredText: true,
+        },
+      }),
+    ]);
+
+    const eligibleParameterIds = eligible.filter((row) => !excluded.has(row.code)).map((row) => row.id);
+    const verdict = evaluateMeasurementCompleteness({
+      eligibleParameterIds,
+      snapshotRows,
+      results,
+    });
+    if (verdict.complete) return;
+
+    throw new BadRequestException({
+      message: "Measurement results are incomplete for this attempt",
+      code: CALIBRATION_MEASUREMENTS_INCOMPLETE,
+      details: { parameters: verdict.parameters },
     });
   }
 

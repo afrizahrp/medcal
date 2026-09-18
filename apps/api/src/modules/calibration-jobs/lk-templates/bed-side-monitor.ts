@@ -14,6 +14,7 @@ import { checkboxPair, drawGridTable, markOption, type LkTableCell } from "../lk
 import {
   normalizeLkKey,
   replicatesFor,
+  replicatesForLabel,
   type LkEquipmentFill,
   type LkPhysicalFill,
   type LkTemplateData,
@@ -630,13 +631,26 @@ function labeledLine(doc: PDFKit.PDFDocument, layout: LkPdfLayout, y: number, la
   return top + 14;
 }
 
+function envCell(prefix: string, value: string, unit: string): string {
+  if (!value) return `${prefix} :            ${unit}`;
+  return `${prefix} : ${value} ${unit}`;
+}
+
+function firstLabeledValue(data: LkTemplateData, codes: readonly string[], settingLabel: string): string {
+  // Printed form has one cell per named point: keep existing first-replicate convention.
+  return replicatesForLabel(data.measurements, codes, settingLabel, 1)[0] ?? "";
+}
+
 function drawEnvironment(doc: PDFKit.PDFDocument, layout: LkPdfLayout, y: number, data: LkTemplateData): number {
-  // Awal/Akhir and L-N/L-G/N-G are not authoritatively mapped in the schema
-  // (see forensic 09). Template cells stay; only a single unidentified reading
-  // is left blank rather than guessed into a specific cell.
-  void firstValue(data, TEMP_CODES);
-  void firstValue(data, RH_CODES);
-  void firstValue(data, VOLT_CODES);
+  // Named cells are filled by snapshot/live settingLabel, not by replicateIndex
+  // and not by guessing an unlabeled Pattern A reading into Awal/Akhir/L-N.
+  const tempAwal = firstLabeledValue(data, TEMP_CODES, "Awal");
+  const tempAkhir = firstLabeledValue(data, TEMP_CODES, "Akhir");
+  const rhAwal = firstLabeledValue(data, RH_CODES, "Awal");
+  const rhAkhir = firstLabeledValue(data, RH_CODES, "Akhir");
+  const voltLn = firstLabeledValue(data, VOLT_CODES, "L-N");
+  const voltLg = firstLabeledValue(data, VOLT_CODES, "L-G");
+  const voltNg = firstLabeledValue(data, VOLT_CODES, "N-G");
   return drawGridTable(
     doc,
     layout,
@@ -644,11 +658,11 @@ function drawEnvironment(doc: PDFKit.PDFDocument, layout: LkPdfLayout, y: number
     TW_ENVIRONMENT,
     [[c("Kondisi Ruangan", { bold: true }), c("Terukur", { bold: true }), c(""), c("Toleransi", { bold: true })]],
     [
-      [c("Suhu (°C)"), c("Awal :            °C"), c("Akhir :            °C"), c("25 ± 5 °C")],
-      [c("Kelembaban / RH (%)"), c("Awal :            %"), c("Akhir :            %"), c("55 % ± 20 % RH")],
-      [c("Tegangan Input"), c("L-N    :              Vac"), c(""), c("220 ± 10% Volt")],
-      [c(""), c("L-G    :              Vac"), c(""), c("")],
-      [c(""), c("N-G    :              Vac"), c(""), c("")],
+      [c("Suhu (°C)"), c(envCell("Awal", tempAwal, "°C")), c(envCell("Akhir", tempAkhir, "°C")), c("25 ± 5 °C")],
+      [c("Kelembaban / RH (%)"), c(envCell("Awal", rhAwal, "%")), c(envCell("Akhir", rhAkhir, "%")), c("55 % ± 20 % RH")],
+      [c("Tegangan Input"), c(envCell("L-N   ", voltLn, "Vac")), c(""), c("220 ± 10% Volt")],
+      [c(""), c(envCell("L-G   ", voltLg, "Vac")), c(""), c("")],
+      [c(""), c(envCell("N-G   ", voltNg, "Vac")), c(""), c("")],
     ],
     3,
     "twip",

@@ -59,6 +59,13 @@ export function settingMatches(hit: LkMeasurementHit, setting: number): boolean 
   return match != null && Number(match[0]) === setting;
 }
 
+/** Match a named measurement point by snapshot/live settingLabel, not by replicateIndex. */
+export function settingLabelMatches(hit: LkMeasurementHit, settingLabel: string): boolean {
+  const wanted = normalizeLkKey(settingLabel);
+  if (!wanted) return false;
+  return normalizeLkKey(hit.settingLabel) === wanted;
+}
+
 export function replicatesFor(
   measurements: LkMeasurementHit[],
   parameterCodes: readonly string[],
@@ -68,6 +75,26 @@ export function replicatesFor(
   const codes = new Set(parameterCodes);
   const hits = measurements
     .filter((m) => codes.has(m.parameterCode) && settingMatches(m, setting))
+    .sort((a, b) => a.replicateIndex - b.replicateIndex);
+  return Array.from({ length: count }, (_, i) => {
+    const found = hits.find((h) => h.replicateIndex === i + 1) ?? hits[i];
+    return found?.formattedValue ?? "";
+  });
+}
+
+/**
+ * Same repetition convention as replicatesFor, keyed by named-point label
+ * (Awal, L-N, Min, …) instead of a numeric setpoint.
+ */
+export function replicatesForLabel(
+  measurements: LkMeasurementHit[],
+  parameterCodes: readonly string[],
+  settingLabel: string,
+  count: number,
+): string[] {
+  const codes = new Set(parameterCodes);
+  const hits = measurements
+    .filter((m) => codes.has(m.parameterCode) && settingLabelMatches(m, settingLabel))
     .sort((a, b) => a.replicateIndex - b.replicateIndex);
   return Array.from({ length: count }, (_, i) => {
     const found = hits.find((h) => h.replicateIndex === i + 1) ?? hits[i];

@@ -484,6 +484,12 @@ describe("LK PDF value/tolerance formatting (generic renderer helpers)", () => {
     );
   });
 
+  it("falls back to measuredText for NUMBER when the numeric cell is empty (symbol reading)", () => {
+    expect(
+      formatMeasuredValue({ measuredValue: null, measuredBool: null, measuredText: "OL" }, "NUMBER", 1),
+    ).toBe("OL");
+  });
+
   it("prefers an established human-readable toleranceNote over raw min/max", () => {
     expect(formatToleranceText(28, 32, "± 5 bpm")).toBe("± 5 bpm");
     expect(formatToleranceText(28, 32, null)).toBe("28 – 32");

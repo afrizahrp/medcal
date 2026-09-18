@@ -3928,3 +3928,380 @@ describe("CalibrationJobsService — JobCalibrationTestPoint snapshot", () => {
     expect(snaps.map((s) => s.settingLabel)).toEqual(["Awal"]);
   });
 });
+
+describe("CalibrationJobsService — submitForReview measurement completeness", () => {
+  const createdParamDeviceTypeIds: string[] = [];
+
+  async function capabilityItem() {
+    const capability = await prisma.deviceCapability.create({
+      data: { code: `CMPCAP-${randomUUID().slice(0, 8).toUpperCase()}`, name: "Cmp Capability" },
+    });
+    createdCapabilityIds.push(capability.id);
+    const item = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: capability.id, name: "Cmp Item" },
+    });
+    return item.id;
+  }
+
+  afterAll(async () => {
+    if (createdParamDeviceTypeIds.length > 0) {
+      await prisma.measurementResult.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdParamDeviceTypeIds } } },
+      });
+      await prisma.jobCalibrationTestPoint.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdParamDeviceTypeIds } } },
+      });
+      await prisma.calibrationTestPoint.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdParamDeviceTypeIds } } },
+      });
+      await prisma.deviceCalibrationParameter.deleteMany({
+        where: { deviceTypeId: { in: createdParamDeviceTypeIds } },
+      });
+    }
+  });
+
+  async function startJobWithParams(setup: (deviceTypeId: string) => Promise<void>) {
+    const ctx = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(ctx.deviceTypeId);
+    await setup(ctx.deviceTypeId);
+    await completeKontrolAlatForStart(realCompanyId, ctx.jobs[0]!.id);
+    const job = await calibrationJobsService.start(realCompanyId, ctx.jobs[0]!.id);
+    const technician = await makeMember(realCompanyId, "TECHNICIAN");
+    return { ...ctx, job, technician };
+  }
+
+  it("rejects Pattern A with zero filled results", async () => {
+    const capabilityItemId = await capabilityItem();
+    const ctx = await startJobWithParams(async (deviceTypeId) => {
+      await prisma.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId,
+          capabilityItemId,
+          code: "CMP_A0",
+          name: "Room temp",
+          valueType: "NUMBER",
+          sortOrder: 10,
+        },
+      });
+    });
+    await expect(calibrationJobsService.submitForReview(realCompanyId, ctx.job.id)).rejects.toMatchObject(
+      { response: { code: "CALIBRATION_MEASUREMENTS_INCOMPLETE" } },
+    );
+  });
+
+  it("allows Pattern A with one filled result (including fewer than 5 reps)", async () => {
+    const capabilityItemId = await capabilityItem();
+    const ctx = await startJobWithParams(async (deviceTypeId) => {
+      await prisma.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId,
+          capabilityItemId,
+          code: "CMP_A1",
+          name: "Room temp",
+          valueType: "NUMBER",
+          sortOrder: 10,
+          toleranceMin: 0,
+          toleranceMax: 100,
+        },
+      });
+    });
+    const param = await prisma.deviceCalibrationParameter.findFirstOrThrow({
+      where: { deviceTypeId: ctx.deviceTypeId, code: "CMP_A1" },
+    });
+    await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: 22,
+      },
+      ctx.technician.id,
+    );
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, ctx.job.id);
+    expect(submitted.status).toBe("SUBMITTED");
+  });
+
+  it("rejects Pattern A when the only row is empty", async () => {
+    const capabilityItemId = await capabilityItem();
+    const ctx = await startJobWithParams(async (deviceTypeId) => {
+      await prisma.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId,
+          capabilityItemId,
+          code: "CMP_AE",
+          name: "Room temp",
+          valueType: "NUMBER",
+          sortOrder: 10,
+        },
+      });
+    });
+    const param = await prisma.deviceCalibrationParameter.findFirstOrThrow({
+      where: { deviceTypeId: ctx.deviceTypeId, code: "CMP_AE" },
+    });
+    await prisma.measurementResult.create({
+      data: {
+        companyId: realCompanyId,
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        attemptNumber: 1,
+        measuredValue: null,
+        measuredText: null,
+      },
+    });
+    await expect(calibrationJobsService.submitForReview(realCompanyId, ctx.job.id)).rejects.toMatchObject(
+      { response: { code: "CALIBRATION_MEASUREMENTS_INCOMPLETE" } },
+    );
+  });
+
+  it("rejects Pattern B when one named snapshot point is missing", async () => {
+    const capabilityItemId = await capabilityItem();
+    const ctx = await startJobWithParams(async (deviceTypeId) => {
+      const param = await prisma.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId,
+          capabilityItemId,
+          code: "CMP_B_MISS",
+          name: "Env",
+          valueType: "NUMBER",
+          sortOrder: 10,
+          toleranceMin: 0,
+          toleranceMax: 100,
+        },
+      });
+      await prisma.calibrationTestPoint.createMany({
+        data: [
+          { deviceCalibrationParameterId: param.id, sequence: 1, settingLabel: "Awal" },
+          { deviceCalibrationParameterId: param.id, sequence: 2, settingLabel: "Akhir" },
+        ],
+      });
+    });
+    const param = await prisma.deviceCalibrationParameter.findFirstOrThrow({
+      where: { deviceTypeId: ctx.deviceTypeId, code: "CMP_B_MISS" },
+    });
+    const awal = await prisma.calibrationTestPoint.findFirstOrThrow({
+      where: { deviceCalibrationParameterId: param.id, settingLabel: "Awal" },
+    });
+    await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: param.id,
+        calibrationTestPointId: awal.id,
+        replicateIndex: 1,
+        measuredValue: 25,
+      },
+      ctx.technician.id,
+    );
+    await expect(calibrationJobsService.submitForReview(realCompanyId, ctx.job.id)).rejects.toMatchObject({
+      response: {
+        code: "CALIBRATION_MEASUREMENTS_INCOMPLETE",
+        details: {
+          parameters: [{ parameterId: param.id, missingTestPointIds: [expect.any(String)] }],
+        },
+      },
+    });
+  });
+
+  it("allows Pattern B when every snapshot point has at least one filled result", async () => {
+    const capabilityItemId = await capabilityItem();
+    const ctx = await startJobWithParams(async (deviceTypeId) => {
+      const param = await prisma.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId,
+          capabilityItemId,
+          code: "CMP_B_OK",
+          name: "Env",
+          valueType: "NUMBER",
+          sortOrder: 10,
+          toleranceMin: 0,
+          toleranceMax: 100,
+        },
+      });
+      await prisma.calibrationTestPoint.createMany({
+        data: [
+          { deviceCalibrationParameterId: param.id, sequence: 1, settingLabel: "Awal" },
+          { deviceCalibrationParameterId: param.id, sequence: 2, settingLabel: "Akhir" },
+        ],
+      });
+    });
+    const param = await prisma.deviceCalibrationParameter.findFirstOrThrow({
+      where: { deviceTypeId: ctx.deviceTypeId, code: "CMP_B_OK" },
+    });
+    const points = await prisma.calibrationTestPoint.findMany({
+      where: { deviceCalibrationParameterId: param.id },
+      orderBy: { sequence: "asc" },
+    });
+    await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: param.id,
+        calibrationTestPointId: points[0]!.id,
+        replicateIndex: 1,
+        measuredValue: 25,
+      },
+      ctx.technician.id,
+    );
+    await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: param.id,
+        calibrationTestPointId: points[0]!.id,
+        replicateIndex: 2,
+        measuredValue: 25.1,
+      },
+      ctx.technician.id,
+    );
+    await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: param.id,
+        calibrationTestPointId: points[1]!.id,
+        replicateIndex: 1,
+        measuredValue: null,
+        measuredText: "OL",
+      },
+      ctx.technician.id,
+    );
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, ctx.job.id);
+    expect(submitted.status).toBe("SUBMITTED");
+  });
+
+  it("allows a filled result outside tolerance", async () => {
+    const capabilityItemId = await capabilityItem();
+    const ctx = await startJobWithParams(async (deviceTypeId) => {
+      await prisma.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId,
+          capabilityItemId,
+          code: "CMP_FAIL",
+          name: "HR",
+          valueType: "NUMBER",
+          sortOrder: 10,
+          toleranceMin: 0,
+          toleranceMax: 10,
+        },
+      });
+    });
+    const param = await prisma.deviceCalibrationParameter.findFirstOrThrow({
+      where: { deviceTypeId: ctx.deviceTypeId, code: "CMP_FAIL" },
+    });
+    const row = await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: 99,
+      },
+      ctx.technician.id,
+    );
+    expect(row.isWithinTolerance).toBe(false);
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, ctx.job.id);
+    expect(submitted.status).toBe("SUBMITTED");
+  });
+
+  it("does not let attempt 1 results complete attempt 2 after REWORK", async () => {
+    const capabilityItemId = await capabilityItem();
+    const ctx = await startJobWithParams(async (deviceTypeId) => {
+      await prisma.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId,
+          capabilityItemId,
+          code: "CMP_RW",
+          name: "Room temp",
+          valueType: "NUMBER",
+          sortOrder: 10,
+          toleranceMin: 0,
+          toleranceMax: 100,
+        },
+      });
+    });
+    const param = await prisma.deviceCalibrationParameter.findFirstOrThrow({
+      where: { deviceTypeId: ctx.deviceTypeId, code: "CMP_RW" },
+    });
+    await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: 22,
+      },
+      ctx.technician.id,
+    );
+    await calibrationJobsService.submitForReview(realCompanyId, ctx.job.id);
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await calibrationJobsService.decideQualityReview(realCompanyId, ctx.job.id, manager.id, {
+      decision: "REJECT",
+      notes: "ulang",
+    });
+    await expect(calibrationJobsService.submitForReview(realCompanyId, ctx.job.id)).rejects.toMatchObject(
+      { response: { code: "CALIBRATION_JOB_NOT_IN_PROGRESS" } },
+    );
+    await calibrationJobsService.resumeAfterRework(realCompanyId, ctx.job.id);
+    await expect(calibrationJobsService.submitForReview(realCompanyId, ctx.job.id)).rejects.toMatchObject(
+      { response: { code: "CALIBRATION_MEASUREMENTS_INCOMPLETE" } },
+    );
+    await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: 23,
+      },
+      ctx.technician.id,
+    );
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, ctx.job.id);
+    expect(submitted.status).toBe("SUBMITTED");
+    expect(submitted.currentAttempt).toBe(2);
+  });
+
+  it("keeps zero-snapshot environment parameters as Pattern A (historical BSM shape)", async () => {
+    const capabilityItemId = await capabilityItem();
+    const ctx = await startJobWithParams(async (deviceTypeId) => {
+      await prisma.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId,
+          capabilityItemId,
+          code: "BSM_ROOM_TEMP_HIST",
+          name: "Suhu ruangan",
+          valueType: "NUMBER",
+          sortOrder: 10,
+          toleranceMin: 0,
+          toleranceMax: 50,
+        },
+      });
+    });
+    const snaps = await prisma.jobCalibrationTestPoint.count({
+      where: { calibrationJobId: ctx.job.id },
+    });
+    expect(snaps).toBe(0);
+    const param = await prisma.deviceCalibrationParameter.findFirstOrThrow({
+      where: { deviceTypeId: ctx.deviceTypeId, code: "BSM_ROOM_TEMP_HIST" },
+    });
+    const row = await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: 25.1,
+      },
+      ctx.technician.id,
+    );
+    expect(row.calibrationTestPointId).toBeNull();
+    await prisma.calibrationTestPoint.create({
+      data: { deviceCalibrationParameterId: param.id, sequence: 1, settingLabel: "Awal" },
+    });
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, ctx.job.id);
+    expect(submitted.status).toBe("SUBMITTED");
+    expect(row.calibrationTestPointId).toBeNull();
+  });
+});
+
