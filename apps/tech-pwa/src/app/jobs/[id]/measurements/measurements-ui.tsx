@@ -1,11 +1,9 @@
 import Link from "next/link";
 import {
-  expectedReplicateCount,
   gridEntryStatus,
   parameterEntryStatus,
   passFailChip,
   toleranceText,
-  usesDirection,
   type MeasurementCapabilitySectionView,
   type ParameterEntryStatus,
   type TechMeasurementParameter,
@@ -55,9 +53,7 @@ export function MeasurementParameterListRow({
     pointCount !== undefined
       ? gridEntryStatus(
           rows,
-          pointCount,
-          expectedReplicateCount(param.code),
-          usesDirection(param.code) ? 2 : 1,
+          (param.testPoints ?? []).map((tp) => tp.id),
         )
       : parameterEntryStatus(rows);
   return (

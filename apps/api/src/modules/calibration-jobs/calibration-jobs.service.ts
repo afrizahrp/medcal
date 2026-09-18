@@ -49,6 +49,7 @@ import {
   type JobReferenceEquipmentUsedDetail,
 } from "./job-reference-equipment";
 import { assertKontrolAlatReadyForStart } from "./kontrol-alat.service";
+import { copyActiveTestPointsIntoJobSnapshot } from "./job-calibration-test-point-snapshot";
 
 const calibrationJobInclude = {
   workOrder: {
@@ -748,9 +749,29 @@ export class CalibrationJobsService {
 
     await assertKontrolAlatReadyForStart(job.workOrder.serviceMode, job.id);
 
-    await prisma.calibrationJob.update({
-      where: { id },
-      data: { status: "IN_PROGRESS", startedAt: new Date() },
+    const deviceTypeId = this.resolveJobDeviceTypeId(job);
+    const startedAt = new Date();
+
+    await prisma.$transaction(async (tx) => {
+      const claimed = await tx.calibrationJob.updateMany({
+        where: { id, companyId, status: "PENDING", startedAt: null },
+        data: {
+          status: "IN_PROGRESS",
+          startedAt,
+          measurementTestPointsSnapshottedAt: startedAt,
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictException({
+          message: "Calibration job has already been started",
+          code: "CALIBRATION_JOB_ALREADY_STARTED",
+        });
+      }
+
+      await copyActiveTestPointsIntoJobSnapshot(tx, {
+        calibrationJobId: id,
+        deviceTypeId,
+      });
     });
 
     return this.findOne(companyId, id);
@@ -1537,7 +1558,7 @@ export class CalibrationJobsService {
       return { deviceType: null, parameters: [], gridParameters: [], capabilityGroups: [] };
     }
 
-    const [deviceType, rows, gridRows, capabilityOrders] = await Promise.all([
+    const [deviceType, eligible, capabilityOrders] = await Promise.all([
       prisma.deviceType.findUnique({
         where: { id: deviceTypeId },
         select: { id: true, name: true },
@@ -1548,19 +1569,6 @@ export class CalibrationJobsService {
           isActive: true,
           valueType: "NUMBER",
           entryStyle: "DIRECT_REPLICATES",
-          testPoints: { none: {} },
-        },
-        select: measurementParameterSelect,
-        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      }),
-      prisma.deviceCalibrationParameter.findMany({
-        where: {
-          deviceTypeId,
-          isActive: true,
-          valueType: "NUMBER",
-          entryStyle: "DIRECT_REPLICATES",
-          code: { notIn: [...GRID_EXCLUDED_PARAMETER_CODES] },
-          testPoints: { some: { isActive: true } },
         },
         select: {
           ...measurementParameterSelect,
@@ -1586,10 +1594,56 @@ export class CalibrationJobsService {
       }),
     ]);
 
-    const parameters = rows.map(toParameterSummary);
-    const gridParameters = gridRows.map((row) => ({
-      ...toParameterSummary(row),
-      testPoints: row.testPoints.map(toTestPointSummary),
+    const useSnapshot = job.measurementTestPointsSnapshottedAt != null;
+    const snapshots = useSnapshot
+      ? await prisma.jobCalibrationTestPoint.findMany({
+          where: { calibrationJobId: jobId },
+          orderBy: { sequence: "asc" },
+        })
+      : [];
+    const snapshotsByParameterId = new Map<string, typeof snapshots>();
+    for (const row of snapshots) {
+      const list = snapshotsByParameterId.get(row.deviceCalibrationParameterId) ?? [];
+      list.push(row);
+      snapshotsByParameterId.set(row.deviceCalibrationParameterId, list);
+    }
+
+    const excluded = new Set<string>(GRID_EXCLUDED_PARAMETER_CODES);
+    const directRows: typeof eligible = [];
+    const gridItems: Array<{
+      row: (typeof eligible)[number];
+      testPoints: MeasurementTestPointSummary[];
+    }> = [];
+
+    for (const row of eligible) {
+      if (excluded.has(row.code)) continue;
+      const frozen = snapshotsByParameterId.get(row.id) ?? [];
+      const livePoints = row.testPoints;
+      const isGrid = useSnapshot ? frozen.length > 0 : livePoints.length > 0;
+      if (!isGrid) {
+        if (useSnapshot || livePoints.length === 0) directRows.push(row);
+        continue;
+      }
+      const testPoints = useSnapshot
+        ? frozen.map((tp) =>
+            toTestPointSummary({
+              id: tp.sourceCalibrationTestPointId,
+              sequence: tp.sequence,
+              settingLabel: tp.settingLabel,
+              settingValue: tp.settingValue,
+              toleranceMin: tp.toleranceMin,
+              toleranceMax: tp.toleranceMax,
+              toleranceNote: tp.toleranceNote,
+            }),
+          )
+        : livePoints.map(toTestPointSummary);
+      gridItems.push({ row, testPoints });
+    }
+
+    const parameters = directRows.map(toParameterSummary);
+    const gridParameters = gridItems.map((item) => ({
+      ...toParameterSummary(item.row),
+      testPoints: item.testPoints,
     }));
     const sortOrderByCapabilityId = new Map(
       capabilityOrders.map((row) => [row.capabilityId, row.sortOrder] as const),
@@ -1601,11 +1655,11 @@ export class CalibrationJobsService {
       gridParameters,
       capabilityGroups: buildMeasurementCapabilityGroups(
         [
-          ...rows.map((row) => ({ row, kind: "DIRECT" as const, testPoints: [] })),
-          ...gridRows.map((row) => ({
-            row,
+          ...directRows.map((row) => ({ row, kind: "DIRECT" as const, testPoints: [] })),
+          ...gridItems.map((item) => ({
+            row: item.row,
             kind: "GRID" as const,
-            testPoints: row.testPoints.map(toTestPointSummary),
+            testPoints: item.testPoints,
           })),
         ],
         sortOrderByCapabilityId,

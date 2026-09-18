@@ -509,6 +509,30 @@ const SEEDS: ParamSeed[] = [
     source: 'measurement-results/ventilator infant.xlsx — "Pengukuran FIO2" (I–III, ± 10%)',
     testPoints: sweep([21, 50, 75, 99], "%"),
   },
+  // Named environment points — BSM only. Do not add other *_ROOM_TEMP / humidity /
+  // voltage codes here. Run AFTER JobCalibrationTestPoint backfill (migration
+  // 20260918120000) so already-started jobs keep Pattern A for these parameters.
+  {
+    code: "BSM_ROOM_TEMP",
+    device: "Bed Side Monitor",
+    pattern: "D-fixed",
+    source: "LK Bed Side Monitor — Kondisi Ruangan (Awal / Akhir)",
+    testPoints: namedSlots(["Awal", "Akhir"]),
+  },
+  {
+    code: "BSM_ROOM_HUMIDITY",
+    device: "Bed Side Monitor",
+    pattern: "D-fixed",
+    source: "LK Bed Side Monitor — Kondisi Ruangan (Awal / Akhir)",
+    testPoints: namedSlots(["Awal", "Akhir"]),
+  },
+  {
+    code: "BSM_INPUT_VOLTAGE",
+    device: "Bed Side Monitor",
+    pattern: "D-fixed",
+    source: "LK Bed Side Monitor — Kondisi Ruangan (L-N / L-G / N-G)",
+    testPoints: namedSlots(["L-N", "L-G", "N-G"]),
+  },
 ];
 
 async function main() {

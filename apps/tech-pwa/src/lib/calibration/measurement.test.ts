@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   canRecordMeasurement,
   capabilityGroupSections,
-  expectedReplicateCount,
   formatMeasuredValue,
   formatReadingDisplay,
   gridEntryStatus,
@@ -21,6 +20,7 @@ import {
   usesDirection,
   validateMeasuredDraft,
   validateMeasuredValue,
+  visibleReplicateCount,
 } from "./measurement";
 
 describe("formatMeasuredValue", () => {
@@ -251,9 +251,12 @@ describe("parameterEntryStatus", () => {
     isWithinTolerance,
   });
 
-  it("counts filled replicates against the seeded default of 5", () => {
+  it("is incomplete with zero readings and does not assume five slots", () => {
+    expect(parameterEntryStatus([])).toMatchObject({ filled: 0, total: 1, complete: false });
+  });
+  it("is complete once any reading exists — extra empty rows are not required", () => {
     const s = parameterEntryStatus([row(1, "10", true), row(2, "11", true), row(3, null, null)]);
-    expect(s).toMatchObject({ filled: 2, total: 5, complete: false, anyFail: false });
+    expect(s).toMatchObject({ filled: 2, total: 2, complete: true, anyFail: false });
   });
   it("counts symbol-only rows as filled", () => {
     const s = parameterEntryStatus([
@@ -261,28 +264,31 @@ describe("parameterEntryStatus", () => {
       row(2, "11", true),
       row(3, null, null, null),
     ]);
-    expect(s).toMatchObject({ filled: 2, total: 5, complete: false });
+    expect(s).toMatchObject({ filled: 2, total: 2, complete: true });
   });
-  it("is complete once every seeded row has a value", () => {
-    const rows = [1, 2, 3, 4, 5].map((i) => row(i, String(i), true));
-    expect(parameterEntryStatus(rows)).toMatchObject({ filled: 5, total: 5, complete: true });
+  it("stays complete with more than five replicates", () => {
+    const rows = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => row(i, String(i), true));
+    expect(parameterEntryStatus(rows)).toMatchObject({ filled: 10, total: 10, complete: true });
   });
-  it("grows total when more replicates exist than the default", () => {
+  it("marks anyFail when a saved reading is out of tolerance", () => {
     const rows = [1, 2, 3, 4, 5, 6, 7].map((i) => row(i, String(i), i === 7 ? false : true));
     expect(parameterEntryStatus(rows)).toMatchObject({ filled: 7, total: 7, complete: true, anyFail: true });
   });
-  it("is not complete with zero readings", () => {
-    expect(parameterEntryStatus([])).toMatchObject({ filled: 0, complete: false });
-  });
 });
 
-describe("expectedReplicateCount / usesDirection", () => {
-  it("uses 3 columns for Ventilator and Audiometer prefixes, otherwise 5", () => {
-    expect(expectedReplicateCount("VENT_PEEP")).toBe(3);
-    expect(expectedReplicateCount("VENT_TIDAL_VOLUME")).toBe(3);
-    expect(expectedReplicateCount("AUD_PURE_TONE_LINEARITY_KANAN")).toBe(3);
-    expect(expectedReplicateCount("BSM_HEART_RATE")).toBe(5);
-    expect(expectedReplicateCount("SPHYG_PRESSURE_ACC")).toBe(5);
+describe("visibleReplicateCount / usesDirection", () => {
+  it("starts with one slot and grows only from saved index plus Tambah ulangan", () => {
+    expect(visibleReplicateCount(0, 0)).toBe(1);
+    expect(visibleReplicateCount(1, 0)).toBe(1);
+    expect(visibleReplicateCount(1, 1)).toBe(2);
+    expect(visibleReplicateCount(5, 0)).toBe(5);
+    expect(visibleReplicateCount(0, 9)).toBe(10);
+    expect(visibleReplicateCount(10, 0)).toBe(10);
+  });
+  it("does not special-case VENT_ or AUD_ prefixes (count is independent of parameter code)", () => {
+    expect(visibleReplicateCount(0, 0)).toBe(1);
+    expect(usesDirection("VENT_PEEP")).toBe(false);
+    expect(usesDirection("AUD_PURE_TONE_LINEARITY_KANAN")).toBe(false);
   });
   it("flags only SPHYG_PRESSURE_ACC as a naik/turun parameter", () => {
     expect(usesDirection("SPHYG_PRESSURE_ACC")).toBe(true);
@@ -293,53 +299,71 @@ describe("expectedReplicateCount / usesDirection", () => {
 
 describe("gridEntryStatus", () => {
   const cell = (
+    testPointId: string,
     replicateIndex: number,
     measuredValue: string | null,
     isWithinTolerance: boolean | null,
     measuredText: string | null = null,
   ) => ({
+    calibrationTestPointId: testPointId,
     replicateIndex,
     measuredValue,
     measuredText,
     isWithinTolerance,
   });
 
-  it("counts filled cells against points × expected replicates", () => {
-    const s = gridEntryStatus([cell(1, "30", true), cell(2, "31", true)], 4, 5, 1);
-    expect(s).toMatchObject({ filled: 2, total: 20, complete: false, anyFail: false });
+  const awal = "tp-awal";
+  const akhir = "tp-akhir";
+  const points = [awal, akhir];
+
+  it("is incomplete when only one of two named points is filled", () => {
+    const s = gridEntryStatus([cell(awal, 1, "25.1", true)], points);
+    expect(s).toMatchObject({ filled: 1, total: 2, complete: false, anyFail: false });
   });
-  it("counts symbol-only cells as filled", () => {
-    const s = gridEntryStatus([cell(1, null, null, "OL"), cell(2, "31", true)], 4, 5, 1);
-    expect(s).toMatchObject({ filled: 2, total: 20, complete: false });
+  it("is complete when every named point has at least one reading", () => {
+    const s = gridEntryStatus(
+      [cell(awal, 1, "25.1", true), cell(akhir, 1, "25.8", true)],
+      points,
+    );
+    expect(s).toMatchObject({ filled: 2, total: 2, complete: true });
   });
-  it("is complete once every cell has a value", () => {
-    const rows = [1, 2, 3, 4, 5].flatMap((i) => [
-      cell(i, "30", true),
-      cell(i, "60", true),
-      cell(i, "120", true),
-      cell(i, "180", true),
+  it("uses test-point ids from data, not hard-coded labels", () => {
+    const low = "tp-low";
+    const high = "tp-high";
+    expect(
+      gridEntryStatus([cell(low, 1, "1", true), cell(high, 1, "9", true)], [low, high]),
+    ).toMatchObject({ complete: true, filled: 2, total: 2 });
+  });
+  it("counts a symbol-only reading as filling that point", () => {
+    const s = gridEntryStatus(
+      [cell(awal, 1, null, null, "OL"), cell(akhir, 1, "25.8", true)],
+      points,
+    );
+    expect(s).toMatchObject({ filled: 2, total: 2, complete: true });
+  });
+  it("does not require extra replicates once every point has a reading", () => {
+    const rows = [
+      cell(awal, 1, "25.1", true),
+      cell(awal, 2, "25.2", true),
+      cell(akhir, 1, "25.8", true),
+    ];
+    expect(gridEntryStatus(rows, points)).toMatchObject({ filled: 2, total: 2, complete: true });
+  });
+  it("allows ten replicates without treating them as a completeness target", () => {
+    const rows = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].flatMap((i) => [
+      cell(awal, i, String(i), true),
+      cell(akhir, i, String(i), true),
     ]);
-    expect(gridEntryStatus(rows, 4, 5, 1)).toMatchObject({ filled: 20, total: 20, complete: true });
+    expect(gridEntryStatus(rows, points)).toMatchObject({ filled: 2, total: 2, complete: true });
   });
   it("marks anyFail when a saved cell is out of tolerance", () => {
-    const rows = [cell(1, "30", true), cell(1, "62", false)];
-    expect(gridEntryStatus(rows, 4, 5, 1).anyFail).toBe(true);
+    const rows = [cell(awal, 1, "30", true), cell(akhir, 1, "62", false)];
+    expect(gridEntryStatus(rows, points).anyFail).toBe(true);
+    expect(gridEntryStatus(rows, points).complete).toBe(true);
   });
-  it("uses 1 row × 3 replicates for a single-point parameter like VENT_PEEP", () => {
-    const s = gridEntryStatus([cell(1, "20", true), cell(2, "20.1", true)], 1, 3, 1);
-    expect(s).toMatchObject({ filled: 2, total: 3, complete: false });
-    expect(gridEntryStatus([cell(1, "20", true), cell(2, "20", true), cell(3, "20", true)], 1, 3, 1)).toMatchObject({
-      filled: 3,
-      total: 3,
-      complete: true,
-    });
-  });
-  it("doubles total when directionCount is 2 (Sphyg naik/turun)", () => {
-    expect(gridEntryStatus([], 6, 5, 2)).toMatchObject({ filled: 0, total: 60, complete: false });
-  });
-  it("grows total when more replicates exist than the expected count", () => {
-    const rows = [1, 2, 3, 4].map((i) => cell(i, String(i), true));
-    expect(gridEntryStatus(rows, 1, 3, 1)).toMatchObject({ filled: 4, total: 4, complete: true });
+  it("is incomplete with zero points or zero readings", () => {
+    expect(gridEntryStatus([], points)).toMatchObject({ filled: 0, total: 2, complete: false });
+    expect(gridEntryStatus([], [])).toMatchObject({ filled: 0, total: 0, complete: false });
   });
 });
 

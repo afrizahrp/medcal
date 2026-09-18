@@ -248,25 +248,19 @@ export function measuredReadingPayload(
   return validation.payload;
 }
 
-// ── Replicate-count soft default ─────────────────────────────────────────────
+// ── Replicate slots (UI only — not a required count) ─────────────────────────
 
 /**
- * There is NO structural "expected replicate count" anywhere — not on
- * DeviceCalibrationParameter, not on CalibrationTestPoint. The LK worksheets
- * imply it only by convention: nearly every performance table has trial columns
- * "I–V". So the entry UI seeds this many rows and offers an "add replicate"
- * affordance; a job that genuinely needs more (or fewer) is never blocked.
- * Known soft spot — see the Stage A report.
+ * How many replicate columns/rows to show. Starts at one empty slot (the
+ * minimum useful input) and grows with saved readings plus "+ Tambah ulangan".
+ * This is presentation only — it is NOT a business rule that N readings
+ * must be filled. No catalog expected-count exists; do not hard-code 5 or 3.
  */
-export const DEFAULT_REPLICATE_COUNT = 5;
-
-const THREE_REPLICATE_PREFIXES = ["VENT_", "AUD_"] as const;
-const DIRECTION_PARAMETER_CODES = new Set(["SPHYG_PRESSURE_ACC"]);
-
-/** Soft default column count for a Pattern B grid (no catalog field exists). */
-export function expectedReplicateCount(code: string): number {
-  return THREE_REPLICATE_PREFIXES.some((prefix) => code.startsWith(prefix)) ? 3 : DEFAULT_REPLICATE_COUNT;
+export function visibleReplicateCount(maxExistingIndex: number, extraSlots: number): number {
+  return Math.max(1, maxExistingIndex) + Math.max(0, extraSlots);
 }
+
+const DIRECTION_PARAMETER_CODES = new Set(["SPHYG_PRESSURE_ACC"]);
 
 /** True when each setpoint is recorded naik + turun (two natural-key rows). */
 export function usesDirection(code: string): boolean {
@@ -437,51 +431,51 @@ export interface ParameterEntryStatus {
 }
 
 /**
- * Fold a parameter's readings (already filtered to the current attempt, Pattern
- * A) into a "n/total diisi" summary. `total` is the larger of the seeded default
- * and however many replicates already exist.
+ * Pattern A (no test points): extra replicates are optional. The parameter has
+ * data once at least one reading is filled. `total` is 1 when empty so the
+ * chip can show 0/1 — not a rule that five (or any N) trials are required.
  */
 export function parameterEntryStatus(
   rows: Pick<
     TechMeasurementResult,
     "replicateIndex" | "measuredValue" | "measuredText" | "isWithinTolerance"
   >[],
-  defaultCount = DEFAULT_REPLICATE_COUNT,
 ): ParameterEntryStatus {
   const withValue = rows.filter(isReadingFilled);
-  const maxIndex = rows.reduce((m, r) => Math.max(m, r.replicateIndex), 0);
-  const total = Math.max(defaultCount, maxIndex);
   return {
     filled: withValue.length,
-    total,
-    complete: withValue.length >= total && withValue.length > 0,
+    total: withValue.length > 0 ? withValue.length : 1,
+    complete: withValue.length > 0,
     anyFail: withValue.some((r) => r.isWithinTolerance === false),
   };
 }
 
 /**
- * Fold a Pattern B grid (already filtered to the current attempt) into a
- * "n/total cells" summary. `total` = points × max(expected, max replicateIndex)
- * × directions (1 or 2).
+ * Pattern B / named measurement points: complete when every active test point
+ * has at least one populated reading for the current attempt. Extra
+ * replicates are optional. Labels are not inspected — only ids from the API.
  */
 export function gridEntryStatus(
   rows: Pick<
     TechMeasurementResult,
-    "replicateIndex" | "measuredValue" | "measuredText" | "isWithinTolerance"
+    "calibrationTestPointId" | "measuredValue" | "measuredText" | "isWithinTolerance"
   >[],
-  testPointCount: number,
-  expectedReplicates: number,
-  directionCount = 1,
+  testPointIds: readonly string[],
 ): ParameterEntryStatus {
-  const withValue = rows.filter(isReadingFilled);
-  const maxIndex = rows.reduce((m, r) => Math.max(m, r.replicateIndex), 0);
-  const replicateCount = Math.max(expectedReplicates, maxIndex);
-  const total = Math.max(0, testPointCount) * replicateCount * Math.max(1, directionCount);
+  const filledByPoint = new Set<string>();
+  let anyFail = false;
+  for (const row of rows) {
+    if (!isReadingFilled(row)) continue;
+    if (row.calibrationTestPointId) filledByPoint.add(row.calibrationTestPointId);
+    if (row.isWithinTolerance === false) anyFail = true;
+  }
+  const total = testPointIds.length;
+  const filled = testPointIds.filter((id) => filledByPoint.has(id)).length;
   return {
-    filled: withValue.length,
+    filled,
     total,
-    complete: total > 0 && withValue.length >= total,
-    anyFail: withValue.some((r) => r.isWithinTolerance === false),
+    complete: total > 0 && filled >= total,
+    anyFail,
   };
 }
 

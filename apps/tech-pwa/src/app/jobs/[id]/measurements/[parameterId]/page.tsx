@@ -10,7 +10,6 @@ import { ErrorBanner } from "../../../../../components/feedback/error-banner";
 import { LoadingState, ErrorState } from "../../../../../components/ui/state-views";
 import { formatApiError } from "../../../../../lib/api-errors";
 import {
-  DEFAULT_REPLICATE_COUNT,
   canRecordMeasurement,
   formatReadingDisplay,
   measuredValueDecimalPlacesExceededMessage,
@@ -19,6 +18,7 @@ import {
   readingDisplayValue,
   toleranceText,
   validateMeasuredDraft,
+  visibleReplicateCount,
   measuredReadingPayload,
   type MeasurementBatchItem,
   type TechMeasurementResult,
@@ -171,7 +171,7 @@ export default function MeasurementParameterEntryPage() {
   const exampleHint = dp == null ? "12.3" : dp === 0 ? "120" : (12.3).toFixed(dp);
 
   const maxExistingIndex = existingRows.reduce((m, r) => Math.max(m, r.replicateIndex), 0);
-  const rowCount = Math.max(DEFAULT_REPLICATE_COUNT, maxExistingIndex) + extraRows;
+  const rowCount = visibleReplicateCount(maxExistingIndex, extraRows);
   const indices = Array.from({ length: rowCount }, (_, i) => i + 1);
 
   const draftFor = (index: number): string => {
@@ -346,8 +346,7 @@ export default function MeasurementParameterEntryPage() {
         ) : null}
 
         <p className="text-xs text-slate-400">
-          Standar lembar kerja mencatat {DEFAULT_REPLICATE_COUNT} ulangan (I–V). Tambah baris bila
-          alat ini butuh lebih.
+          Tambah ulangan bila alat ini butuh lebih dari satu pembacaan.
         </p>
       </div>
     </Screen>

@@ -166,7 +166,12 @@ async function makeParameter(
 }
 
 afterAll(async () => {
-  await prisma.measurementResult.deleteMany({ where: { calibrationJob: { workOrderId: { in: createdWorkOrderIds } } } });
+    await prisma.measurementResult.deleteMany({ where: { calibrationJob: { workOrderId: { in: createdWorkOrderIds } } } });
+    if (createdWorkOrderIds.length > 0) {
+      await prisma.jobCalibrationTestPoint.deleteMany({
+        where: { calibrationJob: { workOrderId: { in: createdWorkOrderIds } } },
+      });
+    }
   if (createdWorkOrderIds.length > 0) {
     await prisma.workOrder.deleteMany({ where: { id: { in: createdWorkOrderIds } } });
   }
@@ -711,6 +716,96 @@ describe("MeasurementResultsService — decimalPlaces enforcement", () => {
     );
     expect(row.calibrationTestPointId).toBe(tp.id);
     expect(row.measuredValue?.toString()).toBe("60.1");
+  });
+
+  it("stores MeasurementResult.calibrationTestPointId as the master id when the point is in the snapshot", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, { toleranceMin: 0, toleranceMax: 100 });
+    const tp = await prisma.calibrationTestPoint.create({
+      data: {
+        deviceCalibrationParameterId: param.id,
+        sequence: 1,
+        settingLabel: "Awal",
+      },
+    });
+    await prisma.jobCalibrationTestPoint.create({
+      data: {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        sourceCalibrationTestPointId: tp.id,
+        sequence: 1,
+        settingLabel: "Awal",
+      },
+    });
+    await prisma.calibrationJob.update({
+      where: { id: ctx.jobId },
+      data: { measurementTestPointsSnapshottedAt: new Date() },
+    });
+
+    const row = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        calibrationTestPointId: tp.id,
+        replicateIndex: 1,
+        measuredValue: 1,
+      },
+      ctx.technician.id,
+    );
+    expect(row.calibrationTestPointId).toBe(tp.id);
+    expect(row.replicateIndex).toBe(1);
+  });
+
+  it("rejects a test point that is not in the started job snapshot", async () => {
+    const ctx = await startedJob();
+    await prisma.calibrationJob.update({
+      where: { id: ctx.jobId },
+      data: { measurementTestPointsSnapshottedAt: new Date() },
+    });
+    const param = await makeParameter(ctx, { toleranceMin: 0, toleranceMax: 100 });
+    const tp = await prisma.calibrationTestPoint.create({
+      data: {
+        deviceCalibrationParameterId: param.id,
+        sequence: 1,
+        settingLabel: "Awal",
+      },
+    });
+
+    await expect(
+      svc.create(
+        companyId,
+        {
+          calibrationJobId: ctx.jobId,
+          deviceCalibrationParameterId: param.id,
+          calibrationTestPointId: tp.id,
+          replicateIndex: 1,
+          measuredValue: 1,
+        },
+        ctx.technician.id,
+      ),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_TEST_POINT_NOT_IN_JOB" } });
+  });
+
+  it("keeps Pattern A calibrationTestPointId NULL under a frozen snapshot", async () => {
+    const ctx = await startedJob();
+    await prisma.calibrationJob.update({
+      where: { id: ctx.jobId },
+      data: { measurementTestPointsSnapshottedAt: new Date() },
+    });
+    const param = await makeParameter(ctx, { toleranceMin: 0, toleranceMax: 100 });
+    const row = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 5,
+        measuredValue: 22.1,
+      },
+      ctx.technician.id,
+    );
+    expect(row.calibrationTestPointId).toBeNull();
+    expect(row.replicateIndex).toBe(5);
   });
 
   it("does not round excess decimals — rejects instead of storing 23.2", async () => {

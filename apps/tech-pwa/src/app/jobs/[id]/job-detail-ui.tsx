@@ -20,11 +20,9 @@ import {
 } from "../../../lib/calibration/reference-equipment";
 import {
   capabilityGroupSections,
-  expectedReplicateCount,
   gridEntryStatus,
   hasCapabilityGroups,
   parameterEntryStatus,
-  usesDirection,
   type TechMeasurementCapabilityGroup,
   type TechMeasurementParameter,
   type TechMeasurementResult,
@@ -370,9 +368,7 @@ export function MeasurementsSection({
                     pointCount !== undefined
                       ? gridEntryStatus(
                           gridRowsByParameter.get(parameter.id) ?? [],
-                          pointCount,
-                          expectedReplicateCount(parameter.code),
-                          usesDirection(parameter.code) ? 2 : 1,
+                          (parameter.testPoints ?? []).map((tp) => tp.id),
                         )
                       : parameterEntryStatus(rowsByParameter.get(parameter.id) ?? []);
                   return (
@@ -410,9 +406,7 @@ export function MeasurementsSection({
                   const pointCount = param.testPoints?.length ?? 0;
                   const status = gridEntryStatus(
                     gridRowsByParameter.get(param.id) ?? [],
-                    pointCount,
-                    expectedReplicateCount(param.code),
-                    usesDirection(param.code) ? 2 : 1,
+                    (param.testPoints ?? []).map((tp) => tp.id),
                   );
                   return (
                     <MeasurementStatusRow key={param.id} name={param.name} status={status} />

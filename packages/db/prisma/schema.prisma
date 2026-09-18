@@ -1408,6 +1408,7 @@ model DeviceCalibrationParameter {
 
   testPoints         CalibrationTestPoint[]
   measurementResults MeasurementResult[]
+  jobTestPoints      JobCalibrationTestPoint[]
 
   @@unique([deviceTypeId, capabilityItemId, code])
   @@index([deviceTypeId])
@@ -2050,6 +2051,9 @@ model CalibrationJob {
   /// moment. Never decremented. (MeasurementResult_Stage1 §6.)
   currentAttempt Int                  @default(1)
   startedAt      DateTime?
+  /// Set when JobCalibrationTestPoint rows are copied (start() or backfill).
+  /// Null on PENDING jobs. Empty snapshot + this timestamp = Pattern A freeze.
+  measurementTestPointsSnapshottedAt DateTime?
   submittedAt    DateTime?
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
@@ -2073,6 +2077,8 @@ model CalibrationJob {
   kontrolAlat            KontrolAlat?
   /// LK Result PDF Download v1 — short-lived step-up tokens scoped to this job.
   lkDownloadAuthorizations LkDownloadAuthorization[]
+  /// Frozen test-point allowlist copied at start() (or backfill for pre-feature jobs).
+  jobTestPoints          JobCalibrationTestPoint[]
 
   @@unique([workOrderId, deviceId])
   @@unique([workOrderId, purchaseOrderItemId, unitOrdinal])
@@ -2222,10 +2228,40 @@ model CalibrationTestPoint {
 
   parameter          DeviceCalibrationParameter @relation(fields: [deviceCalibrationParameterId], references: [id], onDelete: Cascade)
   measurementResults MeasurementResult[]
+  jobSnapshots       JobCalibrationTestPoint[]
 
   @@unique([deviceCalibrationParameterId, sequence])
   @@unique([deviceCalibrationParameterId, settingLabel])
   @@index([deviceCalibrationParameterId])
+}
+
+/// Frozen copy of one catalog CalibrationTestPoint for one CalibrationJob.
+/// Written once at start() (or backfill for jobs that already had startedAt).
+/// MeasurementResult still stores CalibrationTestPoint.id (sourceCalibrationTestPointId).
+model JobCalibrationTestPoint {
+  id                           String @id @default(cuid())
+  calibrationJobId             String
+  deviceCalibrationParameterId String
+  sourceCalibrationTestPointId String
+
+  sequence     Int
+  settingLabel String
+  settingValue Decimal? @db.Decimal(18, 4)
+  toleranceMin Decimal? @db.Decimal(18, 4)
+  toleranceMax Decimal? @db.Decimal(18, 4)
+  toleranceNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calibrationJob CalibrationJob             @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  parameter      DeviceCalibrationParameter @relation(fields: [deviceCalibrationParameterId], references: [id], onDelete: Restrict)
+  sourceTestPoint CalibrationTestPoint      @relation(fields: [sourceCalibrationTestPointId], references: [id], onDelete: Restrict)
+
+  @@unique([calibrationJobId, sourceCalibrationTestPointId])
+  @@index([calibrationJobId])
+  @@index([deviceCalibrationParameterId])
+  @@index([sourceCalibrationTestPointId])
 }
 
 /// One measured reading (or one logger-summary row) for one parameter, at one

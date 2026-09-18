@@ -423,7 +423,11 @@ export class LkDownloadService {
     deviceTypeId: string,
     attemptNumber: number,
   ): Promise<LkResultPdfSection[]> {
-    const [parameters, capabilityOrders, results] = await Promise.all([
+    const [jobFreeze, parameters, capabilityOrders, results] = await Promise.all([
+      prisma.calibrationJob.findFirst({
+        where: { id: calibrationJobId, companyId },
+        select: { measurementTestPointsSnapshottedAt: true },
+      }),
       prisma.deviceCalibrationParameter.findMany({
         where: { deviceTypeId, isActive: true },
         select: {
@@ -471,6 +475,31 @@ export class LkDownloadService {
       }),
     ]);
 
+    const frozenPoints =
+      jobFreeze?.measurementTestPointsSnapshottedAt != null
+        ? await prisma.jobCalibrationTestPoint.findMany({
+            where: { calibrationJobId },
+            orderBy: { sequence: "asc" },
+            select: {
+              deviceCalibrationParameterId: true,
+              sourceCalibrationTestPointId: true,
+              sequence: true,
+              settingLabel: true,
+              toleranceMin: true,
+              toleranceMax: true,
+              toleranceNote: true,
+            },
+          })
+        : null;
+    const frozenByParameterId = new Map<string, NonNullable<typeof frozenPoints>>();
+    if (frozenPoints) {
+      for (const row of frozenPoints) {
+        const list = frozenByParameterId.get(row.deviceCalibrationParameterId) ?? [];
+        list.push(row);
+        frozenByParameterId.set(row.deviceCalibrationParameterId, list);
+      }
+    }
+
     const sortOrderByCapabilityId = new Map(
       capabilityOrders.map((row) => [row.capabilityId, row.sortOrder] as const),
     );
@@ -489,9 +518,21 @@ export class LkDownloadService {
       const capability = parameter.capabilityItem.capability;
       const unit = parameter.uom?.symbol ?? parameter.uom?.code ?? null;
 
+      const catalogPoints =
+        frozenPoints != null
+          ? (frozenByParameterId.get(parameter.id) ?? []).map((tp) => ({
+              id: tp.sourceCalibrationTestPointId,
+              sequence: tp.sequence,
+              settingLabel: tp.settingLabel,
+              toleranceMin: tp.toleranceMin,
+              toleranceMax: tp.toleranceMax,
+              toleranceNote: tp.toleranceNote,
+            }))
+          : parameter.testPoints;
+
       const points =
-        parameter.testPoints.length > 0
-          ? parameter.testPoints.map((tp) => ({
+        catalogPoints.length > 0
+          ? catalogPoints.map((tp) => ({
               key: `${parameter.id}:${tp.id}`,
               label: `${parameter.name} — ${tp.settingLabel}`,
               toleranceMin: tp.toleranceMin ?? parameter.toleranceMin,

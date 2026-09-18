@@ -288,6 +288,12 @@ afterAll(async () => {
   if (createdDeviceTypeIds.length > 0) {
     // Devices created by the device-assignment suite (jobs are already gone via
     // the WorkOrder cascade above) — must go before their DeviceType.
+    await prisma.jobCalibrationTestPoint.deleteMany({
+      where: { parameter: { deviceTypeId: { in: createdDeviceTypeIds } } },
+    });
+    await prisma.calibrationTestPoint.deleteMany({
+      where: { parameter: { deviceTypeId: { in: createdDeviceTypeIds } } },
+    });
     await prisma.deviceCalibrationParameter.deleteMany({
       where: { deviceTypeId: { in: createdDeviceTypeIds } },
     });
@@ -467,6 +473,8 @@ describe("CalibrationJobsService — start (Mulai Kalibrasi)", () => {
     expect(started.status).toBe("IN_PROGRESS");
     expect(started.startedAt).not.toBeNull();
     expect(started.startedAt!.getTime()).toBeGreaterThanOrEqual(before - 1000);
+    const frozen = await prisma.calibrationJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(frozen.measurementTestPointsSnapshottedAt).not.toBeNull();
   });
 
   it("does not touch sibling jobs", async () => {
@@ -3314,6 +3322,9 @@ describe("CalibrationJobsService — Measurement Parameters (Stage A, Pattern A)
 
   afterAll(async () => {
     if (createdParamDeviceTypeIds.length > 0) {
+      await prisma.jobCalibrationTestPoint.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdParamDeviceTypeIds } } },
+      });
       await prisma.calibrationTestPoint.deleteMany({
         where: { parameter: { deviceTypeId: { in: createdParamDeviceTypeIds } } },
       });
@@ -3671,5 +3682,249 @@ describe("CalibrationJobsService — Measurement Parameters (Stage A, Pattern A)
     expect(result.capabilityGroups[2]?.parameters.map((p) => p.code)).toEqual(["SHARED_A"]);
     expect(result.capabilityGroups[3]?.parameters.map((p) => p.code)).toEqual(["SHARED_B"]);
     expect(result.capabilityGroups.flatMap((g) => g.parameters).some((p) => p.code === "ENV_LOGGER")).toBe(false);
+  });
+});
+
+describe("CalibrationJobsService — JobCalibrationTestPoint snapshot", () => {
+  const createdCapabilityIds: string[] = [];
+  const createdParamDeviceTypeIds: string[] = [];
+
+  async function capabilityItem() {
+    const capability = await prisma.deviceCapability.create({
+      data: { code: `SNAPCAP-${randomUUID().slice(0, 8).toUpperCase()}`, name: "Snap Capability" },
+    });
+    createdCapabilityIds.push(capability.id);
+    const item = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: capability.id, name: "Snap Item" },
+    });
+    return item.id;
+  }
+
+  afterAll(async () => {
+    if (createdParamDeviceTypeIds.length > 0) {
+      await prisma.jobCalibrationTestPoint.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdParamDeviceTypeIds } } },
+      });
+      await prisma.calibrationTestPoint.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdParamDeviceTypeIds } } },
+      });
+      await prisma.deviceTypeCapabilityOrder.deleteMany({
+        where: { deviceTypeId: { in: createdParamDeviceTypeIds } },
+      });
+      await prisma.deviceCalibrationParameter.deleteMany({
+        where: { deviceTypeId: { in: createdParamDeviceTypeIds } },
+      });
+    }
+    if (createdCapabilityIds.length > 0) {
+      await prisma.deviceCapabilityItem.deleteMany({
+        where: { capabilityId: { in: createdCapabilityIds } },
+      });
+      await prisma.deviceCapability.deleteMany({ where: { id: { in: createdCapabilityIds } } });
+    }
+  });
+
+  it("PENDING Pattern A catalog: start copies zero test points and lists Pattern A", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId,
+        code: "SNAP_A",
+        name: "Room temp",
+        valueType: "NUMBER",
+        sortOrder: 10,
+      },
+    });
+
+    const pending = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+    expect(pending.parameters.map((p) => p.code)).toEqual(["SNAP_A"]);
+    expect(pending.gridParameters).toEqual([]);
+
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+
+    const snaps = await prisma.jobCalibrationTestPoint.findMany({
+      where: { calibrationJobId: jobs[0]!.id },
+    });
+    expect(snaps).toHaveLength(0);
+    const job = await prisma.calibrationJob.findUniqueOrThrow({ where: { id: jobs[0]!.id } });
+    expect(job.measurementTestPointsSnapshottedAt).not.toBeNull();
+
+    const started = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+    expect(started.parameters.map((p) => p.code)).toEqual(["SNAP_A"]);
+    expect(started.gridParameters).toEqual([]);
+  });
+
+  it("PENDING Pattern B catalog: start copies named test points", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const param = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId,
+        code: "SNAP_B",
+        name: "Env",
+        valueType: "NUMBER",
+        sortOrder: 10,
+      },
+    });
+    await prisma.calibrationTestPoint.createMany({
+      data: [
+        { deviceCalibrationParameterId: param.id, sequence: 1, settingLabel: "Awal" },
+        { deviceCalibrationParameterId: param.id, sequence: 2, settingLabel: "Akhir" },
+      ],
+    });
+
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+
+    const snaps = await prisma.jobCalibrationTestPoint.findMany({
+      where: { calibrationJobId: jobs[0]!.id },
+      orderBy: { sequence: "asc" },
+    });
+    expect(snaps.map((s) => s.settingLabel)).toEqual(["Awal", "Akhir"]);
+
+    const listed = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+    expect(listed.parameters).toEqual([]);
+    expect(listed.gridParameters.map((p) => p.code)).toEqual(["SNAP_B"]);
+    expect(listed.gridParameters[0]?.testPoints.map((tp) => tp.settingLabel)).toEqual(["Awal", "Akhir"]);
+  });
+
+  it("started job does not acquire a test point added to the master catalog later", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const param = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId,
+        code: "SNAP_LIVE",
+        name: "HR",
+        valueType: "NUMBER",
+        sortOrder: 10,
+      },
+    });
+    const first = await prisma.calibrationTestPoint.create({
+      data: { deviceCalibrationParameterId: param.id, sequence: 1, settingLabel: "30 BPM", settingValue: 30 },
+    });
+
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+
+    await prisma.calibrationTestPoint.create({
+      data: { deviceCalibrationParameterId: param.id, sequence: 2, settingLabel: "60 BPM", settingValue: 60 },
+    });
+    await prisma.calibrationTestPoint.update({
+      where: { id: first.id },
+      data: { settingLabel: "30 BPM renamed", isActive: false },
+    });
+
+    const listed = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+    expect(listed.gridParameters[0]?.testPoints.map((tp) => tp.settingLabel)).toEqual(["30 BPM"]);
+    expect(listed.gridParameters[0]?.testPoints.map((tp) => tp.id)).toEqual([first.id]);
+
+    const snapCount = await prisma.jobCalibrationTestPoint.count({
+      where: { calibrationJobId: jobs[0]!.id },
+    });
+    expect(snapCount).toBe(1);
+  });
+
+  it("duplicate start does not duplicate snapshot rows", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const param = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId,
+        code: "SNAP_DUP",
+        name: "Dup",
+        valueType: "NUMBER",
+        sortOrder: 10,
+      },
+    });
+    await prisma.calibrationTestPoint.create({
+      data: { deviceCalibrationParameterId: param.id, sequence: 1, settingLabel: "Awal" },
+    });
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+    await expect(calibrationJobsService.start(realCompanyId, jobs[0]!.id)).rejects.toMatchObject({
+      response: { code: "CALIBRATION_JOB_ALREADY_STARTED" },
+    });
+    expect(
+      await prisma.jobCalibrationTestPoint.count({ where: { calibrationJobId: jobs[0]!.id } }),
+    ).toBe(1);
+  });
+
+  it("rolls back the job to PENDING if snapshot copy fails inside start()", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const param = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId,
+        code: "SNAP_TX",
+        name: "Tx",
+        valueType: "NUMBER",
+        sortOrder: 10,
+      },
+    });
+    await prisma.calibrationTestPoint.create({
+      data: { deviceCalibrationParameterId: param.id, sequence: 1, settingLabel: "Awal" },
+    });
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    const txSpy = vi.spyOn(prisma, "$transaction").mockImplementationOnce(async (arg) => {
+      if (typeof arg !== "function") {
+        throw new Error("expected interactive transaction");
+      }
+      return prisma.$transaction(async (tx) => {
+        vi.spyOn(tx.jobCalibrationTestPoint, "createMany").mockRejectedValueOnce(new Error("copy failed"));
+        return arg(tx);
+      });
+    });
+    await expect(calibrationJobsService.start(realCompanyId, jobs[0]!.id)).rejects.toThrow("copy failed");
+    txSpy.mockRestore();
+    const job = await prisma.calibrationJob.findUniqueOrThrow({ where: { id: jobs[0]!.id } });
+    expect(job.status).toBe("PENDING");
+    expect(job.startedAt).toBeNull();
+    expect(job.measurementTestPointsSnapshottedAt).toBeNull();
+    expect(await prisma.jobCalibrationTestPoint.count({ where: { calibrationJobId: jobs[0]!.id } })).toBe(0);
+  });
+
+  it("resumeAfterRework does not rewrite the snapshot", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const param = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId,
+        code: "SNAP_RW",
+        name: "Rework",
+        valueType: "NUMBER",
+        sortOrder: 10,
+      },
+    });
+    await prisma.calibrationTestPoint.create({
+      data: { deviceCalibrationParameterId: param.id, sequence: 1, settingLabel: "Awal" },
+    });
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+    await prisma.calibrationTestPoint.create({
+      data: { deviceCalibrationParameterId: param.id, sequence: 2, settingLabel: "Akhir" },
+    });
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { status: "REWORK" },
+    });
+    await calibrationJobsService.resumeAfterRework(realCompanyId, jobs[0]!.id);
+    const snaps = await prisma.jobCalibrationTestPoint.findMany({
+      where: { calibrationJobId: jobs[0]!.id },
+    });
+    expect(snaps.map((s) => s.settingLabel)).toEqual(["Awal"]);
   });
 });

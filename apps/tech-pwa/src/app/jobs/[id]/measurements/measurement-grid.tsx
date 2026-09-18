@@ -7,7 +7,6 @@ import { Button } from "../../../../components/ui/button";
 import { ErrorBanner } from "../../../../components/feedback/error-banner";
 import { formatApiError } from "../../../../lib/api-errors";
 import {
-  expectedReplicateCount,
   formatReadingDisplay,
   measuredValueDecimalPlacesExceededMessage,
   measuredValueInputStep,
@@ -15,6 +14,7 @@ import {
   toleranceText,
   usesDirection,
   validateMeasuredDraft,
+  visibleReplicateCount,
   measuredReadingPayload,
   type MeasurementBatchItem,
   type MeasurementDirection,
@@ -62,7 +62,6 @@ export function MeasurementGridEntry({
 }: GridEntryProps) {
   const testPoints = [...(param.testPoints ?? [])].sort((a, b) => a.sequence - b.sequence);
   const directions: MeasurementDirection[] = usesDirection(param.code) ? ["UP", "DOWN"] : ["NONE"];
-  const expected = expectedReplicateCount(param.code);
   const dp = param.decimalPlaces;
   const exampleHint = dp == null ? "12.3" : dp === 0 ? "120" : (12.3).toFixed(dp);
 
@@ -82,7 +81,7 @@ export function MeasurementGridEntry({
   }, [existingRows]);
 
   const maxExistingIndex = existingRows.reduce((m, r) => Math.max(m, r.replicateIndex), 0);
-  const colCount = Math.max(expected, maxExistingIndex) + extraCols;
+  const colCount = visibleReplicateCount(maxExistingIndex, extraCols);
   const indices = Array.from({ length: colCount }, (_, i) => i + 1);
 
   const draftFor = (key: string, existing: TechMeasurementResult | undefined): string => {
@@ -225,7 +224,7 @@ export function MeasurementGridEntry({
             <thead>
               <tr className="border-b border-slate-200">
                 <th className="sticky left-0 z-10 min-w-[7rem] bg-white px-3 py-2 text-left text-xs font-semibold text-slate-500 shadow-[1px_0_0_0_#e2e8f0]">
-                  Setpoint
+                  Titik ukur
                 </th>
                 {indices.map((index) => (
                   <th
@@ -311,8 +310,8 @@ export function MeasurementGridEntry({
         ) : null}
 
         <p className="text-xs text-slate-400">
-          Standar lembar kerja untuk parameter ini mencatat {expected} ulangan. Tambah kolom bila
-          alat ini butuh lebih.
+          Setiap titik ukur wajib terisi. Tambah ulangan bila alat ini butuh lebih dari satu
+          pembacaan per titik.
         </p>
       </div>
     </Screen>

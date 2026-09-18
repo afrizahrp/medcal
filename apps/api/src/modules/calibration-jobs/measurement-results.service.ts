@@ -147,6 +147,7 @@ export class MeasurementResultsService {
     assertMeasurementRowEditable(job, { attemptNumber: job.currentAttempt });
 
     const { parameter, testPoint } = await this.loadCatalog(
+      job,
       input.deviceCalibrationParameterId,
       input.calibrationTestPointId ?? null,
     );
@@ -225,6 +226,7 @@ export class MeasurementResultsService {
     const prepared = await Promise.all(
       inputs.map(async (input) => {
         const { parameter, testPoint } = await this.loadCatalog(
+          job,
           input.deviceCalibrationParameterId,
           input.calibrationTestPointId ?? null,
         );
@@ -310,6 +312,7 @@ export class MeasurementResultsService {
     // whenever measuredValue is present — not only when the Decimal magnitude changed.
     if (input.measuredValue !== undefined) {
       const { parameter } = await this.loadCatalog(
+        row.calibrationJob,
         row.deviceCalibrationParameterId,
         row.calibrationTestPointId,
       );
@@ -322,6 +325,7 @@ export class MeasurementResultsService {
 
     if (measuredValueChanged || measuredBoolChanged || measuredTextChanged) {
       const { parameter, testPoint } = await this.loadCatalog(
+        row.calibrationJob,
         row.deviceCalibrationParameterId,
         row.calibrationTestPointId,
       );
@@ -390,7 +394,16 @@ export class MeasurementResultsService {
     const row = await prisma.measurementResult.findFirst({
       where: { id, companyId, ...(calibrationJobId ? { calibrationJobId } : {}) },
       include: {
-        calibrationJob: { select: { status: true, currentAttempt: true, submittedAt: true } },
+        calibrationJob: {
+          select: {
+            id: true,
+            status: true,
+            currentAttempt: true,
+            submittedAt: true,
+            startedAt: true,
+            measurementTestPointsSnapshottedAt: true,
+          },
+        },
       },
     });
     if (!row) {
@@ -405,7 +418,14 @@ export class MeasurementResultsService {
   private async loadJob(companyId: string, jobId: string) {
     const job = await prisma.calibrationJob.findFirst({
       where: { id: jobId, companyId },
-      select: { id: true, status: true, currentAttempt: true, startedAt: true, submittedAt: true },
+      select: {
+        id: true,
+        status: true,
+        currentAttempt: true,
+        startedAt: true,
+        submittedAt: true,
+        measurementTestPointsSnapshottedAt: true,
+      },
     });
     if (!job) {
       throw new NotFoundException({
@@ -426,7 +446,11 @@ export class MeasurementResultsService {
     }
   }
 
-  private async loadCatalog(parameterId: string, testPointId: string | null) {
+  private async loadCatalog(
+    job: { id: string; measurementTestPointsSnapshottedAt: Date | null },
+    parameterId: string,
+    testPointId: string | null,
+  ) {
     const parameter = await prisma.deviceCalibrationParameter.findUnique({
       where: { id: parameterId },
       select: parameterSelect,
@@ -456,7 +480,36 @@ export class MeasurementResultsService {
         code: "CALIBRATION_TEST_POINT_PARAMETER_MISMATCH",
       });
     }
-    return { parameter, testPoint };
+
+    if (job.measurementTestPointsSnapshottedAt === null) {
+      return { parameter, testPoint };
+    }
+
+    const frozen = await prisma.jobCalibrationTestPoint.findUnique({
+      where: {
+        calibrationJobId_sourceCalibrationTestPointId: {
+          calibrationJobId: job.id,
+          sourceCalibrationTestPointId: testPointId,
+        },
+      },
+    });
+    if (!frozen || frozen.deviceCalibrationParameterId !== parameter.id) {
+      throw new BadRequestException({
+        message: "Test point is not part of this job's frozen measurement definition",
+        code: "MEASUREMENT_TEST_POINT_NOT_IN_JOB",
+      });
+    }
+
+    return {
+      parameter,
+      testPoint: {
+        ...testPoint,
+        settingValue: frozen.settingValue,
+        toleranceMin: frozen.toleranceMin,
+        toleranceMax: frozen.toleranceMax,
+        toleranceNote: frozen.toleranceNote,
+      },
+    };
   }
 
   /**
