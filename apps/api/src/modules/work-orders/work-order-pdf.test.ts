@@ -1,7 +1,29 @@
+import { inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import type { Company } from "@medcal/db";
 import { renderWorkOrderPdf, workOrderPdfFilename } from "./work-order-pdf";
 import { deviceNameCell, type WorkOrderPdfSource } from "./work-order-pdf-shared";
+
+function pdfDecodedText(pdf: Buffer): string {
+  const raw = pdf.toString("latin1");
+  const chunks: string[] = [];
+  const re = /stream\r?\n([\s\S]*?)endstream/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(raw))) {
+    let ops = "";
+    try {
+      ops = inflateSync(Buffer.from(match[1] ?? "", "latin1")).toString("latin1");
+    } catch {
+      continue;
+    }
+    for (const hex of ops.matchAll(/<([0-9A-Fa-f]+)>/g)) {
+      const h = hex[1] ?? "";
+      if (h.length % 2 !== 0) continue;
+      chunks.push(Buffer.from(h, "hex").toString("latin1"));
+    }
+  }
+  return chunks.join("");
+}
 
 describe("workOrderPdfFilename", () => {
   it("formats PKM-SPK-YYYYMMDD-sequence from the WorkOrder number and issue date", () => {
@@ -109,6 +131,7 @@ describe("renderWorkOrderPdf", () => {
     expect(result.buffer.subarray(0, 5).toString()).toBe("%PDF-");
     expect(result.buffer.length).toBeGreaterThan(2000);
     expect(pageCount(result.buffer)).toBeGreaterThanOrEqual(1);
+    expect(pdfDecodedText(result.buffer)).toContain("F.MU.07");
   });
 
   it("keeps the SPK to a single page and flows many WOL equipment rows onto extra pages", async () => {

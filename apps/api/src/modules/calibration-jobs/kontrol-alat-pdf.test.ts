@@ -1,5 +1,27 @@
+import { inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { renderKontrolAlatPdf, type KontrolAlatPdfInput } from "./kontrol-alat-pdf";
+
+function pdfDecodedText(pdf: Buffer): string {
+  const raw = pdf.toString("latin1");
+  const chunks: string[] = [];
+  const re = /stream\r?\n([\s\S]*?)endstream/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(raw))) {
+    let ops = "";
+    try {
+      ops = inflateSync(Buffer.from(match[1] ?? "", "latin1")).toString("latin1");
+    } catch {
+      continue;
+    }
+    for (const hex of ops.matchAll(/<([0-9A-Fa-f]+)>/g)) {
+      const h = hex[1] ?? "";
+      if (h.length % 2 !== 0) continue;
+      chunks.push(Buffer.from(h, "hex").toString("latin1"));
+    }
+  }
+  return chunks.join("");
+}
 
 function makeInput(overrides: Partial<KontrolAlatPdfInput["kontrolAlat"]> = {}): KontrolAlatPdfInput {
   return {
@@ -68,6 +90,9 @@ describe("renderKontrolAlatPdf", () => {
     expect(result.filename).toBe("PKM-KAL-20260912-00007.pdf");
     expect(result.filename).not.toContain("F.MU.08");
     expect(result.filename).not.toContain("WOL");
+    const decoded = pdfDecodedText(result.buffer);
+    expect(decoded).toContain("F.MU.08");
+    expect(decoded).toContain("KAL/2026/09/00007");
   });
 
   it("renders unsigned and not-executed variants without throwing", async () => {

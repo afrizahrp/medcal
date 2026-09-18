@@ -5,7 +5,15 @@
  * not normalized across files.
  *
  * Used only by the LK result PDF header. Not a business-data mapping.
+ *
+ * Printed "Kode Dokumen" on generated PDFs is standardized (MoM #9) to
+ * {@link LK_PRINTED_DOCUMENT_CODE}. Per-template `documentCode` values below
+ * remain the forensic extract from the blank .docx files and are not what
+ * the PDF renderer prints.
  */
+
+/** Form code printed on every generated LK / Laporan Kalibrasi PDF. */
+export const LK_PRINTED_DOCUMENT_CODE = "F.MT.LK.01.44";
 
 export interface LkManualHeaderMeta {
   /** Template filename without extension. */
@@ -506,7 +514,7 @@ const INDEX: Array<{ keys: string[]; entry: LkManualHeaderMeta }> = CATALOG.map(
 export function blankLkFormHeader(deviceTypeName: string | null): LkResolvedFormHeader {
   return {
     sourceFile: "",
-    documentCode: "",
+    documentCode: LK_PRINTED_DOCUMENT_CODE,
     editionRevision: "",
     editionDate: "",
     revisionDate: "",
@@ -518,7 +526,9 @@ export function blankLkFormHeader(deviceTypeName: string | null): LkResolvedForm
 
 /**
  * Resolve printed header fields from a DeviceType name. Match is exact on
- * normalized filename / header title tokens only — never invents a document code.
+ * normalized filename / header title tokens only. Edition/title stay from the
+ * matched template; the printed document code is always
+ * {@link LK_PRINTED_DOCUMENT_CODE}.
  */
 export function resolveLkManualHeader(deviceTypeName: string | null): LkResolvedFormHeader {
   const fallback = blankLkFormHeader(deviceTypeName);
@@ -530,5 +540,5 @@ export function resolveLkManualHeader(deviceTypeName: string | null): LkResolved
 
   const hits = INDEX.filter((row) => row.keys.some((key) => candidates.has(key)));
   if (hits.length !== 1) return fallback;
-  return { ...hits[0].entry, matched: true };
+  return { ...hits[0].entry, documentCode: LK_PRINTED_DOCUMENT_CODE, matched: true };
 }

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { resolvePkmLogoPath } from "../work-orders/work-order-pdf-shared";
-import type { LkResolvedFormHeader } from "./lk-manual-header-catalog";
+import { LK_PRINTED_DOCUMENT_CODE, type LkResolvedFormHeader } from "./lk-manual-header-catalog";
 
 /**
  * Phase 1 page geometry — from LK .docx sectPr (A4, pgMar, header table).
@@ -191,7 +191,7 @@ export function drawLkManualHeader(
   const metaX = left + col1 + col2;
   const metaLabelW = 78;
   const metaRows: Array<[string, string]> = [
-    ["Kode Dokumen", header.documentCode],
+    ["Kode Dokumen", LK_PRINTED_DOCUMENT_CODE],
     ["Edisi / Revisi", header.editionRevision],
     ["Tanggal Edisi", header.editionDate],
     ["Tanggal Revisi", header.revisionDate],
