@@ -168,7 +168,7 @@ export function toQualityReviewRejectInput(
 // ── Identity correction display helpers ───────────────────────────────────────
 
 type CorrectionChangeRow = {
-  attr: "Device" | "Serial" | "AKD/AKL/NIE";
+  attr: "Device" | "Merk" | "Model / Tipe" | "Serial No" | "AKD/AKL/NIE";
   prev: string;
   next: string;
 };
@@ -177,6 +177,10 @@ interface CorrectionLike {
   prevDevice: { code: string | null } | null;
   newDevice: { code: string | null } | null;
   newDeviceId: string | null;
+  prevBrand: string | null;
+  newBrand: string | null;
+  prevModel: string | null;
+  newModel: string | null;
   prevSerial: string | null;
   newSerial: string | null;
   prevAkdAkl: string | null;
@@ -188,6 +192,8 @@ const dash = (v: string | null | undefined) => (v && v.trim() ? v : "—");
 /** The attributes a BA actually changes, as before → after rows. */
 export function summarizeCorrectionChanges(c: CorrectionLike): CorrectionChangeRow[] {
   const rows: CorrectionChangeRow[] = [];
+  // Historical only: the Device is locked to the WO/SPK assignment (MoM #6),
+  // so no new BA carries these — older ones keep their evidence.
   if (c.newDeviceId !== null) {
     rows.push({
       attr: "Device",
@@ -195,8 +201,14 @@ export function summarizeCorrectionChanges(c: CorrectionLike): CorrectionChangeR
       next: dash(c.newDevice?.code),
     });
   }
+  if (c.newBrand !== null) {
+    rows.push({ attr: "Merk", prev: dash(c.prevBrand), next: dash(c.newBrand) });
+  }
+  if (c.newModel !== null) {
+    rows.push({ attr: "Model / Tipe", prev: dash(c.prevModel), next: dash(c.newModel) });
+  }
   if (c.newSerial !== null) {
-    rows.push({ attr: "Serial", prev: dash(c.prevSerial), next: dash(c.newSerial) });
+    rows.push({ attr: "Serial No", prev: dash(c.prevSerial), next: dash(c.newSerial) });
   }
   if (c.newAkdAkl !== null) {
     rows.push({ attr: "AKD/AKL/NIE", prev: dash(c.prevAkdAkl), next: dash(c.newAkdAkl) });

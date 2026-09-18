@@ -211,6 +211,9 @@ interface ChangeRow {
 function summarizeChanges(correction: IdentityCorrectionDetail): ChangeRow[] {
   const dash = (v: string | null | undefined) => text(v ?? null) ?? "—";
   const rows: ChangeRow[] = [];
+  // Historical only: the Device assigned by the WO/SPK is locked (MoM #6), so
+  // no new BA carries a device change — corrections filed before that keep
+  // their evidence and must still print.
   if (correction.newDeviceId !== null) {
     rows.push({
       attr: "Device",
@@ -218,8 +221,22 @@ function summarizeChanges(correction: IdentityCorrectionDetail): ChangeRow[] {
       next: dash(correction.newDevice?.code),
     });
   }
+  if (correction.newBrand !== null) {
+    rows.push({ attr: "Merk", prev: dash(correction.prevBrand), next: dash(correction.newBrand) });
+  }
+  if (correction.newModel !== null) {
+    rows.push({
+      attr: "Model / Tipe",
+      prev: dash(correction.prevModel),
+      next: dash(correction.newModel),
+    });
+  }
   if (correction.newSerial !== null) {
-    rows.push({ attr: "Serial", prev: dash(correction.prevSerial), next: dash(correction.newSerial) });
+    rows.push({
+      attr: "Serial No",
+      prev: dash(correction.prevSerial),
+      next: dash(correction.newSerial),
+    });
   }
   if (correction.newAkdAkl !== null) {
     rows.push({

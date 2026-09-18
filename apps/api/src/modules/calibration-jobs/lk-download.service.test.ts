@@ -13,6 +13,7 @@ import { MeasurementResultsService } from "./measurement-results.service";
 import { PhysicalCheckResultsService } from "./physical-check-results.service";
 import {
   LkDownloadService,
+  resolveLkDeviceIdentity,
   formatMeasuredValue,
   formatToleranceText,
   toNum,
@@ -499,5 +500,94 @@ describe("LK PDF value/tolerance formatting (generic renderer helpers)", () => {
   it("toNum safely converts Prisma.Decimal without assuming a coercion path", () => {
     expect(toNum(new Prisma.Decimal("30.500"))).toBe(30.5);
     expect(toNum(null)).toBeNull();
+  });
+});
+
+describe("resolveLkDeviceIdentity — MoM #6 LK identity precedence", () => {
+  const master = { brand: "Master Brand", model: "Master Model", serialNumber: "SN-MASTER" };
+
+  it("uses the job's observed Brand over the Device master", () => {
+    const out = resolveLkDeviceIdentity(
+      {
+        technicianObservedBrand: "Observed Brand",
+        technicianObservedModel: null,
+        technicianObservedSerial: null,
+      },
+      master,
+    );
+    expect(out.brand).toBe("Observed Brand");
+  });
+
+  it("uses the job's observed Model over the Device master", () => {
+    const out = resolveLkDeviceIdentity(
+      {
+        technicianObservedBrand: null,
+        technicianObservedModel: "Observed Model",
+        technicianObservedSerial: null,
+      },
+      master,
+    );
+    expect(out.model).toBe("Observed Model");
+  });
+
+  it("uses the job's observed Serial over the Device master", () => {
+    const out = resolveLkDeviceIdentity(
+      {
+        technicianObservedBrand: null,
+        technicianObservedModel: null,
+        technicianObservedSerial: "SN-OBSERVED",
+      },
+      master,
+    );
+    expect(out.serial).toBe("SN-OBSERVED");
+  });
+
+  it("falls back to the Device master INDEPENDENTLY PER FIELD", () => {
+    // The locked example: Brand observed, Model NULL, Serial observed.
+    const out = resolveLkDeviceIdentity(
+      {
+        technicianObservedBrand: "ABC",
+        technicianObservedModel: null,
+        technicianObservedSerial: "SN-001",
+      },
+      master,
+    );
+    expect(out).toEqual({ brand: "ABC", model: "Master Model", serial: "SN-001" });
+  });
+
+  it("falls back entirely to the master when the job observed nothing", () => {
+    const out = resolveLkDeviceIdentity(
+      {
+        technicianObservedBrand: null,
+        technicianObservedModel: null,
+        technicianObservedSerial: null,
+      },
+      master,
+    );
+    expect(out).toEqual({ brand: "Master Brand", model: "Master Model", serial: "SN-MASTER" });
+  });
+
+  it("yields nulls when neither the job nor a linked device has a value", () => {
+    const out = resolveLkDeviceIdentity(
+      {
+        technicianObservedBrand: null,
+        technicianObservedModel: null,
+        technicianObservedSerial: null,
+      },
+      null,
+    );
+    expect(out).toEqual({ brand: null, model: null, serial: null });
+  });
+
+  it("still resolves when the job observed values but no device is linked", () => {
+    const out = resolveLkDeviceIdentity(
+      {
+        technicianObservedBrand: "Only Brand",
+        technicianObservedModel: null,
+        technicianObservedSerial: null,
+      },
+      null,
+    );
+    expect(out).toEqual({ brand: "Only Brand", model: null, serial: null });
   });
 });

@@ -40,8 +40,13 @@ export interface IdentityCorrection {
   calibrationJobId: string;
   number: string;
   status: IdentityCorrectionStatus;
+  /** HISTORICAL ONLY — corrections filed before MoM #6 locked the Device. */
   prevDeviceId: string | null;
   newDeviceId: string | null;
+  prevBrand: string | null;
+  newBrand: string | null;
+  prevModel: string | null;
+  newModel: string | null;
   prevSerial: string | null;
   newSerial: string | null;
   prevAkdAkl: string | null;
@@ -66,7 +71,6 @@ export interface IdentityCorrection {
 export interface IdentityCorrectionSubmitResult {
   job: CalibrationJobRow;
   correction: IdentityCorrection;
-  deviceTypeValidated: boolean;
 }
 
 export interface IdentityCorrectionDecisionResult {
@@ -84,7 +88,8 @@ export interface IdentityCorrectionSignatureInput {
 
 export interface IdentityCorrectionSubmitInput {
   reason: string;
-  newDeviceId?: string | null;
+  newBrand?: string | null;
+  newModel?: string | null;
   newSerial?: string | null;
   newAkdAkl?: string | null;
   signatures: {

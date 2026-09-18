@@ -34,6 +34,10 @@ function makeCorrection(
     status: "PENDING_REVIEW",
     prevDeviceId: null,
     newDeviceId: "device-2",
+    prevBrand: null,
+    newBrand: null,
+    prevModel: null,
+    newModel: null,
     prevSerial: "OLD-SERIAL-01",
     newSerial: "NEW-SERIAL-02",
     prevAkdAkl: null,
@@ -200,6 +204,25 @@ describe("renderIdentityCorrectionPdf", () => {
         newSerial: "NEW-SERIAL-02",
         newAkdAkl: "AKL 99999999999",
         prevAkdAkl: "AKL 11111111111",
+      }),
+      job,
+      company,
+      photo: null,
+    });
+
+    expect(result.buffer.subarray(0, 5).toString()).toBe("%PDF-");
+  });
+
+  it("renders a MoM #6 Brand/Model/Serial correction (no device row)", async () => {
+    const result = await renderIdentityCorrectionPdf({
+      correction: makeCorrection({
+        newDeviceId: null,
+        prevBrand: "Old Brand",
+        newBrand: "Mindray",
+        prevModel: null,
+        newModel: "uMEC12",
+        prevSerial: "OLD-SERIAL-01",
+        newSerial: "NEW-SERIAL-02",
       }),
       job,
       company,

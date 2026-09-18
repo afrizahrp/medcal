@@ -12,9 +12,14 @@ export interface WizardSignatureValue {
 
 export interface WizardState {
   reason: string;
-  attrs: { device: boolean; serial: boolean };
-  deviceId: string;
-  deviceLabel: string;
+  /**
+   * MoM #6: a BA corrects the observed identity of the Device assigned by the
+   * WO/SPK — Brand, Model and Serial No. The Device itself is locked and is
+   * never an attribute here.
+   */
+  attrs: { brand: boolean; model: boolean; serial: boolean };
+  brand: string;
+  model: string;
   serial: string;
   signatures: { TECHNICIAN: WizardSignatureValue; CUSTOMER: WizardSignatureValue };
   photo: File | null;
@@ -24,16 +29,33 @@ function emptySignature(): WizardSignatureValue {
   return { status: "SIGNED", signerName: "", unavailableReason: "" };
 }
 
+/**
+ * Each field is pre-filled with what the job currently shows: the value this
+ * calibration observed, falling back to the assigned Device master — the same
+ * precedence the API compares against and the LK prints.
+ */
 export function initialWizardState(job: TechCalibrationJob): WizardState {
   return {
     reason: "",
-    attrs: { device: false, serial: false },
-    deviceId: "",
-    deviceLabel: "",
-    serial: job.technicianObservedSerial ?? "",
+    attrs: { brand: false, model: false, serial: false },
+    brand: currentBrand(job),
+    model: currentModel(job),
+    serial: currentSerial(job),
     signatures: { TECHNICIAN: emptySignature(), CUSTOMER: emptySignature() },
     photo: null,
   };
+}
+
+export function currentBrand(job: TechCalibrationJob): string {
+  return job.technicianObservedBrand ?? job.device?.brand ?? "";
+}
+
+export function currentModel(job: TechCalibrationJob): string {
+  return job.technicianObservedModel ?? job.device?.model ?? "";
+}
+
+export function currentSerial(job: TechCalibrationJob): string {
+  return job.technicianObservedSerial ?? job.device?.serialNumber ?? "";
 }
 
 export function signatureValid(v: WizardSignatureValue): boolean {
@@ -41,9 +63,12 @@ export function signatureValid(v: WizardSignatureValue): boolean {
   return v.unavailableReason.trim().length > 0;
 }
 
-/** Device is only a valid correction once a candidate has actually been resolved — a typed search string is never enough. */
-export function deviceCorrectionValid(state: WizardState): boolean {
-  return state.attrs.device && state.deviceId.length > 0;
+export function brandCorrectionValid(state: WizardState): boolean {
+  return state.attrs.brand && state.brand.trim().length > 0;
+}
+
+export function modelCorrectionValid(state: WizardState): boolean {
+  return state.attrs.model && state.model.trim().length > 0;
 }
 
 export function serialCorrectionValid(state: WizardState): boolean {
@@ -51,13 +76,11 @@ export function serialCorrectionValid(state: WizardState): boolean {
 }
 
 /**
- * At least one checked attribute must be a resolved, valid correction —
- * but an unresolved/incomplete checked attribute (e.g. Device search with no
- * match) must not hard-block the other attributes that ARE valid. Missing
- * identity information is warn/flag territory (MT decides), not a hard stop.
+ * At least one checked attribute must carry a value — a checked-but-empty
+ * attribute must not hard-block the others that ARE filled in.
  */
 export function attrsValid(state: WizardState): boolean {
-  return deviceCorrectionValid(state) || serialCorrectionValid(state);
+  return brandCorrectionValid(state) || modelCorrectionValid(state) || serialCorrectionValid(state);
 }
 
 export function step1Valid(state: WizardState): boolean {

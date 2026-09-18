@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiFetch } from "@medcal/shared";
 import type {
-  CalibrationJobDeviceCandidate,
   IdentityCorrectionSubmitInput,
   IdentityCorrectionSubmitResult,
   TechCalibrationJob,
@@ -129,20 +128,6 @@ export function useResumeAfterRework(id: string) {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
       queryClient.invalidateQueries({ queryKey: jobKey(id) });
     },
-  });
-}
-
-export function useDeviceCandidates(jobId: string | undefined, search: string, enabled: boolean) {
-  const trimmed = search.trim();
-  return useQuery({
-    queryKey: ["job", jobId, "device-candidates", trimmed],
-    queryFn: () =>
-      apiFetch<CalibrationJobDeviceCandidate[]>(
-        `/calibration-jobs/${jobId}/device-candidates${
-          trimmed ? `?search=${encodeURIComponent(trimmed)}` : ""
-        }`,
-      ),
-    enabled: Boolean(jobId) && enabled,
   });
 }
 

@@ -21,6 +21,8 @@ const MESSAGES: Record<string, string> = {
     "Koreksi tidak mengubah nilai identitas job saat ini. Ubah minimal satu atribut.",
   IDENTITY_CORRECTION_ALREADY_PENDING:
     "Job ini sudah punya BA koreksi identitas yang menunggu review.",
+  IDENTITY_CORRECTION_UNRESOLVED:
+    "Koreksi identitas masih menunggu keputusan manajer teknis. Selesaikan dulu sebelum mengirim hasil ke review mutu.",
   IDENTITY_CORRECTION_NOT_FOUND: "BA koreksi identitas tidak ditemukan.",
   INVALID_IDENTITY_CORRECTION_SUBMIT: "Data pengajuan koreksi identitas tidak valid.",
   DEVICE_NOT_FOUND: "Alat yang dipilih tidak ditemukan.",

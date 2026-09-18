@@ -9,8 +9,6 @@ import { shouldShowLengkapiKontrolAlatCta } from "../../../lib/calibration/kontr
 import { LoadingState, ErrorState } from "../../../components/ui/state-views";
 import { formatApiError } from "../../../lib/api-errors";
 import {
-  isIdentityGateLocked,
-  canEscalateIdentity,
   canSubmitIdentityCorrection,
 } from "../../../lib/calibration/identity-gate";
 import {
@@ -51,7 +49,6 @@ import {
   usePhysicalCheckResults,
 } from "./physical-check/use-physical-check-query";
 import {
-  ApprovalStatusSection,
   AssignedDeviceSection,
   CorrectionsListSection,
   DeclaredIdentitySection,
@@ -74,7 +71,7 @@ export default function JobDetailPage() {
   const router = useRouter();
   const { capabilities } = useAuthz();
 
-  // Live refresh so a Portal-side decision (AKD/AKL gate, Identity Correction)
+  // Live refresh so a Portal-side decision (Identity Correction)
   // surfaces here within ~6s. The wizard layout uses useJobQuery without polling.
   const jobQuery = useJobQuery(id, { poll: true });
   const correctionsQuery = useCorrectionsQuery(id, { poll: true });
@@ -109,9 +106,6 @@ export default function JobDetailPage() {
   }
 
   const job = jobQuery.data;
-  const gateLocked = isIdentityGateLocked(job);
-  const canEscalate = canEscalateIdentity(job);
-  const showEscalate = Boolean(capabilities?.calibrationJobEscalateIdentity);
   const showSubmitCorrection = Boolean(capabilities?.calibrationJobSubmitIdentityCorrection);
   const canRecordKontrolAlat = Boolean(capabilities?.calibrationJobRecordKontrolAlat);
 
@@ -135,6 +129,13 @@ export default function JobDetailPage() {
     Boolean(capabilities?.calibrationJobSubmitForReview) && canSubmitForReview(job);
   const referenceApprovalUnresolved =
     isReferenceEquipmentApprovalPending(job) || job.actionSignals.referenceEquipmentNeedsApproval;
+  // MoM #6: a pending BA never blocks bench work, only the handover to review.
+  const identityCorrectionUnresolved = job.actionSignals.identityCorrectionPending;
+  const submitBlockedReason = identityCorrectionUnresolved
+    ? "Koreksi identitas masih menunggu keputusan manajer teknis. Selesaikan dulu sebelum mengirim hasil ke review mutu."
+    : referenceApprovalUnresolved
+      ? "Selesaikan persetujuan alat referensi sebelum mengirim hasil ke review mutu."
+      : null;
   const showResume = canShowResumeAfterRework(
     job,
     Boolean(capabilities?.calibrationJobResumeAfterRework),
@@ -187,7 +188,6 @@ export default function JobDetailPage() {
         showLengkapiKontrolAlat ||
         showStart ||
         showResume ||
-        showEscalate ||
         showSubmitCorrection ||
         showSubmitForReview ||
         showComplete ? (
@@ -225,12 +225,8 @@ export default function JobDetailPage() {
               <SubmitForReviewAction
                 onSubmit={() => submitMutation.mutate()}
                 pending={submitMutation.isPending}
-                disabled={referenceApprovalUnresolved}
-                disabledReason={
-                  referenceApprovalUnresolved
-                    ? "Selesaikan persetujuan alat referensi sebelum mengirim hasil ke review mutu."
-                    : null
-                }
+                disabled={submitBlockedReason !== null}
+                disabledReason={submitBlockedReason}
                 error={
                   submitMutation.isError
                     ? formatApiError(submitMutation.error, "Gagal mengirim.")
@@ -248,24 +244,6 @@ export default function JobDetailPage() {
                     : null
                 }
               />
-            ) : null}
-            {showEscalate ? (
-              canEscalate ? (
-                <LinkButton href={`/jobs/${id}/escalate`} fullWidth>
-                  Eskalasi AKD/AKL
-                </LinkButton>
-              ) : (
-                <div>
-                  <Button fullWidth disabled>
-                    Eskalasi AKD/AKL
-                  </Button>
-                  <p className="mt-1 text-center text-xs text-slate-500">
-                    {gateLocked
-                      ? "Job sudah melewati tahap verifikasi identitas."
-                      : "Eskalasi sedang ditinjau / sudah disetujui."}
-                  </p>
-                </div>
-              )
             ) : null}
             {showSubmitCorrection ? (
               canSubmitIdentityCorrection(job) ? (
@@ -306,7 +284,6 @@ export default function JobDetailPage() {
       <DeclaredIdentitySection job={job} />
       <ObservedIdentitySection job={job} />
       <AssignedDeviceSection job={job} />
-      <ApprovalStatusSection job={job} />
       {referenceEquipmentQuery.isPending ? (
         <LoadingState label="Memuat alat referensi…" />
       ) : referenceEquipmentQuery.isError ? (

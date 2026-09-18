@@ -172,18 +172,26 @@ export function groupJobsByCustomer(jobs: TechCalibrationJob[]): CustomerJobGrou
 const dash = (v: string | null | undefined) => (v && v.trim() ? v : "—");
 
 export interface CorrectionChangeRow {
-  attr: "Alat" | "Serial" | "AKD/AKL/NIE";
+  attr: "Alat" | "Merk" | "Model / Tipe" | "Serial No" | "AKD/AKL/NIE";
   prev: string;
   next: string;
 }
 
 export function summarizeCorrectionChanges(c: TechIdentityCorrection): CorrectionChangeRow[] {
   const rows: CorrectionChangeRow[] = [];
+  // Historical only: the Device is locked to the WO/SPK assignment (MoM #6),
+  // so no new BA carries these — older ones keep their evidence.
   if (c.newDeviceId !== null) {
     rows.push({ attr: "Alat", prev: dash(c.prevDevice?.code), next: dash(c.newDevice?.code) });
   }
+  if (c.newBrand !== null) {
+    rows.push({ attr: "Merk", prev: dash(c.prevBrand), next: dash(c.newBrand) });
+  }
+  if (c.newModel !== null) {
+    rows.push({ attr: "Model / Tipe", prev: dash(c.prevModel), next: dash(c.newModel) });
+  }
   if (c.newSerial !== null) {
-    rows.push({ attr: "Serial", prev: dash(c.prevSerial), next: dash(c.newSerial) });
+    rows.push({ attr: "Serial No", prev: dash(c.prevSerial), next: dash(c.newSerial) });
   }
   if (c.newAkdAkl !== null) {
     rows.push({ attr: "AKD/AKL/NIE", prev: dash(c.prevAkdAkl), next: dash(c.newAkdAkl) });

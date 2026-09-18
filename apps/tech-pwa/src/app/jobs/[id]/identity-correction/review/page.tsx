@@ -12,7 +12,11 @@ import type { IdentityCorrectionSubmitInput } from "../../../../../lib/calibrati
 import { useSubmitIdentityCorrection, useUploadIdentityCorrectionPhoto } from "../../use-job-query";
 import { useWizard } from "../layout";
 import {
-  deviceCorrectionValid,
+  brandCorrectionValid,
+  currentBrand,
+  currentModel,
+  currentSerial,
+  modelCorrectionValid,
   photoStepValid,
   serialCorrectionValid,
   signatureValid,
@@ -69,7 +73,8 @@ export default function IdentityCorrectionReviewPage() {
     try {
       const input: IdentityCorrectionSubmitInput = {
         reason: state.reason.trim(),
-        ...(deviceCorrectionValid(state) ? { newDeviceId: state.deviceId } : {}),
+        ...(brandCorrectionValid(state) ? { newBrand: state.brand.trim() } : {}),
+        ...(modelCorrectionValid(state) ? { newModel: state.model.trim() } : {}),
         ...(serialCorrectionValid(state) ? { newSerial: state.serial.trim() } : {}),
         signatures: {
           TECHNICIAN: toSignatureInput(state.signatures.TECHNICIAN),
@@ -120,27 +125,29 @@ export default function IdentityCorrectionReviewPage() {
 
       <Section title="Perubahan">
         <div className="flex flex-col gap-2">
-          {deviceCorrectionValid(state) ? (
+          {brandCorrectionValid(state) ? (
             <div className="text-sm">
-              <p className="text-xs text-slate-500">Alat</p>
+              <p className="text-xs text-slate-500">Merk</p>
               <p className="text-slate-900">
-                {dash(job.device?.code)} <span className="text-slate-400">→</span> {dash(state.deviceLabel)}
+                {dash(currentBrand(job))} <span className="text-slate-400">→</span>{" "}
+                {dash(state.brand)}
               </p>
             </div>
           ) : null}
-          {state.attrs.device && !deviceCorrectionValid(state) ? (
+          {modelCorrectionValid(state) ? (
             <div className="text-sm">
-              <p className="text-xs text-slate-500">Alat</p>
-              <p className="text-amber-700">
-                Tidak ditemukan — koreksi Alat tidak disertakan dalam pengajuan ini.
+              <p className="text-xs text-slate-500">Model / Tipe</p>
+              <p className="text-slate-900">
+                {dash(currentModel(job))} <span className="text-slate-400">→</span>{" "}
+                {dash(state.model)}
               </p>
             </div>
           ) : null}
           {serialCorrectionValid(state) ? (
             <div className="text-sm">
-              <p className="text-xs text-slate-500">Serial</p>
+              <p className="text-xs text-slate-500">Serial No</p>
               <p className="text-slate-900">
-                {dash(job.technicianObservedSerial)} <span className="text-slate-400">→</span>{" "}
+                {dash(currentSerial(job))} <span className="text-slate-400">→</span>{" "}
                 {dash(state.serial)}
               </p>
             </div>

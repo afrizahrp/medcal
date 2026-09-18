@@ -692,14 +692,9 @@ describe("CalibrationJobsService — start Kontrol Alat gate", () => {
 });
 
 describe("CalibrationJobsService — Identity Correction (device identity)", () => {
-  it("submit creates a BA + one signature per role atomically (first-time resolution)", async () => {
-    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+  it("submit creates a BA + one signature per role atomically", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
-    const device = await devicesService.create(realCompanyId, {
-      customerId,
-      deviceTypeId,
-      serialNumber: "SN-BAI-1",
-    });
 
     const result = await calibrationJobsService.submitIdentityCorrection(
       realCompanyId,
@@ -707,14 +702,18 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
       tech.id,
       {
         reason: "On-site identification",
-        newDeviceId: device.id,
+        newBrand: "Mindray",
+        newModel: "uMEC12",
+        newSerial: "SN-BAI-1",
         signatures: UNAVAILABLE_SIGNATURES,
       },
     );
 
-    expect(result.deviceTypeValidated).toBe(true);
     expect(result.correction.number).toMatch(/^BAI\/\d{4}\//);
     expect(result.correction.status).toBe("PENDING_REVIEW");
+    expect(result.correction.newBrand).toBe("Mindray");
+    expect(result.correction.newModel).toBe("uMEC12");
+    expect(result.correction.newSerial).toBe("SN-BAI-1");
     expect(result.correction.signatures).toHaveLength(2);
     expect(result.correction.signatures.map((s) => s.signerRole).sort()).toEqual([
       "CUSTOMER",
@@ -722,7 +721,9 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
     ]);
     // Not written through to the job until approval.
     const job = await calibrationJobsService.findOne(realCompanyId, jobs[0]!.id);
-    expect(job.deviceId).toBeNull();
+    expect(job.technicianObservedBrand).toBeNull();
+    expect(job.technicianObservedModel).toBeNull();
+    expect(job.technicianObservedSerial).toBeNull();
   });
 
   it("rejects a submit that changes nothing", async () => {
@@ -773,47 +774,16 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
     ).rejects.toMatchObject({ response: { code: "IDENTITY_CORRECTION_ALREADY_PENDING" } });
   });
 
-  it("rejects a device whose DeviceType does not match the job", async () => {
-    const { jobs, customerId } = await startedWorkOrderJobs(realCompanyId);
-    const tech = await makeMember(realCompanyId, "TECHNICIAN");
-    const otherDeviceTypeId = await createDeviceTypeId();
-    const device = await devicesService.create(realCompanyId, {
-      customerId,
-      deviceTypeId: otherDeviceTypeId,
-    });
-
-    await expect(
-      calibrationJobsService.submitIdentityCorrection(realCompanyId, jobs[0]!.id, tech.id, {
-        reason: "x",
-        newDeviceId: device.id,
-        signatures: UNAVAILABLE_SIGNATURES,
-      }),
-    ).rejects.toMatchObject({ response: { code: "DEVICE_TYPE_MISMATCH" } });
-  });
-
-  it("rejects a device owned by a different customer", async () => {
-    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
-    const tech = await makeMember(realCompanyId, "TECHNICIAN");
-    const otherCustomer = await createTestCustomer(realCompanyId);
-    const device = await devicesService.create(realCompanyId, {
-      customerId: otherCustomer.id,
-      deviceTypeId,
-    });
-
-    await expect(
-      calibrationJobsService.submitIdentityCorrection(realCompanyId, jobs[0]!.id, tech.id, {
-        reason: "x",
-        newDeviceId: device.id,
-        signatures: UNAVAILABLE_SIGNATURES,
-      }),
-    ).rejects.toMatchObject({ response: { code: "DEVICE_CUSTOMER_MISMATCH" } });
-  });
-
-  it("approve binds the device and writes serial + AKD/AKL through to the job", async () => {
+  it("approve writes Brand/Model/Serial + AKD/AKL through to the job's observed identity", async () => {
     const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
     const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
     const device = await devicesService.create(realCompanyId, { customerId, deviceTypeId });
+    // The WO/SPK assignment — locked from here on.
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { deviceId: device.id },
+    });
 
     const { correction } = await calibrationJobsService.submitIdentityCorrection(
       realCompanyId,
@@ -821,7 +791,8 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
       tech.id,
       {
         reason: "full identity",
-        newDeviceId: device.id,
+        newBrand: "Mindray",
+        newModel: "uMEC12",
         newSerial: "SN-OBS-9",
         newAkdAkl: "AKL 12345",
         signatures: UNAVAILABLE_SIGNATURES,
@@ -838,9 +809,17 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
 
     expect(result.correction.status).toBe("APPROVED");
     expect(result.correction.decidedByUserId).toBe(manager.id);
-    expect(result.job.deviceId).toBe(device.id);
+    expect(result.job.technicianObservedBrand).toBe("Mindray");
+    expect(result.job.technicianObservedModel).toBe("uMEC12");
     expect(result.job.technicianObservedSerial).toBe("SN-OBS-9");
     expect(result.job.technicianObservedAkdAkl).toBe("AKL 12345");
+    // MoM #6: the Device assigned by the WO/SPK is never rebound by a BA.
+    expect(result.job.deviceId).toBe(device.id);
+    // ...and the master is NOT written at approval time.
+    const master = await prisma.device.findUniqueOrThrow({ where: { id: device.id } });
+    expect(master.brand).toBeNull();
+    expect(master.model).toBeNull();
+    expect(master.serialNumber).toBeNull();
   });
 
   it("approve reopens the AKD/AKL gate when the corrected value changes a previously-APPROVED gate", async () => {
@@ -1173,17 +1152,25 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
     expect(result.correction.status).toBe("APPROVED");
   });
 
-  it("reject makes no writes to the job and keeps the BA number", async () => {
+  it("reject makes no writes to the job or the master, and keeps the BA number", async () => {
     const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
     const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
-    const device = await devicesService.create(realCompanyId, { customerId, deviceTypeId });
+    const device = await devicesService.create(realCompanyId, {
+      customerId,
+      deviceTypeId,
+      brand: "Master Brand",
+    });
+    await prisma.calibrationJob.update({
+      where: { id: jobs[0]!.id },
+      data: { deviceId: device.id },
+    });
 
     const { correction } = await calibrationJobsService.submitIdentityCorrection(
       realCompanyId,
       jobs[0]!.id,
       tech.id,
-      { reason: "not sure", newDeviceId: device.id, signatures: UNAVAILABLE_SIGNATURES },
+      { reason: "not sure", newBrand: "Wrong Brand", signatures: UNAVAILABLE_SIGNATURES },
     );
 
     const result = await calibrationJobsService.decideIdentityCorrection(
@@ -1196,7 +1183,10 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
 
     expect(result.correction.status).toBe("REJECTED");
     expect(result.correction.number).toBe(correction.number);
-    expect(result.job.deviceId).toBeNull();
+    expect(result.job.technicianObservedBrand).toBeNull();
+    expect(result.job.deviceId).toBe(device.id);
+    const master = await prisma.device.findUniqueOrThrow({ where: { id: device.id } });
+    expect(master.brand).toBe("Master Brand");
   });
 
   it("rejects deciding an already-decided BA", async () => {
@@ -1255,29 +1245,308 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
     }
   });
 
-  it("device-candidates: scoped to the job's customer and device type", async () => {
-    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
-    const match = await devicesService.create(realCompanyId, {
-      customerId,
-      deviceTypeId,
-      serialNumber: "CAND-001",
+});
+
+describe("CalibrationJobsService — MoM #6 BAI lifecycle, master commit & LK identity", () => {
+  async function inProgressJobWithDevice(opts?: {
+    brand?: string;
+    model?: string;
+    serialNumber?: string;
+  }) {
+    const ctx = await startedWorkOrderJobs(realCompanyId);
+    const jobId = ctx.jobs[0]!.id;
+    await completeKontrolAlatForStart(realCompanyId, jobId);
+    await calibrationJobsService.start(realCompanyId, jobId);
+    // The Device the WO/SPK assigns to this job — locked from here on.
+    const device = await devicesService.create(realCompanyId, {
+      customerId: ctx.customerId,
+      deviceTypeId: ctx.deviceTypeId,
+      ...(opts?.brand !== undefined ? { brand: opts.brand } : {}),
+      ...(opts?.model !== undefined ? { model: opts.model } : {}),
+      ...(opts?.serialNumber !== undefined ? { serialNumber: opts.serialNumber } : {}),
     });
-    const otherCustomer = await createTestCustomer(realCompanyId);
-    await devicesService.create(realCompanyId, {
-      customerId: otherCustomer.id,
-      deviceTypeId,
-      serialNumber: "CAND-002",
+    await prisma.calibrationJob.update({ where: { id: jobId }, data: { deviceId: device.id } });
+    return { ...ctx, jobId, device };
+  }
+
+  async function pendingCorrection(
+    jobId: string,
+    input: { newBrand?: string; newModel?: string; newSerial?: string },
+  ) {
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const { correction } = await calibrationJobsService.submitIdentityCorrection(
+      realCompanyId,
+      jobId,
+      tech.id,
+      { reason: "MoM6", signatures: UNAVAILABLE_SIGNATURES, ...input },
+    );
+    return correction;
+  }
+
+  // ── BAI lifecycle ──────────────────────────────────────────────────────────
+
+  it("a pending BA does NOT block measurement recording", async () => {
+    const { jobId, deviceTypeId } = await inProgressJobWithDevice();
+    await pendingCorrection(jobId, { newSerial: "SN-PENDING" });
+    const technician = await makeMember(realCompanyId, "TECHNICIAN");
+
+    const capability = await prisma.deviceCapability.create({
+      data: { code: `M6C${randomUUID().slice(0, 8)}`, name: "MoM6 Cap" },
+    });
+    createdCapabilityIds.push(capability.id);
+    const item = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: capability.id, name: "MoM6 Item" },
+    });
+    const param = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId: item.id,
+        code: `M6P${randomUUID().slice(0, 8).toUpperCase()}`,
+        name: "MoM6 Param",
+        valueType: "NUMBER",
+        toleranceMin: 0,
+        toleranceMax: 100,
+      },
     });
 
-    const candidates = await calibrationJobsService.findDeviceCandidates(
+    const row = await measurementResultsService.create(
       realCompanyId,
-      jobs[0]!.id,
-      undefined,
+      {
+        calibrationJobId: jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: 50,
+      },
+      technician.id,
     );
-    const ids = candidates.map((d) => d.id);
-    expect(ids).toContain(match.id);
-    expect(candidates.every((d) => d.customerId === customerId)).toBe(true);
-    expect(candidates.every((d) => d.deviceTypeId === deviceTypeId)).toBe(true);
+    expect(row.id).toBeTruthy();
+  });
+
+  it("a pending BA blocks submitForReview with IDENTITY_CORRECTION_UNRESOLVED", async () => {
+    const { jobId } = await inProgressJobWithDevice();
+    await pendingCorrection(jobId, { newSerial: "SN-BLOCK" });
+
+    await expect(calibrationJobsService.submitForReview(realCompanyId, jobId)).rejects.toMatchObject(
+      { response: { code: "IDENTITY_CORRECTION_UNRESOLVED" } },
+    );
+
+    const job = await calibrationJobsService.findOne(realCompanyId, jobId);
+    expect(job.status).toBe("IN_PROGRESS");
+    expect(job.submittedAt).toBeNull();
+  });
+
+  it("an APPROVED BA clears the submit gate", async () => {
+    const { jobId } = await inProgressJobWithDevice();
+    const correction = await pendingCorrection(jobId, { newSerial: "SN-OK" });
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobId,
+      correction.id,
+      manager.id,
+      { decision: "APPROVE" },
+    );
+
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, jobId);
+    expect(submitted.status).toBe("SUBMITTED");
+  });
+
+  it("a REJECTED BA also clears the submit gate", async () => {
+    const { jobId } = await inProgressJobWithDevice();
+    const correction = await pendingCorrection(jobId, { newSerial: "SN-NO" });
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobId,
+      correction.id,
+      manager.id,
+      { decision: "REJECT", decisionNote: "not confirmed" },
+    );
+
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, jobId);
+    expect(submitted.status).toBe("SUBMITTED");
+  });
+
+  it("a BA cannot be decided once the job is SUBMITTED (no post-submit workflow)", async () => {
+    const { jobId } = await inProgressJobWithDevice();
+    const correction = await pendingCorrection(jobId, { newSerial: "SN-LATE" });
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    // Forced directly: submitForReview would now refuse precisely because this
+    // BA is pending, which is the behaviour the gate test above covers.
+    await prisma.calibrationJob.update({ where: { id: jobId }, data: { status: "SUBMITTED" } });
+
+    await expect(
+      calibrationJobsService.decideIdentityCorrection(
+        realCompanyId,
+        jobId,
+        correction.id,
+        manager.id,
+        { decision: "APPROVE" },
+      ),
+    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_IDENTITY_GATE_LOCKED" } });
+  });
+
+  it("a BA can never change CalibrationJob.deviceId", async () => {
+    const { jobId, device } = await inProgressJobWithDevice();
+    const correction = await pendingCorrection(jobId, {
+      newBrand: "B",
+      newModel: "M",
+      newSerial: "S",
+    });
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    const result = await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobId,
+      correction.id,
+      manager.id,
+      { decision: "APPROVE" },
+    );
+    expect(result.job.deviceId).toBe(device.id);
+  });
+
+  // ── Race condition invariant ───────────────────────────────────────────────
+
+  it("INVARIANT: a BA racing a submit can never leave SUBMITTED + PENDING_REVIEW", async () => {
+    const { jobId } = await inProgressJobWithDevice();
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+
+    // Both start from the same pre-submit view of the job and race to commit.
+    const results = await Promise.allSettled([
+      calibrationJobsService.submitForReview(realCompanyId, jobId),
+      calibrationJobsService.submitIdentityCorrection(realCompanyId, jobId, tech.id, {
+        reason: "concurrent",
+        newSerial: "SN-RACE",
+        signatures: UNAVAILABLE_SIGNATURES,
+      }),
+    ]);
+
+    const job = await prisma.calibrationJob.findUniqueOrThrow({ where: { id: jobId } });
+    const pending = await prisma.identityCorrection.findFirst({
+      where: { calibrationJobId: jobId, status: "PENDING_REVIEW" },
+      select: { id: true },
+    });
+
+    // Whatever the interleaving, the forbidden combination must not exist.
+    expect(job.status === "SUBMITTED" && pending !== null).toBe(false);
+    // ...and at least one of the two operations was refused.
+    expect(results.some((r) => r.status === "rejected")).toBe(true);
+  });
+
+  // ── ACCEPTED_BY_QA master commit ───────────────────────────────────────────
+
+  async function approveThenComplete(jobId: string, correctionId: string | null) {
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    if (correctionId) {
+      await calibrationJobsService.decideIdentityCorrection(
+        realCompanyId,
+        jobId,
+        correctionId,
+        manager.id,
+        { decision: "APPROVE" },
+      );
+    }
+    await calibrationJobsService.submitForReview(realCompanyId, jobId);
+    await calibrationJobsService.decideQualityReview(realCompanyId, jobId, manager.id, {
+      decision: "APPROVE",
+    });
+    return calibrationJobsService.complete(realCompanyId, jobId);
+  }
+
+  it("commits the approved observed identity to the Device master at ACCEPTED_BY_QA", async () => {
+    const { jobId, device } = await inProgressJobWithDevice({
+      brand: "Old Brand",
+      model: "Old Model",
+      serialNumber: "SN-OLD",
+    });
+    const correction = await pendingCorrection(jobId, {
+      newBrand: "New Brand",
+      newModel: "New Model",
+      newSerial: "SN-NEW",
+    });
+
+    const completed = await approveThenComplete(jobId, correction.id);
+    expect(completed.status).toBe("ACCEPTED_BY_QA");
+
+    const master = await prisma.device.findUniqueOrThrow({ where: { id: device.id } });
+    expect(master.brand).toBe("New Brand");
+    expect(master.model).toBe("New Model");
+    expect(master.serialNumber).toBe("SN-NEW");
+    // The Device row itself is never replaced.
+    expect(master.id).toBe(device.id);
+    expect(master.code).toBeTruthy();
+    expect(completed.deviceId).toBe(device.id);
+  });
+
+  it("never overwrites a Device master field with a NULL observed value", async () => {
+    const { jobId, device } = await inProgressJobWithDevice({
+      brand: "Keep Brand",
+      model: "Keep Model",
+      serialNumber: "SN-KEEP",
+    });
+    // Only Brand is corrected — Model and Serial stay NULL on the job.
+    const correction = await pendingCorrection(jobId, { newBrand: "Only Brand" });
+
+    await approveThenComplete(jobId, correction.id);
+
+    const master = await prisma.device.findUniqueOrThrow({ where: { id: device.id } });
+    expect(master.brand).toBe("Only Brand");
+    expect(master.model).toBe("Keep Model");
+    expect(master.serialNumber).toBe("SN-KEEP");
+  });
+
+  it("leaves the master untouched when the job observed nothing", async () => {
+    const { jobId, device } = await inProgressJobWithDevice({
+      brand: "Untouched",
+      serialNumber: "SN-UNTOUCHED",
+    });
+
+    const completed = await approveThenComplete(jobId, null);
+
+    expect(completed.status).toBe("ACCEPTED_BY_QA");
+    const master = await prisma.device.findUniqueOrThrow({ where: { id: device.id } });
+    expect(master.brand).toBe("Untouched");
+    expect(master.serialNumber).toBe("SN-UNTOUCHED");
+  });
+
+  it("rolls the ACCEPTED_BY_QA transition back when the master commit matches no row", async () => {
+    const { jobId, device } = await inProgressJobWithDevice({ brand: "Rollback Brand" });
+    const correction = await pendingCorrection(jobId, { newBrand: "Doomed Brand" });
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    await calibrationJobsService.decideIdentityCorrection(
+      realCompanyId,
+      jobId,
+      correction.id,
+      manager.id,
+      { decision: "APPROVE" },
+    );
+    await calibrationJobsService.submitForReview(realCompanyId, jobId);
+    await calibrationJobsService.decideQualityReview(realCompanyId, jobId, manager.id, {
+      decision: "APPROVE",
+    });
+
+    // Move the Device into another company so the company-scoped master update
+    // inside the transaction matches zero rows. Raw SQL because the FK to
+    // Customer is not re-pointed — only the scope the update filters on.
+    const foreignCompanyId = `R${randomUUID().slice(0, 2).toUpperCase()}`;
+    await prisma.company.create({
+      data: { id: foreignCompanyId, name: "Rollback Co", status: "ACTIVE" },
+    });
+    createdCompanyIds.push(foreignCompanyId);
+    await prisma.$executeRaw`UPDATE "Device" SET "companyId" = ${foreignCompanyId} WHERE "id" = ${device.id}`;
+    try {
+      await expect(calibrationJobsService.complete(realCompanyId, jobId)).rejects.toMatchObject({
+        response: { code: "DEVICE_MASTER_COMMIT_FAILED" },
+      });
+
+      // The whole transaction rolled back: the job did NOT advance, so LK stays
+      // unavailable and the master was never half-written.
+      const job = await prisma.calibrationJob.findUniqueOrThrow({ where: { id: jobId } });
+      expect(job.status).toBe("SUBMITTED");
+      const master = await prisma.device.findUniqueOrThrow({ where: { id: device.id } });
+      expect(master.brand).toBe("Rollback Brand");
+    } finally {
+      await prisma.$executeRaw`UPDATE "Device" SET "companyId" = ${realCompanyId} WHERE "id" = ${device.id}`;
+    }
   });
 });
 

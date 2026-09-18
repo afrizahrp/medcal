@@ -211,6 +211,10 @@ describe("summarizeCorrectionChanges", () => {
     prevDevice: null,
     newDevice: null,
     newDeviceId: null,
+    prevBrand: null,
+    newBrand: null,
+    prevModel: null,
+    newModel: null,
     prevSerial: null,
     newSerial: null,
     prevAkdAkl: null,
@@ -219,6 +223,22 @@ describe("summarizeCorrectionChanges", () => {
 
   it("returns only the attributes the BA actually changed", () => {
     expect(
+      summarizeCorrectionChanges({ ...empty, prevBrand: "Old", newBrand: "Mindray" }),
+    ).toEqual([{ attr: "Merk", prev: "Old", next: "Mindray" }]);
+
+    expect(
+      summarizeCorrectionChanges({ ...empty, prevModel: null, newModel: "uMEC12" }),
+    ).toEqual([{ attr: "Model / Tipe", prev: "—", next: "uMEC12" }]);
+
+    expect(
+      summarizeCorrectionChanges({ ...empty, prevSerial: null, newSerial: "SN-9" }),
+    ).toEqual([{ attr: "Serial No", prev: "—", next: "SN-9" }]);
+
+    expect(summarizeCorrectionChanges(empty)).toEqual([]);
+  });
+
+  it("still renders a pre-MoM#6 Device correction from history", () => {
+    expect(
       summarizeCorrectionChanges({
         ...empty,
         newDeviceId: "dev-2",
@@ -226,12 +246,19 @@ describe("summarizeCorrectionChanges", () => {
         newDevice: { code: "DVC-000002" },
       }),
     ).toEqual([{ attr: "Device", prev: "DVC-000001", next: "DVC-000002" }]);
+  });
 
+  it("reports Merk, Model and Serial No independently in one BA", () => {
     expect(
-      summarizeCorrectionChanges({ ...empty, prevSerial: null, newSerial: "SN-9" }),
-    ).toEqual([{ attr: "Serial", prev: "—", next: "SN-9" }]);
-
-    expect(summarizeCorrectionChanges(empty)).toEqual([]);
+      summarizeCorrectionChanges({
+        ...empty,
+        newBrand: "Mindray",
+        newSerial: "SN-9",
+      }),
+    ).toEqual([
+      { attr: "Merk", prev: "—", next: "Mindray" },
+      { attr: "Serial No", prev: "—", next: "SN-9" },
+    ]);
   });
 });
 

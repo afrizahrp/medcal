@@ -1,12 +1,10 @@
 import Link from "next/link";
 import { Badge } from "../../components/ui/badge";
 import type {
-  AkdAklApprovalStatus,
   CalibrationJobStatus,
   TechCalibrationJob,
 } from "../../lib/calibration/types";
 import {
-  AKD_AKL_APPROVAL_STATUS_LABELS,
   CALIBRATION_JOB_STATUS_LABELS,
   IDENTITY_CORRECTION_STATUS_LABELS,
   type IdentityCorrectionStatus,
@@ -23,13 +21,6 @@ import {
 } from "../../lib/calibration/quality-review";
 
 const badgeBase = "rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide";
-
-const AKD_AKL_BADGE_CLASS: Record<AkdAklApprovalStatus, string> = {
-  NOT_REQUIRED: "bg-slate-400",
-  PENDING_REVIEW: "bg-amber-500",
-  APPROVED: "bg-emerald-600",
-  REJECTED: "bg-red-600",
-};
 
 const JOB_STATUS_BADGE_CLASS: Record<CalibrationJobStatus, string> = {
   PENDING: "bg-slate-500",
@@ -65,14 +56,6 @@ export function JobStatusBadge({ status }: { status: CalibrationJobStatus }) {
   return (
     <Badge className={[badgeBase, JOB_STATUS_BADGE_CLASS[status]].join(" ")}>
       {CALIBRATION_JOB_STATUS_LABELS[status]}
-    </Badge>
-  );
-}
-
-export function AkdAklStatusBadge({ status }: { status: AkdAklApprovalStatus }) {
-  return (
-    <Badge className={[badgeBase, AKD_AKL_BADGE_CLASS[status]].join(" ")}>
-      {AKD_AKL_APPROVAL_STATUS_LABELS[status]}
     </Badge>
   );
 }
@@ -118,10 +101,6 @@ function QueueCardLink({
 }
 
 function UnitRow({ job }: { job: TechCalibrationJob }) {
-  // "Tidak Diperlukan" is the absence of a requirement, not a state the
-  // technician acts on — keep the row uncluttered and surface the AKD/AKL
-  // badge only when it carries a decision. (Full status stays on the detail page.)
-  const showAkdAkl = job.akdAklApprovalStatus !== "NOT_REQUIRED";
   // Most-recent Identity Correction BA — the technician's cue on whether the
   // office has reviewed the identity they submitted.
   const latestCorrection = job.identityCorrections[0] ?? null;
@@ -158,7 +137,6 @@ function UnitRow({ job }: { job: TechCalibrationJob }) {
             </Badge>
           ) : null}
           {latestCorrection ? <IdentityCorrectionBadge status={latestCorrection.status} /> : null}
-          {showAkdAkl ? <AkdAklStatusBadge status={job.akdAklApprovalStatus} /> : null}
         </div>
         {job.deviceId == null ? (
           <p className="mt-1 text-xs text-slate-500">Belum diidentifikasi</p>

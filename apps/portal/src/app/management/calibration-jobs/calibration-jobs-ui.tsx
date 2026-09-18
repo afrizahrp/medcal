@@ -17,8 +17,6 @@ import {
   formatDateTime,
 } from "../quotations/quotations-ui";
 import {
-  AKD_AKL_APPROVAL_STATUS_LABELS,
-  AKD_AKL_APPROVAL_STATUS_VALUES,
   CALIBRATION_JOB_STATUS_LABELS,
   CALIBRATION_JOB_STATUS_VALUES,
   calibrationJobActionFocusHref,
@@ -68,6 +66,8 @@ export interface CalibrationJobRow {
   unitTotal: number;
   customerDeclaredDeviceName: string | null;
   customerDeclaredAkdAkl: string | null;
+  technicianObservedBrand: string | null;
+  technicianObservedModel: string | null;
   technicianObservedSerial: string | null;
   technicianObservedAkdAkl: string | null;
   akdAklApprovalStatus: AkdAklApprovalStatus;
@@ -92,9 +92,12 @@ export interface CalibrationJobRow {
   };
   /** Kontrol Alat summary. Null for ON_SITE jobs. */
   kontrolAlat: KontrolAlatSummary | null;
+  /** Device assigned by the WO/SPK. Locked — a BA never replaces it (MoM #6). */
   device: {
     id: string;
     code: string | null;
+    brand: string | null;
+    model: string | null;
     serialNumber: string | null;
     deviceTypeId: string;
     customerId: string;
@@ -172,15 +175,6 @@ export interface CalibrationJobGroupedResponse {
   totalJobs: number;
 }
 
-export interface CalibrationJobDeviceCandidate {
-  id: string;
-  code: string | null;
-  brand: string | null;
-  model: string | null;
-  serialNumber: string | null;
-  deviceTypeId: string;
-  deviceType: CalibrationJobDeviceTypeRef | null;
-}
 
 // ── Derived display helpers ───────────────────────────────────────────────────
 
@@ -203,13 +197,6 @@ export function declaredAkdAkl(row: CalibrationJobRow): string {
 
 // ── Badges ────────────────────────────────────────────────────────────────────
 
-const AKD_AKL_BADGE_CLASS: Record<AkdAklApprovalStatus, string> = {
-  NOT_REQUIRED: "border-transparent bg-slate-400 text-white hover:bg-slate-400",
-  PENDING_REVIEW: "border-transparent bg-amber-500 text-white hover:bg-amber-500",
-  APPROVED: "border-transparent bg-emerald-600 text-white hover:bg-emerald-600",
-  REJECTED: "border-transparent bg-red-600 text-white hover:bg-red-600",
-};
-
 const JOB_STATUS_BADGE_CLASS: Record<CalibrationJobStatus, string> = {
   PENDING: "border-transparent bg-slate-500 text-white hover:bg-slate-500",
   IN_PROGRESS: "border-transparent bg-amber-500 text-white hover:bg-amber-500",
@@ -217,14 +204,6 @@ const JOB_STATUS_BADGE_CLASS: Record<CalibrationJobStatus, string> = {
   REWORK: "border-transparent bg-orange-500 text-white hover:bg-orange-500",
   ACCEPTED_BY_QA: "border-transparent bg-emerald-600 text-white hover:bg-emerald-600",
 };
-
-export function AkdAklStatusBadge({ status }: { status: AkdAklApprovalStatus }) {
-  return (
-    <Badge variant="status" className={AKD_AKL_BADGE_CLASS[status]}>
-      {AKD_AKL_APPROVAL_STATUS_LABELS[status]}
-    </Badge>
-  );
-}
 
 export function JobStatusBadge({ status }: { status: CalibrationJobStatus }) {
   return (
@@ -309,8 +288,6 @@ export function ReferenceEquipmentReviewBadge() {
 export function CalibrationJobFilters({
   searchInput,
   onSearchChange,
-  approvalStatus,
-  onApprovalStatusChange,
   jobStatus,
   onJobStatusChange,
   workOrderId,
@@ -318,8 +295,6 @@ export function CalibrationJobFilters({
 }: {
   searchInput: string;
   onSearchChange: (value: string) => void;
-  approvalStatus: string;
-  onApprovalStatusChange: (value: string) => void;
   jobStatus: string;
   onJobStatusChange: (value: string) => void;
   workOrderId?: string;
@@ -338,19 +313,6 @@ export function CalibrationJobFilters({
             aria-label="Cari calibration job"
           />
         </div>
-        <select
-          value={approvalStatus}
-          onChange={(e) => onApprovalStatusChange(e.target.value)}
-          className={cn(selectClassName, "w-full sm:w-48")}
-          aria-label="Filter status persetujuan AKD/AKL"
-        >
-          <option value="">Semua status AKD/AKL</option>
-          {AKD_AKL_APPROVAL_STATUS_VALUES.map((s) => (
-            <option key={s} value={s}>
-              {AKD_AKL_APPROVAL_STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
         <select
           value={jobStatus}
           onChange={(e) => onJobStatusChange(e.target.value)}
@@ -416,7 +378,6 @@ const JOB_CHILD_HEADER = [
   "Declared Device",
   "Serial (observed)",
   "Declared AKD/AKL",
-  "Approval",
   "Identity Correction",
   "Alat Referensi",
   "Job Status",
@@ -454,9 +415,6 @@ function JobChildRow({ row }: { row: CalibrationJobRow }) {
         {row.technicianObservedSerial ?? row.device?.serialNumber ?? "—"}
       </td>
       <td className="px-4 py-2.5 text-slate-600">{declaredAkdAkl(row)}</td>
-      <td className="px-4 py-2.5">
-        <AkdAklStatusBadge status={row.akdAklApprovalStatus} />
-      </td>
       <td className="px-4 py-2.5">
         {row.actionSignals.identityCorrectionPending ? (
           <ChildActionHint label="Menunggu review" />

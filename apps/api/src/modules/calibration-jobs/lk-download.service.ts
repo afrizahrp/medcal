@@ -31,6 +31,34 @@ export interface LkDownloadReauthResult {
   expiresAt: Date;
 }
 
+/** What the LK prints for the device under test, per field. */
+export interface LkDeviceIdentity {
+  brand: string | null;
+  model: string | null;
+  serial: string | null;
+}
+
+/**
+ * MoM #6 — LK identity precedence. The identity this calibration actually
+ * observed wins; the Device master is only a fallback, and the fallback is
+ * applied INDEPENDENTLY PER FIELD: the three values are not one package, so a
+ * job that observed only a Brand still prints the master's Model and Serial.
+ */
+export function resolveLkDeviceIdentity(
+  job: {
+    technicianObservedBrand: string | null;
+    technicianObservedModel: string | null;
+    technicianObservedSerial: string | null;
+  },
+  device: { brand: string | null; model: string | null; serialNumber: string | null } | null,
+): LkDeviceIdentity {
+  return {
+    brand: job.technicianObservedBrand ?? device?.brand ?? null,
+    model: job.technicianObservedModel ?? device?.model ?? null,
+    serial: job.technicianObservedSerial ?? device?.serialNumber ?? null,
+  };
+}
+
 /**
  * LK Result PDF Download v1 — orchestrates password step-up re-authentication
  * and the generic PDF build for one CalibrationJob. Deliberately narrow:
@@ -221,6 +249,8 @@ export class LkDownloadService {
           startedAt: true,
           submittedAt: true,
           measurementTestPointsSnapshottedAt: true,
+          technicianObservedBrand: true,
+          technicianObservedModel: true,
           technicianObservedSerial: true,
           device: {
             select: {
@@ -297,6 +327,15 @@ export class LkDownloadService {
       null;
     const linkedDevice = fullJob.device ?? fullJob.purchaseOrderItem?.device ?? null;
 
+    // MoM #6 — resolved once here, in the data-preparation layer that already
+    // assembles deviceBrand/deviceModel/deviceSerial, then handed to every
+    // renderer, so all LK paths share one precedence.
+    const {
+      brand: resolvedBrand,
+      model: resolvedModel,
+      serial: resolvedSerial,
+    } = resolveLkDeviceIdentity(fullJob, linkedDevice);
+
     const [equipmentUsedRows, physicalCheckRows, capabilitySections, physicalCatalog, measurementHits] =
       await Promise.all([
         prisma.jobReferenceEquipmentUsed.findMany({
@@ -359,11 +398,11 @@ export class LkDownloadService {
               text(fullJob.certificate?.number) ?? text(fullJob.kontrolAlat?.certificateNumber) ?? "",
             deviceName: text(deviceTypeName) ?? "",
             assetNumber: "",
-            brand: text(linkedDevice?.brand) ?? "",
+            brand: text(resolvedBrand) ?? "",
             owner: fullJob.workOrder.customer.name,
-            model: text(linkedDevice?.model) ?? "",
+            model: text(resolvedModel) ?? "",
             room: text(fullJob.device?.locationText) ?? text(linkedDevice?.locationText) ?? "",
-            serial: text(fullJob.technicianObservedSerial) ?? text(linkedDevice?.serialNumber) ?? "",
+            serial: text(resolvedSerial) ?? "",
             receivedDate: fullJob.startedAt ? formatDate(fullJob.startedAt) : "",
             calibrationDate: fullJob.startedAt ? formatDate(fullJob.startedAt) : "",
             capacity: text(fullJob.kontrolAlat?.capacity) ?? "",
@@ -405,9 +444,9 @@ export class LkDownloadService {
         workOrderNumber: fullJob.workOrder.number,
         customerName: fullJob.workOrder.customer.name,
         deviceTypeName,
-        deviceBrand: linkedDevice?.brand ?? null,
-        deviceModel: linkedDevice?.model ?? null,
-        deviceSerial: linkedDevice?.serialNumber ?? null,
+        deviceBrand: resolvedBrand,
+        deviceModel: resolvedModel,
+        deviceSerial: resolvedSerial,
       },
       qualityReview: latestReview
         ? {

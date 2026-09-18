@@ -9,7 +9,6 @@ import type {
 } from "@medcal/shared";
 import { WORK_ORDERS_QUERY_KEY } from "../work-orders/use-work-orders-query";
 import type {
-  CalibrationJobDeviceCandidate,
   CalibrationJobGroupedResponse,
   CalibrationJobListResponse,
   CalibrationJobRow,
@@ -140,19 +139,6 @@ export function useWorkOrderCalibrationJobs(workOrderId: string | undefined) {
   });
 }
 
-export function useDeviceCandidates(id: string | undefined, search: string, enabled: boolean) {
-  const trimmed = search.trim();
-  return useQuery({
-    queryKey: [CALIBRATION_JOBS_QUERY_KEY, id, "device-candidates", trimmed],
-    queryFn: () =>
-      apiFetch<CalibrationJobDeviceCandidate[]>(
-        `/calibration-jobs/${id}/device-candidates${
-          trimmed ? `?search=${encodeURIComponent(trimmed)}` : ""
-        }`,
-      ),
-    enabled: Boolean(id) && enabled,
-  });
-}
 
 export function useEscalateIdentity() {
   const queryClient = useQueryClient();

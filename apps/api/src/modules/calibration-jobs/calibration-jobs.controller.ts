@@ -38,7 +38,6 @@ import {
   kontrolAlatPatchSchema,
   kontrolAlatSignatureCreateSchema,
 } from "@medcal/shared";
-import type { DeviceWithRelations } from "../devices/devices.service";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { MembershipRoleParam } from "../../common/decorators/membership-role.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
@@ -233,21 +232,10 @@ export class CalibrationJobsController {
     return this.service.decideIdentity(companyId, id, userId, parsed.data);
   }
 
-  @Get(":id/device-candidates")
-  @RequirePermission("calibrationJob", "submitIdentityCorrection")
-  async deviceCandidates(
-    @CompanyId() companyId: string,
-    @Param("id") id: string,
-    @Query("search") search?: string,
-  ): Promise<DeviceWithRelations[]> {
-    const trimmed = typeof search === "string" ? search.trim() : "";
-    return this.service.findDeviceCandidates(companyId, id, trimmed || undefined);
-  }
-
   /**
-   * Removed. Every device-identity binding now flows through the Identity
-   * Correction BA workflow below. This route stays only to return a typed 410
-   * until the Portal UI is migrated.
+   * Removed. The Device assigned by the WO/SPK is locked (MoM #6) — nothing
+   * rebinds it. This route stays only to return a typed 410 to an
+   * un-migrated Portal build.
    */
   @Post(":id/assign-device")
   @RequirePermission("calibrationJob", "submitIdentityCorrection")

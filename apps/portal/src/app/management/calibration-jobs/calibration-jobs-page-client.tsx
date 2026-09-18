@@ -142,10 +142,6 @@ export default function CalibrationJobsPageClient() {
         <CalibrationJobFilters
           searchInput={searchInput}
           onSearchChange={setSearchInput}
-          approvalStatus={approvalStatus}
-          onApprovalStatusChange={(next) =>
-            setParams({ akdAklApprovalStatus: next || undefined, page: undefined })
-          }
           jobStatus={jobStatus}
           onJobStatusChange={(next) => setParams({ status: next || undefined, page: undefined })}
           workOrderId={workOrderId}

@@ -2025,6 +2025,12 @@ model CalibrationJob {
   /// CalibrationRequestItem.akdAkl never rewrite what was on record when this
   /// job's akdAklApprovalStatus (TECHNICIAN_MANAGER) gate was decided.
   customerDeclaredAkdAkl     String?
+  /// Brand the technician physically read off the device on-site. Job-level
+  /// snapshot, written only by an APPROVED IdentityCorrection (MoM #6).
+  technicianObservedBrand    String?
+  /// Model/type the technician physically read off the device on-site. Job-level
+  /// snapshot, written only by an APPROVED IdentityCorrection (MoM #6).
+  technicianObservedModel    String?
   /// Serial number the technician physically read off the device on-site.
   technicianObservedSerial   String?
   /// AKD/AKL/NIE the technician physically observed / confirmed on-site.
@@ -2516,14 +2522,19 @@ model IdentityCorrection {
   status           IdentityCorrectionStatus @default(PENDING_REVIEW)
 
   // ── Corrected attributes (all nullable — one BA may touch only some) ────────
-  /// Device on the job before this correction. FK: Device is never deleted
-  /// (project policy) so referential integrity holds. (Decision 4)
+  /// HISTORICAL ONLY (MoM #6). The Device assigned by the WO/SPK is locked:
+  /// a BA can no longer replace it, so the active correction workflow never
+  /// writes these two columns. Retained (with their FKs) so corrections
+  /// recorded before MoM #6 keep their evidence and stay renderable on the BA
+  /// PDF. Never set by submitIdentityCorrection / decideIdentityCorrection.
   prevDeviceId String?
-  /// Device the correction resolves the job to. FK enables DeviceType-match
-  /// validation + RI in the service layer. (Decision 4)
   newDeviceId  String?
-  /// Plain snapshot strings, mirroring CalibrationJob.technicianObservedSerial
-  /// / technicianObservedAkdAkl. (Decision 4)
+  /// Plain snapshot strings, mirroring CalibrationJob.technicianObserved*.
+  /// (Decision 4) Brand/Model added by MoM #6 alongside Serial.
+  prevBrand    String?
+  newBrand     String?
+  prevModel    String?
+  newModel     String?
   prevSerial   String?
   newSerial    String?
   prevAkdAkl   String?

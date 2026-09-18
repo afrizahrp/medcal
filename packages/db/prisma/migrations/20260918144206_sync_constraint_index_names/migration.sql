@@ -1,0 +1,8 @@
+-- RenameForeignKey
+ALTER TABLE "JobReferenceEquipmentApprovalItem" RENAME CONSTRAINT "JobReferenceEquipmentApprovalItem_equipmentCalibrationRecordId_" TO "JobReferenceEquipmentApprovalItem_equipmentCalibrationReco_fkey";
+
+-- RenameIndex
+ALTER INDEX "JobCalibrationTestPoint_calibrationJobId_sourceCalibra_key" RENAME TO "JobCalibrationTestPoint_calibrationJobId_sourceCalibrationT_key";
+
+-- RenameIndex
+ALTER INDEX "JobReferenceEquipmentApprovalItem_equipmentCalibrationRecordId_" RENAME TO "JobReferenceEquipmentApprovalItem_equipmentCalibrationRecor_idx";

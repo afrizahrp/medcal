@@ -738,13 +738,15 @@ export type CalibrationJobAssignDeviceInput = z.infer<typeof calibrationJobAssig
 // -----------------------------------------------------------------------------
 // Calibration Job — Identity Correction (Berita Acara Identitas)
 // -----------------------------------------------------------------------------
-// Sole path for setting/changing CalibrationJob.deviceId, and for correcting the
-// technician-observed serial / AKD-AKL. A technician submits a BA (creating the
-// IdentityCorrection row + one signature row per role atomically); signature
-// images are then uploaded via POST /files (ownerType IDENTITY_CORRECTION,
-// ownerId = signature row id). A TECHNICIAN_MANAGER APPROVEs or REJECTs. An
-// APPROVED correction writes its new* values through to the job; if it changed
-// the AKD/AKL value and the job's AKD/AKL gate was already APPROVED, that gate
+// Sole path for correcting the technician-observed Brand / Model / Serial No /
+// AKD-AKL of the job's device. CalibrationJob.deviceId is locked to the Device
+// assigned by the WO/SPK and is never changed here (MoM #6). A technician
+// submits a BA (creating the IdentityCorrection row + one signature row per
+// role atomically); signature images are then uploaded via POST /files
+// (ownerType IDENTITY_CORRECTION, ownerId = signature row id). A
+// TECHNICIAN_MANAGER APPROVEs or REJECTs. An APPROVED correction writes its
+// new* values through to the job's observed identity columns; if it changed the
+// AKD/AKL value and the job's AKD/AKL gate was already APPROVED, that gate
 // reopens to PENDING_REVIEW.
 
 export const IDENTITY_CORRECTION_SIGNER_ROLES = ["TECHNICIAN", "CUSTOMER"] as const;
@@ -783,11 +785,19 @@ const identityCorrectionSignatureInputSchema = z
     }
   });
 
-/** POST /calibration-jobs/:id/identity-corrections body */
+/**
+ * POST /calibration-jobs/:id/identity-corrections body
+ *
+ * MoM #6: the Device assigned by the WO/SPK is locked. A BA corrects the
+ * *observed identity* of that device only — Brand / Model / Serial No (plus
+ * the pre-existing AKD/AKL attribute). `newDeviceId` is deliberately absent:
+ * a BA can no longer replace the job's Device.
+ */
 export const identityCorrectionSubmitSchema = z
   .object({
     reason: z.string().trim().min(1).max(2000),
-    newDeviceId: z.string().min(1).nullable().optional(),
+    newBrand: z.string().trim().max(120).nullable().optional(),
+    newModel: z.string().trim().max(120).nullable().optional(),
     newSerial: z.string().trim().max(120).nullable().optional(),
     newAkdAkl: z.string().trim().max(120).nullable().optional(),
     signatures: z.object({
@@ -797,14 +807,15 @@ export const identityCorrectionSubmitSchema = z
   })
   .superRefine((val, ctx) => {
     if (
-      val.newDeviceId === undefined &&
+      val.newBrand === undefined &&
+      val.newModel === undefined &&
       val.newSerial === undefined &&
       val.newAkdAkl === undefined
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["newDeviceId"],
-        message: "At least one of newDeviceId, newSerial, newAkdAkl must be provided",
+        path: ["newSerial"],
+        message: "At least one of newBrand, newModel, newSerial, newAkdAkl must be provided",
       });
     }
   });

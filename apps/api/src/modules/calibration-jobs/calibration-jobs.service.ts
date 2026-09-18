@@ -26,7 +26,6 @@ import {
 } from "@medcal/shared";
 
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
-import { DevicesService, type DeviceWithRelations } from "../devices/devices.service";
 import { FilesService } from "../files/files.service";
 import {
   renderIdentityCorrectionPdf,
@@ -79,7 +78,15 @@ const calibrationJobInclude = {
     },
   },
   device: {
-    select: { id: true, code: true, serialNumber: true, deviceTypeId: true, customerId: true },
+    select: {
+      id: true,
+      code: true,
+      brand: true,
+      model: true,
+      serialNumber: true,
+      deviceTypeId: true,
+      customerId: true,
+    },
   },
   calibrationRequestItem: {
     select: {
@@ -215,6 +222,68 @@ const REFERENCE_EQUIPMENT_LOCKED_JOB_STATUSES = new Set<string>(["SUBMITTED", "A
 
 /** Pattern D generic-slot — needs suppliedNominalValue, not a Stage B setpoint grid. */
 const GRID_EXCLUDED_PARAMETER_CODES = MEASUREMENT_WORKSHEET_EXCLUDED_PARAMETER_CODES;
+
+/**
+ * Job statuses at which the identity of a job is frozen — the same boundary as
+ * IDENTITY_LOCKED_JOB_STATUSES, expressed as an array for Prisma `notIn`.
+ */
+/**
+ * submitForReview refused because an IdentityCorrection is still awaiting a
+ * TECHNICIAN_MANAGER decision (MoM #6). Deliberately distinct from
+ * IDENTITY_CORRECTION_ALREADY_PENDING, which means "you cannot file a second
+ * BA on this job" — a different actor, a different remedy. Mirrors the
+ * REFERENCE_EQUIPMENT_APPROVAL_UNRESOLVED naming already used for the
+ * equivalent reference-equipment gate.
+ */
+export const IDENTITY_CORRECTION_UNRESOLVED = "IDENTITY_CORRECTION_UNRESOLVED";
+
+const PRE_SUBMIT_EXCLUDED_STATUSES = ["SUBMITTED", "ACCEPTED_BY_QA"] as const;
+
+/**
+ * MoM #6 race guard. Conditionally touches the CalibrationJob row *inside* the
+ * caller's transaction and fails when the job has already left the pre-submit
+ * phase. Two things follow from this being an UPDATE rather than a SELECT:
+ * the row is locked for the rest of the transaction, so a concurrent
+ * submitForReview (which CAS-updates the very same row) is serialised behind
+ * it; and the status is re-read at that moment rather than from a stale
+ * pre-transaction load. Used by both BA submission and BA decision so neither
+ * can slip past a job that is being submitted concurrently.
+ */
+async function assertJobStillPreSubmit(
+  tx: Prisma.TransactionClient,
+  jobId: string,
+  companyId: string,
+): Promise<void> {
+  const claimed = await tx.calibrationJob.updateMany({
+    where: { id: jobId, companyId, status: { notIn: [...PRE_SUBMIT_EXCLUDED_STATUSES] } },
+    data: { updatedAt: new Date() },
+  });
+  if (claimed.count !== 1) {
+    throw new BadRequestException({
+      message: "Calibration job has advanced past the identity gate",
+      code: "CALIBRATION_JOB_IDENTITY_GATE_LOCKED",
+    });
+  }
+}
+
+/**
+ * The identity values a new correction is measured against. The job's own
+ * observed value wins; where the job has not observed one yet the assigned
+ * Device master supplies the baseline, so "re-stating what the master already
+ * says" is correctly rejected as a no-op correction. Mirrors the LK read
+ * precedence exactly (MoM #6).
+ */
+function currentObservedBrand(job: CalibrationJobDetail): string | null {
+  return job.technicianObservedBrand ?? job.device?.brand ?? null;
+}
+
+function currentObservedModel(job: CalibrationJobDetail): string | null {
+  return job.technicianObservedModel ?? job.device?.model ?? null;
+}
+
+function currentObservedSerial(job: CalibrationJobDetail): string | null {
+  return job.technicianObservedSerial ?? job.device?.serialNumber ?? null;
+}
 
 function assertAkdAklTransition(from: AkdAklApprovalStatus, to: AkdAklApprovalStatus): void {
   if (!AKD_AKL_TRANSITIONS[from].includes(to)) {
@@ -522,12 +591,10 @@ export interface IdentityCorrectionSubmitResult {
    * resolved DeviceType. False only when the job's DeviceType could not be
    * resolved — the correction still records the device, just unvalidated.
    */
-  deviceTypeValidated: boolean;
 }
 
 @Injectable()
 export class CalibrationJobsService {
-  private readonly devices = new DevicesService();
 
   constructor(@Inject(FilesService) private readonly files: FilesService) {}
 
@@ -808,16 +875,46 @@ export class CalibrationJobsService {
 
     await this.assertReferenceEquipmentResolvedForSubmit(companyId, id);
 
-    const updated = await prisma.calibrationJob.updateMany({
-      where: { id, companyId, status: "IN_PROGRESS" },
-      data: { status: "SUBMITTED", submittedAt: new Date() },
-    });
-    if (updated.count !== 1) {
-      throw new ConflictException({
-        message: "Calibration job has already been submitted",
-        code: "CALIBRATION_JOB_ALREADY_SUBMITTED",
+    // Fail fast with the precise error before opening a transaction. The
+    // authoritative check is re-run under the row lock below — this one exists
+    // so the ordinary (uncontended) case reports the right code and message.
+    await this.assertNoPendingIdentityCorrectionForSubmit(companyId, id);
+
+    // MoM #6 invariant: a job must never be SUBMITTED while it still has a
+    // PENDING_REVIEW IdentityCorrection. A bare read check cannot hold that —
+    // a BA can be created, and a decision can land, between the check and the
+    // write. So the CAS transition happens first *inside* a transaction, which
+    // locks the job row; the pending re-check then runs while that lock is
+    // held. submitIdentityCorrection and decideIdentityCorrection both touch
+    // the same row through assertJobStillPreSubmit, so they serialise against
+    // this block: whichever commits second observes the other's effect and
+    // fails. Throwing here rolls the transition back.
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.calibrationJob.updateMany({
+        where: { id, companyId, status: "IN_PROGRESS" },
+        data: { status: "SUBMITTED", submittedAt: new Date() },
       });
-    }
+      if (updated.count !== 1) {
+        throw new ConflictException({
+          message: "Calibration job has already been submitted",
+          code: "CALIBRATION_JOB_ALREADY_SUBMITTED",
+        });
+      }
+
+      const pending = await tx.identityCorrection.findFirst({
+        where: { companyId, calibrationJobId: id, status: "PENDING_REVIEW" },
+        select: { id: true, number: true },
+      });
+      if (pending) {
+        throw new ConflictException({
+          message:
+            "Calibration job has a pending Identity Correction that must be approved or rejected before submission",
+          code: IDENTITY_CORRECTION_UNRESOLVED,
+          correctionId: pending.id,
+          number: pending.number,
+        });
+      }
+    });
 
     return this.findOne(companyId, id);
   }
@@ -973,16 +1070,50 @@ export class CalibrationJobsService {
       });
     }
 
-    const updated = await prisma.calibrationJob.updateMany({
-      where: { id, companyId, status: "SUBMITTED" },
-      data: { status: "ACCEPTED_BY_QA" },
-    });
-    if (updated.count !== 1) {
-      throw new ConflictException({
-        message: "Calibration job has already been completed",
-        code: "CALIBRATION_JOB_ALREADY_COMPLETED",
+    // MoM #6: ACCEPTED_BY_QA is the master commit point. The approved observed
+    // identity is written through to the Device master in the SAME transaction
+    // as the status transition, so the two can never disagree: if the master
+    // update fails the job does not become ACCEPTED_BY_QA, and once it is
+    // ACCEPTED_BY_QA (the gate LK download checks) the commit has succeeded.
+    // The Device itself is never replaced — only these three scalar fields, and
+    // only where the job actually observed a value. A NULL observed value
+    // leaves the master field untouched.
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.calibrationJob.updateMany({
+        where: { id, companyId, status: "SUBMITTED" },
+        data: { status: "ACCEPTED_BY_QA" },
       });
-    }
+      if (updated.count !== 1) {
+        throw new ConflictException({
+          message: "Calibration job has already been completed",
+          code: "CALIBRATION_JOB_ALREADY_COMPLETED",
+        });
+      }
+
+      if (job.deviceId === null) return;
+
+      const masterData: Prisma.DeviceUncheckedUpdateInput = {};
+      if (job.technicianObservedBrand !== null) masterData.brand = job.technicianObservedBrand;
+      if (job.technicianObservedModel !== null) masterData.model = job.technicianObservedModel;
+      if (job.technicianObservedSerial !== null) {
+        masterData.serialNumber = job.technicianObservedSerial;
+      }
+      if (Object.keys(masterData).length === 0) return;
+
+      // Scoped by companyId as well as id — Device.id alone must never be
+      // enough to write across a company boundary.
+      const committed = await tx.device.updateMany({
+        where: { id: job.deviceId, companyId },
+        data: masterData,
+      });
+      if (committed.count !== 1) {
+        throw new ConflictException({
+          message: "Failed to commit the observed identity to the device master",
+          code: "DEVICE_MASTER_COMMIT_FAILED",
+          deviceId: job.deviceId,
+        });
+      }
+    });
 
     return this.findOne(companyId, id);
   }
@@ -1087,66 +1218,6 @@ export class CalibrationJobsService {
   }
 
   /**
-   * Customer-match + DeviceType-match validation for a candidate device. Shared
-   * by Identity Correction submit and approve (the former match-only
-   * assignDevice path is removed). Returns whether the DeviceType could be
-   * checked at all.
-   */
-  private async validateDeviceForJob(
-    job: CalibrationJobDetail,
-    deviceId: string,
-    client: Prisma.TransactionClient | typeof prisma = prisma,
-  ): Promise<{ deviceTypeValidated: boolean }> {
-    const device = await client.device.findFirst({
-      where: { id: deviceId, companyId: job.companyId },
-      select: { id: true, customerId: true, deviceTypeId: true },
-    });
-    if (!device) {
-      throw new BadRequestException({ message: "Device not found", code: "DEVICE_NOT_FOUND" });
-    }
-    if (device.customerId !== job.workOrder.customerId) {
-      throw new BadRequestException({
-        message: "Device belongs to a different customer than this work order",
-        code: "DEVICE_CUSTOMER_MISMATCH",
-      });
-    }
-    const resolvedDeviceTypeId = this.resolveJobDeviceTypeId(job);
-    const deviceTypeValidated = resolvedDeviceTypeId !== null;
-    if (deviceTypeValidated && device.deviceTypeId !== resolvedDeviceTypeId) {
-      throw new BadRequestException({
-        message: "Device type does not match the calibration job's device type",
-        code: "DEVICE_TYPE_MISMATCH",
-        expected: resolvedDeviceTypeId,
-        actual: device.deviceTypeId,
-      });
-    }
-    return { deviceTypeValidated };
-  }
-
-  private async bindDevice(
-    jobId: string,
-    deviceId: string,
-    client: Prisma.TransactionClient | typeof prisma = prisma,
-  ): Promise<void> {
-    try {
-      await client.calibrationJob.update({
-        where: { id: jobId },
-        data: { deviceId },
-      });
-    } catch (error) {
-      // @@unique([workOrderId, deviceId]) — the same physical device is already
-      // matched to another job on this work order.
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        throw new ConflictException({
-          message: "This device is already assigned to another job on the same work order",
-          code: "DEVICE_ALREADY_ASSIGNED_ON_WORK_ORDER",
-        });
-      }
-      throw error;
-    }
-  }
-
-  /**
    * The former POST /calibration-jobs/:id/assign-device path. Removed — every
    * device-identity binding now flows through the Identity Correction BA
    * workflow. Kept as an inert 410 so an un-migrated Portal build fails loudly
@@ -1159,25 +1230,6 @@ export class CalibrationJobsService {
         "(POST /calibration-jobs/:id/identity-corrections).",
       code: "ASSIGN_DEVICE_ENDPOINT_REMOVED",
     });
-  }
-
-  /** Existing devices this job could be matched to — scoped to the job's customer
-   * and (when resolvable) DeviceType. Reuses the generic device search. */
-  async findDeviceCandidates(
-    companyId: string,
-    id: string,
-    search: string | undefined,
-  ): Promise<DeviceWithRelations[]> {
-    const job = await this.findOne(companyId, id);
-    const deviceTypeId = this.resolveJobDeviceTypeId(job);
-    const result = await this.devices.findAll(companyId, {
-      ...(search ? { search } : {}),
-      customerId: job.workOrder.customerId,
-      ...(deviceTypeId ? { deviceTypeId } : {}),
-      status: "ACTIVE",
-      pageSize: 20,
-    });
-    return result.data;
   }
 
   private assertIdentityGateOpen(jobStatus: string): void {
@@ -1303,30 +1355,35 @@ export class CalibrationJobsService {
     }
 
     // Decision 2: a BA is only created when at least one observed value differs
-    // from what is currently on the job. A first-time device resolution
-    // (job.deviceId null → newDeviceId set) inherently differs.
-    const deviceChanges =
-      input.newDeviceId !== undefined && (input.newDeviceId ?? null) !== job.deviceId;
+    // from what is currently on the job. MoM #6: the comparison baseline for
+    // Brand/Model/Serial is the job's own observed identity, falling back to
+    // the assigned Device master when the job has not observed one yet — a
+    // first-time observation of a value the master already carries is not a
+    // correction.
+    const brandChanges =
+      input.newBrand !== undefined && (input.newBrand ?? null) !== currentObservedBrand(job);
+    const modelChanges =
+      input.newModel !== undefined && (input.newModel ?? null) !== currentObservedModel(job);
     const serialChanges =
-      input.newSerial !== undefined && (input.newSerial ?? null) !== job.technicianObservedSerial;
+      input.newSerial !== undefined && (input.newSerial ?? null) !== currentObservedSerial(job);
     const akdAklChanges =
       input.newAkdAkl !== undefined && (input.newAkdAkl ?? null) !== job.technicianObservedAkdAkl;
 
-    if (!deviceChanges && !serialChanges && !akdAklChanges) {
+    if (!brandChanges && !modelChanges && !serialChanges && !akdAklChanges) {
       throw new BadRequestException({
         message: "The correction does not change any of the job's current identity values",
         code: "IDENTITY_CORRECTION_NO_CHANGE",
       });
     }
 
-    let deviceTypeValidated = false;
-    if (deviceChanges && input.newDeviceId) {
-      ({ deviceTypeValidated } = await this.validateDeviceForJob(job, input.newDeviceId));
-    }
-
     const issuedAt = new Date();
 
     const created = await prisma.$transaction(async (tx) => {
+      // MoM #6 race guard: a BA must never appear on a job that is being
+      // submitted concurrently, or it would be born already undecidable.
+      // Locks the job row for this transaction — see assertJobStillPreSubmit.
+      await assertJobStillPreSubmit(tx, jobId, companyId);
+
       const number = await DocumentNumberService.allocate({
         companyId,
         documentType: "IDENTITY_CORRECTION_BA",
@@ -1342,12 +1399,21 @@ export class CalibrationJobsService {
           status: "PENDING_REVIEW",
           reason: input.reason,
           submittedByUserId: userId,
-          ...(deviceChanges
-            ? { prevDeviceId: job.deviceId, newDeviceId: input.newDeviceId ?? null }
+          ...(brandChanges
+            ? {
+                prevBrand: currentObservedBrand(job),
+                newBrand: input.newBrand ?? null,
+              }
+            : {}),
+          ...(modelChanges
+            ? {
+                prevModel: currentObservedModel(job),
+                newModel: input.newModel ?? null,
+              }
             : {}),
           ...(serialChanges
             ? {
-                prevSerial: job.technicianObservedSerial,
+                prevSerial: currentObservedSerial(job),
                 newSerial: input.newSerial ?? null,
               }
             : {}),
@@ -1379,7 +1445,6 @@ export class CalibrationJobsService {
     return {
       job,
       correction: await this.attachCorrectionFiles(companyId, created),
-      deviceTypeValidated,
     };
   }
 
@@ -1446,16 +1511,12 @@ export class CalibrationJobsService {
       }
     }
 
-    if (correction.newDeviceId) {
-      await this.validateDeviceForJob(job, correction.newDeviceId);
-    }
-
     // Locked design decision (Q2): the AKD/AKL regulatory gate is driven by
     // whether the technician-observed izin-edar number matches the customer's
     // declaration — a discrepancy is itself what a TECHNICIAN_MANAGER must
     // review, with no separate manual "escalate" action required. We only
     // re-evaluate the gate when this correction actually changed the AKD/AKL
-    // value: an unrelated serial/device-only correction never disturbs it, and
+    // value: an unrelated brand/model/serial-only correction never disturbs it, and
     // any pre-existing stale mismatch is left to a deliberate backfill decision.
     const akdAklCorrected = correction.newAkdAkl !== null;
     const updatedObservedAkdAkl = akdAklCorrected
@@ -1487,11 +1548,17 @@ export class CalibrationJobsService {
     }
 
     await prisma.$transaction(async (tx) => {
-      if (correction.newDeviceId) {
-        await this.bindDevice(jobId, correction.newDeviceId, tx);
-      }
+      // MoM #6 race guard: take the job row inside this transaction and prove
+      // it is still pre-submit. Serialises this decision against a concurrent
+      // submitForReview (which CAS-updates the same row), so an approval can
+      // never land on a job that has meanwhile become SUBMITTED.
+      await assertJobStillPreSubmit(tx, jobId, companyId);
 
+      // CalibrationJob.deviceId is NEVER touched here: the Device assigned by
+      // the WO/SPK is locked (MoM #6). A BA only corrects observed identity.
       const jobData: Prisma.CalibrationJobUncheckedUpdateInput = {};
+      if (correction.newBrand !== null) jobData.technicianObservedBrand = correction.newBrand;
+      if (correction.newModel !== null) jobData.technicianObservedModel = correction.newModel;
       if (correction.newSerial !== null) jobData.technicianObservedSerial = correction.newSerial;
       if (correction.newAkdAkl !== null) jobData.technicianObservedAkdAkl = correction.newAkdAkl;
       if (openAkdAklGate) {
@@ -2024,6 +2091,34 @@ export class CalibrationJobsService {
       code: CALIBRATION_MEASUREMENTS_INCOMPLETE,
       details: { parameters: verdict.parameters },
     });
+  }
+
+  /**
+   * submitForReview prerequisite (MoM #6): no IdentityCorrection is still
+   * awaiting a TECHNICIAN_MANAGER decision. A pending BA never blocks bench
+   * work — only the handover to quality review — because after SUBMITTED the
+   * identity gate closes and the BA could never be decided at all.
+   *
+   * Deliberately NOT assertIdentityGateOpen(): that answers "has the job left
+   * the bench?", which is the opposite question.
+   */
+  private async assertNoPendingIdentityCorrectionForSubmit(
+    companyId: string,
+    jobId: string,
+  ): Promise<void> {
+    const pending = await prisma.identityCorrection.findFirst({
+      where: { companyId, calibrationJobId: jobId, status: "PENDING_REVIEW" },
+      select: { id: true, number: true },
+    });
+    if (pending) {
+      throw new ConflictException({
+        message:
+          "Calibration job has a pending Identity Correction that must be approved or rejected before submission",
+        code: IDENTITY_CORRECTION_UNRESOLVED,
+        correctionId: pending.id,
+        number: pending.number,
+      });
+    }
   }
 
   /**

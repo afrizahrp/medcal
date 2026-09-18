@@ -20,7 +20,6 @@ import { useAuthz } from "@medcal/auth/client";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { AccessDenied } from "../../../../components/access-denied";
 import { SignatureImage } from "../signature-image";
 import { LkDownloadButton } from "../lk-download-button";
@@ -35,7 +34,6 @@ import {
   type PortalKontrolAlatSignerKind,
 } from "../use-kontrol-alat-query";
 import {
-  AkdAklStatusBadge,
   ConfirmDialog,
   DetailField,
   IdentityCorrectionStatusBadge,
@@ -50,13 +48,9 @@ import {
   formatDate,
   formatDateTime,
   resolvedDeviceType,
-  type CalibrationJobDeviceCandidate,
   type CalibrationJobRow,
 } from "../calibration-jobs-ui";
 import {
-  AKD_AKL_APPROVAL_STATUS_LABELS,
-  canDecideIdentity,
-  canEscalateIdentity,
   canRecordReferenceEquipment,
   canReplaceReferenceEquipment,
   canSubmitIdentityCorrection,
@@ -82,10 +76,7 @@ import {
 } from "../calibration-job-utils";
 import {
   useCalibrationJob,
-  useDeviceCandidates,
-  useDecideIdentity,
   useDecideQualityReview,
-  useEscalateIdentity,
 } from "../use-calibration-jobs-query";
 import {
   openIdentityCorrectionPdf,
@@ -142,8 +133,6 @@ export default function CalibrationJobDetailPage() {
     Boolean(capabilities?.calibrationJobRecordReferenceEquipmentUsed),
   );
   const replaceRefEquipment = useReplaceReferenceEquipmentUsed(params.id);
-  const escalateMutation = useEscalateIdentity();
-  const decideMutation = useDecideIdentity();
   const decideQualityReview = useDecideQualityReview();
   const submitCorrection = useSubmitIdentityCorrection();
   const decideCorrection = useDecideIdentityCorrection();
@@ -170,7 +159,6 @@ export default function CalibrationJobDetailPage() {
   const refEquipmentSectionRef = useRef<HTMLDivElement>(null);
   const measurementSectionRef = useRef<HTMLDivElement>(null);
   const correctionsSectionRef = useRef<HTMLDivElement>(null);
-  const akdAklSectionRef = useRef<HTMLDivElement>(null);
   const kontrolAlatSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -186,9 +174,6 @@ export default function CalibrationJobDetailPage() {
       initial.push("corrections");
     }
     if (signals.identityIncomplete) initial.push("identity");
-    if (job.akdAklApprovalStatus === "PENDING_REVIEW" && !gateLocked) {
-      initial.push("akd-akl");
-    }
     setOpenSections(initial);
 
     const focusRef = signals.identityCorrectionPending
@@ -267,7 +252,8 @@ export default function CalibrationJobDetailPage() {
     try {
       const input: IdentityCorrectionSubmitInput = {
         reason: form.reason.trim(),
-        ...(form.attrs.device ? { newDeviceId: form.deviceId } : {}),
+        ...(form.attrs.brand ? { newBrand: form.brand.trim() } : {}),
+        ...(form.attrs.model ? { newModel: form.model.trim() } : {}),
         ...(form.attrs.serial ? { newSerial: form.serial.trim() } : {}),
         ...(form.attrs.akdAkl ? { newAkdAkl: form.akdAkl.trim() } : {}),
         signatures: {
@@ -393,9 +379,6 @@ export default function CalibrationJobDetailPage() {
 
   const deviceType = resolvedDeviceType(job);
   const gateLocked = isIdentityGateLocked(job);
-  const showEscalate =
-    canEscalateIdentity(job) && Boolean(capabilities?.calibrationJobEscalateIdentity);
-  const showDecide = canDecideIdentity(job) && Boolean(capabilities?.calibrationJobApproveIdentity);
   const canSubmitCorrection =
     canSubmitIdentityCorrection(job) &&
     Boolean(capabilities?.calibrationJobSubmitIdentityCorrection);
@@ -412,9 +395,6 @@ export default function CalibrationJobDetailPage() {
   );
   const correctionRows = corrections.data ?? [];
   const hasPendingCorrection = correctionRows.some((c) => c.status === "PENDING_REVIEW");
-  const gateReopenedBy = correctionRows.find(
-    (c) => c.status === "APPROVED" && c.akdAklGateReopened,
-  );
 
   return (
     <div className={formPageClass}>
@@ -459,8 +439,8 @@ export default function CalibrationJobDetailPage() {
 
         {gateLocked ? (
           <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Job ini sudah melewati tahap verifikasi identitas — eskalasi, keputusan AKD/AKL, dan
-            koreksi identitas tidak lagi tersedia.
+            Job ini sudah melewati tahap verifikasi identitas — koreksi identitas tidak lagi
+            tersedia.
           </p>
         ) : null}
 
@@ -470,7 +450,6 @@ export default function CalibrationJobDetailPage() {
           onFocusRefEquipment={() => focusSection("ref-equipment", refEquipmentSectionRef)}
           onFocusMeasurement={() => focusSection("measurement", measurementSectionRef)}
           onFocusCorrections={() => focusSection("corrections", correctionsSectionRef)}
-          onFocusAkdAkl={() => focusSection("akd-akl", akdAklSectionRef)}
         />
 
         <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="mt-2">
@@ -669,114 +648,11 @@ export default function CalibrationJobDetailPage() {
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem
-            ref={akdAklSectionRef}
-            value="akd-akl"
-            className="border-t border-slate-100"
-          >
-            <AccordionTrigger className="px-0 py-3 text-sm font-semibold text-slate-900 hover:no-underline">
-              AKD/AKL/NIE Approval
-            </AccordionTrigger>
-            <AccordionContent>
-              <dl className="space-y-4 text-sm">
-                <DetailField label="Status">
-                  <AkdAklStatusBadge status={job.akdAklApprovalStatus} />
-                </DetailField>
-                {gateReopenedBy ? (
-                  <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    Gate dibuka kembali ke PENDING_REVIEW oleh BA {gateReopenedBy.number}.
-                  </p>
-                ) : null}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <DetailField label="Decided By">{job.akdAklApprovedBy?.name ?? "—"}</DetailField>
-                  <DetailField label="Decided At">{formatDateTime(job.akdAklApprovedAt)}</DetailField>
-                </div>
-                <DetailField label="Decision / Escalation Note">
-                  {job.akdAklDecisionNote ? (
-                    <span className="whitespace-pre-wrap">{job.akdAklDecisionNote}</span>
-                  ) : (
-                    "—"
-                  )}
-                </DetailField>
-              </dl>
-              <p className="mt-2 text-xs text-slate-400">
-                v1: catatan eskalasi dan catatan keputusan berbagi satu kolom — catatan teknisi
-                akan tertimpa oleh catatan manajer.
-              </p>
-            </AccordionContent>
-          </AccordionItem>
         </Accordion>
 
         <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
-          {showEscalate ? (
-            <Button type="button" variant="outline" onClick={() => setDialog("escalate")}>
-              <ShieldAlert className="h-4 w-4" />
-              Escalate Identity
-            </Button>
-          ) : null}
-          {showDecide ? (
-            <>
-              <Button type="button" onClick={() => setDialog("approve")}>
-                <Check className="h-4 w-4" />
-                Approve
-              </Button>
-              <Button type="button" variant="destructive" onClick={() => setDialog("reject")}>
-                <X className="h-4 w-4" />
-                Reject
-              </Button>
-            </>
-          ) : null}
         </div>
       </Surface>
-
-      <EscalateDialog
-        open={dialog === "escalate"}
-        job={job}
-        pending={escalateMutation.isPending}
-        onCancel={() => setDialog(null)}
-        onSubmit={(input) =>
-          run(
-            () => escalateMutation.mutateAsync({ id: job.id, input }),
-            "Identitas dieskalasi — menunggu keputusan TECHNICIAN_MANAGER.",
-            "Gagal mengeskalasi identitas.",
-          )
-        }
-      />
-
-      <ConfirmDialog
-        open={dialog === "approve"}
-        title="Approve AKD/AKL/NIE?"
-        description="Device ini akan dinyatakan lolos gate regulasi dan kalibrasi dapat dilanjutkan. APPROVED bersifat final."
-        confirmLabel="Approve"
-        loading={decideMutation.isPending}
-        onConfirm={() =>
-          run(
-            () => decideMutation.mutateAsync({ id: job.id, input: { decision: "APPROVE" } }),
-            "AKD/AKL/NIE disetujui.",
-            "Gagal menyetujui AKD/AKL.",
-          )
-        }
-        onCancel={() => setDialog(null)}
-      />
-
-      <RejectDialog
-        open={dialog === "reject"}
-        pending={decideMutation.isPending}
-        title="Reject AKD/AKL/NIE"
-        description="Job ini tidak dapat dilanjutkan ke kalibrasi. Catatan wajib diisi."
-        onCancel={() => setDialog(null)}
-        onSubmit={(note) =>
-          run(
-            () =>
-              decideMutation.mutateAsync({
-                id: job.id,
-                input: { decision: "REJECT", akdAklDecisionNote: note },
-              }),
-            "AKD/AKL/NIE ditolak.",
-            "Gagal menolak AKD/AKL.",
-          )
-        }
-      />
 
       <SubmitCorrectionDialog
         open={dialog === "submit-correction"}
@@ -818,8 +694,7 @@ function StatusChip({
 
 /**
  * At-a-glance summary above the accordion sections. Attention tones follow
- * `job.actionSignals` (actionable only) plus AKD/AKL pending while the identity
- * gate is still open. Hasil Pengukuran stays navigational.
+ * `job.actionSignals` (actionable only). Hasil Pengukuran stays navigational.
  */
 function StatusStrip({
   job,
@@ -827,21 +702,16 @@ function StatusStrip({
   onFocusRefEquipment,
   onFocusMeasurement,
   onFocusCorrections,
-  onFocusAkdAkl,
 }: {
   job: CalibrationJobRow;
   onFocusIdentity: () => void;
   onFocusRefEquipment: () => void;
   onFocusMeasurement: () => void;
   onFocusCorrections: () => void;
-  onFocusAkdAkl: () => void;
 }) {
   const identityIncomplete = job.actionSignals.identityIncomplete;
   const refEquipmentNeedsApproval = job.actionSignals.referenceEquipmentNeedsApproval;
   const identityCorrectionPending = job.actionSignals.identityCorrectionPending;
-  const gateLocked = isIdentityGateLocked(job);
-  const akdAklActionable = job.akdAklApprovalStatus === "PENDING_REVIEW" && !gateLocked;
-
   return (
     <div className="mt-4 flex flex-wrap gap-2">
       <StatusChip
@@ -859,17 +729,6 @@ function StatusStrip({
         label={identityCorrectionPending ? "Koreksi Identitas · Menunggu Review" : "Koreksi Identitas"}
         tone={identityCorrectionPending ? "attention" : "neutral"}
         onClick={onFocusCorrections}
-      />
-      <StatusChip
-        label={`AKD/AKL · ${AKD_AKL_APPROVAL_STATUS_LABELS[job.akdAklApprovalStatus]}`}
-        tone={
-          akdAklActionable
-            ? "attention"
-            : job.akdAklApprovalStatus === "APPROVED"
-              ? "ok"
-              : "neutral"
-        }
-        onClick={onFocusAkdAkl}
       />
     </div>
   );
@@ -2103,12 +1962,6 @@ function CorrectionCard({
             </div>
           ) : null}
 
-          {correction.akdAklGateReopened ? (
-            <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Koreksi ini membuka kembali gate AKD/AKL job ke PENDING_REVIEW.
-            </p>
-          ) : null}
-
           {isPending && canDecide ? (
             <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-3">
               {missingImage ? (
@@ -2242,69 +2095,6 @@ function CorrectionPhotoBlock({
 
 // ── Dialogs ──────────────────────────────────────────────────────────────────
 
-function EscalateDialog({
-  open,
-  job,
-  pending,
-  onCancel,
-  onSubmit,
-}: {
-  open: boolean;
-  job: CalibrationJobRow;
-  pending: boolean;
-  onCancel: () => void;
-  onSubmit: (input: { technicianObservedAkdAkl?: string | null; reason?: string }) => void;
-}) {
-  const [observed, setObserved] = useState("");
-  const [reason, setReason] = useState("");
-
-  useEffect(() => {
-    if (open) {
-      setObserved(job.technicianObservedAkdAkl ?? "");
-      setReason("");
-    }
-  }, [open, job.technicianObservedAkdAkl]);
-
-  if (!open) return null;
-
-  return (
-    <DialogShell title="Escalate AKD/AKL/NIE" onCancel={onCancel} pending={pending}>
-      <p className="mt-2 text-sm text-slate-600">
-        Menaikkan job ini ke PENDING_REVIEW untuk keputusan TECHNICIAN_MANAGER.
-      </p>
-      <label className="mt-4 block text-sm font-medium text-slate-700">
-        AKD/AKL/NIE yang diamati di lokasi
-        <Input
-          value={observed}
-          onChange={(e) => setObserved(e.target.value)}
-          placeholder="Kosongkan jika tidak ada sama sekali"
-          className="mt-1"
-        />
-      </label>
-      <label className="mt-3 block text-sm font-medium text-slate-700">
-        Alasan eskalasi (opsional)
-        <textarea
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          rows={3}
-          className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        />
-      </label>
-      <DialogActions
-        pending={pending}
-        confirmLabel="Escalate"
-        onCancel={onCancel}
-        onConfirm={() =>
-          onSubmit({
-            technicianObservedAkdAkl: observed.trim() ? observed.trim() : "",
-            reason: reason.trim() || undefined,
-          })
-        }
-      />
-    </DialogShell>
-  );
-}
-
 function RejectDialog({
   open,
   pending,
@@ -2364,8 +2154,10 @@ interface SignatureFormValue {
 
 interface SubmitCorrectionForm {
   reason: string;
-  attrs: { device: boolean; serial: boolean; akdAkl: boolean };
-  deviceId: string;
+  /** MoM #6: the Device assigned by the WO/SPK is locked — never an attribute here. */
+  attrs: { brand: boolean; model: boolean; serial: boolean; akdAkl: boolean };
+  brand: string;
+  model: string;
   serial: string;
   akdAkl: string;
   signatures: Record<SignerRole, SignatureFormValue>;
@@ -2404,9 +2196,14 @@ function SubmitCorrectionDialog({
   onSubmit: (form: SubmitCorrectionForm) => void;
 }) {
   const [reason, setReason] = useState("");
-  const [attrs, setAttrs] = useState({ device: false, serial: false, akdAkl: false });
-  const [deviceId, setDeviceId] = useState("");
-  const [deviceSearch, setDeviceSearch] = useState("");
+  const [attrs, setAttrs] = useState({
+    brand: false,
+    model: false,
+    serial: false,
+    akdAkl: false,
+  });
+  const [brand, setBrand] = useState("");
+  const [model, setModel] = useState("");
   const [serial, setSerial] = useState("");
   const [akdAkl, setAkdAkl] = useState("");
   const [signatures, setSignatures] = useState<Record<SignerRole, SignatureFormValue>>({
@@ -2418,25 +2215,24 @@ function SubmitCorrectionDialog({
   useEffect(() => {
     if (open) {
       setReason("");
-      setAttrs({ device: false, serial: false, akdAkl: false });
-      setDeviceId("");
-      setDeviceSearch("");
-      setSerial(job.technicianObservedSerial ?? "");
+      setAttrs({ brand: false, model: false, serial: false, akdAkl: false });
+      // Observed value first, assigned Device master as the per-field fallback —
+      // the same precedence the API compares against and the LK prints.
+      setBrand(job.technicianObservedBrand ?? job.device?.brand ?? "");
+      setModel(job.technicianObservedModel ?? job.device?.model ?? "");
+      setSerial(job.technicianObservedSerial ?? job.device?.serialNumber ?? "");
       setAkdAkl(job.technicianObservedAkdAkl ?? "");
       setSignatures({ TECHNICIAN: emptySignature(), CUSTOMER: emptySignature() });
       setFile(null);
     }
-  }, [open, job.technicianObservedSerial, job.technicianObservedAkdAkl]);
-
-  const debouncedSearch = useDebouncedValue(deviceSearch, 400);
-  const candidatesQuery = useDeviceCandidates(job.id, debouncedSearch, open && attrs.device);
-  const candidates = candidatesQuery.data ?? [];
+  }, [open, job]);
 
   if (!open) return null;
 
-  const anyAttr = attrs.device || attrs.serial || attrs.akdAkl;
+  const anyAttr = attrs.brand || attrs.model || attrs.serial || attrs.akdAkl;
   const attrsValid =
-    (!attrs.device || deviceId.length > 0) &&
+    (!attrs.brand || brand.trim().length > 0) &&
+    (!attrs.model || model.trim().length > 0) &&
     (!attrs.serial || serial.trim().length > 0) &&
     (!attrs.akdAkl || akdAkl.trim().length > 0);
   const signaturesValid =
@@ -2464,56 +2260,49 @@ function SubmitCorrectionDialog({
         <fieldset className="space-y-3">
           <legend className="text-sm font-medium text-slate-700">Atribut yang dikoreksi *</legend>
 
+          {/* Alat ditetapkan oleh WO/SPK — konteks read-only, tidak dapat dikoreksi. */}
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="text-xs font-medium text-slate-500">Alat (ditetapkan oleh WO/SPK)</p>
+            <p className="mt-0.5 text-sm font-medium text-slate-900">{job.device?.code ?? "—"}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Alat pada job ini tidak dapat diganti melalui BA koreksi identitas.
+            </p>
+          </div>
+
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
               type="checkbox"
-              checked={attrs.device}
-              onChange={(e) => setAttrs((p) => ({ ...p, device: e.target.checked }))}
+              checked={attrs.brand}
+              onChange={(e) => setAttrs((p) => ({ ...p, brand: e.target.checked }))}
             />
-            Device
+            Merk (observed)
           </label>
-          {attrs.device ? (
-            <div className="ml-6 space-y-2">
-              <Input
-                value={deviceSearch}
-                onChange={(e) => setDeviceSearch(e.target.value)}
-                placeholder="Cari serial / brand / model…"
-              />
-              <div className="max-h-48 space-y-1 overflow-y-auto">
-                {candidatesQuery.isLoading ? (
-                  <p className="text-sm text-slate-400">Memuat…</p>
-                ) : candidatesQuery.isError ? (
-                  <p className="text-sm text-red-600">Gagal memuat kandidat device.</p>
-                ) : candidates.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    Tidak ada device yang cocok. Device harus didaftarkan lebih dulu oleh
-                    admin/kantor.
-                  </p>
-                ) : (
-                  candidates.map((device: CalibrationJobDeviceCandidate) => (
-                    <label
-                      key={device.id}
-                      className="flex items-center gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    >
-                      <input
-                        type="radio"
-                        name="correction-device"
-                        checked={deviceId === device.id}
-                        onChange={() => setDeviceId(device.id)}
-                      />
-                      <span className="min-w-0">
-                        <span className="font-medium text-slate-900">
-                          {device.serialNumber ?? device.code ?? device.id}
-                        </span>
-                        <span className="ml-2 text-xs text-slate-400">
-                          {[device.brand, device.model].filter(Boolean).join(" ") || "—"}
-                        </span>
-                      </span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </div>
+          {attrs.brand ? (
+            <Input
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              maxLength={120}
+              className="ml-6 w-[calc(100%-1.5rem)]"
+              placeholder="Merk yang benar"
+            />
+          ) : null}
+
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={attrs.model}
+              onChange={(e) => setAttrs((p) => ({ ...p, model: e.target.checked }))}
+            />
+            Model / Tipe (observed)
+          </label>
+          {attrs.model ? (
+            <Input
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              maxLength={120}
+              className="ml-6 w-[calc(100%-1.5rem)]"
+              placeholder="Model / tipe yang benar"
+            />
           ) : null}
 
           <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -2522,7 +2311,7 @@ function SubmitCorrectionDialog({
               checked={attrs.serial}
               onChange={(e) => setAttrs((p) => ({ ...p, serial: e.target.checked }))}
             />
-            Serial (observed)
+            Serial No (observed)
           </label>
           {attrs.serial ? (
             <Input
@@ -2530,7 +2319,7 @@ function SubmitCorrectionDialog({
               onChange={(e) => setSerial(e.target.value)}
               maxLength={120}
               className="ml-6 w-[calc(100%-1.5rem)]"
-              placeholder="Serial yang benar"
+              placeholder="Serial No yang benar"
             />
           ) : null}
 
@@ -2622,7 +2411,9 @@ function SubmitCorrectionDialog({
         confirmLabel="Ajukan BA"
         disabled={!canConfirm}
         onCancel={onCancel}
-        onConfirm={() => onSubmit({ reason, attrs, deviceId, serial, akdAkl, signatures, file })}
+        onConfirm={() =>
+          onSubmit({ reason, attrs, brand, model, serial, akdAkl, signatures, file })
+        }
       />
     </DialogShell>
   );

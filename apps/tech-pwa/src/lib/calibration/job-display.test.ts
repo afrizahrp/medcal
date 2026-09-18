@@ -31,6 +31,8 @@ function job(
     unitTotal: 1,
     customerDeclaredDeviceName: "Device",
     customerDeclaredAkdAkl: null,
+    technicianObservedBrand: null,
+    technicianObservedModel: null,
     technicianObservedSerial: null,
     technicianObservedAkdAkl: null,
     akdAklApprovalStatus: "NOT_REQUIRED",

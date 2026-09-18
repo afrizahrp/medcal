@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Section, SectionRow } from "../../../components/ui/section";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
-import { JobStatusBadge, AkdAklStatusBadge } from "../jobs-ui";
+import { JobStatusBadge } from "../jobs-ui";
 import type { TechKontrolAlatSummary } from "../../../lib/calibration/types";
 import type { TechCalibrationJob, TechIdentityCorrection } from "../../../lib/calibration/types";
 import { IDENTITY_CORRECTION_STATUS_LABELS } from "../../../lib/calibration/types";
@@ -147,30 +147,6 @@ export function IdentityIncompleteWarning({ job }: { job: TechCalibrationJob }) 
     >
       Identity perangkat belum lengkap. Silakan konfirmasi/koreksi identitas perangkat.
     </div>
-  );
-}
-
-export function ApprovalStatusSection({ job }: { job: TechCalibrationJob }) {
-  const showDetail = job.akdAklApprovalStatus === "APPROVED" || job.akdAklApprovalStatus === "REJECTED";
-  return (
-    <Section title="Status Persetujuan AKD/AKL">
-      <div className="flex items-center gap-2">
-        <AkdAklStatusBadge status={job.akdAklApprovalStatus} />
-      </div>
-      {showDetail ? (
-        <div className="mt-2 space-y-1">
-          {job.akdAklApprovedBy ? (
-            <SectionRow label="Diputuskan oleh" value={job.akdAklApprovedBy.name ?? "—"} />
-          ) : null}
-          {job.akdAklApprovedAt ? (
-            <SectionRow label="Tanggal" value={formatDate(job.akdAklApprovedAt)} />
-          ) : null}
-          {job.akdAklDecisionNote ? (
-            <p className="mt-1 text-sm text-slate-600">{job.akdAklDecisionNote}</p>
-          ) : null}
-        </div>
-      ) : null}
-    </Section>
   );
 }
 

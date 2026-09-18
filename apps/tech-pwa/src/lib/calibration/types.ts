@@ -79,6 +79,8 @@ export interface TechCalibrationJob {
   unitTotal: number;
   customerDeclaredDeviceName: string | null;
   customerDeclaredAkdAkl: string | null;
+  technicianObservedBrand: string | null;
+  technicianObservedModel: string | null;
   technicianObservedSerial: string | null;
   technicianObservedAkdAkl: string | null;
   akdAklApprovalStatus: AkdAklApprovalStatus;
@@ -110,7 +112,14 @@ export interface TechCalibrationJob {
     purchaseOrder: { customerPoNumber: string } | null;
     requestReviewCompletedAt: string | null;
   };
-  device: { id: string; code: string | null; serialNumber: string | null } | null;
+  /** Device assigned by the WO/SPK. Read-only context — a BA never replaces it. */
+  device: {
+    id: string;
+    code: string | null;
+    brand: string | null;
+    model: string | null;
+    serialNumber: string | null;
+  } | null;
   calibrationRequestItem: { customerDeviceName: string | null; akdAkl: string | null } | null;
   akdAklApprovedBy: { id: string; name: string | null } | null;
   /** Most-recent Identity Correction BA on this job (any status), or []. */
@@ -187,6 +196,10 @@ export interface TechIdentityCorrection {
   prevDevice: { id: string; code: string | null } | null;
   newDevice: { id: string; code: string | null } | null;
   newDeviceId: string | null;
+  prevBrand: string | null;
+  newBrand: string | null;
+  prevModel: string | null;
+  newModel: string | null;
   prevSerial: string | null;
   newSerial: string | null;
   prevAkdAkl: string | null;
@@ -210,7 +223,8 @@ export interface IdentityCorrectionSignatureInput {
 
 export interface IdentityCorrectionSubmitInput {
   reason: string;
-  newDeviceId?: string;
+  newBrand?: string;
+  newModel?: string;
   newSerial?: string;
   newAkdAkl?: string;
   signatures: {
@@ -222,13 +236,4 @@ export interface IdentityCorrectionSubmitInput {
 export interface IdentityCorrectionSubmitResult {
   job: TechCalibrationJob;
   correction: TechIdentityCorrection;
-  deviceTypeValidated: boolean;
-}
-
-export interface CalibrationJobDeviceCandidate {
-  id: string;
-  code: string | null;
-  brand: string | null;
-  model: string | null;
-  serialNumber: string | null;
 }
