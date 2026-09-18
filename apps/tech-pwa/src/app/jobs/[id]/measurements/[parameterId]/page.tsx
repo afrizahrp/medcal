@@ -20,6 +20,8 @@ import {
   validateMeasuredDraft,
   visibleReplicateCount,
   measuredReadingPayload,
+  replicateLabel,
+  resolveMeasurementEntryTarget,
   type MeasurementBatchItem,
   type TechMeasurementResult,
 } from "../../../../../lib/calibration/measurement";
@@ -82,9 +84,8 @@ export default function MeasurementParameterEntryPage() {
     return rows.sort((a, b) => a.replicateIndex - b.replicateIndex);
   }, [resultsQuery.data, parameterId, attempt]);
 
-  const paramA = parametersQuery.data?.parameters.find((p) => p.id === parameterId) ?? null;
-  const paramB = parametersQuery.data?.gridParameters?.find((p) => p.id === parameterId) ?? null;
-  const param = paramA ?? paramB;
+  const entryTarget = resolveMeasurementEntryTarget(parametersQuery.data, parameterId);
+  const param = entryTarget?.param ?? null;
 
   const rowByIndex = useMemo(() => {
     const map = new Map<number, TechMeasurementResult>();
@@ -151,12 +152,12 @@ export default function MeasurementParameterEntryPage() {
   const editable = canRecordMeasurement(job);
   const lockedReason = measurementLockedReason(job);
 
-  if (paramB && (paramB.testPoints?.length ?? 0) > 0) {
+  if (entryTarget?.kind === "GRID") {
     return (
       <MeasurementGridEntry
         job={job}
         parameterId={parameterId}
-        param={paramB}
+        param={entryTarget.param}
         existingRows={gridExistingRows}
         editable={editable}
         lockedReason={lockedReason}
@@ -309,7 +310,7 @@ export default function MeasurementParameterEntryPage() {
                 className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3"
               >
                 <span className="w-16 shrink-0 text-xs font-medium text-slate-500">
-                  Ulangan {index}
+                  {replicateLabel(index)}
                 </span>
                 {editable ? (
                   <input

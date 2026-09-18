@@ -260,6 +260,130 @@ export function visibleReplicateCount(maxExistingIndex: number, extraSlots: numb
   return Math.max(1, maxExistingIndex) + Math.max(0, extraSlots);
 }
 
+/** Anonymous repetition label for Pattern A, and nested reps under a named point. */
+export function replicateLabel(replicateIndex: number): string {
+  return `Ulangan ${replicateIndex}`;
+}
+
+export function patternASlotLabels(maxExistingIndex: number, extraSlots: number): string[] {
+  const count = visibleReplicateCount(maxExistingIndex, extraSlots);
+  return Array.from({ length: count }, (_, i) => replicateLabel(i + 1));
+}
+
+export function sortNamedMeasurementPoints<T extends { sequence: number }>(points: readonly T[]): T[] {
+  return [...points].sort((a, b) => a.sequence - b.sequence);
+}
+
+export interface NamedPointSlotView {
+  replicateIndex: number;
+  /** settingLabel when this point has a single visible slot; otherwise "Ulangan N". */
+  slotLabel: string;
+}
+
+export interface NamedPointGroupView {
+  testPointId: string;
+  settingLabel: string;
+  settingValue: string | null;
+  sequence: number;
+  showGroupHeader: boolean;
+  slots: NamedPointSlotView[];
+}
+
+/**
+ * Pattern B presentation: named-point identity is `settingLabel` from the job
+ * payload. Nested "Ulangan N" appears only when that point has more than one
+ * visible repetition slot. Labels are never inferred from replicateIndex.
+ */
+export function namedPointGroupView(args: {
+  testPoint: {
+    id: string;
+    sequence: number;
+    settingLabel: string;
+    settingValue: string | null;
+  };
+  maxExistingReplicateIndex: number;
+  extraSlots: number;
+}): NamedPointGroupView {
+  const count = visibleReplicateCount(args.maxExistingReplicateIndex, args.extraSlots);
+  const nested = count > 1;
+  return {
+    testPointId: args.testPoint.id,
+    settingLabel: args.testPoint.settingLabel,
+    settingValue: args.testPoint.settingValue,
+    sequence: args.testPoint.sequence,
+    showGroupHeader: nested,
+    slots: Array.from({ length: count }, (_, i) => ({
+      replicateIndex: i + 1,
+      slotLabel: nested ? replicateLabel(i + 1) : args.testPoint.settingLabel,
+    })),
+  };
+}
+
+/**
+ * Historical Pattern A rows (`calibrationTestPointId` null) must not receive an
+ * invented named-point label. Unknown ids also yield null — never a fallback
+ * "Ulangan" or hardcoded Awal/Akhir.
+ */
+export function namedLabelForResult(
+  calibrationTestPointId: string | null,
+  points: readonly { id: string; settingLabel: string }[],
+): string | null {
+  if (calibrationTestPointId == null) return null;
+  return points.find((p) => p.id === calibrationTestPointId)?.settingLabel ?? null;
+}
+
+export type MeasurementEntryKindUi = "DIRECT" | "GRID";
+
+export interface MeasurementEntryTarget {
+  kind: MeasurementEntryKindUi;
+  param: TechMeasurementParameter;
+}
+
+/**
+ * Pattern B iff the job payload has one or more named measurement points for
+ * this parameter (snapshot count > 0). Zero points → Pattern A, including
+ * historical jobs whose readings have null calibrationTestPointId.
+ */
+export function resolveMeasurementEntryTarget(
+  data: TechMeasurementParametersResponse | null | undefined,
+  parameterId: string,
+): MeasurementEntryTarget | null {
+  if (!data) return null;
+
+  const hasNamedPoints = (param: TechMeasurementParameter | undefined): boolean =>
+    (param?.testPoints?.length ?? 0) > 0;
+
+  const fromGrid = data.gridParameters?.find((p) => p.id === parameterId);
+  if (hasNamedPoints(fromGrid)) return { kind: "GRID", param: fromGrid! };
+
+  if (hasCapabilityGroups(data.capabilityGroups)) {
+    for (const group of data.capabilityGroups) {
+      const grouped = group.parameters.find((p) => p.id === parameterId);
+      if (grouped && grouped.kind === "GRID" && grouped.testPoints.length > 0) {
+        return { kind: "GRID", param: grouped };
+      }
+    }
+  }
+
+  const fromDirect = data.parameters.find((p) => p.id === parameterId);
+  if (fromDirect) return { kind: "DIRECT", param: fromDirect };
+
+  if (hasCapabilityGroups(data.capabilityGroups)) {
+    for (const group of data.capabilityGroups) {
+      const grouped = group.parameters.find((p) => p.id === parameterId);
+      if (grouped) {
+        return {
+          kind: grouped.kind === "GRID" && grouped.testPoints.length > 0 ? "GRID" : "DIRECT",
+          param: grouped,
+        };
+      }
+    }
+  }
+
+  if (fromGrid) return { kind: "DIRECT", param: fromGrid };
+  return null;
+}
+
 const DIRECTION_PARAMETER_CODES = new Set(["SPHYG_PRESSURE_ACC"]);
 
 /** True when each setpoint is recorded naik + turun (two natural-key rows). */

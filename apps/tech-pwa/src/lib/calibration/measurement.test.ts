@@ -12,15 +12,23 @@ import {
   measuredReadingPayload,
   measuredValueInputStep,
   measurementLockedReason,
+  namedLabelForResult,
+  namedPointGroupView,
   parameterEntryStatus,
+  patternASlotLabels,
   readingDisplayValue,
+  replicateLabel,
+  resolveMeasurementEntryTarget,
   shouldShowMeasurementSection,
+  sortNamedMeasurementPoints,
   passFailChip,
   toleranceText,
   usesDirection,
   validateMeasuredDraft,
   validateMeasuredValue,
   visibleReplicateCount,
+  type TechMeasurementParameter,
+  type TechMeasurementParametersResponse,
 } from "./measurement";
 
 describe("formatMeasuredValue", () => {
@@ -454,5 +462,172 @@ describe("capabilityGroupSections / hasCapabilityGroups", () => {
     const sections = capabilityGroupSections(groups);
     expect(sections.map((s) => s.name)).toEqual(["Beta", "Alpha"]);
     expect(sections[0]?.parameters.map((p) => p.parameter.name)).toEqual(["Zulu", "Alpha"]);
+  });
+});
+
+describe("Pattern A vs Pattern B measurement-point labels", () => {
+  const tp = (
+    id: string,
+    sequence: number,
+    settingLabel: string,
+    settingValue: string | null = null,
+  ) => ({ id, sequence, settingLabel, settingValue, toleranceMin: null, toleranceMax: null, toleranceNote: null });
+
+  const param = (
+    id: string,
+    extras: Partial<TechMeasurementParameter> = {},
+  ): TechMeasurementParameter => ({
+    id,
+    code: id,
+    name: id,
+    decimalPlaces: 1,
+    uom: null,
+    toleranceMin: null,
+    toleranceMax: null,
+    toleranceNote: null,
+    capabilityName: "cap",
+    capabilityItemName: "item",
+    ...extras,
+  });
+
+  it("Pattern A still displays Ulangan 1, Ulangan 2", () => {
+    expect(patternASlotLabels(0, 0)).toEqual(["Ulangan 1"]);
+    expect(patternASlotLabels(2, 0)).toEqual(["Ulangan 1", "Ulangan 2"]);
+    expect(replicateLabel(1)).toBe("Ulangan 1");
+    expect(replicateLabel(2)).toBe("Ulangan 2");
+  });
+
+  it("Pattern B shows settingLabel Awal / Akhir, not Ulangan", () => {
+    const awal = namedPointGroupView({
+      testPoint: tp("tp-a", 1, "Awal"),
+      maxExistingReplicateIndex: 1,
+      extraSlots: 0,
+    });
+    const akhir = namedPointGroupView({
+      testPoint: tp("tp-b", 2, "Akhir"),
+      maxExistingReplicateIndex: 1,
+      extraSlots: 0,
+    });
+    expect(awal.slots.map((s) => s.slotLabel)).toEqual(["Awal"]);
+    expect(akhir.slots.map((s) => s.slotLabel)).toEqual(["Akhir"]);
+    expect(awal.showGroupHeader).toBe(false);
+  });
+
+  it("Pattern B shows L-N / L-G / N-G from data", () => {
+    const labels = ["L-N", "L-G", "N-G"].map((label, i) =>
+      namedPointGroupView({
+        testPoint: tp(`tp-${i}`, i + 1, label),
+        maxExistingReplicateIndex: 0,
+        extraSlots: 0,
+      }).slots[0]?.slotLabel,
+    );
+    expect(labels).toEqual(["L-N", "L-G", "N-G"]);
+  });
+
+  it("orders named points by sequence, not array position", () => {
+    const ordered = sortNamedMeasurementPoints([
+      tp("tp-akhir", 2, "Akhir"),
+      tp("tp-awal", 1, "Awal"),
+    ]);
+    expect(ordered.map((p) => p.settingLabel)).toEqual(["Awal", "Akhir"]);
+  });
+
+  it("keeps nested Ulangan labels only inside a named point with extra repetitions", () => {
+    const group = namedPointGroupView({
+      testPoint: tp("tp-a", 1, "Awal"),
+      maxExistingReplicateIndex: 2,
+      extraSlots: 0,
+    });
+    expect(group.settingLabel).toBe("Awal");
+    expect(group.showGroupHeader).toBe(true);
+    expect(group.slots.map((s) => ({ index: s.replicateIndex, label: s.slotLabel }))).toEqual([
+      { index: 1, label: "Ulangan 1" },
+      { index: 2, label: "Ulangan 2" },
+    ]);
+  });
+
+  it("supports extra Tambah ulangan slots under one named point", () => {
+    const group = namedPointGroupView({
+      testPoint: tp("tp-a", 1, "Awal"),
+      maxExistingReplicateIndex: 1,
+      extraSlots: 1,
+    });
+    expect(group.slots).toHaveLength(2);
+    expect(group.slots.map((s) => s.slotLabel)).toEqual(["Ulangan 1", "Ulangan 2"]);
+  });
+
+  it("preserves settingValue on the named-point view without using it as identity", () => {
+    const group = namedPointGroupView({
+      testPoint: tp("tp-a", 1, "Awal", "25 °C"),
+      maxExistingReplicateIndex: 1,
+      extraSlots: 0,
+    });
+    expect(group.settingLabel).toBe("Awal");
+    expect(group.settingValue).toBe("25 °C");
+    expect(group.slots[0]?.slotLabel).toBe("Awal");
+  });
+
+  it("uses generic settingLabel values without hardcoded Awal/Akhir conditions", () => {
+    for (const label of ["Low", "High", "Before", "After", "Min", "Mid", "Max"] as const) {
+      const group = namedPointGroupView({
+        testPoint: tp(`tp-${label}`, 1, label),
+        maxExistingReplicateIndex: 1,
+        extraSlots: 0,
+      });
+      expect(group.slots[0]?.slotLabel).toBe(label);
+    }
+  });
+
+  it("does not invent a named label for historical Pattern A (null calibrationTestPointId)", () => {
+    const points = [tp("tp-a", 1, "Awal"), tp("tp-b", 2, "Akhir")];
+    expect(namedLabelForResult(null, points)).toBeNull();
+    expect(namedLabelForResult("tp-a", points)).toBe("Awal");
+    expect(namedLabelForResult("unknown", points)).toBeNull();
+  });
+
+  it("resolves GRID from job payload test points and DIRECT when snapshot count is 0", () => {
+    const gridParam = param("p-b", { testPoints: [tp("tp-1", 1, "Awal"), tp("tp-2", 2, "Akhir")] });
+    const directParam = param("p-a");
+    const data: TechMeasurementParametersResponse = {
+      deviceType: { id: "dt", name: "x" },
+      parameters: [directParam],
+      gridParameters: [gridParam],
+    };
+    expect(resolveMeasurementEntryTarget(data, "p-b")?.kind).toBe("GRID");
+    expect(resolveMeasurementEntryTarget(data, "p-b")?.param.testPoints?.map((p) => p.settingLabel)).toEqual([
+      "Awal",
+      "Akhir",
+    ]);
+    expect(resolveMeasurementEntryTarget(data, "p-a")?.kind).toBe("DIRECT");
+
+    const emptySnapshot: TechMeasurementParametersResponse = {
+      deviceType: { id: "dt", name: "x" },
+      parameters: [param("p-hist")],
+      gridParameters: [param("p-hist", { testPoints: [] })],
+    };
+    expect(resolveMeasurementEntryTarget(emptySnapshot, "p-hist")?.kind).toBe("DIRECT");
+  });
+
+  it("prefers capabilityGroups GRID testPoints when present", () => {
+    const grouped = {
+      ...param("p-g"),
+      kind: "GRID" as const,
+      testPoints: [tp("ln", 1, "L-N"), tp("lg", 2, "L-G"), tp("ng", 3, "N-G")],
+    };
+    const data: TechMeasurementParametersResponse = {
+      deviceType: { id: "dt", name: "x" },
+      parameters: [],
+      gridParameters: [],
+      capabilityGroups: [
+        {
+          capability: { id: "c", code: "C", name: "C" },
+          sortOrder: 1,
+          parameters: [grouped],
+        },
+      ],
+    };
+    const target = resolveMeasurementEntryTarget(data, "p-g");
+    expect(target?.kind).toBe("GRID");
+    expect(target?.param.testPoints?.map((p) => p.settingLabel)).toEqual(["L-N", "L-G", "N-G"]);
   });
 });
