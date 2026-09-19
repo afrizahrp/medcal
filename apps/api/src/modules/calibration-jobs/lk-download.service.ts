@@ -487,6 +487,8 @@ export class LkDownloadService {
           toleranceMin: true,
           toleranceMax: true,
           toleranceNote: true,
+          logicalTestKey: true,
+          logicalTestSequence: true,
           uom: { select: { symbol: true, code: true } },
           capabilityItem: {
             select: { capability: { select: { id: true, name: true } } },
@@ -556,6 +558,8 @@ export class LkDownloadService {
         uomSymbol: parameter.uom?.symbol ?? parameter.uom?.code ?? null,
         capabilityId: parameter.capabilityItem.capability.id,
         capabilityName: parameter.capabilityItem.capability.name,
+        logicalTestKey: parameter.logicalTestKey,
+        logicalTestSequence: parameter.logicalTestSequence,
         liveTestPoints: parameter.testPoints,
       })),
       snapshotRows,

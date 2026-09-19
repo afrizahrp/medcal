@@ -4062,6 +4062,142 @@ describe("CalibrationJobsService — JobCalibrationTestPoint snapshot", () => {
     expect(listed.gridParameters[0]?.testPoints.map((tp) => tp.settingLabel)).toEqual(["Awal", "Akhir"]);
   });
 
+  // ── Phase 4A (Gap A) — multiple measured quantities in one logical test ────
+  // Catalog/presentation grouping only: each quantity stays its own parameter,
+  // MeasurementResult identity is untouched, and an ungrouped catalog is
+  // returned in exactly the order it had before.
+
+  it("returns the quantities of one logical test contiguously and in declared order", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const base = { deviceTypeId, capabilityItemId, valueType: "NUMBER" as const };
+
+    // sortOrder deliberately interleaves the logical test with unrelated rows,
+    // and declares the quantities out of order, so contiguity + ordering can
+    // only come from logicalTestKey/logicalTestSequence.
+    await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "LT_FIRST", name: "Kolimasi", sortOrder: 10 },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: {
+        ...base,
+        code: "LT_MGY",
+        name: "Reproduksibilitas mGy",
+        sortOrder: 20,
+        logicalTestKey: "dxray-repro",
+        logicalTestSequence: 3,
+      },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "LT_MID", name: "HVL", sortOrder: 30 },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: {
+        ...base,
+        code: "LT_KV",
+        name: "Reproduksibilitas kV",
+        sortOrder: 40,
+        logicalTestKey: "dxray-repro",
+        logicalTestSequence: 1,
+      },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: {
+        ...base,
+        code: "LT_S",
+        name: "Reproduksibilitas s",
+        sortOrder: 50,
+        logicalTestKey: "dxray-repro",
+        logicalTestSequence: 2,
+      },
+    });
+
+    const listed = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+
+    expect(listed.parameters.map((p) => p.code)).toEqual([
+      "LT_FIRST",
+      "LT_KV",
+      "LT_S",
+      "LT_MGY",
+      "LT_MID",
+    ]);
+    expect(listed.capabilityGroups[0]?.parameters.map((p) => p.code)).toEqual([
+      "LT_FIRST",
+      "LT_KV",
+      "LT_S",
+      "LT_MGY",
+      "LT_MID",
+    ]);
+    expect(listed.parameters.map((p) => p.logicalTestSequence)).toEqual([null, 1, 2, 3, null]);
+    expect(listed.parameters[1]?.logicalTestKey).toBe("dxray-repro");
+    expect(listed.parameters[0]?.logicalTestKey).toBeNull();
+  });
+
+  it("leaves a catalog with no logical-test metadata in its existing sortOrder", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const base = { deviceTypeId, capabilityItemId, valueType: "NUMBER" as const };
+
+    await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "LG_1", name: "Suhu", sortOrder: 10 },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "LG_2", name: "RH", sortOrder: 20 },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "LG_3", name: "Tegangan", sortOrder: 30 },
+    });
+
+    const listed = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+
+    expect(listed.parameters.map((p) => p.code)).toEqual(["LG_1", "LG_2", "LG_3"]);
+    expect(listed.parameters.map((p) => p.logicalTestKey)).toEqual([null, null, null]);
+    expect(listed.parameters.map((p) => p.logicalTestSequence)).toEqual([null, null, null]);
+  });
+
+  it("groups Pattern B quantities without collapsing their own test points", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const base = { deviceTypeId, capabilityItemId, valueType: "NUMBER" as const };
+
+    const eyepiece = await prisma.deviceCalibrationParameter.create({
+      data: {
+        ...base,
+        code: "LT_OKULER",
+        name: "Okuler",
+        sortOrder: 20,
+        logicalTestKey: "micro-4x",
+        logicalTestSequence: 2,
+      },
+    });
+    const stage = await prisma.deviceCalibrationParameter.create({
+      data: {
+        ...base,
+        code: "LT_STAGE",
+        name: "Stage",
+        sortOrder: 10,
+        logicalTestKey: "micro-4x",
+        logicalTestSequence: 1,
+      },
+    });
+    await prisma.calibrationTestPoint.createMany({
+      data: [
+        { deviceCalibrationParameterId: stage.id, sequence: 1, settingLabel: "10 µm" },
+        { deviceCalibrationParameterId: eyepiece.id, sequence: 1, settingLabel: "10 µm" },
+      ],
+    });
+
+    const listed = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+
+    // Both quantities are Pattern B; grouping orders them, test points survive.
+    expect(listed.gridParameters.map((p) => p.code)).toEqual(["LT_STAGE", "LT_OKULER"]);
+    expect(listed.gridParameters[0]?.testPoints.map((tp) => tp.settingLabel)).toEqual(["10 µm"]);
+    expect(listed.gridParameters[1]?.testPoints.map((tp) => tp.settingLabel)).toEqual(["10 µm"]);
+  });
+
   it("started job does not acquire a test point added to the master catalog later", async () => {
     const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
     createdParamDeviceTypeIds.push(deviceTypeId);
@@ -4195,6 +4331,83 @@ describe("CalibrationJobsService — JobCalibrationTestPoint snapshot", () => {
       where: { calibrationJobId: jobs[0]!.id },
     });
     expect(snaps.map((s) => s.settingLabel)).toEqual(["Awal"]);
+  });
+
+  // ── Phase 4B (Gap B) ── DERIVED participates in the same worksheet flow ──
+
+  it("includes an active DERIVED parameter in Pattern A alongside DIRECT_REPLICATES", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const base = { deviceTypeId, capabilityItemId, valueType: "NUMBER" as const };
+
+    await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "PH4B_DIRECT", name: "Suhu", sortOrder: 10 },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: {
+        ...base,
+        code: "PH4B_DERIVED",
+        name: "Selisih Suhu",
+        sortOrder: 20,
+        entryStyle: "DERIVED",
+        derivation: { description: "Difference between S1 and S3" },
+      },
+    });
+
+    const listed = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+
+    expect(listed.parameters.map((p) => p.code)).toEqual(["PH4B_DIRECT", "PH4B_DERIVED"]);
+  });
+
+  it("still excludes LOGGER_SUMMARY once DERIVED is included", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const base = { deviceTypeId, capabilityItemId, valueType: "NUMBER" as const };
+
+    await prisma.deviceCalibrationParameter.create({
+      data: { ...base, code: "PH4B_DERIVED2", name: "Rasio", sortOrder: 10, entryStyle: "DERIVED" },
+    });
+    await prisma.deviceCalibrationParameter.create({
+      data: {
+        ...base,
+        code: "PH4B_LOGGER",
+        name: "Keseragaman Suhu",
+        sortOrder: 20,
+        entryStyle: "LOGGER_SUMMARY",
+      },
+    });
+
+    const listed = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+
+    expect(listed.parameters.map((p) => p.code)).toEqual(["PH4B_DERIVED2"]);
+    expect(listed.parameters.some((p) => p.code === "PH4B_LOGGER")).toBe(false);
+  });
+
+  it("puts a DERIVED parameter with active test points into gridParameters (Pattern B)", async () => {
+    const { jobs, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    createdParamDeviceTypeIds.push(deviceTypeId);
+    const capabilityItemId = await capabilityItem();
+    const param = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId,
+        capabilityItemId,
+        code: "PH4B_DERIVED_GRID",
+        name: "Selisih per titik",
+        valueType: "NUMBER",
+        sortOrder: 10,
+        entryStyle: "DERIVED",
+      },
+    });
+    await prisma.calibrationTestPoint.create({
+      data: { deviceCalibrationParameterId: param.id, sequence: 1, settingLabel: "Titik 1" },
+    });
+
+    const listed = await calibrationJobsService.listMeasurementParameters(realCompanyId, jobs[0]!.id);
+
+    expect(listed.gridParameters.map((p) => p.code)).toEqual(["PH4B_DERIVED_GRID"]);
+    expect(listed.parameters.some((p) => p.code === "PH4B_DERIVED_GRID")).toBe(false);
   });
 });
 
@@ -4571,6 +4784,115 @@ describe("CalibrationJobsService — submitForReview measurement completeness", 
     const submitted = await calibrationJobsService.submitForReview(realCompanyId, ctx.job.id);
     expect(submitted.status).toBe("SUBMITTED");
     expect(row.calibrationTestPointId).toBeNull();
+  });
+
+  // ── Phase 4B (Gap B) ── a DERIVED parameter is optional at submit ──
+  // (deliberately unchanged from before this phase — see Report 08 §9.B.7,
+  // an explicitly open business question this phase does not resolve).
+
+  it("does not require an empty DERIVED parameter before submit", async () => {
+    const capabilityItemId = await capabilityItem();
+    const ctx = await startJobWithParams(async (deviceTypeId) => {
+      await prisma.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId,
+          capabilityItemId,
+          code: "PH4B_CMP_DIRECT",
+          name: "Room temp",
+          valueType: "NUMBER",
+          sortOrder: 10,
+        },
+      });
+      await prisma.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId,
+          capabilityItemId,
+          code: "PH4B_CMP_DERIVED",
+          name: "Selisih suhu",
+          valueType: "NUMBER",
+          sortOrder: 20,
+          entryStyle: "DERIVED",
+        },
+      });
+    });
+    const direct = await prisma.deviceCalibrationParameter.findFirstOrThrow({
+      where: { deviceTypeId: ctx.deviceTypeId, code: "PH4B_CMP_DIRECT" },
+    });
+    await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: direct.id,
+        replicateIndex: 1,
+        measuredValue: 22,
+      },
+      ctx.technician.id,
+    );
+
+    // PH4B_CMP_DERIVED has zero MeasurementResult rows and submit must still
+    // succeed — it never entered eligibleParameterIds.
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, ctx.job.id);
+    expect(submitted.status).toBe("SUBMITTED");
+  });
+
+  it("accepts a manually typed DERIVED reading and still does not gate on it", async () => {
+    const capabilityItemId = await capabilityItem();
+    const ctx = await startJobWithParams(async (deviceTypeId) => {
+      await prisma.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId,
+          capabilityItemId,
+          code: "PH4B_CMP_DIRECT2",
+          name: "Room temp",
+          valueType: "NUMBER",
+          sortOrder: 10,
+        },
+      });
+      await prisma.deviceCalibrationParameter.create({
+        data: {
+          deviceTypeId,
+          capabilityItemId,
+          code: "PH4B_CMP_DERIVED2",
+          name: "Selisih suhu",
+          valueType: "NUMBER",
+          sortOrder: 20,
+          entryStyle: "DERIVED",
+          derivation: { description: "Difference between S1 and S3" },
+        },
+      });
+    });
+    const direct = await prisma.deviceCalibrationParameter.findFirstOrThrow({
+      where: { deviceTypeId: ctx.deviceTypeId, code: "PH4B_CMP_DIRECT2" },
+    });
+    const derived = await prisma.deviceCalibrationParameter.findFirstOrThrow({
+      where: { deviceTypeId: ctx.deviceTypeId, code: "PH4B_CMP_DERIVED2" },
+    });
+    await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: direct.id,
+        replicateIndex: 1,
+        measuredValue: 22,
+      },
+      ctx.technician.id,
+    );
+    // The technician types the derived value in by hand — an ordinary
+    // MeasurementResult write. No formula runs; nothing computes this.
+    const derivedRow = await measurementResultsService.create(
+      realCompanyId,
+      {
+        calibrationJobId: ctx.job.id,
+        deviceCalibrationParameterId: derived.id,
+        replicateIndex: 1,
+        measuredValue: 0.3,
+      },
+      ctx.technician.id,
+    );
+    expect(derivedRow.measuredValue?.toString()).toBe("0.3");
+
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, ctx.job.id);
+    expect(submitted.status).toBe("SUBMITTED");
   });
 });
 

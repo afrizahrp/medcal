@@ -1,4 +1,5 @@
 import type { LkResultPdfRow } from "./lk-result-pdf";
+import { orderByLogicalTest } from "./logical-test-grouping";
 
 export interface FrozenTestPointFields {
   settingLabel: string;
@@ -38,6 +39,13 @@ export interface CapabilityParameterForLk {
   uomSymbol: string | null;
   capabilityId: string;
   capabilityName: string;
+  /**
+   * Phase 4A (Gap A) — catalog grouping. Parameters sharing a key are the
+   * measured quantities of one logical test and are printed contiguously, in
+   * `logicalTestSequence` order. NULL (every legacy row) = standalone.
+   */
+  logicalTestKey: string | null;
+  logicalTestSequence: number | null;
   liveTestPoints: Array<{
     id: string;
     sequence: number;
@@ -69,6 +77,11 @@ export interface ResultForLkRow {
  * Pattern B = one row per snapshot (or live, if unfrozen) named point.
  * Multiple filled results for the same point are joined with ", "
  * (existing generic PDF convention — not a new aggregate).
+ *
+ * Phase 4A (Gap A): parameters declared as quantities of the same logical test
+ * are emitted contiguously and in their declared order, at the position of the
+ * group's first member. Row shape, values and tolerance text are unchanged, and
+ * a catalog with no grouping produces byte-identical rows to before.
  */
 export function mapCapabilityMeasurementRows(input: {
   parameters: CapabilityParameterForLk[];
@@ -101,7 +114,7 @@ export function mapCapabilityMeasurementRows(input: {
 
   const out: Array<{ capabilityId: string; capabilityName: string; row: LkResultPdfRow }> = [];
 
-  for (const parameter of input.parameters) {
+  for (const parameter of orderByLogicalTest(input.parameters)) {
     const catalogPoints =
       input.snapshotRows != null
         ? (frozenByParameterId.get(parameter.id) ?? []).map((tp) => ({

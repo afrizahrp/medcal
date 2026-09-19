@@ -40,6 +40,10 @@ const emptyForm: DeviceCalibrationParameterFormValue = {
   toleranceMax: "",
   toleranceNote: "",
   decimalPlaces: "",
+  logicalTestKey: "",
+  logicalTestSequence: "",
+  entryStyle: "DIRECT_REPLICATES",
+  derivation: "",
   description: "",
 };
 

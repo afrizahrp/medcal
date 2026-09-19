@@ -393,6 +393,8 @@ describe("capabilityGroupSections / hasCapabilityGroups", () => {
     toleranceNote: null,
     capabilityName: "unused",
     capabilityItemName: "unused",
+    logicalTestKey: null,
+    logicalTestSequence: null,
     kind,
     testPoints: testPoints.map((tp) => ({
       ...tp,
@@ -488,6 +490,8 @@ describe("Pattern A vs Pattern B measurement-point labels", () => {
     toleranceNote: null,
     capabilityName: "cap",
     capabilityItemName: "item",
+    logicalTestKey: null,
+    logicalTestSequence: null,
     ...extras,
   });
 

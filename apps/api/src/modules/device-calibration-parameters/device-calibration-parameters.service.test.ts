@@ -775,3 +775,458 @@ describe("DeviceCapabilitiesService.removeItem with calibration parameters", () 
     );
   });
 });
+
+// ── Phase 4A (Gap A) — logical-test grouping on the catalog row ──────────────
+// Presentation metadata only: it never reaches MeasurementResult. A parameter is
+// either fully grouped or fully standalone, and two parameters of one device type
+// may not claim the same position in the same logical test.
+
+describe("deviceCalibrationParameterCreateSchema — logical test grouping", () => {
+  const base = {
+    deviceTypeId: "dt-1",
+    capabilityItemId: "ci-1",
+    uomId: "uom-1",
+    name: "Reproduksibilitas kV",
+  };
+
+  it("accepts a fully declared pair", () => {
+    const parsed = deviceCalibrationParameterCreateSchema.safeParse({
+      ...base,
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 1,
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("accepts a payload with no grouping at all (legacy shape)", () => {
+    expect(deviceCalibrationParameterCreateSchema.safeParse(base).success).toBe(true);
+  });
+
+  it("rejects a key without a sequence", () => {
+    const parsed = deviceCalibrationParameterCreateSchema.safeParse({
+      ...base,
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: null,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects a sequence without a key", () => {
+    const parsed = deviceCalibrationParameterCreateSchema.safeParse({
+      ...base,
+      logicalTestKey: null,
+      logicalTestSequence: 2,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("coerces an empty key to null so a blank form field means standalone", () => {
+    const parsed = deviceCalibrationParameterCreateSchema.safeParse({
+      ...base,
+      logicalTestKey: "   ",
+      logicalTestSequence: "",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.logicalTestKey).toBeNull();
+      expect(parsed.data.logicalTestSequence).toBeNull();
+    }
+  });
+
+  it("rejects a sequence below 1", () => {
+    const parsed = deviceCalibrationParameterCreateSchema.safeParse({
+      ...base,
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 0,
+    });
+    expect(parsed.success).toBe(false);
+  });
+});
+
+describe("DeviceCalibrationParametersService — logical test grouping", () => {
+  it("persists the pair on create and leaves it NULL when not supplied", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const grouped = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Reproduksibilitas kV"),
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 1,
+    });
+    createdParameterIds.push(grouped.id);
+    const standalone = await service.create(
+      baseInput(deviceType.id, item.id, uom.id, "Kolimasi"),
+    );
+    createdParameterIds.push(standalone.id);
+
+    expect(grouped.logicalTestKey).toBe("dxray-repro");
+    expect(grouped.logicalTestSequence).toBe(1);
+    expect(standalone.logicalTestKey).toBeNull();
+    expect(standalone.logicalTestSequence).toBeNull();
+  });
+
+  it("rejects a half-declared pair on create", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    await expect(
+      service.create({
+        ...baseInput(deviceType.id, item.id, uom.id, "Half declared"),
+        logicalTestKey: "dxray-repro",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects two parameters claiming the same position in the same logical test", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const first = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Reproduksibilitas kV"),
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 1,
+    });
+    createdParameterIds.push(first.id);
+
+    await expect(
+      service.create({
+        ...baseInput(deviceType.id, item.id, uom.id, "Reproduksibilitas s"),
+        logicalTestKey: "dxray-repro",
+        logicalTestSequence: 1,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("allows the same logical test position under a different device type", async () => {
+    const typeA = await createDeviceType();
+    const typeB = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const a = await service.create({
+      ...baseInput(typeA.id, item.id, uom.id, "Reproduksibilitas kV"),
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 1,
+    });
+    createdParameterIds.push(a.id);
+    const b = await service.create({
+      ...baseInput(typeB.id, item.id, uom.id, "Reproduksibilitas kV"),
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 1,
+    });
+    createdParameterIds.push(b.id);
+
+    expect(b.logicalTestSequence).toBe(1);
+  });
+
+  it("clears the grouping on update when both halves are set to null", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Reproduksibilitas mGy"),
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 3,
+    });
+    createdParameterIds.push(created.id);
+
+    const cleared = await service.update(created.id, {
+      logicalTestKey: null,
+      logicalTestSequence: null,
+    });
+    expect(cleared.logicalTestKey).toBeNull();
+    expect(cleared.logicalTestSequence).toBeNull();
+  });
+
+  it("rejects an update that would leave only one half of the pair set", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Reproduksibilitas s"),
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 2,
+    });
+    createdParameterIds.push(created.id);
+
+    await expect(
+      service.update(created.id, { logicalTestSequence: null }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("does not carry the grouping through copy — the copied row lands standalone", async () => {
+    const source = await createDeviceType();
+    const target = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(source.id, item.id, uom.id, "Reproduksibilitas kV"),
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 1,
+    });
+    createdParameterIds.push(created.id);
+
+    const result = await service.copy({
+      sourceDeviceTypeId: source.id,
+      targetDeviceTypeId: target.id,
+      parameterIds: [created.id],
+    });
+    expect(result.created).toHaveLength(1);
+
+    const copied = await prisma.deviceCalibrationParameter.findUniqueOrThrow({
+      where: { id: result.created[0]!.id },
+    });
+    expect(copied.logicalTestKey).toBeNull();
+    expect(copied.logicalTestSequence).toBeNull();
+  });
+});
+
+
+// ── Phase 4B (Gap B) — derived / aggregate measurements, B1 minimum ─────────
+// entryStyle DERIVED + descriptive-only `derivation`. No formula engine, no
+// automatic calculation — a derived value is still an ordinary
+// DeviceCalibrationParameter / MeasurementResult, distinguished only by its
+// catalog entryStyle. `derivation` is validated purely as a shape (an object
+// with a single `description` string); its CONTENT is never interpreted.
+
+describe("deviceCalibrationParameterCreateSchema — entryStyle / derivation", () => {
+  const base = {
+    deviceTypeId: "dt-1",
+    capabilityItemId: "ci-1",
+    uomId: "uom-1",
+    name: "Selisih Suhu",
+  };
+
+  it("accepts entryStyle DIRECT_REPLICATES and DERIVED", () => {
+    expect(
+      deviceCalibrationParameterCreateSchema.safeParse({ ...base, entryStyle: "DIRECT_REPLICATES" })
+        .success,
+    ).toBe(true);
+    expect(
+      deviceCalibrationParameterCreateSchema.safeParse({ ...base, entryStyle: "DERIVED" }).success,
+    ).toBe(true);
+  });
+
+  it("omits entryStyle entirely (still valid, service defaults to DIRECT_REPLICATES)", () => {
+    expect(deviceCalibrationParameterCreateSchema.safeParse(base).success).toBe(true);
+  });
+
+  it("rejects LOGGER_SUMMARY (not settable through the API)", () => {
+    const parsed = deviceCalibrationParameterCreateSchema.safeParse({
+      ...base,
+      entryStyle: "LOGGER_SUMMARY",
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("accepts a derivation note shaped as an object with a description", () => {
+    const parsed = deviceCalibrationParameterCreateSchema.safeParse({
+      ...base,
+      entryStyle: "DERIVED",
+      derivation: { description: "Difference between S1 and S3" },
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.derivation).toEqual({ description: "Difference between S1 and S3" });
+    }
+  });
+
+  it("rejects a derivation with an unknown key (not a formula language)", () => {
+    const parsed = deviceCalibrationParameterCreateSchema.safeParse({
+      ...base,
+      entryStyle: "DERIVED",
+      derivation: { description: "x", formula: "S1 - S3" },
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects a derivation missing description", () => {
+    const parsed = deviceCalibrationParameterCreateSchema.safeParse({
+      ...base,
+      entryStyle: "DERIVED",
+      derivation: {},
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("coerces null/omitted derivation to null", () => {
+    const parsed = deviceCalibrationParameterCreateSchema.safeParse({
+      ...base,
+      derivation: null,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.derivation).toBeNull();
+  });
+});
+
+describe("DeviceCalibrationParametersService - entryStyle / derivation", () => {
+  it("defaults entryStyle to DIRECT_REPLICATES and derivation to null when omitted", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create(baseInput(deviceType.id, item.id, uom.id, "Suhu Chamber"));
+    createdParameterIds.push(created.id);
+
+    expect(created.entryStyle).toBe("DIRECT_REPLICATES");
+    expect(created.derivation).toBeNull();
+  });
+
+  it("persists entryStyle DERIVED with a derivation note", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Selisih Suhu"),
+      entryStyle: "DERIVED",
+      derivation: { description: "Difference between S1 and S3" },
+    });
+    createdParameterIds.push(created.id);
+
+    expect(created.entryStyle).toBe("DERIVED");
+    expect(created.derivation).toEqual({ description: "Difference between S1 and S3" });
+  });
+
+  it("allows DERIVED with no derivation note at all", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Rasio Pembesaran"),
+      entryStyle: "DERIVED",
+    });
+    createdParameterIds.push(created.id);
+
+    expect(created.entryStyle).toBe("DERIVED");
+    expect(created.derivation).toBeNull();
+  });
+
+  it("rejects a derivation note on a non-DERIVED (default) parameter", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    await expect(
+      service.create({
+        ...baseInput(deviceType.id, item.id, uom.id, "Suhu"),
+        derivation: { description: "should not be allowed here" },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects a derivation note explicitly paired with entryStyle DIRECT_REPLICATES", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    await expect(
+      service.create({
+        ...baseInput(deviceType.id, item.id, uom.id, "Suhu"),
+        entryStyle: "DIRECT_REPLICATES",
+        derivation: { description: "should not be allowed here" },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("flips an existing parameter from DIRECT_REPLICATES to DERIVED with a note", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create(
+      baseInput(deviceType.id, item.id, uom.id, "Selisih Waktu"),
+    );
+    createdParameterIds.push(created.id);
+
+    const updated = await service.update(created.id, {
+      entryStyle: "DERIVED",
+      derivation: { description: "Difference between two timestamps" },
+    });
+
+    expect(updated.entryStyle).toBe("DERIVED");
+    expect(updated.derivation).toEqual({ description: "Difference between two timestamps" });
+  });
+
+  it("clears the derivation note while staying DERIVED", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Rasio"),
+      entryStyle: "DERIVED",
+      derivation: { description: "initial note" },
+    });
+    createdParameterIds.push(created.id);
+
+    const updated = await service.update(created.id, { derivation: null });
+
+    expect(updated.entryStyle).toBe("DERIVED");
+    expect(updated.derivation).toBeNull();
+  });
+
+  it("rejects flipping back to DIRECT_REPLICATES while leaving a stale derivation note in place", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Selisih Tekanan"),
+      entryStyle: "DERIVED",
+      derivation: { description: "initial note" },
+    });
+    createdParameterIds.push(created.id);
+
+    await expect(
+      service.update(created.id, { entryStyle: "DIRECT_REPLICATES" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("allows flipping back to DIRECT_REPLICATES when the note is cleared in the same request", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Selisih Tekanan 2"),
+      entryStyle: "DERIVED",
+      derivation: { description: "initial note" },
+    });
+    createdParameterIds.push(created.id);
+
+    const updated = await service.update(created.id, {
+      entryStyle: "DIRECT_REPLICATES",
+      derivation: null,
+    });
+
+    expect(updated.entryStyle).toBe("DIRECT_REPLICATES");
+    expect(updated.derivation).toBeNull();
+  });
+
+  it("leaves entryStyle and derivation untouched when an unrelated field is updated", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Selisih Berat"),
+      entryStyle: "DERIVED",
+      derivation: { description: "kept as-is" },
+    });
+    createdParameterIds.push(created.id);
+
+    const updated = await service.update(created.id, { toleranceNote: "+/- 2" });
+
+    expect(updated.entryStyle).toBe("DERIVED");
+    expect(updated.derivation).toEqual({ description: "kept as-is" });
+    expect(updated.toleranceNote).toBe("+/- 2");
+  });
+});

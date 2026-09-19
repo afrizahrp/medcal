@@ -4,8 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { MasterCodeService, prisma } from "@medcal/db";
-import type { Prisma } from "@medcal/db";
+import { MasterCodeService, Prisma, prisma } from "@medcal/db";
 import {
   DEVICE_CALIBRATION_PARAMETER_SORTABLE_FIELDS,
   type DeviceCalibrationParameterCopyInput,
@@ -255,6 +254,75 @@ export class DeviceCalibrationParametersService {
   }
 
   /**
+   * Phase 4B (Gap B) — `derivation` is a descriptive note on what a DERIVED
+   * value is derived from; attaching it to a non-DERIVED parameter would be
+   * dead/misleading metadata. Mirrors `assertDecimalPlacesValidForValueType`
+   * (same "field X only makes sense for state Y" shape).
+   */
+  private assertDerivationValidForEntryStyle(
+    derivation: unknown,
+    entryStyle: string,
+  ): void {
+    if (derivation != null && entryStyle !== "DERIVED") {
+      throw new BadRequestException({
+        message: "derivation only applies to DERIVED-entry-style calibration parameters",
+        code: "INVALID_DERIVATION_FOR_ENTRY_STYLE",
+      });
+    }
+  }
+
+  /**
+   * Phase 4A (Gap A) — a parameter is either fully declared as one quantity of a
+   * logical test, or fully standalone. A half-declared pair would leave the
+   * presentation order undefined, so it is rejected here as well as by the DB
+   * CHECK constraint (the zod schema catches the single-request case; this
+   * catches a PATCH that supplies only one half of the pair).
+   */
+  private assertLogicalTestPair(
+    logicalTestKey: string | null | undefined,
+    logicalTestSequence: number | null | undefined,
+  ): void {
+    const hasKey = logicalTestKey != null;
+    const hasSequence = logicalTestSequence != null;
+    if (hasKey === hasSequence) return;
+    throw new BadRequestException({
+      message: "logicalTestKey and logicalTestSequence must be set together",
+      code: "INVALID_LOGICAL_TEST_GROUPING",
+    });
+  }
+
+  /**
+   * Two parameters of the same device type may not claim the same position in
+   * the same logical test. Enforced by a unique index too; checked here so the
+   * caller gets a typed conflict instead of a raw P2002.
+   */
+  private async assertUniqueLogicalTestSequence(
+    deviceTypeId: string,
+    logicalTestKey: string | null | undefined,
+    logicalTestSequence: number | null | undefined,
+    excludeId?: string,
+  ): Promise<void> {
+    if (logicalTestKey == null || logicalTestSequence == null) return;
+    const duplicate = await prisma.deviceCalibrationParameter.findFirst({
+      where: {
+        deviceTypeId,
+        logicalTestKey,
+        logicalTestSequence,
+        ...(excludeId ? { NOT: { id: excludeId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new ConflictException({
+        message:
+          "Another calibration parameter already occupies this position in this logical test",
+        code: "DUPLICATE_LOGICAL_TEST_SEQUENCE",
+        existingId: duplicate.id,
+      });
+    }
+  }
+
+  /**
    * `code` is now system-issued and globally unique, so the composite
    * (deviceTypeId, capabilityItemId, code) constraint can never collide. The
    * meaningful "no duplicate parameter" rule is preserved here on `name`.
@@ -352,7 +420,18 @@ export class DeviceCalibrationParametersService {
     this.assertToleranceBounds(input.toleranceMin, input.toleranceMax);
     // valueType is not settable via the API and defaults to NUMBER at the DB level.
     this.assertDecimalPlacesValidForValueType(input.decimalPlaces, "NUMBER");
+    this.assertLogicalTestPair(input.logicalTestKey, input.logicalTestSequence);
+    // entryStyle is not required in the payload and defaults to DIRECT_REPLICATES.
+    this.assertDerivationValidForEntryStyle(
+      input.derivation,
+      input.entryStyle ?? "DIRECT_REPLICATES",
+    );
     await this.assertUniqueName(input.deviceTypeId, input.capabilityItemId, input.name);
+    await this.assertUniqueLogicalTestSequence(
+      input.deviceTypeId,
+      input.logicalTestKey,
+      input.logicalTestSequence,
+    );
 
     // `code` is a system-issued, immutable business identifier (DCP-0001).
     return prisma.$transaction(async (tx) => {
@@ -374,6 +453,10 @@ export class DeviceCalibrationParametersService {
           toleranceMax: input.toleranceMax ?? null,
           toleranceNote: input.toleranceNote ?? null,
           decimalPlaces: input.decimalPlaces ?? null,
+          logicalTestKey: input.logicalTestKey ?? null,
+          logicalTestSequence: input.logicalTestSequence ?? null,
+          entryStyle: input.entryStyle ?? "DIRECT_REPLICATES",
+          derivation: input.derivation ?? undefined,
           sortOrder,
         },
         include: parameterInclude,
@@ -398,6 +481,13 @@ export class DeviceCalibrationParametersService {
    *   Pattern B/LOGGER_SUMMARY parameters with CalibrationTestPoint children)
    *   — `skippedUnsupportedEntryStyle`. Copying these silently would produce a
    *   parameter that looks like Pattern A but is missing its test points.
+   *
+   * Phase 4A: `logicalTestKey` / `logicalTestSequence` are deliberately NOT
+   * copied — a copy may carry only part of a logical test, and half a group has
+   * no defined presentation order. The copied row lands standalone (both NULL),
+   * exactly as every pre-Phase-4A row, and the grouping is re-declared on the
+   * target. Same reasoning as the Pattern B skip above: structure that cannot be
+   * carried in full is not carried at all.
    */
   async copy(input: DeviceCalibrationParameterCopyInput): Promise<DeviceCalibrationParameterCopyResult> {
     await this.assertDeviceTypeExists(input.sourceDeviceTypeId);
@@ -655,6 +745,33 @@ export class DeviceCalibrationParametersService {
       this.assertDecimalPlacesValidForValueType(input.decimalPlaces, existing.valueType);
     }
 
+    // Validate the MERGED row: a PATCH may supply only one half of the pair.
+    const nextLogicalTestKey =
+      input.logicalTestKey !== undefined ? input.logicalTestKey : existing.logicalTestKey;
+    const nextLogicalTestSequence =
+      input.logicalTestSequence !== undefined
+        ? input.logicalTestSequence
+        : existing.logicalTestSequence;
+    this.assertLogicalTestPair(nextLogicalTestKey, nextLogicalTestSequence);
+    if (
+      input.logicalTestKey !== undefined ||
+      input.logicalTestSequence !== undefined ||
+      nextDeviceTypeId !== existing.deviceTypeId
+    ) {
+      await this.assertUniqueLogicalTestSequence(
+        nextDeviceTypeId,
+        nextLogicalTestKey,
+        nextLogicalTestSequence,
+        id,
+      );
+    }
+
+    // Phase 4B (Gap B) — validate the MERGED row: a PATCH may change entryStyle
+    // without touching derivation, or vice versa.
+    const nextEntryStyle = input.entryStyle !== undefined ? input.entryStyle : existing.entryStyle;
+    const nextDerivation = input.derivation !== undefined ? input.derivation : existing.derivation;
+    this.assertDerivationValidForEntryStyle(nextDerivation, nextEntryStyle);
+
     const uniqueChanged =
       nextDeviceTypeId !== existing.deviceTypeId ||
       nextCapabilityItemId !== existing.capabilityItemId ||
@@ -681,6 +798,14 @@ export class DeviceCalibrationParametersService {
       ...(input.toleranceMax !== undefined ? { toleranceMax: input.toleranceMax } : {}),
       ...(input.toleranceNote !== undefined ? { toleranceNote: input.toleranceNote } : {}),
       ...(input.decimalPlaces !== undefined ? { decimalPlaces: input.decimalPlaces } : {}),
+      ...(input.logicalTestKey !== undefined ? { logicalTestKey: input.logicalTestKey } : {}),
+      ...(input.logicalTestSequence !== undefined
+        ? { logicalTestSequence: input.logicalTestSequence }
+        : {}),
+      ...(input.entryStyle !== undefined ? { entryStyle: input.entryStyle } : {}),
+      ...(input.derivation !== undefined
+        ? { derivation: input.derivation === null ? Prisma.DbNull : input.derivation }
+        : {}),
       ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
     };
 

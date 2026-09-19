@@ -21,6 +21,8 @@ function param(overrides: Partial<CapabilityParameterForLk> & Pick<CapabilityPar
     uomSymbol: "°C",
     capabilityId: "cap-1",
     capabilityName: "Lingkungan",
+    logicalTestKey: null,
+    logicalTestSequence: null,
     liveTestPoints: [],
     ...overrides,
   };
@@ -234,5 +236,138 @@ describe("mapCapabilityMeasurementRows", () => {
     });
     expect(rows.map((r) => r.row.label)).toEqual(["Pressure — Low", "Pressure — High"]);
     expect(rows[1]?.row.value).toBe("250");
+  });
+});
+
+/**
+ * Phase 4A (Gap A) — several independently measured quantities of one logical
+ * test are printed contiguously and in declared order. Row shape, values and
+ * tolerance text are unchanged; only the ORDER of the emitted rows is affected.
+ */
+describe("mapCapabilityMeasurementRows — logical test grouping", () => {
+  const dxray = [
+    param({
+      id: "p-mgy",
+      name: "Reproduksibilitas mGy",
+      uomSymbol: "mGy",
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 3,
+    }),
+    param({
+      id: "p-kv",
+      name: "Reproduksibilitas kV",
+      uomSymbol: "kV",
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 1,
+    }),
+    param({
+      id: "p-s",
+      name: "Reproduksibilitas s",
+      uomSymbol: "s",
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 2,
+    }),
+  ];
+
+  it("prints the quantities of one logical test in declared order", () => {
+    const rows = mapCapabilityMeasurementRows({
+      parameters: dxray,
+      snapshotRows: null,
+      results: [
+        { deviceCalibrationParameterId: "p-kv", calibrationTestPointId: null, formattedValue: "70" },
+        { deviceCalibrationParameterId: "p-s", calibrationTestPointId: null, formattedValue: "0.2" },
+        {
+          deviceCalibrationParameterId: "p-mgy",
+          calibrationTestPointId: null,
+          formattedValue: "1.8",
+        },
+      ],
+      formatToleranceText,
+    });
+    expect(rows.map((r) => r.row.label)).toEqual([
+      "Reproduksibilitas kV (kV)",
+      "Reproduksibilitas s (s)",
+      "Reproduksibilitas mGy (mGy)",
+    ]);
+    expect(rows.map((r) => r.row.value)).toEqual(["70", "0.2", "1.8"]);
+  });
+
+  it("keeps the group contiguous without moving the parameters around it", () => {
+    const rows = mapCapabilityMeasurementRows({
+      parameters: [
+        param({ id: "p-first", name: "Kolimasi" }),
+        dxray[1]!,
+        param({ id: "p-mid", name: "HVL" }),
+        dxray[0]!,
+        dxray[2]!,
+        param({ id: "p-last", name: "Akurasi kV" }),
+      ],
+      snapshotRows: null,
+      results: [],
+      formatToleranceText,
+    });
+    expect(rows.map((r) => r.row.label)).toEqual([
+      "Kolimasi (°C)",
+      "Reproduksibilitas kV (kV)",
+      "Reproduksibilitas s (s)",
+      "Reproduksibilitas mGy (mGy)",
+      "HVL (°C)",
+      "Akurasi kV (°C)",
+    ]);
+  });
+
+  it("leaves an ungrouped catalog in exactly its previous order", () => {
+    const parameters = [
+      param({ id: "p-1", name: "Suhu" }),
+      param({ id: "p-2", name: "RH" }),
+      param({ id: "p-3", name: "Tegangan" }),
+    ];
+    const rows = mapCapabilityMeasurementRows({
+      parameters,
+      snapshotRows: null,
+      results: [],
+      formatToleranceText,
+    });
+    expect(rows.map((r) => r.row.label)).toEqual(["Suhu (°C)", "RH (°C)", "Tegangan (°C)"]);
+  });
+
+  it("still expands a grouped quantity's own named test points (Pattern B)", () => {
+    const rows = mapCapabilityMeasurementRows({
+      parameters: [
+        param({
+          id: "p-a",
+          name: "Stage",
+          logicalTestKey: "micro-4x",
+          logicalTestSequence: 2,
+          liveTestPoints: [
+            {
+              id: "tp-1",
+              sequence: 1,
+              settingLabel: "10 µm",
+              toleranceMin: null,
+              toleranceMax: null,
+              toleranceNote: null,
+            },
+          ],
+        }),
+        param({ id: "p-b", name: "Okuler", logicalTestKey: "micro-4x", logicalTestSequence: 1 }),
+      ],
+      snapshotRows: null,
+      results: [],
+      formatToleranceText,
+    });
+    expect(rows.map((r) => r.row.label)).toEqual(["Okuler (°C)", "Stage — 10 µm"]);
+  });
+
+  it("does not let grouping pull a historical NULL-test-point result into another row", () => {
+    const rows = mapCapabilityMeasurementRows({
+      parameters: [dxray[1]!, dxray[2]!],
+      snapshotRows: null,
+      results: [
+        { deviceCalibrationParameterId: "p-kv", calibrationTestPointId: null, formattedValue: "70" },
+      ],
+      formatToleranceText,
+    });
+    expect(rows.map((r) => r.row.value)).toEqual(["70", "—"]);
   });
 });

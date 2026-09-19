@@ -1582,6 +1582,89 @@ const optionalDecimalPlaces = z.preprocess((value) => {
   return value;
 }, z.number().int().min(0).max(10).nullable().optional());
 
+/**
+ * Phase 4A (Gap A) — catalog grouping for a logical test with several
+ * independently measured quantities (Dental X-Ray kV + s + mGy). Presentation
+ * metadata on the catalog row; never part of measurement identity.
+ * `""`/`null` coerce to `null` = standalone parameter (the legacy behaviour).
+ */
+const optionalLogicalTestKey = z.preprocess((value) => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+  }
+  return value;
+}, z.string().min(1).max(100).nullable().optional());
+
+const optionalLogicalTestSequence = z.preprocess((value) => {
+  if (value === undefined) return undefined;
+  if (value === "" || value === null) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return null;
+    return Number(trimmed);
+  }
+  return value;
+}, z.number().int().min(1).max(100).nullable().optional());
+
+/**
+ * A parameter is either fully grouped or fully standalone — a half-declared pair
+ * would leave the presentation order undefined. Mirrors the DB CHECK constraint
+ * so the API rejects it with a field error instead of a 500.
+ *
+ * `undefined` means "not supplied" on a PATCH, so the pairing is only enforced
+ * across the values that will actually be written; the service re-checks the
+ * merged row.
+ */
+function refineLogicalTestPair(
+  data: { logicalTestKey?: string | null; logicalTestSequence?: number | null },
+  ctx: z.RefinementCtx,
+) {
+  const key = data.logicalTestKey;
+  const sequence = data.logicalTestSequence;
+  if (key === undefined && sequence === undefined) return;
+  const hasKey = key !== undefined && key !== null;
+  const hasSequence = sequence !== undefined && sequence !== null;
+  if (key !== undefined && sequence !== undefined && hasKey !== hasSequence) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "logicalTestKey and logicalTestSequence must be set together",
+      path: [hasKey ? "logicalTestSequence" : "logicalTestKey"],
+    });
+  }
+}
+
+/**
+ * Phase 4B (Gap B) — the subset of `CalibrationParameterEntryStyle` settable
+ * through the Portal/API. `LOGGER_SUMMARY` parameters have `CalibrationTestPoint`
+ * children with no create endpoint yet (same reason `copy()` skips them — see
+ * device-calibration-parameters.service.ts) and stay seed/script-only, exactly
+ * as before this phase.
+ */
+export const DEVICE_CALIBRATION_PARAMETER_ENTRY_STYLE_VALUES = [
+  "DIRECT_REPLICATES",
+  "DERIVED",
+] as const;
+
+/**
+ * Phase 4B (Gap B) — descriptive-only note on what a DERIVED parameter's value
+ * is derived from, e.g. `{ description: "Difference between S1 and S3" }`.
+ * Never parsed as a formula, never evaluated — a single free-text field is the
+ * entire shape, deliberately not a formula language. `.strict()` rejects any
+ * other key so no formula-language field can be smuggled in through the API.
+ * `""` / `null` coerce to `null` (no derivation note).
+ */
+const optionalDerivation = z.preprocess(
+  (value) => (value === undefined ? undefined : (value ?? null)),
+  z
+    .object({ description: z.string().trim().min(1).max(1000) })
+    .strict()
+    .nullable()
+    .optional(),
+);
+
 // `code` is not accepted — system-issued, immutable business identifier (DCP-0001).
 export const deviceCalibrationParameterCreateSchema = z
   .object({
@@ -1594,8 +1677,14 @@ export const deviceCalibrationParameterCreateSchema = z
     toleranceMax: optionalFiniteNumber,
     toleranceNote: z.string().max(500).nullable().optional(),
     decimalPlaces: optionalDecimalPlaces,
+    logicalTestKey: optionalLogicalTestKey,
+    logicalTestSequence: optionalLogicalTestSequence,
+    /** Phase 4B (Gap B). Omitted = DIRECT_REPLICATES, the existing default. */
+    entryStyle: z.enum(DEVICE_CALIBRATION_PARAMETER_ENTRY_STYLE_VALUES).optional(),
+    derivation: optionalDerivation,
   })
-  .superRefine(refineToleranceBounds);
+  .superRefine(refineToleranceBounds)
+  .superRefine(refineLogicalTestPair);
 
 export type DeviceCalibrationParameterCreateInput = z.infer<
   typeof deviceCalibrationParameterCreateSchema
@@ -1632,9 +1721,15 @@ export const deviceCalibrationParameterUpdateSchema = z
     toleranceMax: optionalFiniteNumber,
     toleranceNote: z.string().max(500).nullable().optional(),
     decimalPlaces: optionalDecimalPlaces,
+    logicalTestKey: optionalLogicalTestKey,
+    logicalTestSequence: optionalLogicalTestSequence,
+    /** Phase 4B (Gap B). Omitted = leave the current entryStyle unchanged. */
+    entryStyle: z.enum(DEVICE_CALIBRATION_PARAMETER_ENTRY_STYLE_VALUES).optional(),
+    derivation: optionalDerivation,
     isActive: z.boolean().optional(),
   })
-  .superRefine(refineToleranceBounds);
+  .superRefine(refineToleranceBounds)
+  .superRefine(refineLogicalTestPair);
 
 export type DeviceCalibrationParameterUpdateInput = z.infer<
   typeof deviceCalibrationParameterUpdateSchema

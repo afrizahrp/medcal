@@ -47,6 +47,10 @@ const emptyForm: DeviceCalibrationParameterFormValue = {
   toleranceMax: "",
   toleranceNote: "",
   decimalPlaces: "",
+  logicalTestKey: "",
+  logicalTestSequence: "",
+  entryStyle: "DIRECT_REPLICATES",
+  derivation: "",
   description: "",
 };
 
@@ -64,6 +68,13 @@ function formFromRow(row: DeviceCalibrationParameterRow): DeviceCalibrationParam
       row.toleranceMax == null || row.toleranceMax === "" ? "" : String(Number(row.toleranceMax)),
     toleranceNote: row.toleranceNote ?? "",
     decimalPlaces: row.decimalPlaces == null ? "" : String(row.decimalPlaces),
+    logicalTestKey: row.logicalTestKey ?? "",
+    logicalTestSequence: row.logicalTestSequence == null ? "" : String(row.logicalTestSequence),
+    // LOGGER_SUMMARY has no representation in this two-value control; it falls
+    // back to the DIRECT_REPLICATES display and the form is rendered locked
+    // (entryStyleLocked below), so this fallback is never actually submitted.
+    entryStyle: row.entryStyle === "DERIVED" ? "DERIVED" : "DIRECT_REPLICATES",
+    derivation: row.derivation?.description ?? "",
     description: row.description ?? "",
   };
 }
@@ -207,7 +218,10 @@ export default function DeviceCalibrationParameterDetailPage() {
     try {
       await updateMutation.mutateAsync({
         id: row!.id,
-        input: buildDeviceCalibrationParameterUpdatePayload({ ...form, isActive }),
+        input: buildDeviceCalibrationParameterUpdatePayload(
+          { ...form, isActive },
+          row!.entryStyle === "LOGGER_SUMMARY",
+        ),
       });
       setSuccess("Perubahan tersimpan.");
       setEditing(false);
@@ -256,6 +270,7 @@ export default function DeviceCalibrationParameterDetailPage() {
               onChange={setField}
               mode="edit"
               valueType={row.valueType}
+              entryStyleLocked={row.entryStyle === "LOGGER_SUMMARY"}
               deviceTypes={typesQuery.data?.data ?? []}
               deviceTypesLoading={typesQuery.isLoading}
               capabilities={capabilitiesQuery.data?.data ?? []}
@@ -330,6 +345,29 @@ export default function DeviceCalibrationParameterDetailPage() {
                       ? "Belum diatur"
                       : `${row.decimalPlaces} digit`}
                 </span>
+              </DetailField>
+
+              <DetailField label="Uji gabungan">
+                <span className="font-medium">
+                  {row.logicalTestKey == null || row.logicalTestSequence == null
+                    ? "— (parameter berdiri sendiri)"
+                    : `${row.logicalTestKey} — urutan ${row.logicalTestSequence}`}
+                </span>
+              </DetailField>
+
+              <DetailField label="Cara pengisian">
+                <span className="font-medium">
+                  {row.entryStyle === "DERIVED"
+                    ? "Nilai turunan (dihitung manual oleh teknisi)"
+                    : row.entryStyle === "LOGGER_SUMMARY"
+                      ? "Logger summary"
+                      : "Terukur langsung"}
+                </span>
+                {row.entryStyle === "DERIVED" && row.derivation?.description ? (
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Diturunkan dari: {row.derivation.description}
+                  </p>
+                ) : null}
               </DetailField>
 
               <DetailField label="Deskripsi">

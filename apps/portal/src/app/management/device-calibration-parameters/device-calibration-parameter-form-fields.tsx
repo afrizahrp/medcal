@@ -30,6 +30,22 @@ export interface DeviceCalibrationParameterFormValue {
   toleranceMax: string;
   toleranceNote: string;
   decimalPlaces: string;
+  /**
+   * Phase 4A (Gap A) — catalog grouping for a logical test that yields several
+   * independently measured quantities (Dental X-Ray kV + s + mGy). Empty = a
+   * standalone parameter, which is how every existing parameter behaves.
+   */
+  logicalTestKey: string;
+  logicalTestSequence: string;
+  /**
+   * Phase 4B (Gap B) — "DIRECT_REPLICATES" (default) or "DERIVED". DERIVED
+   * means the technician computes and types in the value by hand (e.g. an
+   * Autoclave ΔT); Medcal never calculates it. `derivation` is a free-text note
+   * on what it's derived from — documentation only, ignored unless entryStyle
+   * is DERIVED.
+   */
+  entryStyle: "DIRECT_REPLICATES" | "DERIVED";
+  derivation: string;
   description: string;
 }
 
@@ -55,6 +71,15 @@ export interface DeviceCalibrationParameterFormFieldsProps {
   mode?: "create" | "edit";
   /** Parameter value type — decimalPlaces is only shown for NUMBER. Defaults to NUMBER. */
   valueType?: "NUMBER" | "RATIO" | "TEXT" | "BOOLEAN";
+  /**
+   * Phase 4B (Gap B). Set when editing a row whose CURRENT entryStyle is
+   * LOGGER_SUMMARY — a shape the Portal cannot create or safely reassign (it
+   * has CalibrationTestPoint children with no create endpoint yet, same as the
+   * `copy()` skip). The Entry Style control renders read-only, and the caller
+   * must leave `entryStyle`/`derivation` out of the update payload so an
+   * unrelated edit (e.g. tolerance) can never silently downgrade it.
+   */
+  entryStyleLocked?: boolean;
 }
 
 function ComboboxField({
@@ -158,6 +183,7 @@ export function DeviceCalibrationParameterFormFields({
   uomsLoading,
   mode = "create",
   valueType = "NUMBER",
+  entryStyleLocked = false,
 }: DeviceCalibrationParameterFormFieldsProps) {
   const [deviceTypeOpen, setDeviceTypeOpen] = useState(false);
   const [capabilityOpen, setCapabilityOpen] = useState(false);
@@ -390,6 +416,96 @@ export function DeviceCalibrationParameterFormFields({
           </div>
         ) : null}
 
+        <div className={gridClass}>
+          <div>
+            <label htmlFor="logicalTestKey" className="block text-sm font-medium text-slate-700">
+              Kunci uji gabungan
+            </label>
+            <Input
+              id="logicalTestKey"
+              value={value.logicalTestKey}
+              onChange={(e) => onChange("logicalTestKey", e.target.value)}
+              className={fieldClass}
+              placeholder="mis. DXRAY_REPRODUCIBILITY"
+              maxLength={100}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Isi hanya jika parameter ini salah satu besaran dari satu uji yang sama (mis. kV, s,
+              dan mGy dari satu eksposur). Parameter dengan kunci sama dicetak berurutan di LK.
+              Kosongkan untuk parameter berdiri sendiri.
+            </p>
+          </div>
+          <div>
+            <label
+              htmlFor="logicalTestSequence"
+              className="block text-sm font-medium text-slate-700"
+            >
+              Urutan dalam uji gabungan
+            </label>
+            <Input
+              id="logicalTestSequence"
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={value.logicalTestSequence}
+              onChange={(e) => onChange("logicalTestSequence", e.target.value)}
+              className={fieldClass}
+              placeholder="1–100"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Wajib diisi bersama kunci di samping. Menentukan urutan kolom pada baris LK.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="entryStyle" className="block text-sm font-medium text-slate-700">
+            Cara pengisian
+          </label>
+          {entryStyleLocked ? (
+            <p className={`${fieldClass} rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600`}>
+              Logger summary (grid dengan lampiran) — tidak dapat diubah dari sini.
+            </p>
+          ) : (
+            <select
+              id="entryStyle"
+              value={value.entryStyle}
+              onChange={(e) =>
+                onChange("entryStyle", e.target.value as DeviceCalibrationParameterFormValue["entryStyle"])
+              }
+              className={`${selectClassName} ${fieldClass}`}
+            >
+              <option value="DIRECT_REPLICATES">Terukur langsung (default)</option>
+              <option value="DERIVED">Nilai turunan (dihitung manual oleh teknisi)</option>
+            </select>
+          )}
+          <p className="mt-1 text-xs text-slate-500">
+            &quot;Nilai turunan&quot; berarti teknisi menghitung dan mengetik hasilnya sendiri (mis.
+            selisih ΔT pada Autoclave). Medcal tidak pernah menghitung nilai ini secara otomatis.
+          </p>
+        </div>
+
+        {!entryStyleLocked && value.entryStyle === "DERIVED" ? (
+          <div>
+            <label htmlFor="derivation" className="block text-sm font-medium text-slate-700">
+              Diturunkan dari (catatan)
+            </label>
+            <Input
+              id="derivation"
+              value={value.derivation}
+              onChange={(e) => onChange("derivation", e.target.value)}
+              className={fieldClass}
+              placeholder="mis. Selisih antara S1 dan S3"
+              maxLength={1000}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Catatan dokumentasi saja — bukan rumus, dan tidak dihitung oleh sistem. Kosongkan jika
+              tidak perlu dijelaskan.
+            </p>
+          </div>
+        ) : null}
+
         <div>
           <label htmlFor="description" className="block text-sm font-medium text-slate-700">
             Deskripsi
@@ -426,6 +542,23 @@ export function validateCalibrationToleranceForm(
       return "Decimal places harus bilangan bulat 0–10.";
     }
   }
+  const keyRaw = form.logicalTestKey.trim();
+  const seqRaw = form.logicalTestSequence.trim();
+  if (keyRaw !== "" && seqRaw === "") {
+    return "Urutan dalam uji gabungan wajib diisi jika kunci uji gabungan diisi.";
+  }
+  if (seqRaw !== "" && keyRaw === "") {
+    return "Kunci uji gabungan wajib diisi jika urutan diisi.";
+  }
+  if (seqRaw !== "") {
+    const seq = Number(seqRaw);
+    if (!Number.isInteger(seq) || seq < 1 || seq > 100) {
+      return "Urutan dalam uji gabungan harus bilangan bulat 1–100.";
+    }
+  }
+  if (form.entryStyle !== "DERIVED" && form.derivation.trim() !== "") {
+    return 'Catatan "diturunkan dari" hanya berlaku untuk cara pengisian "Nilai turunan".';
+  }
   return null;
 }
 
@@ -437,6 +570,9 @@ export function buildDeviceCalibrationParameterCreatePayload(
   const minRaw = form.toleranceMin.trim();
   const maxRaw = form.toleranceMax.trim();
   const dpRaw = form.decimalPlaces.trim();
+  const keyRaw = form.logicalTestKey.trim();
+  const seqRaw = form.logicalTestSequence.trim();
+  const derivationRaw = form.derivation.trim();
   return {
     deviceTypeId: form.deviceTypeId,
     capabilityItemId: form.capabilityItemId,
@@ -447,15 +583,32 @@ export function buildDeviceCalibrationParameterCreatePayload(
     ...(maxRaw !== "" ? { toleranceMax: Number(maxRaw) } : {}),
     ...(note ? { toleranceNote: note } : {}),
     ...(dpRaw !== "" ? { decimalPlaces: Number(dpRaw) } : {}),
+    ...(keyRaw !== "" ? { logicalTestKey: keyRaw } : {}),
+    ...(seqRaw !== "" ? { logicalTestSequence: Number(seqRaw) } : {}),
+    entryStyle: form.entryStyle,
+    ...(form.entryStyle === "DERIVED" && derivationRaw !== ""
+      ? { derivation: { description: derivationRaw } }
+      : {}),
   };
 }
 
 export function buildDeviceCalibrationParameterUpdatePayload(
   form: DeviceCalibrationParameterFormValue & { isActive?: boolean },
+  /**
+   * Phase 4B (Gap B). Pass `true` when the row being edited is currently
+   * LOGGER_SUMMARY — `entryStyle`/`derivation` are then left out of the
+   * payload entirely, so an unrelated edit (tolerance, description, …) can
+   * never silently downgrade it to DIRECT_REPLICATES. See
+   * `DeviceCalibrationParameterFormFieldsProps.entryStyleLocked`.
+   */
+  entryStyleLocked = false,
 ) {
   const minRaw = form.toleranceMin.trim();
   const maxRaw = form.toleranceMax.trim();
   const dpRaw = form.decimalPlaces.trim();
+  const keyRaw = form.logicalTestKey.trim();
+  const seqRaw = form.logicalTestSequence.trim();
+  const derivationRaw = form.derivation.trim();
   return {
     deviceTypeId: form.deviceTypeId,
     capabilityItemId: form.capabilityItemId,
@@ -466,6 +619,17 @@ export function buildDeviceCalibrationParameterUpdatePayload(
     toleranceMax: maxRaw === "" ? null : Number(maxRaw),
     toleranceNote: form.toleranceNote.trim() ? form.toleranceNote.trim() : null,
     decimalPlaces: dpRaw === "" ? null : Number(dpRaw),
+    logicalTestKey: keyRaw === "" ? null : keyRaw,
+    logicalTestSequence: seqRaw === "" ? null : Number(seqRaw),
+    ...(entryStyleLocked
+      ? {}
+      : {
+          entryStyle: form.entryStyle,
+          derivation:
+            form.entryStyle === "DERIVED" && derivationRaw !== ""
+              ? { description: derivationRaw }
+              : null,
+        }),
     ...(form.isActive !== undefined ? { isActive: form.isActive } : {}),
   };
 }
@@ -475,6 +639,15 @@ export function formatDeviceCalibrationParameterApiError(error: unknown): string
     const code = error.data?.code;
     if (code === "DUPLICATE_DEVICE_CALIBRATION_PARAMETER_CODE") {
       return "Calibration Parameter dengan kode ini sudah ada pada Device Name dan Capability Item yang sama.";
+    }
+    if (code === "DUPLICATE_LOGICAL_TEST_SEQUENCE") {
+      return "Urutan ini sudah dipakai parameter lain pada uji gabungan yang sama.";
+    }
+    if (code === "INVALID_LOGICAL_TEST_GROUPING") {
+      return "Kunci uji gabungan dan urutannya harus diisi bersama-sama.";
+    }
+    if (code === "INVALID_DERIVATION_FOR_ENTRY_STYLE") {
+      return 'Catatan "diturunkan dari" hanya berlaku untuk cara pengisian "Nilai turunan".';
     }
     if (code === "DEVICE_CALIBRATION_PARAMETER_NOT_FOUND") {
       return "Calibration Parameter tidak ditemukan.";

@@ -408,9 +408,14 @@ enum CalibrationValueType {
 /// stay DIRECT_REPLICATES here and are excluded from Stage A by having
 /// CalibrationTestPoint children. LOGGER_SUMMARY is the Pattern D fridge /
 /// freezer / oven / sterilizer uniformity case (min/max + attachment; Stage C).
+/// DERIVED (Phase 4B / Gap B) is a value the technician computes by hand from
+/// other readings on the same worksheet (Autoclave ΔT, a magnification ratio)
+/// and types in like any other reading — see `derivation` below. No formula is
+/// ever executed by Medcal for this entry style.
 enum CalibrationParameterEntryStyle {
   DIRECT_REPLICATES
   LOGGER_SUMMARY
+  DERIVED
 }
 
 /// Ramp facet for Pattern D paired up/down sweeps (Suction Pump vacuum-gauge
@@ -544,43 +549,43 @@ model User {
   memberships                           UserMembership[]
   customerLinks                         CustomerUserLink[]
   fcmTokens                             FCMToken[]
-  assignedLeads                         Lead[]                       @relation("LeadAssignee")
-  confirmedMatches                      ContactMessage[]             @relation("MatchConfirmer")
+  assignedLeads                         Lead[]                          @relation("LeadAssignee")
+  confirmedMatches                      ContactMessage[]                @relation("MatchConfirmer")
   workOrderAssignments                  WorkOrderAssignment[]
-  qualityReviews                        QualityReview[]              @relation("Reviewer")
+  qualityReviews                        QualityReview[]                 @relation("Reviewer")
   sessions                              Session[]
   accounts                              Account[]
-  emailWhitelistCreated                 EmailWhitelist[]             @relation("EmailWhitelistCreator")
-  emailWhitelistRevoked                 EmailWhitelist[]             @relation("EmailWhitelistRevoker")
-  menusCreated                          Menu[]                       @relation("MenuCreatedBy")
-  menusUpdated                          Menu[]                       @relation("MenuUpdatedBy")
-  sentEmails                            Email[]                      @relation("EmailSender")
-  rolePermissionsCreated                RolePermission[]             @relation("RolePermissionCreatedBy")
-  rolePermissionsUpdated                RolePermission[]             @relation("RolePermissionUpdatedBy")
-  uploadedFiles                         FileObject[]                 @relation("FileUploadedBy")
-  equipmentCalibrationsCreated          EquipmentCalibrationRecord[] @relation("EquipmentCalibrationCreatedBy")
-  equipmentCalibrationsAccepted         EquipmentCalibrationRecord[] @relation("EquipmentCalibrationAcceptedBy")
-  calibrationJobsAkdAklApproved         CalibrationJob[]             @relation("CalibrationJobAkdAklApprover")
-  identityCorrectionsSubmitted          IdentityCorrection[]         @relation("IdentityCorrectionSubmitter")
-  identityCorrectionsDecided            IdentityCorrection[]         @relation("IdentityCorrectionDecider")
-  jobReferenceEquipmentUsagesOverridden JobReferenceEquipmentUsed[]  @relation("JobReferenceEquipmentOverrider")
+  emailWhitelistCreated                 EmailWhitelist[]                @relation("EmailWhitelistCreator")
+  emailWhitelistRevoked                 EmailWhitelist[]                @relation("EmailWhitelistRevoker")
+  menusCreated                          Menu[]                          @relation("MenuCreatedBy")
+  menusUpdated                          Menu[]                          @relation("MenuUpdatedBy")
+  sentEmails                            Email[]                         @relation("EmailSender")
+  rolePermissionsCreated                RolePermission[]                @relation("RolePermissionCreatedBy")
+  rolePermissionsUpdated                RolePermission[]                @relation("RolePermissionUpdatedBy")
+  uploadedFiles                         FileObject[]                    @relation("FileUploadedBy")
+  equipmentCalibrationsCreated          EquipmentCalibrationRecord[]    @relation("EquipmentCalibrationCreatedBy")
+  equipmentCalibrationsAccepted         EquipmentCalibrationRecord[]    @relation("EquipmentCalibrationAcceptedBy")
+  calibrationJobsAkdAklApproved         CalibrationJob[]                @relation("CalibrationJobAkdAklApprover")
+  identityCorrectionsSubmitted          IdentityCorrection[]            @relation("IdentityCorrectionSubmitter")
+  identityCorrectionsDecided            IdentityCorrection[]            @relation("IdentityCorrectionDecider")
+  jobReferenceEquipmentUsagesOverridden JobReferenceEquipmentUsed[]     @relation("JobReferenceEquipmentOverrider")
   referenceEquipmentApprovalsSubmitted  JobReferenceEquipmentApproval[] @relation("JobReferenceEquipmentApprovalSubmitter")
   referenceEquipmentApprovalsDecided    JobReferenceEquipmentApproval[] @relation("JobReferenceEquipmentApprovalDecider")
-  measurementResultsRecorded            MeasurementResult[]          @relation("MeasurementResultRecordedBy")
-  physicalCheckResultsRecorded          PhysicalCheckResult[]        @relation("PhysicalCheckResultRecordedBy")
-  workOrdersRequestReviewCompleted      WorkOrder[]                  @relation("WorkOrderRequestReviewCompletedBy")
-  kontrolAlatsCreated                   KontrolAlat[]                @relation("KontrolAlatCreatedBy")
-  kontrolAlatSignatures                 KontrolAlatSignature[]       @relation("KontrolAlatSigner")
-  calibrationRequestsCreated            CalibrationRequest[]         @relation("CalibrationRequestCreatedBy")
-  calibrationRequestsUpdated            CalibrationRequest[]         @relation("CalibrationRequestUpdatedBy")
-  certificatesCreated                   Certificate[]                @relation("CertificateCreatedBy")
-  certificatesUpdated                   Certificate[]                @relation("CertificateUpdatedBy")
-  invoicesCreated                       Invoice[]                    @relation("InvoiceCreatedBy")
-  invoicesUpdated                       Invoice[]                    @relation("InvoiceUpdatedBy")
-  paymentsCreated                       Payment[]                    @relation("PaymentCreatedBy")
-  paymentsUpdated                       Payment[]                    @relation("PaymentUpdatedBy")
-  quotationsApproved                    Quotation[]                  @relation("QuotationApprovedBy")
-  purchaseOrdersConfirmed               PurchaseOrder[]              @relation("PurchaseOrderConfirmedBy")
+  measurementResultsRecorded            MeasurementResult[]             @relation("MeasurementResultRecordedBy")
+  physicalCheckResultsRecorded          PhysicalCheckResult[]           @relation("PhysicalCheckResultRecordedBy")
+  workOrdersRequestReviewCompleted      WorkOrder[]                     @relation("WorkOrderRequestReviewCompletedBy")
+  kontrolAlatsCreated                   KontrolAlat[]                   @relation("KontrolAlatCreatedBy")
+  kontrolAlatSignatures                 KontrolAlatSignature[]          @relation("KontrolAlatSigner")
+  calibrationRequestsCreated            CalibrationRequest[]            @relation("CalibrationRequestCreatedBy")
+  calibrationRequestsUpdated            CalibrationRequest[]            @relation("CalibrationRequestUpdatedBy")
+  certificatesCreated                   Certificate[]                   @relation("CertificateCreatedBy")
+  certificatesUpdated                   Certificate[]                   @relation("CertificateUpdatedBy")
+  invoicesCreated                       Invoice[]                       @relation("InvoiceCreatedBy")
+  invoicesUpdated                       Invoice[]                       @relation("InvoiceUpdatedBy")
+  paymentsCreated                       Payment[]                       @relation("PaymentCreatedBy")
+  paymentsUpdated                       Payment[]                       @relation("PaymentUpdatedBy")
+  quotationsApproved                    Quotation[]                     @relation("QuotationApprovedBy")
+  purchaseOrdersConfirmed               PurchaseOrder[]                 @relation("PurchaseOrderConfirmedBy")
   auditLogs                             AuditLog[]
   lkDownloadAuthorizations              LkDownloadAuthorization[]
 }
@@ -1206,9 +1211,9 @@ model Equipment {
   company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   equipmentType EquipmentType @relation(fields: [equipmentTypeId], references: [id])
 
-  calibrationRecords  EquipmentCalibrationRecord[]
-  workOrderSelections WorkOrderEquipment[]
-  jobReferenceUsages  JobReferenceEquipmentUsed[]
+  calibrationRecords              EquipmentCalibrationRecord[]
+  workOrderSelections             WorkOrderEquipment[]
+  jobReferenceUsages              JobReferenceEquipmentUsed[]
   referenceEquipmentApprovalItems JobReferenceEquipmentApprovalItem[]
 
   @@unique([companyId, code])
@@ -1261,7 +1266,7 @@ model EquipmentCalibrationRecord {
   acceptedBy User?     @relation("EquipmentCalibrationAcceptedBy", fields: [acceptedByUserId], references: [id])
   createdBy  User?     @relation("EquipmentCalibrationCreatedBy", fields: [createdByUserId], references: [id])
 
-  jobReferenceUsages JobReferenceEquipmentUsed[]
+  jobReferenceUsages              JobReferenceEquipmentUsed[]
   referenceEquipmentApprovalItems JobReferenceEquipmentApprovalItem[]
 
   @@index([equipmentId, calibrationDate])
@@ -1370,37 +1375,67 @@ model DeviceCapabilityItem {
 // toleranceNote keeps the verbatim LK wording. Unique per
 // (deviceTypeId, capabilityItemId, code).
 model DeviceCalibrationParameter {
-  id               String                         @id @default(cuid())
-  deviceTypeId     String
-  capabilityItemId String
-  code             String
-  name             String
-  description      String?
-  valueType        CalibrationValueType           @default(NUMBER)
-  uomId            String?
-  toleranceMin     Decimal?                       @db.Decimal(18, 4)
-  toleranceMax     Decimal?                       @db.Decimal(18, 4)
-  toleranceNote    String?
+  id                  String                         @id @default(cuid())
+  deviceTypeId        String
+  capabilityItemId    String
+  code                String
+  name                String
+  description         String?
+  valueType           CalibrationValueType           @default(NUMBER)
+  uomId               String?
+  toleranceMin        Decimal?                       @db.Decimal(18, 4)
+  toleranceMax        Decimal?                       @db.Decimal(18, 4)
+  toleranceNote       String?
   // Digits after the decimal point required for this parameter's measured
   // calibration result. Only meaningful for valueType = NUMBER; NULL for
   // RATIO/TEXT/BOOLEAN. Existing NUMBER rows were backfilled with a uniform
   // safe default of 0 (accurate per-parameter values are a separate follow-up).
   // A CHECK constraint bounds it to 0..10 (see migrations).
-  decimalPlaces    Int?
+  decimalPlaces       Int?
   // Display order of this parameter within its (deviceTypeId, capability) scope
   // on the calibration-parameter screen and the future generated worksheet.
   // Written in a single transactional pass (multiples of 10); reads tie-break
   // on `name`. Existing rows are seeded by backfill-calibration-ordering.ts.
-  sortOrder        Int                            @default(0)
-  isActive         Boolean                        @default(true)
+  sortOrder           Int                            @default(0)
+  isActive            Boolean                        @default(true)
   /// Which entry UI this catalog row needs. Default DIRECT_REPLICATES covers
   /// Pattern A (+ Pattern C-as-A) and Pattern B (which still uses typed
   /// readings; the grid is expressed by CalibrationTestPoint children).
   /// LOGGER_SUMMARY is backfilled for the 9 storage-temperature uniformity
   /// codes in CalibrationTestPoint_Seed_Extraction.md §6.4.
-  entryStyle       CalibrationParameterEntryStyle @default(DIRECT_REPLICATES)
-  createdAt        DateTime                       @default(now())
-  updatedAt        DateTime                       @updatedAt
+  entryStyle          CalibrationParameterEntryStyle @default(DIRECT_REPLICATES)
+  /// Phase 4A (Gap A) — CATALOG / PRESENTATION metadata only.
+  ///
+  /// Several LK worksheets record more than one independently measured quantity
+  /// for a single logical test: one Dental X-Ray exposure yields kV, s and mGy;
+  /// one microscope magnification yields a stage and an eyepiece reading. Each
+  /// quantity keeps its own unit, decimalPlaces, tolerance and verdict, so each
+  /// stays its OWN parameter row (the same split already used for
+  /// _KANAN/_KIRI and _ON/_OFF). These two columns are the only thing that says
+  /// "these rows are one logical test, printed in this order".
+  ///
+  /// This is NOT part of measurement identity: MeasurementResult's natural key,
+  /// CalibrationTestPoint, JobCalibrationTestPoint and replicateIndex are all
+  /// unchanged. Grouping is never inferred from `code` or `name`.
+  ///
+  /// Both NULL (the default, and every pre-existing row) = a standalone
+  /// parameter that behaves exactly as before. Both must be set together, and
+  /// `(deviceTypeId, logicalTestKey, logicalTestSequence)` is unique so two
+  /// parameters can never claim the same column of the same logical test
+  /// (see migrations for the paired-NULL and >= 1 CHECK constraints).
+  logicalTestKey      String?
+  logicalTestSequence Int?
+  /// Phase 4B (Gap B) — DESCRIPTIVE ONLY. Only meaningful when
+  /// `entryStyle = DERIVED`. Documents in structured but non-executable form
+  /// what this value is derived from (e.g. `{ "description": "Difference
+  /// between S1 and S3" }`), for the technician and the reviewer to read. It is
+  /// NEVER parsed as a formula, NEVER evaluated, and NEVER drives an automatic
+  /// calculation — the technician still types the derived value into an
+  /// ordinary MeasurementResult, exactly like every other reading. NULL for
+  /// every non-DERIVED row and for every pre-existing row.
+  derivation          Json?
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
 
   deviceType     DeviceType           @relation(fields: [deviceTypeId], references: [id])
   capabilityItem DeviceCapabilityItem @relation(fields: [capabilityItemId], references: [id])
@@ -1411,10 +1446,14 @@ model DeviceCalibrationParameter {
   jobTestPoints      JobCalibrationTestPoint[]
 
   @@unique([deviceTypeId, capabilityItemId, code])
+  // One column position per logical test, per device type. NULLs are DISTINCT in
+  // Postgres, so every ungrouped (legacy) row is exempt.
+  @@unique([deviceTypeId, logicalTestKey, logicalTestSequence])
   @@index([deviceTypeId])
   @@index([capabilityItemId])
   @@index([uomId])
   @@index([isActive])
+  @@index([deviceTypeId, logicalTestKey])
 }
 
 // Per-DeviceType ordering of DeviceCapabilities on the calibration-parameter
@@ -2051,40 +2090,40 @@ model CalibrationJob {
   /// default to NULL (no backfill: a stale NOT_REQUIRED job has no open gate).
   akdAklGateOpenedBy     AkdAklGateOrigin?
 
-  status         CalibrationJobStatus @default(PENDING)
+  status                             CalibrationJobStatus @default(PENDING)
   /// Current revision attempt. Starts at 1. Incremented by exactly 1 in the
   /// SUBMITTED -> REWORK transition service method — the single well-defined
   /// moment. Never decremented. (MeasurementResult_Stage1 §6.)
-  currentAttempt Int                  @default(1)
-  startedAt      DateTime?
+  currentAttempt                     Int                  @default(1)
+  startedAt                          DateTime?
   /// Set when JobCalibrationTestPoint rows are copied (start() or backfill).
   /// Null on PENDING jobs. Empty snapshot + this timestamp = Pattern A freeze.
   measurementTestPointsSnapshottedAt DateTime?
-  submittedAt    DateTime?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  submittedAt                        DateTime?
+  createdAt                          DateTime             @default(now())
+  updatedAt                          DateTime             @updatedAt
 
-  workOrder              WorkOrder                   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  purchaseOrderItem      PurchaseOrderItem?          @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
-  device                 Device?                     @relation(fields: [deviceId], references: [id], onDelete: Restrict)
-  calibrationRequestItem CalibrationRequestItem?     @relation(fields: [calibrationRequestItemId], references: [id], onDelete: SetNull)
-  akdAklApprovedBy       User?                       @relation("CalibrationJobAkdAklApprover", fields: [akdAklApprovedByUserId], references: [id])
-  results                MeasurementResult[]
-  physicalCheckResults   PhysicalCheckResult[]
-  evidences              JobEvidence[]
-  referenceEquipmentUsed        JobReferenceEquipmentUsed[]
-  referenceEquipmentApprovals   JobReferenceEquipmentApproval[]
-  signature              CustomerSignature?
-  reviews                QualityReview[]
-  certificate            Certificate?
-  identityCorrections    IdentityCorrection[]
+  workOrder                   WorkOrder                       @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  purchaseOrderItem           PurchaseOrderItem?              @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
+  device                      Device?                         @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  calibrationRequestItem      CalibrationRequestItem?         @relation(fields: [calibrationRequestItemId], references: [id], onDelete: SetNull)
+  akdAklApprovedBy            User?                           @relation("CalibrationJobAkdAklApprover", fields: [akdAklApprovedByUserId], references: [id])
+  results                     MeasurementResult[]
+  physicalCheckResults        PhysicalCheckResult[]
+  evidences                   JobEvidence[]
+  referenceEquipmentUsed      JobReferenceEquipmentUsed[]
+  referenceEquipmentApprovals JobReferenceEquipmentApproval[]
+  signature                   CustomerSignature?
+  reviews                     QualityReview[]
+  certificate                 Certificate?
+  identityCorrections         IdentityCorrection[]
   /// Present 1:1 for SEND_TO_LAB (WOL) jobs after fan-out / backfill.
   /// Absent for ON_SITE (SPK). Application-enforced; no DB CHECK across WO.
-  kontrolAlat            KontrolAlat?
+  kontrolAlat                 KontrolAlat?
   /// LK Result PDF Download v1 — short-lived step-up tokens scoped to this job.
-  lkDownloadAuthorizations LkDownloadAuthorization[]
+  lkDownloadAuthorizations    LkDownloadAuthorization[]
   /// Frozen test-point allowlist copied at start() (or backfill for pre-feature jobs).
-  jobTestPoints          JobCalibrationTestPoint[]
+  jobTestPoints               JobCalibrationTestPoint[]
 
   @@unique([workOrderId, deviceId])
   @@unique([workOrderId, purchaseOrderItemId, unitOrdinal])
@@ -2250,19 +2289,19 @@ model JobCalibrationTestPoint {
   deviceCalibrationParameterId String
   sourceCalibrationTestPointId String
 
-  sequence     Int
-  settingLabel String
-  settingValue Decimal? @db.Decimal(18, 4)
-  toleranceMin Decimal? @db.Decimal(18, 4)
-  toleranceMax Decimal? @db.Decimal(18, 4)
+  sequence      Int
+  settingLabel  String
+  settingValue  Decimal? @db.Decimal(18, 4)
+  toleranceMin  Decimal? @db.Decimal(18, 4)
+  toleranceMax  Decimal? @db.Decimal(18, 4)
   toleranceNote String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  calibrationJob CalibrationJob             @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
-  parameter      DeviceCalibrationParameter @relation(fields: [deviceCalibrationParameterId], references: [id], onDelete: Restrict)
-  sourceTestPoint CalibrationTestPoint      @relation(fields: [sourceCalibrationTestPointId], references: [id], onDelete: Restrict)
+  calibrationJob  CalibrationJob             @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
+  parameter       DeviceCalibrationParameter @relation(fields: [deviceCalibrationParameterId], references: [id], onDelete: Restrict)
+  sourceTestPoint CalibrationTestPoint       @relation(fields: [sourceCalibrationTestPointId], references: [id], onDelete: Restrict)
 
   @@unique([calibrationJobId, sourceCalibrationTestPointId])
   @@index([calibrationJobId])
@@ -2469,7 +2508,7 @@ model JobReferenceEquipmentApproval {
 }
 
 model JobReferenceEquipmentApprovalItem {
-  id                           String                                 @id @default(cuid())
+  id                           String                                @id @default(cuid())
   companyId                    String
   approvalId                   String
   equipmentId                  String
@@ -2477,7 +2516,7 @@ model JobReferenceEquipmentApprovalItem {
   validityStatus               JobReferenceEquipmentValiditySnapshot
   requiresOverride             Boolean
   overrideReason               String?
-  createdAt                    DateTime                               @default(now())
+  createdAt                    DateTime                              @default(now())
 
   approval                   JobReferenceEquipmentApproval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
   equipment                  Equipment                     @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
@@ -2874,7 +2913,7 @@ model FileObject {
 /// a schema migration just to record a new action name — validate/constrain
 /// the vocabulary at the call site instead.
 model AuditLog {
-  id         String       @id @default(cuid())
+  id         String          @id @default(cuid())
   companyId  String
   /// Nullable: a failed re-authentication before a session is fully trusted
   /// may still want the attempted user's id; a truly anonymous/system event
@@ -2891,7 +2930,7 @@ model AuditLog {
   metadata   Json?
   ipAddress  String?
   userAgent  String?
-  createdAt  DateTime     @default(now())
+  createdAt  DateTime        @default(now())
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)

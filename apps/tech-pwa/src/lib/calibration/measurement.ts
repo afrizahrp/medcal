@@ -57,6 +57,16 @@ export interface TechMeasurementParameter {
   toleranceNote: string | null;
   capabilityName: string;
   capabilityItemName: string;
+  /**
+   * Phase 4A (Gap A) — catalog grouping. Non-null when this parameter is one
+   * measured quantity of a multi-quantity logical test (Dental X-Ray kV + s +
+   * mGy). The API already returns members of the same logical test contiguously
+   * and in `logicalTestSequence` order, so entry needs no special handling: each
+   * quantity is still an ordinary Pattern A / Pattern B parameter with its own
+   * replicates, tolerance and verdict.
+   */
+  logicalTestKey: string | null;
+  logicalTestSequence: number | null;
   /** Present and non-empty on Pattern B (`gridParameters`). Absent or [] on A. */
   testPoints?: TechMeasurementTestPoint[];
 }

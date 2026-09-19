@@ -70,11 +70,26 @@ export interface DeviceCalibrationParameterRow {
   sortOrder: number;
   isActive: boolean;
   /**
-   * Which entry UI this parameter needs. Only DIRECT_REPLICATES can be
-   * created (and therefore copied) via the Portal today — LOGGER_SUMMARY
+   * Which entry UI this parameter needs. DIRECT_REPLICATES and DERIVED
+   * (Phase 4B) can be created/edited via the Portal today — LOGGER_SUMMARY
    * parameters have CalibrationTestPoint children with no create endpoint yet.
    */
-  entryStyle: "DIRECT_REPLICATES" | "LOGGER_SUMMARY";
+  entryStyle: "DIRECT_REPLICATES" | "LOGGER_SUMMARY" | "DERIVED";
+  /**
+   * Phase 4B (Gap B) — descriptive-only note on what a DERIVED value is
+   * derived from, e.g. `{ description: "Difference between S1 and S3" }`.
+   * Never a formula; never evaluated. Only meaningful when
+   * `entryStyle === "DERIVED"`; NULL otherwise and on every pre-Phase-4B row.
+   */
+  derivation: { description: string } | null;
+  /**
+   * Phase 4A (Gap A) — catalog grouping. Non-null when this parameter is one
+   * measured quantity of a multi-quantity logical test; parameters sharing a key
+   * are rendered contiguously in `logicalTestSequence` order. NULL on every
+   * pre-Phase-4A row and on every standalone parameter.
+   */
+  logicalTestKey: string | null;
+  logicalTestSequence: number | null;
   createdAt: string;
   updatedAt: string;
   deviceType: DeviceCalibrationParameterTypeRef;
@@ -105,6 +120,15 @@ export function formatCalibrationTolerance(row: {
   const note = row.toleranceNote?.trim() || null;
   if (bounds && note) return `${bounds} (${note})`;
   return bounds ?? note;
+}
+
+/** "DXRAY_REPRODUCIBILITY #2" for a grouped quantity, "—" for a standalone one. */
+export function formatLogicalTest(row: {
+  logicalTestKey: string | null;
+  logicalTestSequence: number | null;
+}): string {
+  if (row.logicalTestKey == null || row.logicalTestSequence == null) return "—";
+  return `${row.logicalTestKey} #${row.logicalTestSequence}`;
 }
 
 export function formatDecimalPlaces(row: {
@@ -328,6 +352,11 @@ function SortableParameterRow({
         {row.valueType !== "NUMBER" ? (
           <Badge variant="secondary" className="ml-2 font-mono text-[10px] text-slate-500">
             {row.valueType}
+          </Badge>
+        ) : null}
+        {row.entryStyle === "DERIVED" ? (
+          <Badge variant="secondary" className="ml-2 font-mono text-[10px] text-slate-500">
+            DERIVED
           </Badge>
         ) : null}
       </td>

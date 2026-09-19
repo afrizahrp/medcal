@@ -54,6 +54,7 @@ import {
   evaluateMeasurementCompleteness,
   MEASUREMENT_WORKSHEET_EXCLUDED_PARAMETER_CODES,
 } from "./measurement-completeness";
+import { orderByLogicalTest } from "./logical-test-grouping";
 
 const calibrationJobInclude = {
   workOrder: {
@@ -329,10 +330,14 @@ export type CalibrationJobListRow = CalibrationJobDetail & {
 
 /**
  * One directly-entered ("Pattern A") calibration parameter for a job's resolved
- * DeviceType: valueType NUMBER, entryStyle DIRECT_REPLICATES, active, no
- * CalibrationTestPoint children. The tech-pwa measurement-entry skeleton
- * (Stage A) lists these. Decimal columns are stringified (same wire shape as
- * `DeviceCalibrationParameter.toleranceMin` everywhere else in this API).
+ * DeviceType: valueType NUMBER, entryStyle DIRECT_REPLICATES or DERIVED
+ * (Phase 4B), active, no CalibrationTestPoint children. The tech-pwa
+ * measurement-entry skeleton (Stage A) lists these. Decimal columns are
+ * stringified (same wire shape as `DeviceCalibrationParameter.toleranceMin`
+ * everywhere else in this API). `entryStyle` itself is a filter-only concern —
+ * never returned on the wire, same as LOGGER_SUMMARY exclusion before it — so a
+ * DERIVED row and a DIRECT_REPLICATES row are indistinguishable to the client;
+ * both are just an ordinary manual reading.
  */
 export interface MeasurementParameterSummary {
   id: string;
@@ -346,6 +351,14 @@ export interface MeasurementParameterSummary {
   toleranceNote: string | null;
   capabilityName: string;
   capabilityItemName: string;
+  /**
+   * Phase 4A (Gap A) — catalog/presentation grouping. Non-null on parameters
+   * that are one measured quantity of a multi-quantity logical test (Dental
+   * X-Ray kV + s + mGy). NULL on every standalone parameter, which is the
+   * pre-Phase-4A behaviour. Never part of measurement identity.
+   */
+  logicalTestKey: string | null;
+  logicalTestSequence: number | null;
 }
 
 /** One active CalibrationTestPoint nested under a Pattern B grid parameter. */
@@ -419,6 +432,8 @@ const measurementParameterSelect = {
   toleranceMin: true,
   toleranceMax: true,
   toleranceNote: true,
+  logicalTestKey: true,
+  logicalTestSequence: true,
   uom: { select: { code: true, symbol: true } },
   capabilityItem: {
     select: {
@@ -454,6 +469,8 @@ function toParameterSummary(row: MeasurementParameterRow): MeasurementParameterS
     toleranceNote: row.toleranceNote,
     capabilityName: row.capabilityItem.capability.name,
     capabilityItemName: row.capabilityItem.name,
+    logicalTestKey: row.logicalTestKey,
+    logicalTestSequence: row.logicalTestSequence,
   };
 }
 
@@ -546,10 +563,20 @@ function buildMeasurementCapabilityGroups(
       if (byName !== 0) return byName;
       return a.id.localeCompare(b.id);
     });
+    // Phase 4A: keep the quantities of one logical test contiguous and in their
+    // declared order, without disturbing the catalog order around them.
+    const ordered = orderByLogicalTest(
+      group.items.map((entry) => ({
+        id: entry.id,
+        logicalTestKey: entry.grouped.logicalTestKey,
+        logicalTestSequence: entry.grouped.logicalTestSequence,
+        entry,
+      })),
+    );
     return {
       capability: group.capability,
       sortOrder: group.sortOrder,
-      parameters: group.items.map((entry) => entry.grouped),
+      parameters: ordered.map((item) => item.entry.grouped),
     };
   });
 }
@@ -1612,11 +1639,16 @@ export class CalibrationJobsService {
   /**
    * Calibration parameters for a job's resolved DeviceType.
    *
-   * Pattern A (`parameters`): NUMBER, DIRECT_REPLICATES, active, no
+   * Pattern A (`parameters`): NUMBER, DIRECT_REPLICATES or DERIVED, active, no
    * CalibrationTestPoint children. Pattern B (`gridParameters`): same filters
    * except they HAVE active test-point children. LOGGER_SUMMARY is excluded
    * from both via `entryStyle`. SUCT_VACUUM_GAUGE (generic-slot + on-site
    * nominal) is excluded from the grid by code allowlist — Pattern D, not Stage B.
+   *
+   * Phase 4B (Gap B): DERIVED is included here so a derived value (Autoclave
+   * ΔT, a magnification ratio) can be typed in like any other reading — see
+   * `DeviceCalibrationParameter.derivation`. It is still an ordinary
+   * MeasurementResult; nothing is computed or auto-filled for it.
    *
    * `capabilityGroups` is additive: the same eligible rows, grouped by
    * DeviceCapability id and ordered by DeviceTypeCapabilityOrder then
@@ -1642,7 +1674,9 @@ export class CalibrationJobsService {
           deviceTypeId,
           isActive: true,
           valueType: "NUMBER",
-          entryStyle: "DIRECT_REPLICATES",
+          // Phase 4B (Gap B): DERIVED participates in the same worksheet flow
+          // as DIRECT_REPLICATES — see the method doc comment above.
+          entryStyle: { in: ["DIRECT_REPLICATES", "DERIVED"] },
         },
         select: {
           ...measurementParameterSelect,
@@ -1714,11 +1748,16 @@ export class CalibrationJobsService {
       gridItems.push({ row, testPoints });
     }
 
-    const parameters = directRows.map(toParameterSummary);
-    const gridParameters = gridItems.map((item) => ({
-      ...toParameterSummary(item.row),
-      testPoints: item.testPoints,
-    }));
+    // Phase 4A: the flat Pattern A / Pattern B arrays get the same contiguous
+    // logical-test ordering as `capabilityGroups`. Catalogs with no grouping
+    // declared come back in exactly the order they had before.
+    const parameters = orderByLogicalTest(directRows.map(toParameterSummary));
+    const gridParameters = orderByLogicalTest(
+      gridItems.map((item) => ({
+        ...toParameterSummary(item.row),
+        testPoints: item.testPoints,
+      })),
+    );
     const sortOrderByCapabilityId = new Map(
       capabilityOrders.map((row) => [row.capabilityId, row.sortOrder] as const),
     );
@@ -2037,6 +2076,12 @@ export class CalibrationJobsService {
    * submitForReview prerequisite: eligible worksheet parameters for the current
    * attempt are complete. Pattern A/B comes from JobCalibrationTestPoint only
    * (live catalog must not expand a started job). Physical checks are not gated.
+   *
+   * Phase 4B (Gap B): deliberately DOES NOT include DERIVED here — it stays
+   * DIRECT_REPLICATES-only, unchanged from before this phase. A DERIVED value
+   * is enterable (see listMeasurementParameters) but optional at submit; Report
+   * 08 §9.B.7 leaves "should a derived value gate submit?" as an open business
+   * question, so the safe default is to require nothing new.
    */
   private async assertMeasurementsCompleteForSubmit(
     companyId: string,
