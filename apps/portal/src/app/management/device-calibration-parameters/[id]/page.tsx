@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
-import { Save } from "lucide-react";
+import { Plus, Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,17 @@ import {
   validateCalibrationToleranceForm,
   type DeviceCalibrationParameterFormValue,
 } from "../device-calibration-parameter-form-fields";
+import {
+  CalibrationTestPointFormFields,
+  buildCalibrationTestPointCreatePayload,
+  buildCalibrationTestPointUpdatePayload,
+  calibrationTestPointFormFromRow,
+  emptyCalibrationTestPointForm,
+  formatCalibrationTestPointApiError,
+  validateCalibrationTestPointForm,
+  type CalibrationTestPointFormValue,
+} from "../calibration-test-point-form-fields";
+import { moveAdjacent } from "../calibration-test-point-ordering";
 import {
   type DeviceCalibrationParameterRow,
   DeviceCalibrationParameterStatusBadge,
@@ -29,6 +40,13 @@ import {
   useDeviceCalibrationParameter,
   useUpdateDeviceCalibrationParameter,
 } from "../use-device-calibration-parameters-query";
+import {
+  useCalibrationTestPoints,
+  useCreateCalibrationTestPoint,
+  useReorderCalibrationTestPoints,
+  useUpdateCalibrationTestPoint,
+  type CalibrationTestPointApiRow,
+} from "../use-calibration-test-points-query";
 import {
   useDeviceCapabilities,
   useDeviceCapabilityItems,
@@ -100,6 +118,24 @@ export default function DeviceCalibrationParameterDetailPage() {
   const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // ── Phase 4C — Named Measurement Points (CalibrationTestPoint), embedded ──
+  const testPointsQuery = useCalibrationTestPoints(params.id);
+  const createTestPointMutation = useCreateCalibrationTestPoint();
+  const updateTestPointMutation = useUpdateCalibrationTestPoint();
+  const reorderTestPointsMutation = useReorderCalibrationTestPoints();
+  const [addingTestPoint, setAddingTestPoint] = useState(false);
+  const [testPointForm, setTestPointForm] = useState<CalibrationTestPointFormValue>(
+    emptyCalibrationTestPointForm,
+  );
+  const [editingTestPointId, setEditingTestPointId] = useState<string | null>(null);
+  const [editTestPointForm, setEditTestPointForm] = useState<CalibrationTestPointFormValue>(
+    emptyCalibrationTestPointForm,
+  );
+  const [togglingTestPointId, setTogglingTestPointId] = useState<string | null>(null);
+  const [reorderingTestPointId, setReorderingTestPointId] = useState<string | null>(null);
+  const [testPointError, setTestPointError] = useState<string | null>(null);
+  const [testPointSuccess, setTestPointSuccess] = useState<string | null>(null);
 
   const typesQuery = useDeviceTypes({
     search: "",
@@ -228,6 +264,111 @@ export default function DeviceCalibrationParameterDetailPage() {
       await parameterQuery.refetch();
     } catch (err) {
       setError(formatDeviceCalibrationParameterApiError(err));
+    }
+  }
+
+  // ── Phase 4C — Named Measurement Points handlers ──────────────────────────
+
+  function setTestPointField<K extends keyof CalibrationTestPointFormValue>(
+    field: K,
+    next: CalibrationTestPointFormValue[K],
+  ) {
+    setTestPointForm((prev) => ({ ...prev, [field]: next }));
+  }
+
+  function setEditTestPointField<K extends keyof CalibrationTestPointFormValue>(
+    field: K,
+    next: CalibrationTestPointFormValue[K],
+  ) {
+    setEditTestPointForm((prev) => ({ ...prev, [field]: next }));
+  }
+
+  async function submitTestPoint(e: React.FormEvent) {
+    e.preventDefault();
+    if (!capabilities?.deviceCalibrationParameterCreate) return;
+    setTestPointError(null);
+    setTestPointSuccess(null);
+
+    const validationError = validateCalibrationTestPointForm(testPointForm);
+    if (validationError) {
+      setTestPointError(validationError);
+      return;
+    }
+
+    try {
+      await createTestPointMutation.mutateAsync({
+        parameterId: row!.id,
+        input: buildCalibrationTestPointCreatePayload(testPointForm),
+      });
+      setTestPointSuccess("Titik ukur berhasil ditambahkan.");
+      setAddingTestPoint(false);
+      setTestPointForm(emptyCalibrationTestPointForm);
+    } catch (err) {
+      setTestPointError(formatCalibrationTestPointApiError(err));
+    }
+  }
+
+  async function saveTestPoint(e: React.FormEvent) {
+    e.preventDefault();
+    if (!capabilities?.deviceCalibrationParameterUpdate || !editingTestPointId) return;
+    setTestPointError(null);
+    setTestPointSuccess(null);
+
+    const validationError = validateCalibrationTestPointForm(editTestPointForm);
+    if (validationError) {
+      setTestPointError(validationError);
+      return;
+    }
+
+    try {
+      await updateTestPointMutation.mutateAsync({
+        parameterId: row!.id,
+        testPointId: editingTestPointId,
+        input: buildCalibrationTestPointUpdatePayload(editTestPointForm),
+      });
+      setTestPointSuccess("Titik ukur berhasil diubah.");
+      setEditingTestPointId(null);
+    } catch (err) {
+      setTestPointError(formatCalibrationTestPointApiError(err));
+    }
+  }
+
+  async function toggleTestPointActive(testPoint: CalibrationTestPointApiRow) {
+    if (!capabilities?.deviceCalibrationParameterUpdate) return;
+    setTestPointError(null);
+    setTestPointSuccess(null);
+    setTogglingTestPointId(testPoint.id);
+    try {
+      await updateTestPointMutation.mutateAsync({
+        parameterId: row!.id,
+        testPointId: testPoint.id,
+        input: { isActive: !testPoint.isActive },
+      });
+    } catch (err) {
+      setTestPointError(formatCalibrationTestPointApiError(err));
+    } finally {
+      setTogglingTestPointId(null);
+    }
+  }
+
+  async function moveTestPoint(testPoint: CalibrationTestPointApiRow, direction: "up" | "down") {
+    if (!capabilities?.deviceCalibrationParameterUpdate) return;
+    const ids = (testPointsQuery.data ?? []).map((p) => p.id);
+    const nextIds = moveAdjacent(ids, testPoint.id, direction);
+    if (nextIds === ids) return;
+
+    setTestPointError(null);
+    setTestPointSuccess(null);
+    setReorderingTestPointId(testPoint.id);
+    try {
+      await reorderTestPointsMutation.mutateAsync({
+        parameterId: row!.id,
+        testPointIds: nextIds,
+      });
+    } catch (err) {
+      setTestPointError(formatCalibrationTestPointApiError(err));
+    } finally {
+      setReorderingTestPointId(null);
     }
   }
 
@@ -387,6 +528,199 @@ export default function DeviceCalibrationParameterDetailPage() {
               ) : null}
             </div>
           </>
+        )}
+      </Surface>
+
+      <Surface className={deviceCalibrationParameterFormSurfaceClass}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Titik Ukur</h2>
+            <p className="text-xs text-slate-500">Named Measurement Points</p>
+          </div>
+          {capabilities.deviceCalibrationParameterCreate && !addingTestPoint ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setAddingTestPoint(true);
+                setEditingTestPointId(null);
+                setTestPointForm(emptyCalibrationTestPointForm);
+                setTestPointError(null);
+                setTestPointSuccess(null);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              Tambah Titik Ukur
+            </Button>
+          ) : null}
+        </div>
+
+        {testPointError ? <p className="mt-3 text-sm text-red-600">{testPointError}</p> : null}
+        {testPointSuccess ? (
+          <p className="mt-3 text-sm text-emerald-700">{testPointSuccess}</p>
+        ) : null}
+
+        {addingTestPoint ? (
+          <form onSubmit={submitTestPoint} className="mt-4 rounded-md border border-slate-200 p-4">
+            <CalibrationTestPointFormFields
+              value={testPointForm}
+              onChange={setTestPointField}
+              mode="create"
+              idPrefix="new-test-point"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setAddingTestPoint(false);
+                  setTestPointForm(emptyCalibrationTestPointForm);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createTestPointMutation.isPending}>
+                <Save className="h-4 w-4" />
+                {createTestPointMutation.isPending ? "Saving…" : "Save Titik Ukur"}
+              </Button>
+            </div>
+          </form>
+        ) : null}
+
+        {testPointsQuery.isLoading ? (
+          <p className="mt-4 text-sm text-slate-400">Memuat titik ukur…</p>
+        ) : testPointsQuery.isError ? (
+          <p className="mt-4 text-sm text-red-600">Gagal memuat titik ukur.</p>
+        ) : (testPointsQuery.data?.length ?? 0) === 0 && !addingTestPoint ? (
+          <div className="mt-4 text-sm text-slate-500">
+            <p className="font-medium text-slate-600">Tidak ada titik ukur</p>
+            <p className="mt-0.5">Parameter ini belum memiliki titik ukur bernama.</p>
+          </div>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[720px]">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+                  <th className="px-4 py-3">No.</th>
+                  <th className="px-4 py-3">Nama Titik</th>
+                  <th className="px-4 py-3">Setting</th>
+                  <th className="px-4 py-3">Toleransi</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(testPointsQuery.data ?? []).map((testPoint, index) => (
+                  <tr key={testPoint.id} className="align-top hover:bg-slate-50">
+                    {editingTestPointId === testPoint.id ? (
+                      <td colSpan={6} className="px-4 py-3">
+                        <form onSubmit={saveTestPoint}>
+                          <CalibrationTestPointFormFields
+                            value={editTestPointForm}
+                            onChange={setEditTestPointField}
+                            mode="edit"
+                            idPrefix={`edit-test-point-${testPoint.id}`}
+                          />
+                          <div className="mt-3 flex justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setEditingTestPointId(null)}
+                            >
+                              Cancel
+                            </Button>
+                            <Button type="submit" disabled={updateTestPointMutation.isPending}>
+                              <Save className="h-4 w-4" />
+                              {updateTestPointMutation.isPending ? "Saving…" : "Save"}
+                            </Button>
+                          </div>
+                        </form>
+                      </td>
+                    ) : (
+                      <>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          <div className="flex items-center gap-1">
+                            <span className="tabular-nums">{testPoint.sequence}</span>
+                            {capabilities.deviceCalibrationParameterUpdate ? (
+                              <div className="flex flex-col">
+                                <button
+                                  type="button"
+                                  aria-label={`Naikkan urutan ${testPoint.settingLabel}`}
+                                  className="text-slate-400 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                                  disabled={index === 0 || reorderingTestPointId !== null}
+                                  onClick={() => moveTestPoint(testPoint, "up")}
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label={`Turunkan urutan ${testPoint.settingLabel}`}
+                                  className="text-slate-400 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                                  disabled={
+                                    index === (testPointsQuery.data?.length ?? 0) - 1 ||
+                                    reorderingTestPointId !== null
+                                  }
+                                  onClick={() => moveTestPoint(testPoint, "down")}
+                                >
+                                  ▼
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900">
+                          {testPoint.settingLabel}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {testPoint.settingValue == null || testPoint.settingValue === ""
+                            ? "—"
+                            : String(Number(testPoint.settingValue))}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {formatCalibrationTolerance(testPoint) ?? "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <DeviceCalibrationParameterStatusBadge isActive={testPoint.isActive} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-1">
+                            {capabilities.deviceCalibrationParameterUpdate ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => toggleTestPointActive(testPoint)}
+                                  disabled={togglingTestPointId === testPoint.id}
+                                >
+                                  {testPoint.isActive ? "Nonaktifkan" : "Aktifkan"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingTestPointId(testPoint.id);
+                                    setAddingTestPoint(false);
+                                    setEditTestPointForm(calibrationTestPointFormFromRow(testPoint));
+                                    setTestPointError(null);
+                                    setTestPointSuccess(null);
+                                  }}
+                                >
+                                  Edit
+                                </Button>
+                              </>
+                            ) : null}
+                          </div>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Surface>
     </div>

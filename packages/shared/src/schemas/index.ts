@@ -1805,6 +1805,66 @@ export type DeviceCalibrationParameterCopyInput = z.infer<
 >;
 
 // =============================================================================
+// CalibrationTestPoint (Named Measurement Points) — Portal CRUD
+// Nested under DeviceCalibrationParameter, mirroring the
+// DeviceCapability -> DeviceCapabilityItem nesting convention. Master/catalog
+// rows only — JobCalibrationTestPoint (the per-job snapshot) is untouched by
+// this Portal surface.
+// =============================================================================
+
+/**
+ * POST /device-calibration-parameters/:id/test-points body.
+ * `sequence` is optional — omitted means "append after the current highest
+ * sequence for this parameter" (server-computed), matching the existing
+ * append-to-end convention used for DeviceCalibrationParameter.sortOrder.
+ */
+export const calibrationTestPointCreateSchema = z
+  .object({
+    settingLabel: z.string().trim().min(1).max(150),
+    settingValue: optionalFiniteNumber,
+    sequence: z.coerce.number().int().min(1).optional(),
+    toleranceMin: optionalFiniteNumber,
+    toleranceMax: optionalFiniteNumber,
+    toleranceNote: z.string().max(500).nullable().optional(),
+  })
+  .superRefine(refineToleranceBounds);
+
+export type CalibrationTestPointCreateInput = z.infer<typeof calibrationTestPointCreateSchema>;
+
+/**
+ * PATCH /device-calibration-parameters/:id/test-points/:testPointId body.
+ * `sequence` is deliberately NOT accepted here — display order changes only
+ * through the dedicated reorder endpoint below, which safely rewrites the
+ * whole ordered set in one transaction (a plain single-row sequence update
+ * risks colliding with the `(deviceCalibrationParameterId, sequence)` unique
+ * constraint on another row).
+ */
+export const calibrationTestPointUpdateSchema = z
+  .object({
+    settingLabel: z.string().trim().min(1).max(150).optional(),
+    settingValue: optionalFiniteNumber,
+    toleranceMin: optionalFiniteNumber,
+    toleranceMax: optionalFiniteNumber,
+    toleranceNote: z.string().max(500).nullable().optional(),
+    isActive: z.boolean().optional(),
+  })
+  .superRefine(refineToleranceBounds);
+
+export type CalibrationTestPointUpdateInput = z.infer<typeof calibrationTestPointUpdateSchema>;
+
+/**
+ * PATCH /device-calibration-parameters/:id/test-points/reorder body.
+ * `testPointIds` must be the FULL ordered list of test points (active and
+ * inactive) currently belonging to that parameter — the server rejects any
+ * set mismatch, same convention as `deviceCalibrationParameterParameterOrderSchema`.
+ */
+export const calibrationTestPointReorderSchema = z.object({
+  testPointIds: z.array(z.string().min(1)).min(1),
+});
+
+export type CalibrationTestPointReorderInput = z.infer<typeof calibrationTestPointReorderSchema>;
+
+// =============================================================================
 // DevicePhysicalCheckItem Master Data
 // (Portal Device Management → Physical Inspection)
 // Flat DeviceType → items. No Capability / UOM / tolerance / MeasurementResult.

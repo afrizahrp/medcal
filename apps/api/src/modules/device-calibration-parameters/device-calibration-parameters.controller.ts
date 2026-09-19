@@ -12,6 +12,9 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import {
+  calibrationTestPointCreateSchema,
+  calibrationTestPointReorderSchema,
+  calibrationTestPointUpdateSchema,
   deviceCalibrationParameterCapabilityOrderSchema,
   deviceCalibrationParameterCopySchema,
   deviceCalibrationParameterCreateSchema,
@@ -24,6 +27,7 @@ import { RequirePermission } from "../../common/decorators/require-permission.de
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   DeviceCalibrationParametersService,
+  type CalibrationTestPointRow,
   type DeviceCalibrationParameterCapabilityGroup,
   type DeviceCalibrationParameterCopyResult,
   type DeviceCalibrationParameterGroupedResult,
@@ -128,6 +132,71 @@ export class DeviceCalibrationParametersController {
       });
     }
     return this.service.reorderParameters(deviceTypeId, capabilityId, parsed.data.parameterIds);
+  }
+
+  // ── CalibrationTestPoint (Named Measurement Points) ────────────────────────
+  // Nested under one DeviceCalibrationParameter, same routing/permission
+  // convention as device-capabilities.controller.ts's ":id/items". Reuses the
+  // parent resource's permission ("deviceCalibrationParameter") — a user who
+  // can manage the parameter catalog can manage its named points, no separate
+  // permission type introduced.
+
+  @Get(":id/test-points")
+  @RequirePermission("deviceCalibrationParameter", "read")
+  async listTestPoints(@Param("id") id: string): Promise<CalibrationTestPointRow[]> {
+    return this.service.findTestPoints(id);
+  }
+
+  @Post(":id/test-points")
+  @RequirePermission("deviceCalibrationParameter", "create")
+  async createTestPoint(
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<CalibrationTestPointRow> {
+    const parsed = calibrationTestPointCreateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid calibration test point payload",
+        code: "INVALID_CALIBRATION_TEST_POINT",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.createTestPoint(id, parsed.data);
+  }
+
+  @Patch(":id/test-points/reorder")
+  @RequirePermission("deviceCalibrationParameter", "update")
+  async reorderTestPoints(
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<CalibrationTestPointRow[]> {
+    const parsed = calibrationTestPointReorderSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid calibration test point order payload",
+        code: "INVALID_CALIBRATION_TEST_POINT_ORDER",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.reorderTestPoints(id, parsed.data.testPointIds);
+  }
+
+  @Patch(":id/test-points/:testPointId")
+  @RequirePermission("deviceCalibrationParameter", "update")
+  async updateTestPoint(
+    @Param("id") id: string,
+    @Param("testPointId") testPointId: string,
+    @Body() rawBody: unknown,
+  ): Promise<CalibrationTestPointRow> {
+    const parsed = calibrationTestPointUpdateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid calibration test point update",
+        code: "INVALID_CALIBRATION_TEST_POINT_UPDATE",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.updateTestPoint(id, testPointId, parsed.data);
   }
 
   @Get(":id")

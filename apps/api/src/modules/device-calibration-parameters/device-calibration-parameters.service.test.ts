@@ -3,6 +3,9 @@ import { BadRequestException, ConflictException, NotFoundException } from "@nest
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@medcal/db";
 import {
+  calibrationTestPointCreateSchema,
+  calibrationTestPointReorderSchema,
+  calibrationTestPointUpdateSchema,
   deviceCalibrationParameterCopySchema,
   deviceCalibrationParameterCreateSchema,
 } from "@medcal/shared";
@@ -1228,5 +1231,309 @@ describe("DeviceCalibrationParametersService - entryStyle / derivation", () => {
     expect(updated.entryStyle).toBe("DERIVED");
     expect(updated.derivation).toEqual({ description: "kept as-is" });
     expect(updated.toleranceNote).toBe("+/- 2");
+  });
+});
+
+
+// -- Phase 4C -- CalibrationTestPoint (Named Measurement Points) Portal CRUD.
+// Master/catalog rows only. JobCalibrationTestPoint (per-job snapshot) and
+// MeasurementResult must never be touched by any of these operations.
+
+describe("DeviceCalibrationParametersService - CalibrationTestPoint CRUD", () => {
+  async function createParameter(overrides: Partial<{ name: string }> = {}) {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const parameter = await service.create(
+      baseInput(deviceType.id, item.id, uom.id, overrides.name ?? "Suhu Ruangan"),
+    );
+    createdParameterIds.push(parameter.id);
+    return { deviceType, item, uom, parameter };
+  }
+
+  it("returns an empty list for a parameter with no test points", async () => {
+    const { parameter } = await createParameter();
+    const points = await service.findTestPoints(parameter.id);
+    expect(points).toEqual([]);
+  });
+
+  it("rejects listing test points for an unknown parameter", async () => {
+    await expect(service.findTestPoints("missing-parameter-id")).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it("creates a test point with an explicit sequence and tolerance override", async () => {
+    const { parameter } = await createParameter();
+    const created = await service.createTestPoint(parameter.id, {
+      settingLabel: "Awal",
+      settingValue: 25,
+      sequence: 1,
+      toleranceMin: 20,
+      toleranceMax: 30,
+      toleranceNote: "25 +/- 5 C",
+    });
+    expect(created.settingLabel).toBe("Awal");
+    expect(created.sequence).toBe(1);
+    expect(Number(created.settingValue)).toBe(25);
+    expect(Number(created.toleranceMin)).toBe(20);
+    expect(Number(created.toleranceMax)).toBe(30);
+    expect(created.toleranceNote).toBe("25 +/- 5 C");
+    expect(created.isActive).toBe(true);
+  });
+
+  it("auto-appends sequence when not supplied, following creation order", async () => {
+    const { parameter } = await createParameter();
+    const first = await service.createTestPoint(parameter.id, { settingLabel: "Awal" });
+    const second = await service.createTestPoint(parameter.id, { settingLabel: "Akhir" });
+    expect(first.sequence).toBe(1);
+    expect(second.sequence).toBe(2);
+  });
+
+  it("rejects a duplicate label for the same parameter (case-insensitive)", async () => {
+    const { parameter } = await createParameter();
+    await service.createTestPoint(parameter.id, { settingLabel: "Awal" });
+    await expect(
+      service.createTestPoint(parameter.id, { settingLabel: "awal" }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("allows the same label on a different parameter", async () => {
+    const a = await createParameter({ name: "Suhu A" });
+    const b = await createParameter({ name: "Suhu B" });
+    const pa = await service.createTestPoint(a.parameter.id, { settingLabel: "Awal" });
+    const pb = await service.createTestPoint(b.parameter.id, { settingLabel: "Awal" });
+    expect(pa.settingLabel).toBe(pb.settingLabel);
+    expect(pa.deviceCalibrationParameterId).not.toBe(pb.deviceCalibrationParameterId);
+  });
+
+  it("rejects an explicit sequence that is already taken", async () => {
+    const { parameter } = await createParameter();
+    await service.createTestPoint(parameter.id, { settingLabel: "Awal", sequence: 1 });
+    await expect(
+      service.createTestPoint(parameter.id, { settingLabel: "Akhir", sequence: 1 }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("rejects creating a test point for an unknown parameter", async () => {
+    await expect(
+      service.createTestPoint("missing-parameter-id", { settingLabel: "Awal" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("updates settingLabel, settingValue, tolerance fields and isActive", async () => {
+    const { parameter } = await createParameter();
+    const created = await service.createTestPoint(parameter.id, { settingLabel: "Awal" });
+
+    const updated = await service.updateTestPoint(parameter.id, created.id, {
+      settingLabel: "Awal (revisi)",
+      settingValue: 26,
+      toleranceMin: 21,
+      toleranceMax: 31,
+      toleranceNote: "revised",
+      isActive: false,
+    });
+
+    expect(updated.settingLabel).toBe("Awal (revisi)");
+    expect(Number(updated.settingValue)).toBe(26);
+    expect(Number(updated.toleranceMin)).toBe(21);
+    expect(Number(updated.toleranceMax)).toBe(31);
+    expect(updated.toleranceNote).toBe("revised");
+    expect(updated.isActive).toBe(false);
+    // sequence is untouched by update() -- reorder is the only mutator.
+    expect(updated.sequence).toBe(created.sequence);
+  });
+
+  it("deactivate then reactivate round-trips isActive without a delete", async () => {
+    const { parameter } = await createParameter();
+    const created = await service.createTestPoint(parameter.id, { settingLabel: "Awal" });
+
+    const deactivated = await service.updateTestPoint(parameter.id, created.id, {
+      isActive: false,
+    });
+    expect(deactivated.isActive).toBe(false);
+
+    const stillListed = await service.findTestPoints(parameter.id);
+    expect(stillListed.map((p) => p.id)).toContain(created.id);
+
+    const reactivated = await service.updateTestPoint(parameter.id, created.id, {
+      isActive: true,
+    });
+    expect(reactivated.isActive).toBe(true);
+  });
+
+  it("rejects renaming onto a label that collides with a sibling test point", async () => {
+    const { parameter } = await createParameter();
+    await service.createTestPoint(parameter.id, { settingLabel: "Awal" });
+    const akhir = await service.createTestPoint(parameter.id, { settingLabel: "Akhir" });
+    await expect(
+      service.updateTestPoint(parameter.id, akhir.id, { settingLabel: "awal" }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("rejects updating a test point that belongs to a different parameter (ownership)", async () => {
+    const a = await createParameter({ name: "Suhu A2" });
+    const b = await createParameter({ name: "Suhu B2" });
+    const pointOnA = await service.createTestPoint(a.parameter.id, { settingLabel: "Awal" });
+
+    await expect(
+      service.updateTestPoint(b.parameter.id, pointOnA.id, { settingLabel: "Hijacked" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("rejects updating an unknown test point id", async () => {
+    const { parameter } = await createParameter();
+    await expect(
+      service.updateTestPoint(parameter.id, "missing-test-point-id", { settingLabel: "x" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("reorders the full set and persists the new sequence", async () => {
+    const { parameter } = await createParameter();
+    const awal = await service.createTestPoint(parameter.id, { settingLabel: "Awal" });
+    const akhir = await service.createTestPoint(parameter.id, { settingLabel: "Akhir" });
+    expect(awal.sequence).toBe(1);
+    expect(akhir.sequence).toBe(2);
+
+    const reordered = await service.reorderTestPoints(parameter.id, [akhir.id, awal.id]);
+
+    expect(reordered.map((p) => p.settingLabel)).toEqual(["Akhir", "Awal"]);
+    expect(reordered.map((p) => p.sequence)).toEqual([1, 2]);
+
+    const relisted = await service.findTestPoints(parameter.id);
+    expect(relisted.map((p) => p.settingLabel)).toEqual(["Akhir", "Awal"]);
+  });
+
+  it("reorders a larger set (adjacent head-on swap) without a transient unique collision", async () => {
+    const { parameter } = await createParameter();
+    const p1 = await service.createTestPoint(parameter.id, { settingLabel: "T1" });
+    const p2 = await service.createTestPoint(parameter.id, { settingLabel: "T2" });
+    const p3 = await service.createTestPoint(parameter.id, { settingLabel: "T3" });
+
+    // Swap #1 and #2 head-on -- the exact case a naive single-pass rewrite
+    // would collide on the (deviceCalibrationParameterId, sequence) constraint.
+    const reordered = await service.reorderTestPoints(parameter.id, [p2.id, p1.id, p3.id]);
+    expect(reordered.map((p) => p.settingLabel)).toEqual(["T2", "T1", "T3"]);
+    expect(reordered.map((p) => p.sequence)).toEqual([1, 2, 3]);
+  });
+
+  it("rejects a reorder that omits an existing test point", async () => {
+    const { parameter } = await createParameter();
+    const awal = await service.createTestPoint(parameter.id, { settingLabel: "Awal" });
+    await service.createTestPoint(parameter.id, { settingLabel: "Akhir" });
+    await expect(
+      service.reorderTestPoints(parameter.id, [awal.id]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects a reorder that includes an id from a different parameter", async () => {
+    const a = await createParameter({ name: "Suhu A3" });
+    const b = await createParameter({ name: "Suhu B3" });
+    const onA = await service.createTestPoint(a.parameter.id, { settingLabel: "Awal" });
+    const onB = await service.createTestPoint(b.parameter.id, { settingLabel: "Awal" });
+    await expect(
+      service.reorderTestPoints(a.parameter.id, [onB.id]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    // Untouched -- the mismatch is rejected before any write.
+    const stillOnB = await service.findTestPoints(b.parameter.id);
+    expect(stillOnB.map((p) => p.id)).toEqual([onB.id]);
+    void onA;
+  });
+
+  it("reorders an inactive test point too (inactive rows stay part of the managed set)", async () => {
+    const { parameter } = await createParameter();
+    const awal = await service.createTestPoint(parameter.id, { settingLabel: "Awal" });
+    const akhir = await service.createTestPoint(parameter.id, { settingLabel: "Akhir" });
+    await service.updateTestPoint(parameter.id, akhir.id, { isActive: false });
+
+    const reordered = await service.reorderTestPoints(parameter.id, [akhir.id, awal.id]);
+    expect(reordered.map((p) => ({ label: p.settingLabel, active: p.isActive }))).toEqual([
+      { label: "Akhir", active: false },
+      { label: "Awal", active: true },
+    ]);
+  });
+
+  it("attaches test points to a DERIVED (Phase 4B) parameter without interference", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const parameter = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Selisih per titik"),
+      entryStyle: "DERIVED",
+      derivation: { description: "Difference per point" },
+    });
+    createdParameterIds.push(parameter.id);
+
+    const created = await service.createTestPoint(parameter.id, { settingLabel: "Titik 1" });
+    expect(created.settingLabel).toBe("Titik 1");
+
+    const reread = await service.findOne(parameter.id);
+    expect(reread.entryStyle).toBe("DERIVED");
+    expect(reread.derivation).toEqual({ description: "Difference per point" });
+  });
+
+  it("attaches test points to a parameter grouped by Phase 4A logicalTestKey without interference", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const parameter = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Reproduksibilitas kV"),
+      logicalTestKey: "dxray-repro",
+      logicalTestSequence: 1,
+    });
+    createdParameterIds.push(parameter.id);
+
+    await service.createTestPoint(parameter.id, { settingLabel: "70 kV" });
+
+    const reread = await service.findOne(parameter.id);
+    expect(reread.logicalTestKey).toBe("dxray-repro");
+    expect(reread.logicalTestSequence).toBe(1);
+  });
+});
+
+describe("DeviceCalibrationParametersService - CalibrationTestPoint schemas", () => {
+  it("rejects a create payload with an empty settingLabel", () => {
+    const parsed = calibrationTestPointCreateSchema.safeParse({ settingLabel: "" });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects a non-positive sequence on create", () => {
+    const parsed = calibrationTestPointCreateSchema.safeParse({
+      settingLabel: "Awal",
+      sequence: 0,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("accepts a create payload with only settingLabel", () => {
+    const parsed = calibrationTestPointCreateSchema.safeParse({ settingLabel: "Awal" });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("does not accept sequence on the update schema", () => {
+    const parsed = calibrationTestPointUpdateSchema.safeParse({
+      settingLabel: "Awal",
+      sequence: 3,
+    });
+    // Unknown keys are stripped by default zod .object() (non-strict) --
+    // confirm the parsed result simply has no sequence field, not an error.
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect((parsed.data as Record<string, unknown>).sequence).toBeUndefined();
+    }
+  });
+
+  it("rejects toleranceMin greater than toleranceMax on create", () => {
+    const parsed = calibrationTestPointCreateSchema.safeParse({
+      settingLabel: "Awal",
+      toleranceMin: 10,
+      toleranceMax: 5,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("requires a non-empty testPointIds array for reorder", () => {
+    const parsed = calibrationTestPointReorderSchema.safeParse({ testPointIds: [] });
+    expect(parsed.success).toBe(false);
   });
 });

@@ -15,6 +15,7 @@ import { PurchaseOrdersService } from "../purchase-orders/purchase-orders.servic
 import { WorkOrdersService } from "../work-orders/work-orders.service";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import { DevicesService } from "../devices/devices.service";
+import { DeviceCalibrationParametersService } from "../device-calibration-parameters/device-calibration-parameters.service";
 import { CalibrationJobsController } from "./calibration-jobs.controller";
 import { CalibrationJobsService } from "./calibration-jobs.service";
 import { identityCorrectionFileOwnerPolicy } from "./identity-correction-file-owner-policy";
@@ -37,6 +38,7 @@ vi.mock("@medcal/auth", async () => {
 
 const calibrationJobsService = new CalibrationJobsService();
 const measurementResultsService = new MeasurementResultsService();
+const deviceCalibrationParametersService = new DeviceCalibrationParametersService();
 const devicesService = new DevicesService();
 const calibrationRequestsService = new CalibrationRequestsService();
 const quotationsService = new QuotationsService();
@@ -4896,3 +4898,85 @@ describe("CalibrationJobsService — submitForReview measurement completeness", 
   });
 });
 
+
+describe("DeviceCalibrationParametersService - CalibrationTestPoint does not touch job snapshots", () => {
+  const createdJobDeviceTypeIds: string[] = [];
+
+  afterAll(async () => {
+    if (createdJobDeviceTypeIds.length > 0) {
+      await prisma.measurementResult.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdJobDeviceTypeIds } } },
+      });
+      await prisma.jobCalibrationTestPoint.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdJobDeviceTypeIds } } },
+      });
+      await prisma.calibrationTestPoint.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdJobDeviceTypeIds } } },
+      });
+      await prisma.deviceCalibrationParameter.deleteMany({
+        where: { deviceTypeId: { in: createdJobDeviceTypeIds } },
+      });
+    }
+  });
+
+  it("editing/reordering/deactivating a master test point does not change an already-started job's JobCalibrationTestPoint snapshot", async () => {
+    const ctx = await startedWorkOrderJobs(realCompanyId);
+    createdJobDeviceTypeIds.push(ctx.deviceTypeId);
+    const capability = await prisma.deviceCapability.create({
+      data: { code: `PH4C-CAP-${randomUUID().slice(0, 8).toUpperCase()}`, name: "Ph4c Capability" },
+    });
+    const item = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: capability.id, name: "Ph4c Item" },
+    });
+    const parameter = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId: ctx.deviceTypeId,
+        capabilityItemId: item.id,
+        code: "PH4C_SNAP",
+        name: "Suhu",
+        valueType: "NUMBER",
+        sortOrder: 10,
+      },
+    });
+    const awal = await deviceCalibrationParametersService.createTestPoint(parameter.id, { settingLabel: "Awal" });
+    await deviceCalibrationParametersService.createTestPoint(parameter.id, { settingLabel: "Akhir" });
+
+    await completeKontrolAlatForStart(realCompanyId, ctx.jobs[0]!.id);
+    const started = await calibrationJobsService.start(realCompanyId, ctx.jobs[0]!.id);
+    expect(started.status).toBe("IN_PROGRESS");
+
+    const snapshotBefore = await prisma.jobCalibrationTestPoint.findMany({
+      where: { calibrationJobId: ctx.jobs[0]!.id },
+      orderBy: { sequence: "asc" },
+    });
+    expect(snapshotBefore.map((s) => s.settingLabel)).toEqual(["Awal", "Akhir"]);
+
+    // Mutate the MASTER catalog after the job has already started/snapshotted.
+    await deviceCalibrationParametersService.updateTestPoint(parameter.id, awal.id, {
+      settingLabel: "Awal (edited)",
+      isActive: false,
+    });
+    const akhirRow = await prisma.calibrationTestPoint.findFirstOrThrow({
+      where: { deviceCalibrationParameterId: parameter.id, settingLabel: "Akhir" },
+    });
+    await deviceCalibrationParametersService.reorderTestPoints(parameter.id, [akhirRow.id, awal.id]);
+    await deviceCalibrationParametersService.createTestPoint(parameter.id, { settingLabel: "Baru setelah start" });
+
+    const snapshotAfter = await prisma.jobCalibrationTestPoint.findMany({
+      where: { calibrationJobId: ctx.jobs[0]!.id },
+      orderBy: { sequence: "asc" },
+    });
+    // Snapshot is byte-for-byte unchanged: still "Awal"/"Akhir" in original
+    // order, unaffected by the master edit, reorder, deactivation, or the new
+    // point created after start().
+    expect(snapshotAfter).toEqual(snapshotBefore);
+
+    const listed = await calibrationJobsService.listMeasurementParameters(
+      realCompanyId,
+      ctx.jobs[0]!.id,
+    );
+    expect(
+      listed.gridParameters.find((p) => p.code === "PH4C_SNAP")?.testPoints.map((tp) => tp.settingLabel),
+    ).toEqual(["Awal", "Akhir"]);
+  });
+});

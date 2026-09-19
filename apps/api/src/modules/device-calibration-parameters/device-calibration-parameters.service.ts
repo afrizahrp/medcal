@@ -5,8 +5,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { MasterCodeService, Prisma, prisma } from "@medcal/db";
+import type { CalibrationTestPoint } from "@medcal/db";
 import {
   DEVICE_CALIBRATION_PARAMETER_SORTABLE_FIELDS,
+  type CalibrationTestPointCreateInput,
+  type CalibrationTestPointUpdateInput,
   type DeviceCalibrationParameterCopyInput,
   type DeviceCalibrationParameterCreateInput,
   type DeviceCalibrationParameterListQuery,
@@ -47,6 +50,9 @@ export type DeviceCalibrationParameterWithRelations = Prisma.DeviceCalibrationPa
     uom: { select: { id: true; code: true; name: true; symbol: true } };
   };
 }>;
+
+/** One CalibrationTestPoint (Named Measurement Point) row, verbatim schema shape. */
+export type CalibrationTestPointRow = CalibrationTestPoint;
 
 export interface DeviceCalibrationParameterListResult {
   data: DeviceCalibrationParameterWithRelations[];
@@ -953,5 +959,197 @@ export class DeviceCalibrationParametersService {
       capabilityOrders.map((row) => [row.capabilityId, row.sortOrder] as const),
     );
     return buildCapabilityGroups(rows, sortOrderByCapabilityId);
+  }
+
+  // ── CalibrationTestPoint (Named Measurement Points) ────────────────────────
+  //
+  // Master/catalog rows nested under one DeviceCalibrationParameter — the same
+  // "reads for future jobs, historical jobs use their own JobCalibrationTestPoint
+  // snapshot" split already implemented by start()/copyActiveTestPointsIntoJobSnapshot.
+  // This Portal surface only ever touches the master row; it never reads or
+  // writes JobCalibrationTestPoint or MeasurementResult.
+  //
+  // No physical delete is exposed — isActive is the only lifecycle mechanism
+  // (see schema.prisma CalibrationTestPoint.isActive and measurement-tolerance.ts /
+  // job-calibration-test-point-snapshot.ts, which already treat isActive as the
+  // sole "counts for future jobs" gate).
+
+  private async assertUniqueTestPointLabel(
+    deviceCalibrationParameterId: string,
+    settingLabel: string,
+    excludeId?: string,
+  ): Promise<void> {
+    const duplicate = await prisma.calibrationTestPoint.findFirst({
+      where: {
+        deviceCalibrationParameterId,
+        settingLabel: { equals: settingLabel, mode: "insensitive" },
+        ...(excludeId ? { NOT: { id: excludeId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new ConflictException({
+        message: "A test point with this label already exists for this calibration parameter",
+        code: "DUPLICATE_CALIBRATION_TEST_POINT_LABEL",
+        existingId: duplicate.id,
+      });
+    }
+  }
+
+  private async assertSequenceAvailable(
+    deviceCalibrationParameterId: string,
+    sequence: number,
+  ): Promise<void> {
+    const duplicate = await prisma.calibrationTestPoint.findFirst({
+      where: { deviceCalibrationParameterId, sequence },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new ConflictException({
+        message: "Another test point already occupies this sequence for this calibration parameter",
+        code: "DUPLICATE_CALIBRATION_TEST_POINT_SEQUENCE",
+        existingId: duplicate.id,
+      });
+    }
+  }
+
+  /** All test points (active AND inactive) for one parameter — Portal management list. */
+  async findTestPoints(deviceCalibrationParameterId: string): Promise<CalibrationTestPointRow[]> {
+    await this.findOne(deviceCalibrationParameterId);
+    return prisma.calibrationTestPoint.findMany({
+      where: { deviceCalibrationParameterId },
+      orderBy: { sequence: "asc" },
+    });
+  }
+
+  async createTestPoint(
+    deviceCalibrationParameterId: string,
+    input: CalibrationTestPointCreateInput,
+  ): Promise<CalibrationTestPointRow> {
+    await this.findOne(deviceCalibrationParameterId);
+    await this.assertUniqueTestPointLabel(deviceCalibrationParameterId, input.settingLabel);
+
+    let sequence = input.sequence;
+    if (sequence !== undefined) {
+      await this.assertSequenceAvailable(deviceCalibrationParameterId, sequence);
+    } else {
+      // Append-to-end, mirroring appendToOrderingScope's max+step convention —
+      // but +1, not +ORDER_STEP: `sequence` is the 1-based worksheet/LK display
+      // number (schema.prisma comment), read directly by the generic PDF and
+      // job-start snapshot, unlike the purely internal `sortOrder`.
+      const agg = await prisma.calibrationTestPoint.aggregate({
+        where: { deviceCalibrationParameterId },
+        _max: { sequence: true },
+      });
+      sequence = (agg._max.sequence ?? 0) + 1;
+    }
+
+    return prisma.calibrationTestPoint.create({
+      data: {
+        deviceCalibrationParameterId,
+        settingLabel: input.settingLabel,
+        settingValue: input.settingValue ?? null,
+        sequence,
+        toleranceMin: input.toleranceMin ?? null,
+        toleranceMax: input.toleranceMax ?? null,
+        toleranceNote: input.toleranceNote ?? null,
+      },
+    });
+  }
+
+  /** Ownership-scoped lookup — 404 for both "does not exist" and "belongs to another parameter". */
+  private async findTestPoint(
+    deviceCalibrationParameterId: string,
+    testPointId: string,
+  ): Promise<CalibrationTestPointRow> {
+    await this.findOne(deviceCalibrationParameterId);
+    const testPoint = await prisma.calibrationTestPoint.findFirst({
+      where: { id: testPointId, deviceCalibrationParameterId },
+    });
+    if (!testPoint) {
+      throw new NotFoundException({
+        message: "Calibration test point not found",
+        code: "CALIBRATION_TEST_POINT_NOT_FOUND",
+      });
+    }
+    return testPoint;
+  }
+
+  async updateTestPoint(
+    deviceCalibrationParameterId: string,
+    testPointId: string,
+    input: CalibrationTestPointUpdateInput,
+  ): Promise<CalibrationTestPointRow> {
+    const existing = await this.findTestPoint(deviceCalibrationParameterId, testPointId);
+
+    if (input.settingLabel !== undefined && input.settingLabel !== existing.settingLabel) {
+      await this.assertUniqueTestPointLabel(
+        deviceCalibrationParameterId,
+        input.settingLabel,
+        testPointId,
+      );
+    }
+
+    return prisma.calibrationTestPoint.update({
+      where: { id: testPointId },
+      data: {
+        ...(input.settingLabel !== undefined ? { settingLabel: input.settingLabel } : {}),
+        ...(input.settingValue !== undefined ? { settingValue: input.settingValue } : {}),
+        ...(input.toleranceMin !== undefined ? { toleranceMin: input.toleranceMin } : {}),
+        ...(input.toleranceMax !== undefined ? { toleranceMax: input.toleranceMax } : {}),
+        ...(input.toleranceNote !== undefined ? { toleranceNote: input.toleranceNote } : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+      },
+    });
+  }
+
+  /**
+   * Persist the full display order of a parameter's test points. `testPointIds`
+   * must be the complete set currently owned by the parameter (active AND
+   * inactive) — a mismatch (unknown id, id from another parameter, duplicate,
+   * or a missing existing id) is rejected, same convention as
+   * reorderParameters/reorderCapabilities above.
+   *
+   * `sequence` is written in two passes inside one transaction: every row first
+   * moves to a temporary value far outside the real 1..N range, then to its
+   * final 1-based position. A single-pass rewrite could transiently collide
+   * with the `(deviceCalibrationParameterId, sequence)` unique constraint on
+   * whichever row hasn't been updated yet (e.g. swapping #1 and #2 head-on).
+   */
+  async reorderTestPoints(
+    deviceCalibrationParameterId: string,
+    testPointIds: string[],
+  ): Promise<CalibrationTestPointRow[]> {
+    await this.findOne(deviceCalibrationParameterId);
+    const scoped = await prisma.calibrationTestPoint.findMany({
+      where: { deviceCalibrationParameterId },
+      select: { id: true },
+    });
+    DeviceCalibrationParametersService.assertSameSet(
+      testPointIds,
+      new Set(scoped.map((row) => row.id)),
+      "CALIBRATION_TEST_POINT_ORDER_MISMATCH",
+    );
+
+    const TEMP_SEQUENCE_OFFSET = 1_000_000;
+    await prisma.$transaction([
+      ...testPointIds.map((id, index) =>
+        prisma.calibrationTestPoint.update({
+          where: { id },
+          data: { sequence: TEMP_SEQUENCE_OFFSET + index + 1 },
+        }),
+      ),
+      ...testPointIds.map((id, index) =>
+        prisma.calibrationTestPoint.update({
+          where: { id },
+          data: { sequence: index + 1 },
+        }),
+      ),
+    ]);
+
+    return prisma.calibrationTestPoint.findMany({
+      where: { deviceCalibrationParameterId },
+      orderBy: { sequence: "asc" },
+    });
   }
 }
