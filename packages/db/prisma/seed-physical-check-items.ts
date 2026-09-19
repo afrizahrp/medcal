@@ -12,7 +12,7 @@
  * Run manually: pnpm --filter @medcal/db run seed:physical-check-items
  * Dry-run (no DB mutation): pnpm --filter @medcal/db run seed:physical-check-items -- --dry-run
  *
- * Source: docs/claude/plans/technician-app/ui-tasks/PhysicalInspection_Master_Seed.md
+ * Source: docs/module-specs/technician-app/ui-tasks/PhysicalInspection_Master_Seed.md
  */
 import { prisma } from "../src/index";
 

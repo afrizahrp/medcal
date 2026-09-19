@@ -4,7 +4,7 @@
  *
  * Replaces the uniform 0 placeholder on NUMBER-type DeviceCalibrationParameter
  * rows with a proposed per-parameter precision. See
- *   docs/claude/plans/Calibration-management/measurement-results/DecimalPlaces_Backfill_Proposal.md
+ *   docs/module-specs/measurement-results/DecimalPlaces_Backfill_Proposal.md
  * for the full per-parameter evidence table and the flagged low-confidence list.
  *
  * EVIDENCE BASIS (read the report §2 first):

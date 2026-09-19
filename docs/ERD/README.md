@@ -8,8 +8,8 @@
 
 | Doc | Focus |
 | --- | ----- |
-| [overview.md](./overview.md) | Full MVP entity-relationship (split diagrams) |
-| [attributes.md](./attributes.md) | Key attributes & enums per entity (conceptual) |
+| [overview.md](../architecture/ERD/overview.md) | Full MVP entity-relationship (split diagrams) |
+| [attributes.md](../architecture/ERD/attributes.md) | Key attributes & enums per entity (conceptual) |
 
 ## Legend
 
@@ -23,5 +23,5 @@
 ## Next
 
 1. ~~ERD approval~~ **done**
-2. ~~`packages/db` Prisma schema~~ **draft created** — see [`prisma-notes.md`](./prisma-notes.md)
+2. ~~`packages/db` Prisma schema~~ **draft created** — see [`prisma-notes.md`](../architecture/ERD/prisma-notes.md)
 3. Fase 0 monorepo scaffold → `pnpm install` → `prisma migrate`

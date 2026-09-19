@@ -33,12 +33,12 @@ https://api.kalibrasimedika.co.id        → apps/api
 https://apps.kalibrasimedika.co.id       → apps/portal
 ```
 
-See **[production-containerization-implementation-summary.md](production-containerization-implementation-summary.md)** for the current state (what's implemented, what's validated, exact VPS deployment steps, and remaining risks) and **[audits/](audits/)** for the full design/evidence trail:
+See **[production-containerization-implementation-summary.md](../deployment-ops/production-containerization-implementation-summary.md)** for the current state (what's implemented, what's validated, exact VPS deployment steps, and remaining risks) and **[audits/](audits/)** for the full design/evidence trail:
 
-1. [SEO + Lead Generation Audit](audits/01-seo-lead-generation-audit.md)
-2. [Production Env + Docker Wiring Audit](audits/02-production-env-docker-wiring-audit.md)
-3. [apps/web-api Build Readiness Audit](audits/03-web-api-build-readiness-audit.md)
-4. [Forensic Production Containerization Audit](audits/04-production-containerization-forensic-audit.md)
-5. [apps/portal Delta Audit](audits/05-apps-portal-delta-audit.md)
+1. [SEO + Lead Generation Audit](../deployment-ops/audits/01-seo-lead-generation-audit.md)
+2. [Production Env + Docker Wiring Audit](../deployment-ops/audits/02-production-env-docker-wiring-audit.md)
+3. [apps/web-api Build Readiness Audit](../deployment-ops/audits/03-web-api-build-readiness-audit.md)
+4. [Forensic Production Containerization Audit](../deployment-ops/audits/04-production-containerization-forensic-audit.md)
+5. [apps/portal Delta Audit](../deployment-ops/audits/05-apps-portal-delta-audit.md)
 
 `apps/tech-pwa` is not yet containerized — out of scope until its own implementation reaches that stage.

@@ -5,7 +5,7 @@
  *
  * This is an INITIAL DATASET for PKM to manually verify against their own
  * records — NOT a finalised master. See the traceability report:
- *   docs/claude/plans/device-management/equipment/implementation_report_reference_equipment_seed.md
+ *   docs/module-specs/device-management/equipment/implementation_report_reference_equipment_seed.md
  *
  * Rules honoured:
  *  - Only Section A "Nama Alat" values. Source wording (incl. typos such as

@@ -5,7 +5,7 @@ Calibration Business Management System (CBMS) monorepo.
 ## Stack
 
 - Turborepo + pnpm
-- Next.js **16.2.12** + React **19.2.8** (pinned; see [`docs/ADR/001-nextjs-version.md`](./docs/ADR/001-nextjs-version.md))
+- Next.js **16.2.12** + React **19.2.8** (pinned; see [`docs/ADR/001-nextjs-version.md`](./docs/architecture/001-nextjs-version.md))
 - Express (`web-api` — public edge only)
 - NestJS (`api` — modular monolith business layer)
 - Prisma + PostgreSQL (`@medcal/db`)

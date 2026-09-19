@@ -36,7 +36,7 @@ const contactStatusValues = ["PENDING", "READ", "REPLIED", "CLOSED"] as const;
 /**
  * Common mechanics shared by every server-paginated management list
  * (Management List canonical pattern, 2026-08-18 — see
- * docs/claude/plans/forensic-analysis-search-crispy-leaf.md). `sortBy` is
+ * docs/architecture/forensic-analysis-search-crispy-leaf.md). `sortBy` is
  * intentionally a plain optional string here, not validated against a
  * per-resource field enum: Zod only shapes the wire format, the *service*
  * layer is the trust boundary that whitelists it (see
