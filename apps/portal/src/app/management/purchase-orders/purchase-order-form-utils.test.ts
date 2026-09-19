@@ -19,24 +19,37 @@ describe("purchaseOrderActions", () => {
       canApprove: true,
       canCancel: true,
       isLocked: false,
+      canRevise: false,
     });
   });
 
-  it("locks APPROVED without cancel", () => {
+  it("locks APPROVED without cancel, but leaves it revision-eligible (MOM #1)", () => {
     expect(purchaseOrderActions("APPROVED")).toEqual({
       canEdit: false,
       canApprove: false,
       canCancel: false,
       isLocked: true,
+      canRevise: true,
     });
   });
 
-  it("locks CANCELLED", () => {
+  it("locks CANCELLED, including revision (terminal)", () => {
     expect(purchaseOrderActions("CANCELLED")).toEqual({
       canEdit: false,
       canApprove: false,
       canCancel: false,
       isLocked: true,
+      canRevise: false,
+    });
+  });
+
+  it("locks FULFILLED, including revision (terminal)", () => {
+    expect(purchaseOrderActions("FULFILLED")).toEqual({
+      canEdit: false,
+      canApprove: false,
+      canCancel: false,
+      isLocked: true,
+      canRevise: false,
     });
   });
 });

@@ -588,6 +588,11 @@ model User {
   purchaseOrdersConfirmed               PurchaseOrder[]                 @relation("PurchaseOrderConfirmedBy")
   auditLogs                             AuditLog[]
   lkDownloadAuthorizations              LkDownloadAuthorization[]
+  // MOM #1 — Transaction Revision + Immutable History
+  calibrationRequestRevisions           CalibrationRequestHistory[]     @relation("CalibrationRequestHistoryRevisedBy")
+  quotationRevisions                    QuotationHistory[]              @relation("QuotationHistoryRevisedBy")
+  purchaseOrderRevisions                PurchaseOrderHistory[]          @relation("PurchaseOrderHistoryRevisedBy")
+  workOrderRevisions                    WorkOrderHistory[]              @relation("WorkOrderHistoryRevisedBy")
 }
 
 // =============================================================================
@@ -1568,6 +1573,8 @@ model CalibrationRequest {
 
   items     CalibrationRequestItem[]
   quotation Quotation?
+  // MOM #1 — Transaction Revision + Immutable History
+  history   CalibrationRequestHistory[]
 
   @@unique([companyId, number])
   @@index([companyId, status])
@@ -1705,6 +1712,8 @@ model Quotation {
   items          QuotationItem[]
   purchaseOrders PurchaseOrder[]
   workOrders     WorkOrder[]
+  // MOM #1 — Transaction Revision + Immutable History
+  history        QuotationHistory[]
 
   @@unique([companyId, number])
   @@index([companyId, status])
@@ -1762,12 +1771,14 @@ model PurchaseOrder {
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
-  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  quotation   Quotation           @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-  confirmedBy User?               @relation("PurchaseOrderConfirmedBy", fields: [confirmedByUserId], references: [id])
+  company     Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer    Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  quotation   Quotation              @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  confirmedBy User?                  @relation("PurchaseOrderConfirmedBy", fields: [confirmedByUserId], references: [id])
   items       PurchaseOrderItem[]
   workOrders  WorkOrder[]
+  // MOM #1 — Transaction Revision + Immutable History
+  history     PurchaseOrderHistory[]
 
   @@unique([companyId, number])
   @@unique([companyId, customerId, customerPoNumber])
@@ -1858,6 +1869,8 @@ model WorkOrder {
   purchaseOrderItems       PurchaseOrderItem[]
   /// Partial unique index `WorkOrder_purchaseOrderId_active_key` (status <> CANCELLED)
   /// is created in SQL. Prisma cannot model it; do not add @@unique([purchaseOrderId]).
+  // MOM #1 — Transaction Revision + Immutable History
+  history                  WorkOrderHistory[]
 
   @@unique([companyId, number])
   @@index([companyId, status])
@@ -1900,6 +1913,231 @@ model WorkOrderItemAccessory {
   workOrderItem WorkOrderItem @relation(fields: [workOrderItemId], references: [id], onDelete: Cascade)
 
   @@index([workOrderItemId])
+}
+
+// =============================================================================
+// MOM #1 — Transaction Revision + Immutable History
+//
+// Append-only, full-snapshot history for the REQ -> QUOTATION -> PO -> WOL/SPK
+// chain (see docs/minutes-of-meeting/mom-1-*.md). Operational tables above stay
+// the source of current state; a revision mutates them in place (or adds an
+// additive sibling item row where a downstream snapshot already exists — see
+// mom-1-item-revision-rule) and INSERTs one header + N item history rows first.
+// History rows are INSERT-only: no service method may UPDATE or DELETE them.
+// Customer-facing `number` never changes across revisions.
+// =============================================================================
+
+/// Complete snapshot of a CalibrationRequest header immediately before a
+/// revision was applied. One row per revision; `revisionNumber` is 1-based and
+/// allocated as MAX(revisionNumber)+1 inside the same transaction that updates
+/// the current CalibrationRequest row (see CalibrationRequestsService.revise).
+model CalibrationRequestHistory {
+  id              String                   @id @default(cuid())
+  requestId       String
+  revisionNumber  Int
+  companyId       String
+  customerId      String
+  number          String
+  leadId          String?
+  serviceMode     ServiceMode
+  expectedDate    DateTime?                @db.Date
+  status          CalibrationRequestStatus
+  notes           String?
+  revisedByUserId String?
+  revisedAt       DateTime                 @default(now())
+
+  request   CalibrationRequest              @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  revisedBy User?                           @relation("CalibrationRequestHistoryRevisedBy", fields: [revisedByUserId], references: [id])
+  items     CalibrationRequestItemHistory[]
+
+  @@unique([requestId, revisionNumber])
+  @@index([requestId])
+}
+
+/// Complete snapshot of one CalibrationRequestItem row as it stood at the
+/// moment of the parent CalibrationRequestHistory revision. `sourceItemId`
+/// points at the live CalibrationRequestItem.id this snapshot was taken from
+/// (not a foreign key — the source row may itself later change or, in
+/// principle, be superseded; the snapshot must remain readable regardless).
+model CalibrationRequestItemHistory {
+  id                 String            @id @default(cuid())
+  historyId          String
+  sourceItemId       String
+  deviceTypeId       String
+  customerDeviceName String?
+  model              String?
+  deviceId           String?
+  qty                Int
+  akdAkl             String?
+  akdAklDeclaration  AkdAklDeclaration
+  notes              String?
+
+  history CalibrationRequestHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
+
+  @@index([historyId])
+}
+
+/// Complete snapshot of a Quotation header immediately before a revision was
+/// applied. See CalibrationRequestHistory for the revision-numbering contract.
+model QuotationHistory {
+  id                   String          @id @default(cuid())
+  quotationId          String
+  revisionNumber       Int
+  companyId            String
+  customerId           String
+  number               String
+  requestId            String
+  source               QuotationSource
+  status               QuotationStatus
+  validUntil           DateTime?
+  subtotal             Decimal         @db.Decimal(18, 2)
+  headerDiscountAmount Decimal         @db.Decimal(18, 2)
+  taxCode              String
+  taxRate              Decimal         @db.Decimal(5, 4)
+  taxAmount            Decimal         @db.Decimal(18, 2)
+  totalAmount          Decimal         @db.Decimal(18, 2)
+  currency             String
+  approvedAt           DateTime?
+  approvedByUserId     String?
+  customerApprovedAt   DateTime?
+  revisedByUserId      String?
+  revisedAt            DateTime        @default(now())
+
+  quotation Quotation              @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  revisedBy User?                  @relation("QuotationHistoryRevisedBy", fields: [revisedByUserId], references: [id])
+  items     QuotationItemHistory[]
+
+  @@unique([quotationId, revisionNumber])
+  @@index([quotationId])
+}
+
+/// Complete snapshot of one QuotationItem row. See
+/// CalibrationRequestItemHistory for the `sourceItemId` contract.
+model QuotationItemHistory {
+  id             String  @id @default(cuid())
+  historyId      String
+  sourceItemId   String
+  deviceId       String?
+  requestItemId  String?
+  tariffId       String?
+  description    String
+  qty            Decimal @db.Decimal(18, 4)
+  unitPrice      Decimal @db.Decimal(18, 2)
+  discountAmount Decimal @db.Decimal(18, 2)
+  lineTotal      Decimal @db.Decimal(18, 2)
+  pricePending   Boolean
+
+  history QuotationHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
+
+  @@index([historyId])
+}
+
+/// Complete snapshot of a PurchaseOrder header immediately before a revision
+/// was applied. See CalibrationRequestHistory for the revision-numbering
+/// contract.
+model PurchaseOrderHistory {
+  id                   String              @id @default(cuid())
+  purchaseOrderId      String
+  revisionNumber       Int
+  companyId            String
+  customerId           String
+  quotationId          String
+  number               String
+  customerPoNumber     String
+  customerPoDate       DateTime
+  status               PurchaseOrderStatus
+  subtotal             Decimal             @db.Decimal(18, 2)
+  headerDiscountAmount Decimal             @db.Decimal(18, 2)
+  taxCode              String
+  taxRate              Decimal             @db.Decimal(5, 4)
+  taxAmount            Decimal             @db.Decimal(18, 2)
+  totalAmount          Decimal             @db.Decimal(18, 2)
+  currency             String
+  receivedAt           DateTime?
+  confirmedAt          DateTime?
+  confirmedByUserId    String?
+  notes                String?
+  revisedByUserId      String?
+  revisedAt            DateTime            @default(now())
+
+  purchaseOrder PurchaseOrder              @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  revisedBy     User?                      @relation("PurchaseOrderHistoryRevisedBy", fields: [revisedByUserId], references: [id])
+  items         PurchaseOrderItemHistory[]
+
+  @@unique([purchaseOrderId, revisionNumber])
+  @@index([purchaseOrderId])
+}
+
+/// Complete snapshot of one PurchaseOrderItem row. See
+/// CalibrationRequestItemHistory for the `sourceItemId` contract.
+model PurchaseOrderItemHistory {
+  id              String                  @id @default(cuid())
+  historyId       String
+  sourceItemId    String
+  quotationItemId String
+  deviceId        String?
+  tariffId        String?
+  description     String
+  qty             Decimal                 @db.Decimal(18, 4)
+  unitPrice       Decimal                 @db.Decimal(18, 2)
+  discountAmount  Decimal                 @db.Decimal(18, 2)
+  lineTotal       Decimal                 @db.Decimal(18, 2)
+  status          PurchaseOrderItemStatus
+
+  history PurchaseOrderHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
+
+  @@index([historyId])
+}
+
+/// Complete snapshot of a WorkOrder header immediately before a revision was
+/// applied. See CalibrationRequestHistory for the revision-numbering contract.
+/// Deliberately excludes the F.MU.08 "Kaji Ulang" request-review checklist
+/// fields (requestReview*) — those track a separate review-completion process,
+/// not the document's commercial/operational scope, and snapshotting them is
+/// outside MOM #1's defined scope (see the implementation report's Known
+/// Constraints section).
+model WorkOrderHistory {
+  id                   String          @id @default(cuid())
+  workOrderId          String
+  revisionNumber       Int
+  companyId            String
+  quotationId          String
+  purchaseOrderId      String
+  customerId           String
+  number               String
+  serviceMode          ServiceMode
+  addressText          String?
+  geoLat               Float?
+  geoLng               Float?
+  locationNotes        String?
+  scheduledStart       DateTime?
+  scheduledEnd         DateTime?
+  status               WorkOrderStatus
+  equipmentConfirmedAt DateTime?
+  revisedByUserId      String?
+  revisedAt            DateTime        @default(now())
+
+  workOrder WorkOrder              @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  revisedBy User?                  @relation("WorkOrderHistoryRevisedBy", fields: [revisedByUserId], references: [id])
+  items     WorkOrderItemHistory[]
+
+  @@unique([workOrderId, revisionNumber])
+  @@index([workOrderId])
+}
+
+/// Complete snapshot of one WorkOrderItem row. See
+/// CalibrationRequestItemHistory for the `sourceItemId` contract.
+model WorkOrderItemHistory {
+  id                  String  @id @default(cuid())
+  historyId           String
+  sourceItemId        String
+  purchaseOrderItemId String
+  description         String
+  qty                 Decimal @db.Decimal(18, 4)
+
+  history WorkOrderHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
+
+  @@index([historyId])
 }
 
 model WorkOrderAssignment {

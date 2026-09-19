@@ -4,17 +4,37 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { DocumentNumberService, Prisma, prisma } from "@medcal/db";
+import { DocumentNumberService, Prisma, allocateRevisionNumber, prisma } from "@medcal/db";
 import {
   QUOTATION_SORTABLE_FIELDS,
   type QuotationCreateInput,
   type QuotationListQuery,
   type QuotationPreviewInput,
+  type QuotationReviseInput,
   type QuotationUpdateInput,
 } from "@medcal/shared";
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
+import { recordAuditLog } from "../calibration-jobs/audit-log";
 import { resolveActivePriceListItem } from "../price-list-items/price-list-items.service";
 import { renderQuotationPdf, type QuotationPdfResult } from "./quotation-pdf";
+
+/**
+ * MOM #1 — Transaction Revision + Immutable History.
+ * Statuses eligible for `Revise` (as opposed to the normal DRAFT `Edit`/PATCH).
+ * REJECTED/EXPIRED/CANCELLED are terminal/read-only.
+ */
+const REVISABLE_QUOTATION_STATUSES = ["SENT", "APPROVED"] as const;
+
+const quotationHistoryInclude = {
+  items: true,
+  revisedBy: { select: { id: true, name: true, email: true } },
+} as const;
+
+export type QuotationHistoryWithItems = Prisma.QuotationHistoryGetPayload<{
+  include: typeof quotationHistoryInclude;
+}>;
+
+export type QuotationHistorySummary = Omit<QuotationHistoryWithItems, "items">;
 
 const DEFAULT_PAGE_SIZE = 10;
 const MONEY_DECIMAL_PLACES = 2;
@@ -784,5 +804,300 @@ export class QuotationsService {
       data: { status: "CANCELLED" },
       include: quotationInclude,
     });
+  }
+
+  /**
+   * MOM #1 — Transaction Revision + Immutable History.
+   *
+   * The `Revise` counterpart to `update()`: reachable once the quotation has
+   * left DRAFT (see REVISABLE_QUOTATION_STATUSES). Snapshots the complete
+   * current header + items into QuotationHistory / QuotationItemHistory
+   * (append-only) before applying the change. The customer-facing `number`
+   * never changes.
+   *
+   * Per-item semantics (mom-1-item-revision-rule): a `qty` change on an item
+   * that has NOT yet been snapshotted into a PurchaseOrderItem is applied in
+   * place. Once a PurchaseOrderItem already references it, the row is frozen
+   * and additional quantity is carried by a new sibling row instead.
+   */
+  async revise(
+    companyId: string,
+    id: string,
+    userId: string,
+    input: QuotationReviseInput,
+  ): Promise<QuotationWithItems> {
+    const existing = await prisma.quotation.findFirst({
+      where: { id, companyId },
+      include: { items: true },
+    });
+    if (!existing) {
+      throw new NotFoundException({
+        message: "Quotation not found",
+        code: "QUOTATION_NOT_FOUND",
+      });
+    }
+
+    if (
+      !REVISABLE_QUOTATION_STATUSES.includes(
+        existing.status as (typeof REVISABLE_QUOTATION_STATUSES)[number],
+      )
+    ) {
+      throw new BadRequestException({
+        message:
+          existing.status === "DRAFT"
+            ? "DRAFT quotations must use the normal edit action, not revise"
+            : "Quotation is not in a status that allows revision",
+        code: "INVALID_STATUS_FOR_REVISE",
+      });
+    }
+
+    const existingItemsById = new Map(existing.items.map((item) => [item.id, item]));
+    for (const item of input.items) {
+      if (item.id && !existingItemsById.has(item.id)) {
+        throw new BadRequestException({
+          message: "One or more revised items do not belong to this quotation",
+          code: "QUOTATION_ITEM_NOT_FOUND",
+        });
+      }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Row lock for concurrent revise() calls on the same quotation — see
+      // allocateRevisionNumber for why this must happen before it is called.
+      await tx.quotation.update({ where: { id }, data: {} });
+
+      await assertTariffsExist(
+        tx,
+        companyId,
+        input.items.flatMap((item) => (item.tariffId ? [item.tariffId] : [])),
+      );
+      await assertDevicesBelongToCustomer(
+        tx,
+        companyId,
+        existing.customerId,
+        input.items.flatMap((item) => (item.deviceId ? [item.deviceId] : [])),
+      );
+
+      const revisionNumber = await allocateRevisionNumber({
+        tx,
+        historyTable: "QuotationHistory",
+        parentIdColumn: "quotationId",
+        parentId: id,
+      });
+
+      await tx.quotationHistory.create({
+        data: {
+          quotationId: id,
+          revisionNumber,
+          companyId,
+          customerId: existing.customerId,
+          number: existing.number,
+          requestId: existing.requestId,
+          source: existing.source,
+          status: existing.status,
+          validUntil: existing.validUntil,
+          subtotal: existing.subtotal,
+          headerDiscountAmount: existing.headerDiscountAmount,
+          taxCode: existing.taxCode,
+          taxRate: existing.taxRate,
+          taxAmount: existing.taxAmount,
+          totalAmount: existing.totalAmount,
+          currency: existing.currency,
+          approvedAt: existing.approvedAt,
+          approvedByUserId: existing.approvedByUserId,
+          customerApprovedAt: existing.customerApprovedAt,
+          revisedByUserId: userId,
+          items: {
+            create: existing.items.map((item) => ({
+              sourceItemId: item.id,
+              deviceId: item.deviceId,
+              requestItemId: item.requestItemId,
+              tariffId: item.tariffId,
+              description: item.description,
+              qty: item.qty,
+              unitPrice: item.unitPrice,
+              discountAmount: item.discountAmount,
+              lineTotal: item.lineTotal,
+              pricePending: item.pricePending,
+            })),
+          },
+        },
+      });
+
+      for (const item of input.items) {
+        if (!item.id) {
+          const requestItem = await tx.calibrationRequestItem.findFirst({
+            where: { id: item.requestItemId, requestId: existing.requestId },
+            select: { id: true },
+          });
+          if (!requestItem) {
+            throw new BadRequestException({
+              message: "requestItemId does not belong to this quotation's requisition",
+              code: "CALIBRATION_REQUEST_ITEM_NOT_FOUND",
+            });
+          }
+          const qty = toDecimal(item.qty ?? DEFAULT_QTY);
+          const unitPrice = toDecimal(item.unitPrice);
+          const line = computeItemLine(qty, unitPrice, toDecimal(item.discountAmount ?? 0));
+          await tx.quotationItem.create({
+            data: {
+              companyId,
+              quotationId: id,
+              requestItemId: item.requestItemId,
+              deviceId: item.deviceId ?? null,
+              tariffId: item.tariffId ?? null,
+              description: item.description,
+              qty,
+              unitPrice,
+              discountAmount: line.discountAmount,
+              lineTotal: line.lineTotal,
+              pricePending: unitPrice.lessThanOrEqualTo(0),
+            },
+          });
+          continue;
+        }
+
+        const currentItem = existingItemsById.get(item.id);
+        if (!currentItem) continue; // validated above
+
+        const consumedCount = await tx.purchaseOrderItem.count({
+          where: { quotationItemId: item.id },
+        });
+
+        if (consumedCount === 0) {
+          const qty = toDecimal(item.qty ?? currentItem.qty);
+          const unitPrice = toDecimal(item.unitPrice);
+          const line = computeItemLine(
+            qty,
+            unitPrice,
+            toDecimal(item.discountAmount ?? currentItem.discountAmount),
+          );
+          await tx.quotationItem.update({
+            where: { id: item.id },
+            data: {
+              requestItemId: item.requestItemId,
+              deviceId: item.deviceId ?? null,
+              tariffId: item.tariffId ?? null,
+              description: item.description,
+              qty,
+              unitPrice,
+              discountAmount: line.discountAmount,
+              lineTotal: line.lineTotal,
+              pricePending: unitPrice.lessThanOrEqualTo(0),
+            },
+          });
+          continue;
+        }
+
+        // Already snapshotted into a PurchaseOrderItem — the row is frozen
+        // (mom-1-item-revision-rule). Growth is represented by a new sibling
+        // row cloned from the frozen row's identity, carrying only the delta.
+        const requestedQty = item.qty !== undefined ? toDecimal(item.qty) : null;
+        if (!requestedQty || requestedQty.lessThanOrEqualTo(toDecimal(currentItem.qty))) {
+          throw new BadRequestException({
+            message:
+              "This item already has a Purchase Order generated from it and cannot be shrunk or edited in place. " +
+              "Provide a qty greater than the current value to add scope as a new line.",
+            code: "QUOTATION_ITEM_ALREADY_CONSUMED",
+            itemId: item.id,
+          });
+        }
+
+        const deltaQty = requestedQty.minus(toDecimal(currentItem.qty));
+        const line = computeItemLine(
+          deltaQty,
+          toDecimal(currentItem.unitPrice),
+          new Prisma.Decimal(0),
+        );
+        await tx.quotationItem.create({
+          data: {
+            companyId,
+            quotationId: id,
+            requestItemId: currentItem.requestItemId,
+            deviceId: currentItem.deviceId,
+            tariffId: currentItem.tariffId,
+            description: currentItem.description,
+            qty: deltaQty,
+            unitPrice: currentItem.unitPrice,
+            discountAmount: line.discountAmount,
+            lineTotal: line.lineTotal,
+            pricePending: currentItem.pricePending,
+          },
+        });
+      }
+
+      const taxCode = input.taxCode !== undefined ? input.taxCode : existing.taxCode;
+      const documentTax = await resolveDocumentTax(tx, companyId, taxCode);
+      const headerDiscountAmount =
+        input.headerDiscountAmount !== undefined
+          ? toDecimal(input.headerDiscountAmount)
+          : toDecimal(existing.headerDiscountAmount);
+
+      const itemRows = await tx.quotationItem.findMany({ where: { quotationId: id } });
+      const totals = computeHeaderTotals(
+        itemRows.map((row) => toDecimal(row.lineTotal)),
+        headerDiscountAmount,
+        documentTax,
+      );
+
+      await tx.quotation.update({
+        where: { id },
+        data: {
+          taxCode: documentTax.taxCode,
+          taxRate: documentTax.taxRate,
+          subtotal: totals.subtotal,
+          headerDiscountAmount: totals.headerDiscountAmount,
+          taxAmount: totals.taxAmount,
+          totalAmount: totals.totalAmount,
+        },
+      });
+
+      return tx.quotation.findFirstOrThrow({
+        where: { id, companyId },
+        include: quotationInclude,
+      });
+    });
+
+    await recordAuditLog({
+      companyId,
+      userId,
+      action: "QUOTATION_REVISE",
+      outcome: "SUCCESS",
+      targetType: "Quotation",
+      targetId: id,
+      metadata: { number: existing.number },
+    });
+
+    return result;
+  }
+
+  /** MOM #1 — read-only revision list (header snapshots only, no items). */
+  async listHistory(companyId: string, id: string): Promise<QuotationHistorySummary[]> {
+    await this.findOne(companyId, id);
+    return prisma.quotationHistory.findMany({
+      where: { quotationId: id, companyId },
+      orderBy: { revisionNumber: "desc" },
+      include: { revisedBy: { select: { id: true, name: true, email: true } } },
+    });
+  }
+
+  /** MOM #1 — read-only single revision snapshot, including its items. */
+  async getHistoryRevision(
+    companyId: string,
+    id: string,
+    revisionNumber: number,
+  ): Promise<QuotationHistoryWithItems> {
+    await this.findOne(companyId, id);
+    const revision = await prisma.quotationHistory.findFirst({
+      where: { quotationId: id, companyId, revisionNumber },
+      include: quotationHistoryInclude,
+    });
+    if (!revision) {
+      throw new NotFoundException({
+        message: "Revision not found",
+        code: "QUOTATION_REVISION_NOT_FOUND",
+      });
+    }
+    return revision;
   }
 }

@@ -17,6 +17,7 @@ import {
   calibrationRequestCreateSchema,
   calibrationRequestImportConfirmSchema,
   calibrationRequestListQuerySchema,
+  calibrationRequestReviseSchema,
   calibrationRequestUpdateSchema,
   type CalibrationRequestImportPreviewResponse,
 } from "@medcal/shared";
@@ -31,6 +32,8 @@ import {
 } from "./calibration-request-import.service";
 import {
   CalibrationRequestsService,
+  type CalibrationRequestHistorySummary,
+  type CalibrationRequestHistoryWithItems,
   type CalibrationRequestListResult,
   type CalibrationRequestWithItems,
 } from "./calibration-requests.service";
@@ -161,5 +164,53 @@ export class CalibrationRequestsController {
     @Param("id") id: string,
   ): Promise<CalibrationRequestWithItems> {
     return this.service.submit(companyId, id, userId);
+  }
+
+  /** MOM #1 — Revise a committed (non-DRAFT) requisition. */
+  @Post(":id/revise")
+  @RequirePermission("calibrationRequest", "update")
+  async revise(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<CalibrationRequestWithItems> {
+    const parsed = calibrationRequestReviseSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid requisition revision payload",
+        code: "INVALID_CALIBRATION_REQUEST_REVISE",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.revise(companyId, id, userId, parsed.data);
+  }
+
+  /** MOM #1 — read-only revision list (header snapshots only). */
+  @Get(":id/history")
+  @RequirePermission("calibrationRequest", "read")
+  async listHistory(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<CalibrationRequestHistorySummary[]> {
+    return this.service.listHistory(companyId, id);
+  }
+
+  /** MOM #1 — read-only single revision snapshot, including its items. */
+  @Get(":id/history/:revisionNumber")
+  @RequirePermission("calibrationRequest", "read")
+  async getHistoryRevision(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Param("revisionNumber") revisionNumber: string,
+  ): Promise<CalibrationRequestHistoryWithItems> {
+    const parsedRevisionNumber = Number(revisionNumber);
+    if (!Number.isInteger(parsedRevisionNumber) || parsedRevisionNumber < 1) {
+      throw new BadRequestException({
+        message: "Invalid revision number",
+        code: "INVALID_REVISION_NUMBER",
+      });
+    }
+    return this.service.getHistoryRevision(companyId, id, parsedRevisionNumber);
   }
 }

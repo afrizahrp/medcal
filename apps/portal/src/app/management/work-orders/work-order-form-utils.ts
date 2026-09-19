@@ -36,6 +36,13 @@ export function workOrderActions(status: string): {
   canDone: boolean;
   canCancel: boolean;
   isLocked: boolean;
+  /**
+   * MOM #1 — Transaction Revision + Immutable History. Matches the MOM's
+   * explicit WorkOrder boundary and REVISABLE_WORK_ORDER_STATUSES in
+   * work-orders.service.ts: PLANNED/ASSIGNED only — IN_PROGRESS locks scope
+   * (CalibrationJob fan-out can run), DONE/CANCELLED are terminal.
+   */
+  canRevise: boolean;
 } {
   if (status === "PLANNED") {
     return {
@@ -45,6 +52,7 @@ export function workOrderActions(status: string): {
       canDone: false,
       canCancel: true,
       isLocked: false,
+      canRevise: true,
     };
   }
   if (status === "ASSIGNED") {
@@ -55,6 +63,7 @@ export function workOrderActions(status: string): {
       canDone: false,
       canCancel: true,
       isLocked: false,
+      canRevise: true,
     };
   }
   if (status === "IN_PROGRESS") {
@@ -65,6 +74,7 @@ export function workOrderActions(status: string): {
       canDone: true,
       canCancel: true,
       isLocked: false,
+      canRevise: false,
     };
   }
   return {
@@ -74,6 +84,7 @@ export function workOrderActions(status: string): {
     canDone: false,
     canCancel: false,
     isLocked: true,
+    canRevise: false,
   };
 }
 
@@ -230,6 +241,10 @@ export function formatWorkOrderApiError(
       INVALID_WORK_ORDER: "Data Work Order tidak valid.",
       INVALID_WORK_ORDER_UPDATE: "Data update Work Order tidak valid.",
       INVALID_WORK_ORDER_ASSIGN: "Data assignment Work Order tidak valid.",
+      // MOM #1 — Transaction Revision + Immutable History
+      INVALID_STATUS_FOR_REVISE: "Work Order tidak dalam status yang bisa direvisi.",
+      NO_PENDING_SCOPE_CHANGE:
+        "Tidak ada perubahan scope dari Purchase Order untuk diterapkan ke Work Order ini.",
     };
     if (code && messages[code]) {
       return { message: messages[code], workOrderId };

@@ -128,6 +128,73 @@ export function useCancelPurchaseOrder() {
   });
 }
 
+/**
+ * MOM #1 — Transaction Revision + Immutable History. Pull-based: no body —
+ * the backend re-reads the parent Quotation's current items and adds
+ * whatever scope isn't represented on this PO yet.
+ */
+export function useRevisePurchaseOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<PurchaseOrderRow>(`/purchase-orders/${id}/revise`, { method: "POST" }),
+    onSuccess: (_data, id) => {
+      invalidatePurchaseOrderQueries(queryClient, id);
+      queryClient.invalidateQueries({ queryKey: [PURCHASE_ORDERS_QUERY_KEY, id, "history"] });
+    },
+  });
+}
+
+export interface PurchaseOrderHistorySummary {
+  id: string;
+  purchaseOrderId: string;
+  revisionNumber: number;
+  number: string;
+  status: PurchaseOrderStatus;
+  subtotal: string;
+  headerDiscountAmount: string;
+  taxAmount: string;
+  totalAmount: string;
+  revisedAt: string;
+  revisedBy: { id: string; name: string | null; email: string } | null;
+}
+
+export interface PurchaseOrderHistoryItem {
+  id: string;
+  sourceItemId: string;
+  description: string;
+  qty: string;
+  unitPrice: string;
+  discountAmount: string;
+  lineTotal: string;
+}
+
+export interface PurchaseOrderHistoryRevision extends PurchaseOrderHistorySummary {
+  items: PurchaseOrderHistoryItem[];
+}
+
+/** MOM #1 — read-only revision list (header snapshots only). */
+export function usePurchaseOrderHistory(id: string | undefined) {
+  return useQuery({
+    queryKey: [PURCHASE_ORDERS_QUERY_KEY, id, "history"],
+    queryFn: () => apiFetch<PurchaseOrderHistorySummary[]>(`/purchase-orders/${id}/history`),
+    enabled: Boolean(id),
+  });
+}
+
+/** MOM #1 — read-only single revision snapshot, including its items. */
+export function usePurchaseOrderHistoryRevision(
+  id: string | undefined,
+  revisionNumber: number | undefined,
+) {
+  return useQuery({
+    queryKey: [PURCHASE_ORDERS_QUERY_KEY, id, "history", revisionNumber],
+    queryFn: () =>
+      apiFetch<PurchaseOrderHistoryRevision>(`/purchase-orders/${id}/history/${revisionNumber}`),
+    enabled: Boolean(id) && revisionNumber !== undefined,
+  });
+}
+
 export async function fetchPurchaseOrderPdf(id: string): Promise<Blob> {
   const blob = await apiFetchBlob(`/purchase-orders/${id}/pdf`);
   if (blob.size === 0) {

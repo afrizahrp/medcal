@@ -183,6 +183,67 @@ export function useCancelWorkOrder() {
   });
 }
 
+/**
+ * MOM #1 — Transaction Revision + Immutable History. Pull-based: no body —
+ * the backend re-reads the parent PurchaseOrder's current items and adds
+ * whatever scope isn't represented on this WorkOrder yet.
+ */
+export function useReviseWorkOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<WorkOrderRow>(`/work-orders/${id}/revise`, { method: "POST" }),
+    onSuccess: (_data, id) => {
+      invalidateWorkOrderQueries(queryClient, id);
+      queryClient.invalidateQueries({ queryKey: [WORK_ORDERS_QUERY_KEY, id, "history"] });
+    },
+  });
+}
+
+export interface WorkOrderHistorySummary {
+  id: string;
+  workOrderId: string;
+  revisionNumber: number;
+  number: string;
+  status: WorkOrderStatus;
+  serviceMode: string;
+  revisedAt: string;
+  revisedBy: { id: string; name: string | null; email: string } | null;
+}
+
+export interface WorkOrderHistoryItem {
+  id: string;
+  sourceItemId: string;
+  description: string;
+  qty: string;
+}
+
+export interface WorkOrderHistoryRevision extends WorkOrderHistorySummary {
+  items: WorkOrderHistoryItem[];
+}
+
+/** MOM #1 — read-only revision list (header snapshots only). */
+export function useWorkOrderHistory(id: string | undefined) {
+  return useQuery({
+    queryKey: [WORK_ORDERS_QUERY_KEY, id, "history"],
+    queryFn: () => apiFetch<WorkOrderHistorySummary[]>(`/work-orders/${id}/history`),
+    enabled: Boolean(id),
+  });
+}
+
+/** MOM #1 — read-only single revision snapshot, including its items. */
+export function useWorkOrderHistoryRevision(
+  id: string | undefined,
+  revisionNumber: number | undefined,
+) {
+  return useQuery({
+    queryKey: [WORK_ORDERS_QUERY_KEY, id, "history", revisionNumber],
+    queryFn: () =>
+      apiFetch<WorkOrderHistoryRevision>(`/work-orders/${id}/history/${revisionNumber}`),
+    enabled: Boolean(id) && revisionNumber !== undefined,
+  });
+}
+
 export function useWorkOrderEquipmentProposal(id: string | undefined, enabled = true) {
   return useQuery({
     queryKey: [WORK_ORDERS_QUERY_KEY, id, "equipment-proposal"],

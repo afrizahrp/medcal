@@ -1967,3 +1967,104 @@ describe("WorkOrdersService reference equipment", () => {
     expect(reordered.equipment.map((row) => row.equipmentId)).toEqual([unitC.id, unitA.id, unitB.id]);
   });
 });
+
+// =============================================================================
+// MOM #1 — Transaction Revision + Immutable History
+// =============================================================================
+
+describe("WorkOrdersService.revise", () => {
+  it("rejects revise when there is no additional scope to pick up", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
+    const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+
+    await expect(
+      workOrdersService.revise(realCompanyId, created.id, staffUserId),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "NO_PENDING_SCOPE_CHANGE" }),
+    });
+  });
+
+  it("rejects revise once IN_PROGRESS (scope lock matches the MOM's explicit boundary)", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
+    const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    const technician = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, created.id, {
+      technicians: [{ technicianUserId: technician.id }],
+    });
+    await workOrdersService.start(realCompanyId, created.id);
+
+    await expect(
+      workOrdersService.revise(realCompanyId, created.id, staffUserId),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "INVALID_STATUS_FOR_REVISE" }),
+    });
+  });
+
+  it(
+    "end-to-end 1 -> 3 (MOM #1 §7): REQ -> QUOTATION -> PO -> WOL scope growth flows through as an " +
+      "additive WorkOrderItem, the original row stays byte-for-byte frozen, and CalibrationJob fan-out " +
+      "correctly produces 3 jobs once started",
+    async () => {
+      const { quotation, purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+        unitPrice: 100_000,
+      });
+      const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+      expect(created.items).toHaveLength(1);
+      expect(Number(created.items[0]!.qty)).toBe(1);
+      const originalWorkOrderItemId = created.items[0]!.id;
+      const originalPurchaseOrderItemId = created.items[0]!.purchaseOrderItemId;
+
+      // Grow scope at every upstream level — each one's item is already
+      // consumed downstream, so each revise() must add an additive sibling
+      // row rather than mutate the frozen one (mom-1-item-revision-rule).
+      await quotationsService.revise(realCompanyId, quotation.id, staffUserId, {
+        items: [
+          {
+            id: quotation.items[0]!.id,
+            requestItemId: quotation.items[0]!.requestItemId!,
+            unitPrice: Number(quotation.items[0]!.unitPrice),
+            qty: 3,
+          },
+        ],
+      });
+      await purchaseOrdersService.revise(realCompanyId, purchaseOrder.id, staffUserId);
+      const revisedWorkOrder = await workOrdersService.revise(realCompanyId, created.id, staffUserId);
+
+      expect(revisedWorkOrder.number).toBe(created.number);
+      expect(revisedWorkOrder.items).toHaveLength(2);
+      const originalRow = revisedWorkOrder.items.find((item) => item.id === originalWorkOrderItemId)!;
+      expect(Number(originalRow.qty)).toBe(1); // frozen — never mutated
+      expect(originalRow.purchaseOrderItemId).toBe(originalPurchaseOrderItemId);
+      const siblingRow = revisedWorkOrder.items.find((item) => item.id !== originalWorkOrderItemId)!;
+      expect(Number(siblingRow.qty)).toBe(2); // delta only
+      expect(siblingRow.purchaseOrderItemId).not.toBe(originalPurchaseOrderItemId);
+
+      const history = await workOrdersService.listHistory(realCompanyId, created.id);
+      expect(history.map((h) => h.revisionNumber)).toEqual([1]);
+      const rev1 = await workOrdersService.getHistoryRevision(realCompanyId, created.id, 1);
+      expect(rev1.items).toHaveLength(1); // pre-revision snapshot: only the original item
+      expect(Number(rev1.items[0]!.qty)).toBe(1);
+
+      // Total declared scope (1 + 2 = 3) fans out correctly once started —
+      // the existing fan-out mechanism (WorkOrder-wide idempotency guard,
+      // per-item qty cardinality) is untouched by this MOM.
+      const technician = await createTechnician(realCompanyId);
+      await workOrdersService.assign(realCompanyId, created.id, {
+        technicians: [{ technicianUserId: technician.id }],
+      });
+      await workOrdersService.start(realCompanyId, created.id);
+
+      const jobs = await prisma.calibrationJob.findMany({ where: { workOrderId: created.id } });
+      expect(jobs).toHaveLength(3);
+      const jobsByPoItem = new Map<string, number>();
+      for (const job of jobs) {
+        jobsByPoItem.set(job.purchaseOrderItemId!, (jobsByPoItem.get(job.purchaseOrderItemId!) ?? 0) + 1);
+      }
+      expect(jobsByPoItem.get(originalPurchaseOrderItemId)).toBe(1);
+      const siblingJobsCount = [...jobsByPoItem.entries()].find(
+        ([poItemId]) => poItemId !== originalPurchaseOrderItemId,
+      )?.[1];
+      expect(siblingJobsCount).toBe(2);
+    },
+  );
+});

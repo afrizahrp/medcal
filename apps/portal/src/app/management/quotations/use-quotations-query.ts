@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiFetchBlob } from "@medcal/shared";
-import type { QuotationCreateBody, QuotationUpdateBody } from "@medcal/shared";
+import type { QuotationCreateBody, QuotationReviseBody, QuotationUpdateBody } from "@medcal/shared";
 import { CALIBRATION_REQUESTS_QUERY_KEY } from "../calibration-requests/use-calibration-requests-query";
 import type { QuotationPreviewResponse } from "./quotation-preview";
 import type {
@@ -161,6 +161,75 @@ export function useCancelQuotation() {
     onSuccess: (_data, id) => {
       invalidateQuotationQueries(queryClient, id);
     },
+  });
+}
+
+/**
+ * MOM #1 — Transaction Revision + Immutable History. The `Revise` counterpart
+ * to useUpdateQuotation, reachable once the quotation has left DRAFT.
+ */
+export function useReviseQuotation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: QuotationReviseBody }) =>
+      apiFetch<QuotationRow>(`/quotations/${id}/revise`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (_data, variables) => {
+      invalidateQuotationQueries(queryClient, variables.id);
+      queryClient.invalidateQueries({ queryKey: [QUOTATIONS_QUERY_KEY, variables.id, "history"] });
+    },
+  });
+}
+
+export interface QuotationHistorySummary {
+  id: string;
+  quotationId: string;
+  revisionNumber: number;
+  number: string;
+  status: QuotationStatus;
+  subtotal: string;
+  headerDiscountAmount: string;
+  taxAmount: string;
+  totalAmount: string;
+  revisedAt: string;
+  revisedBy: { id: string; name: string | null; email: string } | null;
+}
+
+export interface QuotationHistoryItem {
+  id: string;
+  sourceItemId: string;
+  description: string;
+  qty: string;
+  unitPrice: string;
+  discountAmount: string;
+  lineTotal: string;
+}
+
+export interface QuotationHistoryRevision extends QuotationHistorySummary {
+  items: QuotationHistoryItem[];
+}
+
+/** MOM #1 — read-only revision list (header snapshots only). */
+export function useQuotationHistory(id: string | undefined) {
+  return useQuery({
+    queryKey: [QUOTATIONS_QUERY_KEY, id, "history"],
+    queryFn: () => apiFetch<QuotationHistorySummary[]>(`/quotations/${id}/history`),
+    enabled: Boolean(id),
+  });
+}
+
+/** MOM #1 — read-only single revision snapshot, including its items. */
+export function useQuotationHistoryRevision(
+  id: string | undefined,
+  revisionNumber: number | undefined,
+) {
+  return useQuery({
+    queryKey: [QUOTATIONS_QUERY_KEY, id, "history", revisionNumber],
+    queryFn: () =>
+      apiFetch<QuotationHistoryRevision>(`/quotations/${id}/history/${revisionNumber}`),
+    enabled: Boolean(id) && revisionNumber !== undefined,
   });
 }
 

@@ -29,6 +29,8 @@ import { UserId } from "../../common/decorators/user-id.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   WorkOrdersService,
+  type WorkOrderHistorySummary,
+  type WorkOrderHistoryWithItems,
   type WorkOrderListResult,
   type WorkOrderWithItems,
 } from "./work-orders.service";
@@ -258,6 +260,45 @@ export class WorkOrdersController {
     @Param("id") id: string,
   ): Promise<WorkOrderWithItems> {
     return this.service.done(companyId, id);
+  }
+
+  /** MOM #1 — Revise a PLANNED/ASSIGNED work order (pull-based, no body). */
+  @Post(":id/revise")
+  @RequirePermission("workOrder", "update")
+  async revise(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+  ): Promise<WorkOrderWithItems> {
+    return this.service.revise(companyId, id, userId);
+  }
+
+  /** MOM #1 — read-only revision list (header snapshots only). */
+  @Get(":id/history")
+  @RequirePermission("workOrder", "read")
+  async listHistory(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<WorkOrderHistorySummary[]> {
+    return this.service.listHistory(companyId, id);
+  }
+
+  /** MOM #1 — read-only single revision snapshot, including its items. */
+  @Get(":id/history/:revisionNumber")
+  @RequirePermission("workOrder", "read")
+  async getHistoryRevision(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Param("revisionNumber") revisionNumber: string,
+  ): Promise<WorkOrderHistoryWithItems> {
+    const parsedRevisionNumber = Number(revisionNumber);
+    if (!Number.isInteger(parsedRevisionNumber) || parsedRevisionNumber < 1) {
+      throw new BadRequestException({
+        message: "Invalid revision number",
+        code: "INVALID_REVISION_NUMBER",
+      });
+    }
+    return this.service.getHistoryRevision(companyId, id, parsedRevisionNumber);
   }
 
   @Post(":id/cancel")

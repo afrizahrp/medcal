@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { DocumentNumberService, Prisma, prisma } from "@medcal/db";
+import { DocumentNumberService, Prisma, allocateRevisionNumber, prisma } from "@medcal/db";
 import {
   PURCHASE_ORDER_SORTABLE_FIELDS,
   type PurchaseOrderCreateInput,
@@ -12,9 +12,28 @@ import {
   type PurchaseOrderUpdateInput,
 } from "@medcal/shared";
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
+import { recordAuditLog } from "../calibration-jobs/audit-log";
 import { renderPurchaseOrderPdf, type PurchaseOrderPdfResult } from "./purchase-order-pdf";
 
 const DEFAULT_PAGE_SIZE = 10;
+
+/**
+ * MOM #1 — Transaction Revision + Immutable History.
+ * Statuses eligible for `Revise` (as opposed to the normal DRAFT `Edit`/PATCH).
+ * FULFILLED/CANCELLED are terminal/read-only.
+ */
+const REVISABLE_PURCHASE_ORDER_STATUSES = ["APPROVED", "RECEIVED", "CONFIRMED"] as const;
+
+const purchaseOrderHistoryInclude = {
+  items: true,
+  revisedBy: { select: { id: true, name: true, email: true } },
+} as const;
+
+export type PurchaseOrderHistoryWithItems = Prisma.PurchaseOrderHistoryGetPayload<{
+  include: typeof purchaseOrderHistoryInclude;
+}>;
+
+export type PurchaseOrderHistorySummary = Omit<PurchaseOrderHistoryWithItems, "items">;
 
 const deviceTypeSelect = {
   id: true,
@@ -359,5 +378,194 @@ export class PurchaseOrdersService {
       data: { status: "CANCELLED" },
       include: purchaseOrderInclude,
     });
+  }
+
+  /**
+   * MOM #1 — Transaction Revision + Immutable History.
+   *
+   * PurchaseOrderItem has no client-facing item-edit surface (never mutated
+   * by any existing code, and mom-1-item-revision-rule forbids it once a
+   * WorkOrder has been created from it) — `revise()` is therefore pull-based,
+   * not input-driven: it re-reads the parent Quotation's CURRENT items and
+   * adds one new PurchaseOrderItem for each one not yet represented on this
+   * PO, never touching an existing row. Snapshots the complete current
+   * header + items into PurchaseOrderHistory / PurchaseOrderItemHistory
+   * (append-only) first. The customer-facing `number` never changes.
+   */
+  async revise(
+    companyId: string,
+    id: string,
+    userId: string,
+  ): Promise<PurchaseOrderWithItems> {
+    const existing = await prisma.purchaseOrder.findFirst({
+      where: { id, companyId },
+      include: { items: true },
+    });
+    if (!existing) {
+      throw new NotFoundException({
+        message: "Purchase order not found",
+        code: "PURCHASE_ORDER_NOT_FOUND",
+      });
+    }
+
+    if (
+      !REVISABLE_PURCHASE_ORDER_STATUSES.includes(
+        existing.status as (typeof REVISABLE_PURCHASE_ORDER_STATUSES)[number],
+      )
+    ) {
+      throw new BadRequestException({
+        message:
+          existing.status === "DRAFT"
+            ? "DRAFT purchase orders must use the normal edit action, not revise"
+            : "Purchase order is not in a status that allows revision",
+        code: "INVALID_STATUS_FOR_REVISE",
+      });
+    }
+
+    const quotation = await prisma.quotation.findFirstOrThrow({
+      where: { id: existing.quotationId, companyId },
+      include: { items: true },
+    });
+
+    const consumedQuotationItemIds = new Set(existing.items.map((item) => item.quotationItemId));
+    const pendingQuotationItems = quotation.items.filter(
+      (item) => !consumedQuotationItemIds.has(item.id),
+    );
+    if (pendingQuotationItems.length === 0) {
+      throw new BadRequestException({
+        message: "Quotation has no additional scope for this purchase order to pick up",
+        code: "NO_PENDING_SCOPE_CHANGE",
+      });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Row lock for concurrent revise() calls on the same PO — see
+      // allocateRevisionNumber for why this must happen before it is called.
+      await tx.purchaseOrder.update({ where: { id }, data: {} });
+
+      const revisionNumber = await allocateRevisionNumber({
+        tx,
+        historyTable: "PurchaseOrderHistory",
+        parentIdColumn: "purchaseOrderId",
+        parentId: id,
+      });
+
+      await tx.purchaseOrderHistory.create({
+        data: {
+          purchaseOrderId: id,
+          revisionNumber,
+          companyId,
+          customerId: existing.customerId,
+          quotationId: existing.quotationId,
+          number: existing.number,
+          customerPoNumber: existing.customerPoNumber,
+          customerPoDate: existing.customerPoDate,
+          status: existing.status,
+          subtotal: existing.subtotal,
+          headerDiscountAmount: existing.headerDiscountAmount,
+          taxCode: existing.taxCode,
+          taxRate: existing.taxRate,
+          taxAmount: existing.taxAmount,
+          totalAmount: existing.totalAmount,
+          currency: existing.currency,
+          receivedAt: existing.receivedAt,
+          confirmedAt: existing.confirmedAt,
+          confirmedByUserId: existing.confirmedByUserId,
+          notes: existing.notes,
+          revisedByUserId: userId,
+          items: {
+            create: existing.items.map((item) => ({
+              sourceItemId: item.id,
+              quotationItemId: item.quotationItemId,
+              deviceId: item.deviceId,
+              tariffId: item.tariffId,
+              description: item.description,
+              qty: item.qty,
+              unitPrice: item.unitPrice,
+              discountAmount: item.discountAmount,
+              lineTotal: item.lineTotal,
+              status: item.status,
+            })),
+          },
+        },
+      });
+
+      await tx.purchaseOrderItem.createMany({
+        data: pendingQuotationItems.map((item) => ({
+          companyId,
+          purchaseOrderId: id,
+          quotationItemId: item.id,
+          deviceId: item.deviceId,
+          tariffId: item.tariffId,
+          description: item.description,
+          qty: item.qty,
+          unitPrice: item.unitPrice,
+          discountAmount: item.discountAmount,
+          lineTotal: item.lineTotal,
+          status: "OPEN",
+        })),
+      });
+
+      // Mirror create()'s "copy the quotation's current commercial totals"
+      // rather than re-deriving them independently.
+      await tx.purchaseOrder.update({
+        where: { id },
+        data: {
+          subtotal: quotation.subtotal,
+          headerDiscountAmount: quotation.headerDiscountAmount,
+          taxCode: quotation.taxCode,
+          taxRate: quotation.taxRate,
+          taxAmount: quotation.taxAmount,
+          totalAmount: quotation.totalAmount,
+        },
+      });
+
+      return tx.purchaseOrder.findFirstOrThrow({
+        where: { id, companyId },
+        include: purchaseOrderInclude,
+      });
+    });
+
+    await recordAuditLog({
+      companyId,
+      userId,
+      action: "PURCHASE_ORDER_REVISE",
+      outcome: "SUCCESS",
+      targetType: "PurchaseOrder",
+      targetId: id,
+      metadata: { number: existing.number },
+    });
+
+    return result;
+  }
+
+  /** MOM #1 — read-only revision list (header snapshots only, no items). */
+  async listHistory(companyId: string, id: string): Promise<PurchaseOrderHistorySummary[]> {
+    await this.findOne(companyId, id);
+    return prisma.purchaseOrderHistory.findMany({
+      where: { purchaseOrderId: id, companyId },
+      orderBy: { revisionNumber: "desc" },
+      include: { revisedBy: { select: { id: true, name: true, email: true } } },
+    });
+  }
+
+  /** MOM #1 — read-only single revision snapshot, including its items. */
+  async getHistoryRevision(
+    companyId: string,
+    id: string,
+    revisionNumber: number,
+  ): Promise<PurchaseOrderHistoryWithItems> {
+    await this.findOne(companyId, id);
+    const revision = await prisma.purchaseOrderHistory.findFirst({
+      where: { purchaseOrderId: id, companyId, revisionNumber },
+      include: purchaseOrderHistoryInclude,
+    });
+    if (!revision) {
+      throw new NotFoundException({
+        message: "Revision not found",
+        code: "PURCHASE_ORDER_REVISION_NOT_FOUND",
+      });
+    }
+    return revision;
   }
 }

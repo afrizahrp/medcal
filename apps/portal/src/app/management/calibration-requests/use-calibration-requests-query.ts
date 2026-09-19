@@ -7,6 +7,7 @@ import type {
   CalibrationRequestImportConfirmBody,
   CalibrationRequestImportPreviewResponse,
   CalibrationRequestListQuery,
+  CalibrationRequestReviseBody,
   CalibrationRequestUpdateBody,
 } from "@medcal/shared";
 import type {
@@ -108,6 +109,80 @@ export function useSubmitCalibrationRequest() {
       queryClient.invalidateQueries({ queryKey: [CALIBRATION_REQUESTS_QUERY_KEY] });
       queryClient.invalidateQueries({ queryKey: [CALIBRATION_REQUESTS_QUERY_KEY, id] });
     },
+  });
+}
+
+/**
+ * MOM #1 — Transaction Revision + Immutable History. The `Revise` counterpart
+ * to useUpdateCalibrationRequest, reachable once the requisition has left
+ * DRAFT.
+ */
+export function useReviseCalibrationRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: CalibrationRequestReviseBody }) =>
+      apiFetch<CalibrationRequestRow>(`/calibration-requests/${id}/revise`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [CALIBRATION_REQUESTS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: [CALIBRATION_REQUESTS_QUERY_KEY, variables.id] });
+      queryClient.invalidateQueries({
+        queryKey: [CALIBRATION_REQUESTS_QUERY_KEY, variables.id, "history"],
+      });
+    },
+  });
+}
+
+export interface CalibrationRequestHistorySummary {
+  id: string;
+  requestId: string;
+  revisionNumber: number;
+  number: string;
+  status: CalibrationRequestStatus;
+  serviceMode: string;
+  revisedAt: string;
+  revisedBy: { id: string; name: string | null; email: string } | null;
+}
+
+export interface CalibrationRequestHistoryItem {
+  id: string;
+  sourceItemId: string;
+  deviceTypeId: string;
+  qty: number;
+  customerDeviceName: string | null;
+  model: string | null;
+  deviceId: string | null;
+  notes: string | null;
+}
+
+export interface CalibrationRequestHistoryRevision extends CalibrationRequestHistorySummary {
+  items: CalibrationRequestHistoryItem[];
+}
+
+/** MOM #1 — read-only revision list (header snapshots only). */
+export function useCalibrationRequestHistory(id: string | undefined) {
+  return useQuery({
+    queryKey: [CALIBRATION_REQUESTS_QUERY_KEY, id, "history"],
+    queryFn: () =>
+      apiFetch<CalibrationRequestHistorySummary[]>(`/calibration-requests/${id}/history`),
+    enabled: Boolean(id),
+  });
+}
+
+/** MOM #1 — read-only single revision snapshot, including its items. */
+export function useCalibrationRequestHistoryRevision(
+  id: string | undefined,
+  revisionNumber: number | undefined,
+) {
+  return useQuery({
+    queryKey: [CALIBRATION_REQUESTS_QUERY_KEY, id, "history", revisionNumber],
+    queryFn: () =>
+      apiFetch<CalibrationRequestHistoryRevision>(
+        `/calibration-requests/${id}/history/${revisionNumber}`,
+      ),
+    enabled: Boolean(id) && revisionNumber !== undefined,
   });
 }
 

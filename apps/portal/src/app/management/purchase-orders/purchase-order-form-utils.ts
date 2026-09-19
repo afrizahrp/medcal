@@ -29,11 +29,19 @@ export function purchaseOrderActions(status: string): {
   canApprove: boolean;
   canCancel: boolean;
   isLocked: boolean;
+  /**
+   * MOM #1 — Transaction Revision + Immutable History. Revise is the
+   * committed-document counterpart to Edit: legal exactly where Edit is not
+   * (left DRAFT) and the document isn't terminal (CANCELLED/FULFILLED).
+   * Matches REVISABLE_PURCHASE_ORDER_STATUSES in purchase-orders.service.ts.
+   */
+  canRevise: boolean;
 } {
   if (status === "DRAFT") {
-    return { canEdit: true, canApprove: true, canCancel: true, isLocked: false };
+    return { canEdit: true, canApprove: true, canCancel: true, isLocked: false, canRevise: false };
   }
-  return { canEdit: false, canApprove: false, canCancel: false, isLocked: true };
+  const canRevise = status !== "CANCELLED" && status !== "FULFILLED";
+  return { canEdit: false, canApprove: false, canCancel: false, isLocked: true, canRevise };
 }
 
 export function formatTaxHeaderLabel(
@@ -130,6 +138,10 @@ export function formatPurchaseOrderApiError(
       CANNOT_CANCEL_APPROVED: "Purchase Order yang sudah di-approve tidak dapat dibatalkan.",
       ALREADY_CANCELLED: "Purchase Order sudah dibatalkan.",
       PURCHASE_ORDER_HAS_NO_ITEMS: "Purchase Order tidak memiliki item.",
+      // MOM #1 — Transaction Revision + Immutable History
+      INVALID_STATUS_FOR_REVISE: "Purchase Order tidak dalam status yang bisa direvisi.",
+      NO_PENDING_SCOPE_CHANGE:
+        "Tidak ada perubahan scope dari Quotation untuk diterapkan ke Purchase Order ini.",
     };
     if (code && messages[code]) {
       return { message: messages[code], purchaseOrderId };

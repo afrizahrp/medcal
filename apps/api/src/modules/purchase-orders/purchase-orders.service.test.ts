@@ -245,6 +245,25 @@ function customerPoInput(quotationId: string, poNumber?: string) {
   };
 }
 
+async function createApprovedPurchaseOrder(
+  companyId: string,
+  options?: Parameters<typeof createQuotation>[1],
+) {
+  const created = await createQuotation(companyId, options);
+  const quotation = await approveQuotation(companyId, created.quotation.id);
+  const purchaseOrderDraft = await purchaseOrdersService.create(
+    companyId,
+    customerPoInput(quotation.id),
+  );
+  createdPurchaseOrderIds.push(purchaseOrderDraft.id);
+  const purchaseOrder = await purchaseOrdersService.approve(
+    companyId,
+    purchaseOrderDraft.id,
+    staffUserId,
+  );
+  return { ...created, quotation, purchaseOrder };
+}
+
 afterAll(async () => {
   await cleanupPurchaseOrders();
   if (createdTaxIds.length > 0) {
@@ -937,5 +956,77 @@ describe("PurchaseOrdersService.buildPdf", () => {
 
     const after = await prisma.purchaseOrder.findFirstOrThrow({ where: { id: created.id } });
     expect(after.status).toBe("DRAFT");
+  });
+});
+
+// =============================================================================
+// MOM #1 — Transaction Revision + Immutable History
+// =============================================================================
+
+describe("PurchaseOrdersService.revise", () => {
+  it("rejects revise on a DRAFT purchase order", async () => {
+    const { quotation } = await createApprovedQuotation(realCompanyId);
+    const created = await purchaseOrdersService.create(realCompanyId, customerPoInput(quotation.id));
+    createdPurchaseOrderIds.push(created.id);
+
+    await expect(
+      purchaseOrdersService.revise(realCompanyId, created.id, staffUserId),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects revise when the quotation has no additional scope to pick up", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
+
+    await expect(
+      purchaseOrdersService.revise(realCompanyId, purchaseOrder.id, staffUserId),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "NO_PENDING_SCOPE_CHANGE" }),
+    });
+  });
+
+  it("1 -> 3: pulls the quotation's revised scope as an additive sibling PurchaseOrderItem, number stays stable", async () => {
+    const { quotation, purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      unitPrice: 100_000,
+    });
+    expect(purchaseOrder.items).toHaveLength(1);
+    expect(Number(purchaseOrder.items[0]!.qty)).toBe(1);
+    const originalPoItemId = purchaseOrder.items[0]!.id;
+
+    // Grow the quotation's scope first (Quotation-level revision) — the item
+    // is already consumed by this PO, so QuotationsService.revise() must add
+    // an additive sibling QuotationItem rather than mutate in place.
+    await quotationsService.revise(realCompanyId, quotation.id, staffUserId, {
+      items: [
+        {
+          id: quotation.items[0]!.id,
+          requestItemId: quotation.items[0]!.requestItemId!,
+          unitPrice: Number(quotation.items[0]!.unitPrice),
+          qty: 3,
+        },
+      ],
+    });
+
+    const revised = await purchaseOrdersService.revise(realCompanyId, purchaseOrder.id, staffUserId);
+
+    expect(revised.number).toBe(purchaseOrder.number);
+    expect(revised.items).toHaveLength(2);
+    const originalRow = revised.items.find((item) => item.id === originalPoItemId)!;
+    expect(Number(originalRow.qty)).toBe(1); // frozen — never mutated
+    const siblingRow = revised.items.find((item) => item.id !== originalPoItemId)!;
+    expect(Number(siblingRow.qty)).toBe(2); // delta only
+    expect(Number(revised.totalAmount)).toBe(3 * 100_000);
+
+    const history = await purchaseOrdersService.listHistory(realCompanyId, purchaseOrder.id);
+    expect(history.map((h) => h.revisionNumber)).toEqual([1]);
+    const rev1 = await purchaseOrdersService.getHistoryRevision(realCompanyId, purchaseOrder.id, 1);
+    expect(rev1.items).toHaveLength(1); // pre-revision snapshot: only the original item
+    expect(Number(rev1.items[0]!.qty)).toBe(1);
+
+    // Calling revise() again immediately (no further quotation growth) is a no-op error.
+    await expect(
+      purchaseOrdersService.revise(realCompanyId, purchaseOrder.id, staffUserId),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "NO_PENDING_SCOPE_CHANGE" }),
+    });
   });
 });

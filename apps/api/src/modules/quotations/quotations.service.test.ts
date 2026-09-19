@@ -9,12 +9,15 @@ import {
   quotationUpdateSchema,
 } from "@medcal/shared";
 import { CalibrationRequestsService } from "../calibration-requests/calibration-requests.service";
+import { PurchaseOrdersService } from "../purchase-orders/purchase-orders.service";
 import { QuotationsService } from "./quotations.service";
 
 const quotationsService = new QuotationsService();
 const requestsService = new CalibrationRequestsService();
+const purchaseOrdersService = new PurchaseOrdersService();
 const realCompanyId = "PKM";
 const staffUserId = "qt-staff-user";
+const createdPurchaseOrderIds: string[] = [];
 
 const createdQuotationIds: string[] = [];
 const createdCalibrationRequestIds: string[] = [];
@@ -192,6 +195,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (createdPurchaseOrderIds.length > 0) {
+    await prisma.purchaseOrderItem.deleteMany({
+      where: { purchaseOrderId: { in: createdPurchaseOrderIds } },
+    });
+    await prisma.purchaseOrder.deleteMany({ where: { id: { in: createdPurchaseOrderIds } } });
+  }
   await cleanupQuotations(createdQuotationIds);
   if (createdPriceListItemIds.length > 0) {
     await prisma.priceListItem.deleteMany({ where: { id: { in: createdPriceListItemIds } } });
@@ -804,6 +813,168 @@ describe("QuotationsService lifecycle", () => {
     await expect(quotationsService.cancel(realCompanyId, created.id)).rejects.toMatchObject({
       response: expect.objectContaining({ code: "CANNOT_CANCEL_APPROVED" }),
     });
+  });
+});
+
+// =============================================================================
+// MOM #1 — Transaction Revision + Immutable History
+// =============================================================================
+
+describe("QuotationsService.revise", () => {
+  async function sentQuotation(unitPrice = 100_000) {
+    const dt = await makeDeviceType();
+    await seedPrice(realCompanyId, dt.id, unitPrice);
+    const { request } = await createSubmittedRequest(realCompanyId, { deviceTypeId: dt.id });
+    const created = await createQuoted(realCompanyId, { requestId: request.id });
+    createdQuotationIds.push(created.id);
+    return quotationsService.send(realCompanyId, created.id);
+  }
+
+  async function consumeIntoPurchaseOrder(quotationId: string) {
+    const approved = await quotationsService.approve(realCompanyId, quotationId, staffUserId);
+    const po = await purchaseOrdersService.create(realCompanyId, {
+      quotationId: approved.id,
+      customerPoNumber: `CPO-${randomUUID().slice(0, 8).toUpperCase()}`,
+      customerPoDate: new Date("2026-08-15T00:00:00.000Z"),
+    });
+    createdPurchaseOrderIds.push(po.id);
+    return po;
+  }
+
+  it("rejects revise while still DRAFT", async () => {
+    const created = await createQuoted(realCompanyId, {
+      requestId: (
+        await createSubmittedRequest(realCompanyId, { deviceTypeId: (await makeDeviceType()).id })
+      ).request.id,
+    });
+    createdQuotationIds.push(created.id);
+
+    await expect(
+      quotationsService.revise(realCompanyId, created.id, staffUserId, {
+        items: [{ id: created.items[0]!.id, requestItemId: created.items[0]!.requestItemId!, unitPrice: 1, qty: 3 }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("MOM #1 example: QUO-01 1 -> 3 -> 4 grows qty in place before any PO exists, number stays QUO-01", async () => {
+    const sent = await sentQuotation();
+    const itemId = sent.items[0]!.id;
+    const requestItemId = sent.items[0]!.requestItemId!;
+
+    const rev1 = await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [{ id: itemId, requestItemId, unitPrice: Number(sent.items[0]!.unitPrice), qty: 3 }],
+    });
+    expect(rev1.number).toBe(sent.number);
+    expect(rev1.items).toHaveLength(1);
+    expect(rev1.items[0]!.id).toBe(itemId);
+    expect(Number(rev1.items[0]!.qty)).toBe(3);
+    expect(Number(rev1.subtotal)).toBe(3 * 100_000);
+
+    const rev2 = await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [{ id: itemId, requestItemId, unitPrice: Number(sent.items[0]!.unitPrice), qty: 4 }],
+    });
+    expect(rev2.number).toBe(sent.number);
+    expect(Number(rev2.items[0]!.qty)).toBe(4);
+    expect(Number(rev2.subtotal)).toBe(4 * 100_000);
+
+    const history = await quotationsService.listHistory(realCompanyId, sent.id);
+    expect(history.map((h) => h.revisionNumber).sort()).toEqual([1, 2]);
+
+    const historyRev1 = await quotationsService.getHistoryRevision(realCompanyId, sent.id, 1);
+    expect(historyRev1.items).toHaveLength(1);
+    expect(Number(historyRev1.items[0]!.qty)).toBe(1); // pre-revision-1 snapshot: the original qty
+
+    const historyRev2 = await quotationsService.getHistoryRevision(realCompanyId, sent.id, 2);
+    expect(Number(historyRev2.items[0]!.qty)).toBe(3); // pre-revision-2 snapshot: state after revision 1
+  });
+
+  it("supports a later decrease (3 -> 2) as a new revision, without touching earlier history", async () => {
+    const sent = await sentQuotation();
+    const itemId = sent.items[0]!.id;
+    const requestItemId = sent.items[0]!.requestItemId!;
+    const unitPrice = Number(sent.items[0]!.unitPrice);
+
+    await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [{ id: itemId, requestItemId, unitPrice, qty: 3 }],
+    });
+    const rev2 = await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [{ id: itemId, requestItemId, unitPrice, qty: 2 }],
+    });
+
+    expect(Number(rev2.items[0]!.qty)).toBe(2);
+    expect(rev2.number).toBe(sent.number);
+
+    const historyRev1 = await quotationsService.getHistoryRevision(realCompanyId, sent.id, 1);
+    expect(Number(historyRev1.items[0]!.qty)).toBe(1);
+    const historyRev2 = await quotationsService.getHistoryRevision(realCompanyId, sent.id, 2);
+    expect(Number(historyRev2.items[0]!.qty)).toBe(3);
+  });
+
+  it("freezes an item once a Purchase Order has been generated from it, adding an additive sibling row for growth", async () => {
+    const sent = await sentQuotation();
+    const itemId = sent.items[0]!.id;
+    await consumeIntoPurchaseOrder(sent.id);
+
+    const revised = await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [
+        {
+          id: itemId,
+          requestItemId: sent.items[0]!.requestItemId!,
+          unitPrice: Number(sent.items[0]!.unitPrice),
+          qty: 3,
+        },
+      ],
+    });
+
+    expect(revised.items).toHaveLength(2);
+    const originalRow = revised.items.find((item) => item.id === itemId)!;
+    expect(Number(originalRow.qty)).toBe(1); // frozen
+    const siblingRow = revised.items.find((item) => item.id !== itemId)!;
+    expect(Number(siblingRow.qty)).toBe(2); // delta only
+    expect(Number(revised.subtotal)).toBe(3 * 100_000);
+  });
+
+  it("rejects shrinking or no-op qty on an already-consumed item", async () => {
+    const sent = await sentQuotation();
+    await consumeIntoPurchaseOrder(sent.id);
+
+    await expect(
+      quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+        items: [
+          {
+            id: sent.items[0]!.id,
+            requestItemId: sent.items[0]!.requestItemId!,
+            unitPrice: Number(sent.items[0]!.unitPrice),
+            qty: 1,
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rolls back everything (no history row committed) if the batch is invalid", async () => {
+    const sent = await sentQuotation();
+
+    await expect(
+      quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+        items: [
+          {
+            id: sent.items[0]!.id,
+            requestItemId: sent.items[0]!.requestItemId!,
+            unitPrice: Number(sent.items[0]!.unitPrice),
+            qty: 3,
+          },
+          { requestItemId: "does-not-exist", unitPrice: 1, description: "bad line" },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const historyAfter = await quotationsService.listHistory(realCompanyId, sent.id);
+    expect(historyAfter).toHaveLength(0);
+
+    const quotationAfter = await quotationsService.findOne(realCompanyId, sent.id);
+    expect(quotationAfter.items).toHaveLength(1);
+    expect(Number(quotationAfter.items[0]!.qty)).toBe(1);
   });
 });
 

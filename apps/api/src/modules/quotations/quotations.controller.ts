@@ -15,6 +15,7 @@ import {
   quotationCreateSchema,
   quotationListQuerySchema,
   quotationPreviewSchema,
+  quotationReviseSchema,
   quotationUpdateSchema,
 } from "@medcal/shared";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
@@ -23,6 +24,8 @@ import { UserId } from "../../common/decorators/user-id.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   QuotationsService,
+  type QuotationHistorySummary,
+  type QuotationHistoryWithItems,
   type QuotationListResult,
   type QuotationPreviewResult,
   type QuotationWithItems,
@@ -162,5 +165,53 @@ export class QuotationsController {
     @Param("id") id: string,
   ): Promise<QuotationWithItems> {
     return this.service.cancel(companyId, id);
+  }
+
+  /** MOM #1 — Revise a committed (non-DRAFT) quotation. */
+  @Post(":id/revise")
+  @RequirePermission("quotation", "update")
+  async revise(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<QuotationWithItems> {
+    const parsed = quotationReviseSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid quotation revision payload",
+        code: "INVALID_QUOTATION_REVISE",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.revise(companyId, id, userId, parsed.data);
+  }
+
+  /** MOM #1 — read-only revision list (header snapshots only). */
+  @Get(":id/history")
+  @RequirePermission("quotation", "read")
+  async listHistory(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<QuotationHistorySummary[]> {
+    return this.service.listHistory(companyId, id);
+  }
+
+  /** MOM #1 — read-only single revision snapshot, including its items. */
+  @Get(":id/history/:revisionNumber")
+  @RequirePermission("quotation", "read")
+  async getHistoryRevision(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Param("revisionNumber") revisionNumber: string,
+  ): Promise<QuotationHistoryWithItems> {
+    const parsedRevisionNumber = Number(revisionNumber);
+    if (!Number.isInteger(parsedRevisionNumber) || parsedRevisionNumber < 1) {
+      throw new BadRequestException({
+        message: "Invalid revision number",
+        code: "INVALID_REVISION_NUMBER",
+      });
+    }
+    return this.service.getHistoryRevision(companyId, id, parsedRevisionNumber);
   }
 }

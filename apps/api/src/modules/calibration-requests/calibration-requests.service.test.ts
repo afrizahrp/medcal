@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { prisma } from "@medcal/db";
+import { Prisma, prisma } from "@medcal/db";
 import { isValidDocumentNumber } from "@medcal/db";
 import { calibrationRequestCreateSchema } from "@medcal/shared";
+import { QuotationsService } from "../quotations/quotations.service";
 import { CalibrationRequestsService } from "./calibration-requests.service";
 
 const service = new CalibrationRequestsService();
+const quotationsService = new QuotationsService();
+const createdQuotationIds: string[] = [];
+const createdTaxIds: string[] = [];
+const createdPriceListItemIds: string[] = [];
 const realCompanyId = "PKM";
 const createdCalibrationRequestIds: string[] = [];
 const createdCustomerIds: string[] = [];
@@ -89,6 +94,16 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (createdQuotationIds.length > 0) {
+    await prisma.quotationItem.deleteMany({ where: { quotationId: { in: createdQuotationIds } } });
+    await prisma.quotation.deleteMany({ where: { id: { in: createdQuotationIds } } });
+  }
+  if (createdPriceListItemIds.length > 0) {
+    await prisma.priceListItem.deleteMany({ where: { id: { in: createdPriceListItemIds } } });
+  }
+  if (createdTaxIds.length > 0) {
+    await prisma.tax.deleteMany({ where: { id: { in: createdTaxIds } } });
+  }
   await cleanupCalibrationRequests(createdCalibrationRequestIds);
   if (createdDeviceTypeIds.length > 0) {
     await prisma.deviceType.deleteMany({ where: { id: { in: createdDeviceTypeIds } } });
@@ -673,5 +688,218 @@ describe("CalibrationRequestsService transaction rollback", () => {
       where: { companyId: realCompanyId, customerId: customer.id },
     });
     expect(countForCustomer).toBe(0);
+  });
+});
+
+// =============================================================================
+// MOM #1 — Transaction Revision + Immutable History
+// =============================================================================
+
+async function ensureNonPpnTax() {
+  const existing = await prisma.tax.findUnique({
+    where: { companyId_taxCode: { companyId: realCompanyId, taxCode: "T0" } },
+  });
+  if (existing) return existing;
+  const tax = await prisma.tax.create({
+    data: { companyId: realCompanyId, taxCode: "T0", taxRate: 0, isExclude: false, description: "Non PPN" },
+  });
+  createdTaxIds.push(tax.id);
+  return tax;
+}
+
+async function seedPrice(deviceTypeId: string, unitPrice: number) {
+  const effectiveFrom = new Date("2020-01-01T00:00:00.000Z");
+  const row = await prisma.priceListItem.upsert({
+    where: { companyId_deviceTypeId_effectiveFrom: { companyId: realCompanyId, deviceTypeId, effectiveFrom } },
+    create: { companyId: realCompanyId, deviceTypeId, unitPrice: new Prisma.Decimal(unitPrice), effectiveFrom },
+    update: { unitPrice: new Prisma.Decimal(unitPrice) },
+  });
+  createdPriceListItemIds.push(row.id);
+  return row;
+}
+
+/** Generates a real Quotation from the request, so its item becomes "consumed". */
+async function consumeRequestIntoQuotation(requestId: string, deviceTypeId: string) {
+  await ensureNonPpnTax();
+  await seedPrice(deviceTypeId, 100_000);
+  const quotation = await quotationsService.create(realCompanyId, { requestId, taxCode: "T0" });
+  createdQuotationIds.push(quotation.id);
+  return quotation;
+}
+
+describe("CalibrationRequestsService.revise", () => {
+  it("rejects revise while still DRAFT (use the normal edit action instead)", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, qty: 1 }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+
+    await expect(
+      service.revise(realCompanyId, created.id, testUserId, {
+        items: [{ id: created.items[0]!.id, deviceTypeId, qty: 3 }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects revise on a terminal (CANCELLED) request", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, qty: 1 }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+    await service.submit(realCompanyId, created.id, testUserId);
+    await service.cancel(realCompanyId, created.id, testUserId);
+
+    await expect(
+      service.revise(realCompanyId, created.id, testUserId, {
+        items: [{ id: created.items[0]!.id, deviceTypeId, qty: 3 }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("1 -> 3: grows qty in place before any Quotation exists, keeping the document number and item id stable", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, qty: 1 }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+    const submitted = await service.submit(realCompanyId, created.id, testUserId);
+    const originalItemId = submitted.items[0]!.id;
+
+    const revised = await service.revise(realCompanyId, created.id, testUserId, {
+      items: [{ id: originalItemId, deviceTypeId, qty: 3 }],
+    });
+
+    expect(revised.number).toBe(created.number);
+    expect(revised.status).toBe("SUBMITTED");
+    expect(revised.items).toHaveLength(1);
+    expect(revised.items[0]!.id).toBe(originalItemId);
+    expect(revised.items[0]!.qty).toBe(3);
+  });
+
+  it("history is a complete snapshot per revision (not a delta), preserved unchanged by later revisions, including a decrease (3 -> 2)", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, qty: 1, notes: "first" }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+    const submitted = await service.submit(realCompanyId, created.id, testUserId);
+    const itemId = submitted.items[0]!.id;
+
+    await service.revise(realCompanyId, created.id, testUserId, {
+      items: [{ id: itemId, deviceTypeId, qty: 3, notes: "second" }],
+    });
+    const final = await service.revise(realCompanyId, created.id, testUserId, {
+      items: [{ id: itemId, deviceTypeId, qty: 2, notes: "third" }],
+    });
+
+    expect(final.number).toBe(created.number);
+    expect(final.items[0]!.qty).toBe(2);
+
+    const history = await service.listHistory(realCompanyId, created.id);
+    expect(history.map((h) => h.revisionNumber).sort()).toEqual([1, 2]);
+
+    const rev1 = await service.getHistoryRevision(realCompanyId, created.id, 1);
+    expect(rev1.number).toBe(created.number);
+    expect(rev1.items).toHaveLength(1);
+    expect(rev1.items[0]!.qty).toBe(1);
+    expect(rev1.items[0]!.notes).toBe("first"); // complete snapshot — item-level notes captured too
+
+    const rev2 = await service.getHistoryRevision(realCompanyId, created.id, 2);
+    expect(rev2.items).toHaveLength(1);
+    expect(rev2.items[0]!.qty).toBe(3);
+
+    // Re-reading revision 1 again after revision 2 was created must be unchanged.
+    const rev1Again = await service.getHistoryRevision(realCompanyId, created.id, 1);
+    expect(rev1Again.items[0]!.qty).toBe(1);
+  });
+
+  it("freezes an item once a Quotation has been generated from it, and adds an additive sibling row for growth instead of mutating it", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, qty: 1 }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+    const submitted = await service.submit(realCompanyId, created.id, testUserId);
+    const originalItemId = submitted.items[0]!.id;
+
+    await consumeRequestIntoQuotation(created.id, deviceTypeId);
+
+    const revised = await service.revise(realCompanyId, created.id, testUserId, {
+      items: [{ id: originalItemId, deviceTypeId, qty: 3 }],
+    });
+
+    expect(revised.items).toHaveLength(2);
+    const originalRow = revised.items.find((item) => item.id === originalItemId)!;
+    expect(originalRow.qty).toBe(1); // frozen — never mutated
+    const siblingRow = revised.items.find((item) => item.id !== originalItemId)!;
+    expect(siblingRow.qty).toBe(2); // delta only
+    expect(siblingRow.deviceTypeId).toBe(originalRow.deviceTypeId);
+  });
+
+  it("rejects shrinking or no-op qty on an already-consumed item", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, qty: 3 }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+    const submitted = await service.submit(realCompanyId, created.id, testUserId);
+    const originalItemId = submitted.items[0]!.id;
+
+    await consumeRequestIntoQuotation(created.id, deviceTypeId);
+
+    await expect(
+      service.revise(realCompanyId, created.id, testUserId, {
+        items: [{ id: originalItemId, deviceTypeId, qty: 2 }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rolls back everything (no history, no item mutation) if any line in the batch is invalid", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, qty: 1 }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+    const submitted = await service.submit(realCompanyId, created.id, testUserId);
+    const originalItemId = submitted.items[0]!.id;
+
+    await expect(
+      service.revise(realCompanyId, created.id, testUserId, {
+        items: [
+          { id: originalItemId, deviceTypeId, qty: 3 },
+          { deviceTypeId: "does-not-exist", qty: 1 },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const historyAfter = await service.listHistory(realCompanyId, created.id);
+    expect(historyAfter).toHaveLength(0);
+
+    const requestAfter = await service.findOne(realCompanyId, created.id);
+    expect(requestAfter.items).toHaveLength(1);
+    expect(requestAfter.items[0]!.qty).toBe(1);
   });
 });

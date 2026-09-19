@@ -1,18 +1,31 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, Edit, Plus, Printer, Wrench, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Edit,
+  History as HistoryIcon,
+  Plus,
+  Printer,
+  RefreshCw,
+  Wrench,
+  X,
+} from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { AccessDenied } from "../../../../components/access-denied";
 import {
   formPageClass,
   formSurfaceClass,
   formatDate,
   formatDateTime,
+  formatIdr,
+  formatQty,
 } from "../../quotations/quotations-ui";
 import { useTaxes } from "../../quotations/use-taxes-query";
 import {
@@ -35,6 +48,9 @@ import {
   useApprovePurchaseOrder,
   useCancelPurchaseOrder,
   usePurchaseOrder,
+  usePurchaseOrderHistory,
+  usePurchaseOrderHistoryRevision,
+  useRevisePurchaseOrder,
 } from "../use-purchase-orders-query";
 import {
   canCreateWorkOrderFromPurchaseOrder,
@@ -51,6 +67,7 @@ export default function PurchaseOrderDetailPage() {
   const taxesQuery = useTaxes();
   const approveMutation = useApprovePurchaseOrder();
   const cancelMutation = useCancelPurchaseOrder();
+  const reviseMutation = useRevisePurchaseOrder();
   const workOrderQuery = useWorkOrders(
     {
       search: "",
@@ -64,10 +81,12 @@ export default function PurchaseOrderDetailPage() {
     Boolean(params.id && capabilities?.workOrderRead),
   );
 
-  const [confirmAction, setConfirmAction] = useState<"approve" | "cancel" | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"approve" | "cancel" | "revise" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [printPending, setPrintPending] = useState(false);
+  // MOM #1 — Transaction Revision + Immutable History
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
 
   const purchaseOrder = query.data;
 
@@ -108,20 +127,23 @@ export default function PurchaseOrderDetailPage() {
 
   const actions = purchaseOrderActions(purchaseOrder.status);
 
-  async function runAction(action: "approve" | "cancel") {
+  async function runAction(action: "approve" | "cancel" | "revise") {
     setError(null);
     setSuccess(null);
     const mutations = {
       approve: approveMutation,
       cancel: cancelMutation,
+      revise: reviseMutation,
     };
     const successMessages = {
       approve: "Purchase Order berhasil di-approve.",
       cancel: "Purchase Order berhasil dibatalkan.",
+      revise: "Purchase Order berhasil direvisi.",
     };
     const fallbacks = {
       approve: "Gagal approve purchase order.",
       cancel: "Gagal membatalkan purchase order.",
+      revise: "Gagal merevisi purchase order.",
     };
     try {
       await mutations[action].mutateAsync(purchaseOrder!.id);
@@ -134,7 +156,8 @@ export default function PurchaseOrderDetailPage() {
     }
   }
 
-  const actionPending = approveMutation.isPending || cancelMutation.isPending || printPending;
+  const actionPending =
+    approveMutation.isPending || cancelMutation.isPending || reviseMutation.isPending || printPending;
 
   async function handlePrint() {
     setError(null);
@@ -275,6 +298,20 @@ export default function PurchaseOrderDetailPage() {
             {printPending ? "Membuka PDF…" : "Print"}
           </Button>
 
+          {capabilities?.purchaseOrderRead ? (
+            <Button type="button" variant="outline" onClick={() => setHistoryDialogOpen(true)}>
+              <HistoryIcon className="h-4 w-4" />
+              History
+            </Button>
+          ) : null}
+
+          {actions.canRevise && capabilities?.purchaseOrderUpdate ? (
+            <Button type="button" variant="outline" onClick={() => setConfirmAction("revise")}>
+              <RefreshCw className="h-4 w-4" />
+              Revise
+            </Button>
+          ) : null}
+
           {actions.canEdit && capabilities?.purchaseOrderUpdate ? (
             <Button type="button" variant="outline" asChild>
               <Link href={`/purchase-orders/${purchaseOrder.id}/edit`}>
@@ -319,6 +356,126 @@ export default function PurchaseOrderDetailPage() {
         loading={actionPending}
         variant="destructive"
       />
+      <ConfirmDialog
+        open={confirmAction === "revise"}
+        title="Revise this Purchase Order?"
+        description="Kondisi Purchase Order saat ini akan disimpan sebagai riwayat, lalu scope terbaru dari Quotation akan diterapkan. Nomor PO tidak berubah."
+        confirmLabel="Revise"
+        onConfirm={() => runAction("revise")}
+        onCancel={() => setConfirmAction(null)}
+        loading={actionPending}
+      />
+
+      {historyDialogOpen ? (
+        <PurchaseOrderHistoryDialog
+          purchaseOrderId={purchaseOrder.id}
+          onClose={() => setHistoryDialogOpen(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * MOM #1 — Transaction Revision + Immutable History.
+ * Read-only: no Edit/Delete affordance is ever rendered for a historical
+ * snapshot. Mirrors QuotationHistoryDialog (quotations/[id]/page.tsx).
+ */
+function PurchaseOrderHistoryDialog({
+  purchaseOrderId,
+  onClose,
+}: {
+  purchaseOrderId: string;
+  onClose: () => void;
+}) {
+  const historyQuery = usePurchaseOrderHistory(purchaseOrderId);
+  const [selected, setSelected] = useState<number | null>(null);
+  const revisionQuery = usePurchaseOrderHistoryRevision(purchaseOrderId, selected ?? undefined);
+
+  useEffect(() => {
+    if (historyQuery.data && historyQuery.data.length > 0 && selected === null) {
+      setSelected(historyQuery.data[0]!.revisionNumber);
+    }
+  }, [historyQuery.data, selected]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="mx-4 w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-slate-900">Revision History</h3>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Tutup
+          </Button>
+        </div>
+
+        {historyQuery.isLoading ? (
+          <p className="mt-4 text-sm text-slate-400">Memuat…</p>
+        ) : (historyQuery.data ?? []).length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">Belum ada revisi untuk purchase order ini.</p>
+        ) : (
+          <div className="mt-4 grid gap-4 sm:grid-cols-[220px_1fr]">
+            <ul className="space-y-1">
+              {(historyQuery.data ?? []).map((rev) => (
+                <li key={rev.revisionNumber}>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(rev.revisionNumber)}
+                    className={cn(
+                      "w-full rounded-md px-3 py-2 text-left text-sm",
+                      selected === rev.revisionNumber
+                        ? "bg-brand-50 text-brand-700"
+                        : "hover:bg-slate-50",
+                    )}
+                  >
+                    <p className="font-medium">Revision #{rev.revisionNumber}</p>
+                    <p className="text-xs text-slate-500">{formatDateTime(rev.revisedAt)}</p>
+                    <p className="text-xs text-slate-500">
+                      {rev.revisedBy?.name ?? rev.revisedBy?.email ?? "—"}
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="rounded-md border border-slate-200 p-3">
+              {selected === null ? (
+                <p className="text-sm text-slate-500">Pilih revisi untuk melihat detailnya.</p>
+              ) : revisionQuery.isLoading ? (
+                <p className="text-sm text-slate-400">Memuat…</p>
+              ) : revisionQuery.data ? (
+                <>
+                  <p className="text-sm font-medium text-slate-900">
+                    {revisionQuery.data.number} — Revision #{revisionQuery.data.revisionNumber}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Status saat itu: {revisionQuery.data.status}
+                  </p>
+                  <table className="mt-3 w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase text-slate-500">
+                        <th className="py-1">Deskripsi</th>
+                        <th className="py-1 text-right">Qty</th>
+                        <th className="py-1 text-right">Line Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {revisionQuery.data.items.map((item) => (
+                        <tr key={item.id}>
+                          <td className="py-1.5">{item.description}</td>
+                          <td className="py-1.5 text-right">{formatQty(item.qty)}</td>
+                          <td className="py-1.5 text-right">{formatIdr(item.lineTotal)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="mt-2 text-right text-sm font-semibold text-slate-900">
+                    Total: {formatIdr(revisionQuery.data.totalAmount)}
+                  </p>
+                </>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

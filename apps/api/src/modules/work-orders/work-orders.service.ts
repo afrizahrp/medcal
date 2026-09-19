@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { DocumentNumberService, Prisma, prisma } from "@medcal/db";
+import { DocumentNumberService, Prisma, allocateRevisionNumber, prisma } from "@medcal/db";
 import {
   WORK_ORDER_SORTABLE_FIELDS,
   type WorkOrderAssignInput,
@@ -16,6 +16,7 @@ import {
   type WorkOrderUpdateInput,
 } from "@medcal/shared";
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
+import { recordAuditLog } from "../calibration-jobs/audit-log";
 import { renderWorkOrderPdf, type WorkOrderPdfResult } from "./work-order-pdf";
 import {
   WORK_ORDER_EQUIPMENT_ORDER_STEP,
@@ -135,6 +136,25 @@ const workOrderInclude = {
 export type WorkOrderWithItems = Prisma.WorkOrderGetPayload<{
   include: typeof workOrderInclude;
 }>;
+
+/**
+ * MOM #1 — Transaction Revision + Immutable History.
+ * Statuses eligible for `Revise` — matches the MOM's explicit WorkOrder table:
+ * PLANNED/ASSIGNED are revision-eligible; IN_PROGRESS is locked (scope is
+ * frozen once CalibrationJob fan-out can run); DONE/CANCELLED are terminal.
+ */
+const REVISABLE_WORK_ORDER_STATUSES = ["PLANNED", "ASSIGNED"] as const;
+
+const workOrderHistoryInclude = {
+  items: true,
+  revisedBy: { select: { id: true, name: true, email: true } },
+} as const;
+
+export type WorkOrderHistoryWithItems = Prisma.WorkOrderHistoryGetPayload<{
+  include: typeof workOrderHistoryInclude;
+}>;
+
+export type WorkOrderHistorySummary = Omit<WorkOrderHistoryWithItems, "items">;
 
 export interface WorkOrderListResult {
   data: WorkOrderWithItems[];
@@ -1112,5 +1132,164 @@ export class WorkOrdersService {
       data: { status: "CANCELLED" },
       include: workOrderInclude,
     });
+  }
+
+  /**
+   * MOM #1 — Transaction Revision + Immutable History.
+   *
+   * WorkOrderItem is "immutable after create" (schema.prisma) — `revise()` is
+   * therefore pull-based, not input-driven, exactly like
+   * PurchaseOrdersService.revise(): it re-reads the parent PurchaseOrder's
+   * CURRENT items and adds one new WorkOrderItem for each one not yet
+   * represented on this WorkOrder, never touching an existing row. Only
+   * PLANNED/ASSIGNED work orders are revision-eligible — once IN_PROGRESS,
+   * CalibrationJob fan-out has already run (or can run) and scope is locked
+   * (see fanOutCalibrationJobs; its idempotency guard is WorkOrder-wide, so a
+   * WorkOrderItem added after fan-out would never receive jobs through the
+   * existing mechanism — this MOM does not change that mechanism). Snapshots
+   * the complete current header + items into WorkOrderHistory /
+   * WorkOrderItemHistory (append-only) first. The customer-facing `number`
+   * never changes.
+   */
+  async revise(companyId: string, id: string, userId: string): Promise<WorkOrderWithItems> {
+    const existing = await prisma.workOrder.findFirst({
+      where: { id, companyId },
+      include: { items: true },
+    });
+    if (!existing) {
+      throw new NotFoundException({
+        message: "Work order not found",
+        code: "WORK_ORDER_NOT_FOUND",
+      });
+    }
+
+    if (
+      !REVISABLE_WORK_ORDER_STATUSES.includes(
+        existing.status as (typeof REVISABLE_WORK_ORDER_STATUSES)[number],
+      )
+    ) {
+      throw new BadRequestException({
+        message: "Work order is not in a status that allows revision",
+        code: "INVALID_STATUS_FOR_REVISE",
+      });
+    }
+
+    const purchaseOrder = await prisma.purchaseOrder.findFirstOrThrow({
+      where: { id: existing.purchaseOrderId, companyId },
+      include: { items: true },
+    });
+
+    const consumedPurchaseOrderItemIds = new Set(
+      existing.items.map((item) => item.purchaseOrderItemId),
+    );
+    const pendingPurchaseOrderItems = purchaseOrder.items.filter(
+      (item) => !consumedPurchaseOrderItemIds.has(item.id),
+    );
+    if (pendingPurchaseOrderItems.length === 0) {
+      throw new BadRequestException({
+        message: "Purchase order has no additional scope for this work order to pick up",
+        code: "NO_PENDING_SCOPE_CHANGE",
+      });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Row lock for concurrent revise() calls on the same work order — see
+      // allocateRevisionNumber for why this must happen before it is called.
+      await tx.workOrder.update({ where: { id }, data: {} });
+
+      const revisionNumber = await allocateRevisionNumber({
+        tx,
+        historyTable: "WorkOrderHistory",
+        parentIdColumn: "workOrderId",
+        parentId: id,
+      });
+
+      await tx.workOrderHistory.create({
+        data: {
+          workOrderId: id,
+          revisionNumber,
+          companyId,
+          quotationId: existing.quotationId,
+          purchaseOrderId: existing.purchaseOrderId,
+          customerId: existing.customerId,
+          number: existing.number,
+          serviceMode: existing.serviceMode,
+          addressText: existing.addressText,
+          geoLat: existing.geoLat,
+          geoLng: existing.geoLng,
+          locationNotes: existing.locationNotes,
+          scheduledStart: existing.scheduledStart,
+          scheduledEnd: existing.scheduledEnd,
+          status: existing.status,
+          equipmentConfirmedAt: existing.equipmentConfirmedAt,
+          revisedByUserId: userId,
+          items: {
+            create: existing.items.map((item) => ({
+              sourceItemId: item.id,
+              purchaseOrderItemId: item.purchaseOrderItemId,
+              description: item.description,
+              qty: item.qty,
+            })),
+          },
+        },
+      });
+
+      await tx.workOrderItem.createMany({
+        data: pendingPurchaseOrderItems.map((item) => ({
+          companyId,
+          workOrderId: id,
+          purchaseOrderItemId: item.id,
+          description: item.description,
+          qty: item.qty,
+        })),
+      });
+
+      return tx.workOrder.findFirstOrThrow({
+        where: { id, companyId },
+        include: workOrderInclude,
+      });
+    });
+
+    await recordAuditLog({
+      companyId,
+      userId,
+      action: "WORK_ORDER_REVISE",
+      outcome: "SUCCESS",
+      targetType: "WorkOrder",
+      targetId: id,
+      metadata: { number: existing.number },
+    });
+
+    return result;
+  }
+
+  /** MOM #1 — read-only revision list (header snapshots only, no items). */
+  async listHistory(companyId: string, id: string): Promise<WorkOrderHistorySummary[]> {
+    await this.findOne(companyId, id);
+    return prisma.workOrderHistory.findMany({
+      where: { workOrderId: id, companyId },
+      orderBy: { revisionNumber: "desc" },
+      include: { revisedBy: { select: { id: true, name: true, email: true } } },
+    });
+  }
+
+  /** MOM #1 — read-only single revision snapshot, including its items. */
+  async getHistoryRevision(
+    companyId: string,
+    id: string,
+    revisionNumber: number,
+  ): Promise<WorkOrderHistoryWithItems> {
+    await this.findOne(companyId, id);
+    const revision = await prisma.workOrderHistory.findFirst({
+      where: { workOrderId: id, companyId, revisionNumber },
+      include: workOrderHistoryInclude,
+    });
+    if (!revision) {
+      throw new NotFoundException({
+        message: "Revision not found",
+        code: "WORK_ORDER_REVISION_NOT_FOUND",
+      });
+    }
+    return revision;
   }
 }

@@ -1,12 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Edit, FileText, Plus, Send, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Edit,
+  FileText,
+  History as HistoryIcon,
+  Plus,
+  RefreshCw,
+  Send,
+  X,
+} from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { deviceDisplayNames } from "@/lib/device-name-display";
 import { AccessDenied } from "../../../../components/access-denied";
 import {
@@ -19,10 +30,15 @@ import {
   DetailField,
   ConfirmDialog,
   SERVICE_MODE_LABELS,
+  type CalibrationRequestRow,
 } from "../calibration-requests-ui";
 import { formatRelativeTime } from "../../leads/leads-ui";
+import { formatDateTime } from "../../quotations/quotations-ui";
 import {
   useCalibrationRequest,
+  useCalibrationRequestHistory,
+  useCalibrationRequestHistoryRevision,
+  useReviseCalibrationRequest,
   useSubmitCalibrationRequest,
   useCancelCalibrationRequest,
 } from "../use-calibration-requests-query";
@@ -37,6 +53,7 @@ export default function CalibrationRequestDetailPage() {
   const query = useCalibrationRequest(params.id);
   const submitMutation = useSubmitCalibrationRequest();
   const cancelMutation = useCancelCalibrationRequest();
+  const reviseMutation = useReviseCalibrationRequest();
   const quotationQuery = useQuotations(
     {
       search: "",
@@ -54,6 +71,9 @@ export default function CalibrationRequestDetailPage() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // MOM #1 — Transaction Revision + Immutable History
+  const [reviseDialogOpen, setReviseDialogOpen] = useState(false);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
 
   const request = query.data;
 
@@ -95,6 +115,12 @@ export default function CalibrationRequestDetailPage() {
   const isDraft = request.status === "DRAFT";
   const canCancel = request.status !== "CANCELLED" && request.status !== "FULFILLED";
   const isReadOnly = !isDraft;
+  // MOM #1 — Transaction Revision + Immutable History. Revise is the
+  // committed-document counterpart to Edit: legal exactly where Edit is not
+  // (left DRAFT) and the document isn't terminal (CANCELLED/FULFILLED).
+  // Matches REVISABLE_CALIBRATION_REQUEST_STATUSES in
+  // calibration-requests.service.ts.
+  const canRevise = request.status === "SUBMITTED" || request.status === "IN_QUOTATION";
   const quotationForbidden = isForbidden(quotationQuery.error);
   const quotationReady = !quotationQuery.isLoading && !quotationQuery.isError;
   const existingQuotation = quotationReady ? quotationQuery.data?.data[0] : undefined;
@@ -303,6 +329,20 @@ export default function CalibrationRequestDetailPage() {
             </Link>
           </Button>
 
+          {capabilities?.calibrationRequestRead ? (
+            <Button type="button" variant="outline" onClick={() => setHistoryDialogOpen(true)}>
+              <HistoryIcon className="h-4 w-4" />
+              History
+            </Button>
+          ) : null}
+
+          {canRevise && capabilities?.calibrationRequestUpdate ? (
+            <Button type="button" variant="outline" onClick={() => setReviseDialogOpen(true)}>
+              <RefreshCw className="h-4 w-4" />
+              Revise
+            </Button>
+          ) : null}
+
           {isDraft ? (
             <>
               {capabilities?.calibrationRequestUpdate ? (
@@ -351,6 +391,242 @@ export default function CalibrationRequestDetailPage() {
         loading={cancelMutation.isPending}
         variant="destructive"
       />
+
+      {reviseDialogOpen ? (
+        <ReviseRequestDialog
+          request={request}
+          onClose={() => setReviseDialogOpen(false)}
+          onRevised={async () => {
+            setReviseDialogOpen(false);
+            setSuccess("Requisition berhasil direvisi.");
+            await query.refetch();
+          }}
+        />
+      ) : null}
+
+      {historyDialogOpen ? (
+        <RequestHistoryDialog requestId={request.id} onClose={() => setHistoryDialogOpen(false)} />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * MOM #1 — Transaction Revision + Immutable History.
+ *
+ * Minimal revision form, mirroring ReviseQuotationDialog
+ * (quotations/[id]/page.tsx): lets the user change the qty of an existing
+ * item. The service decides per line whether that's applied in place or as
+ * an additive sibling row (mom-1-item-revision-rule) — the UI does not need
+ * to know which. Adding a brand-new device line is intentionally out of
+ * scope for this UI pass.
+ */
+function ReviseRequestDialog({
+  request,
+  onClose,
+  onRevised,
+}: {
+  request: CalibrationRequestRow;
+  onClose: () => void;
+  onRevised: () => void;
+}) {
+  const reviseMutation = useReviseCalibrationRequest();
+  const [qtyById, setQtyById] = useState<Record<string, string>>(() =>
+    Object.fromEntries(request.items.map((item) => [item.id, String(item.qty)])),
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const changedItems = request.items.filter((item) => {
+    const value = Number(qtyById[item.id]);
+    return Number.isFinite(value) && value > 0 && value !== item.qty;
+  });
+
+  async function submit() {
+    setError(null);
+    if (changedItems.length === 0) {
+      setError("Ubah qty setidaknya satu item untuk membuat revisi.");
+      return;
+    }
+    try {
+      await reviseMutation.mutateAsync({
+        id: request.id,
+        input: {
+          items: changedItems.map((item) => ({
+            id: item.id,
+            deviceTypeId: item.deviceTypeId,
+            customerDeviceName: item.customerDeviceName ?? undefined,
+            model: item.model ?? undefined,
+            deviceId: item.deviceId ?? undefined,
+            akdAkl: item.akdAkl ?? undefined,
+            akdAklDeclaration: item.akdAklDeclaration,
+            notes: item.notes ?? undefined,
+            qty: Number(qtyById[item.id]),
+          })),
+        },
+      });
+      onRevised();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.data?.message ?? err.message);
+      } else {
+        setError("Gagal merevisi requisition.");
+      }
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+        <h3 className="text-lg font-semibold text-slate-900">Revise {request.number}</h3>
+        <p className="mt-2 text-sm text-slate-600">
+          Ubah qty item di bawah ini. Kondisi requisition saat ini akan disimpan sebagai riwayat
+          (revision) sebelum perubahan diterapkan. Nomor requisition tidak berubah.
+        </p>
+        <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">
+          {request.items.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-slate-900">
+                  {item.deviceType.name}
+                </p>
+                <p className="text-xs text-slate-500">Qty saat ini: {item.qty}</p>
+              </div>
+              <Input
+                type="number"
+                min={1}
+                step="1"
+                className="w-24 shrink-0"
+                value={qtyById[item.id] ?? ""}
+                onChange={(e) =>
+                  setQtyById((prev) => ({ ...prev, [item.id]: e.target.value }))
+                }
+              />
+            </div>
+          ))}
+        </div>
+        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        <div className="mt-5 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={reviseMutation.isPending}
+          >
+            Batal
+          </Button>
+          <Button
+            type="button"
+            onClick={submit}
+            disabled={reviseMutation.isPending || changedItems.length === 0}
+          >
+            {reviseMutation.isPending ? "Menyimpan…" : "Simpan Revisi"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * MOM #1 — Transaction Revision + Immutable History.
+ * Read-only: no Edit/Delete affordance is ever rendered for a historical
+ * snapshot. Mirrors QuotationHistoryDialog (quotations/[id]/page.tsx).
+ */
+function RequestHistoryDialog({
+  requestId,
+  onClose,
+}: {
+  requestId: string;
+  onClose: () => void;
+}) {
+  const historyQuery = useCalibrationRequestHistory(requestId);
+  const [selected, setSelected] = useState<number | null>(null);
+  const revisionQuery = useCalibrationRequestHistoryRevision(requestId, selected ?? undefined);
+
+  useEffect(() => {
+    if (historyQuery.data && historyQuery.data.length > 0 && selected === null) {
+      setSelected(historyQuery.data[0]!.revisionNumber);
+    }
+  }, [historyQuery.data, selected]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="mx-4 w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-slate-900">Revision History</h3>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Tutup
+          </Button>
+        </div>
+
+        {historyQuery.isLoading ? (
+          <p className="mt-4 text-sm text-slate-400">Memuat…</p>
+        ) : (historyQuery.data ?? []).length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">Belum ada revisi untuk requisition ini.</p>
+        ) : (
+          <div className="mt-4 grid gap-4 sm:grid-cols-[220px_1fr]">
+            <ul className="space-y-1">
+              {(historyQuery.data ?? []).map((rev) => (
+                <li key={rev.revisionNumber}>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(rev.revisionNumber)}
+                    className={cn(
+                      "w-full rounded-md px-3 py-2 text-left text-sm",
+                      selected === rev.revisionNumber
+                        ? "bg-brand-50 text-brand-700"
+                        : "hover:bg-slate-50",
+                    )}
+                  >
+                    <p className="font-medium">Revision #{rev.revisionNumber}</p>
+                    <p className="text-xs text-slate-500">{formatDateTime(rev.revisedAt)}</p>
+                    <p className="text-xs text-slate-500">
+                      {rev.revisedBy?.name ?? rev.revisedBy?.email ?? "—"}
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="rounded-md border border-slate-200 p-3">
+              {selected === null ? (
+                <p className="text-sm text-slate-500">Pilih revisi untuk melihat detailnya.</p>
+              ) : revisionQuery.isLoading ? (
+                <p className="text-sm text-slate-400">Memuat…</p>
+              ) : revisionQuery.data ? (
+                <>
+                  <p className="text-sm font-medium text-slate-900">
+                    {revisionQuery.data.number} — Revision #{revisionQuery.data.revisionNumber}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Status saat itu: {revisionQuery.data.status}
+                  </p>
+                  <table className="mt-3 w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase text-slate-500">
+                        <th className="py-1">Device Type</th>
+                        <th className="py-1 text-right">Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {revisionQuery.data.items.map((item) => (
+                        <tr key={item.id}>
+                          <td className="py-1.5">
+                            {item.customerDeviceName ?? item.deviceTypeId}
+                          </td>
+                          <td className="py-1.5 text-right">{item.qty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

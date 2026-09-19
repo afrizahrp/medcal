@@ -556,6 +556,12 @@ export function formatQuotationApiError(
       ALREADY_CANCELLED: "Quotation sudah dibatalkan.",
       CANNOT_CANCEL_APPROVED: "Quotation yang sudah di-approve tidak dapat dibatalkan.",
       QUOTATION_NOT_FOUND: "Quotation tidak ditemukan.",
+      // MOM #1 — Transaction Revision + Immutable History
+      INVALID_STATUS_FOR_REVISE: "Quotation tidak dalam status yang bisa direvisi.",
+      QUOTATION_ITEM_NOT_FOUND: "Satu atau lebih item revisi tidak ditemukan pada quotation ini.",
+      QUOTATION_ITEM_ALREADY_CONSUMED:
+        "Item ini sudah dibuatkan Purchase Order — qty baru harus lebih besar dari qty saat ini.",
+      CALIBRATION_REQUEST_ITEM_NOT_FOUND: "Item requisition sumber tidak ditemukan.",
     };
     if (code && messages[code]) {
       return { message: messages[code], quotationId };

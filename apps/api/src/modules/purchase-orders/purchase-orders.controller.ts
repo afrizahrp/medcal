@@ -22,6 +22,8 @@ import { UserId } from "../../common/decorators/user-id.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   PurchaseOrdersService,
+  type PurchaseOrderHistorySummary,
+  type PurchaseOrderHistoryWithItems,
   type PurchaseOrderListResult,
   type PurchaseOrderWithItems,
 } from "./purchase-orders.service";
@@ -125,5 +127,44 @@ export class PurchaseOrdersController {
     @Param("id") id: string,
   ): Promise<PurchaseOrderWithItems> {
     return this.service.cancel(companyId, id);
+  }
+
+  /** MOM #1 — Revise a committed purchase order (pull-based, no body). */
+  @Post(":id/revise")
+  @RequirePermission("purchaseOrder", "update")
+  async revise(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+  ): Promise<PurchaseOrderWithItems> {
+    return this.service.revise(companyId, id, userId);
+  }
+
+  /** MOM #1 — read-only revision list (header snapshots only). */
+  @Get(":id/history")
+  @RequirePermission("purchaseOrder", "read")
+  async listHistory(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<PurchaseOrderHistorySummary[]> {
+    return this.service.listHistory(companyId, id);
+  }
+
+  /** MOM #1 — read-only single revision snapshot, including its items. */
+  @Get(":id/history/:revisionNumber")
+  @RequirePermission("purchaseOrder", "read")
+  async getHistoryRevision(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Param("revisionNumber") revisionNumber: string,
+  ): Promise<PurchaseOrderHistoryWithItems> {
+    const parsedRevisionNumber = Number(revisionNumber);
+    if (!Number.isInteger(parsedRevisionNumber) || parsedRevisionNumber < 1) {
+      throw new BadRequestException({
+        message: "Invalid revision number",
+        code: "INVALID_REVISION_NUMBER",
+      });
+    }
+    return this.service.getHistoryRevision(companyId, id, parsedRevisionNumber);
   }
 }

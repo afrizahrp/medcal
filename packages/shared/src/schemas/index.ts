@@ -400,6 +400,49 @@ export type CalibrationRequestUpdateInput = z.infer<typeof calibrationRequestUpd
 /** Request-body shape (client): `expectedDate` is a `YYYY-MM-DD` string. */
 export type CalibrationRequestUpdateBody = z.input<typeof calibrationRequestUpdateSchema>;
 
+// -----------------------------------------------------------------------------
+// MOM #1 — Transaction Revision + Immutable History
+// -----------------------------------------------------------------------------
+
+/**
+ * Nested item input for POST /calibration-requests/:id/revise. Same shape as
+ * calibrationRequestItemInputSchema, plus an optional `id` targeting an
+ * existing current CalibrationRequestItem. See CalibrationRequestsService.revise
+ * for the in-place-vs-additive-sibling decision (mom-1-item-revision-rule).
+ */
+const calibrationRequestReviseItemInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  deviceTypeId: z.string().min(1),
+  customerDeviceName: z.string().trim().max(200).optional(),
+  model: z.string().trim().max(120).optional(),
+  deviceId: z.string().trim().max(120).optional(),
+  qty: z.number().int().positive().optional(),
+  akdAkl: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  akdAklDeclaration: z.enum(akdAklDeclarationValues).optional(),
+  notes: z.string().max(1000).optional(),
+});
+
+/**
+ * POST /calibration-requests/:id/revise body — only reachable once the
+ * requisition has left DRAFT (use PATCH instead while DRAFT). `items` entries
+ * with an existing `id` target that current row; entries without `id` are new
+ * lines.
+ */
+export const calibrationRequestReviseSchema = z.object({
+  serviceMode: z.enum(serviceModeValues).optional(),
+  expectedDate: wireDate.nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  items: z.array(calibrationRequestReviseItemInputSchema).min(1),
+});
+
+export type CalibrationRequestReviseInput = z.infer<typeof calibrationRequestReviseSchema>;
+export type CalibrationRequestReviseBody = z.input<typeof calibrationRequestReviseSchema>;
+
 // =============================================================================
 // Quotation (CalibrationRequest → Quotation)
 // =============================================================================
@@ -497,6 +540,40 @@ export const quotationUpdateSchema = z.object({
 export type QuotationUpdateInput = z.infer<typeof quotationUpdateSchema>;
 /** Request-body shape (client): `validUntil` is a `YYYY-MM-DD` string. */
 export type QuotationUpdateBody = z.input<typeof quotationUpdateSchema>;
+
+// -----------------------------------------------------------------------------
+// MOM #1 — Transaction Revision + Immutable History
+// -----------------------------------------------------------------------------
+
+/**
+ * Nested item input for POST /quotations/:id/revise. Same shape as
+ * quotationItemInputSchema, plus an optional `id` targeting an existing
+ * current QuotationItem. See QuotationsService.revise for the
+ * in-place-vs-additive-sibling decision (mom-1-item-revision-rule).
+ */
+const quotationReviseItemInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  requestItemId: z.string().min(1),
+  deviceId: z.string().min(1).optional(),
+  tariffId: z.string().min(1).optional(),
+  description: z.string().min(1).max(500),
+  qty: z.coerce.number().int().positive().optional(),
+  unitPrice: quotationDecimalSchema.nonnegative(),
+  discountAmount: quotationDecimalSchema.nonnegative().optional(),
+});
+
+/**
+ * POST /quotations/:id/revise body — only reachable once the quotation has
+ * left DRAFT (use PATCH instead while DRAFT).
+ */
+export const quotationReviseSchema = z.object({
+  taxCode: z.string().min(1).max(50).optional(),
+  headerDiscountAmount: quotationDecimalSchema.nonnegative().optional(),
+  items: z.array(quotationReviseItemInputSchema).min(1),
+});
+
+export type QuotationReviseInput = z.infer<typeof quotationReviseSchema>;
+export type QuotationReviseBody = z.input<typeof quotationReviseSchema>;
 
 // =============================================================================
 // PurchaseOrder (APPROVED Quotation → PurchaseOrder)
@@ -644,6 +721,7 @@ export const workOrderUpdateSchema = z.object({
 export type WorkOrderUpdateInput = z.infer<typeof workOrderUpdateSchema>;
 /** Request-body shape (client): `scheduled*` are `YYYY-MM-DD` strings. */
 export type WorkOrderUpdateBody = z.input<typeof workOrderUpdateSchema>;
+
 
 /** POST /work-orders/:id/assign body */
 export const workOrderAssignSchema = z.object({

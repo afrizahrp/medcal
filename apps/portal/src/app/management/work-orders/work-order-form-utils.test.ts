@@ -17,7 +17,7 @@ import {
 } from "./work-order-form-utils";
 
 describe("workOrderActions", () => {
-  it("shows Assign and Cancel for PLANNED, hides Start and Done", () => {
+  it("shows Assign and Cancel for PLANNED, hides Start and Done; revision-eligible (MOM #1)", () => {
     expect(workOrderActions("PLANNED")).toEqual({
       canEdit: true,
       canAssign: true,
@@ -25,10 +25,11 @@ describe("workOrderActions", () => {
       canDone: false,
       canCancel: true,
       isLocked: false,
+      canRevise: true,
     });
   });
 
-  it("shows Start and Cancel for ASSIGNED", () => {
+  it("shows Start and Cancel for ASSIGNED; revision-eligible (MOM #1)", () => {
     expect(workOrderActions("ASSIGNED")).toEqual({
       canEdit: true,
       canAssign: false,
@@ -36,10 +37,11 @@ describe("workOrderActions", () => {
       canDone: false,
       canCancel: true,
       isLocked: false,
+      canRevise: true,
     });
   });
 
-  it("shows Done and Cancel for IN_PROGRESS", () => {
+  it("shows Done and Cancel for IN_PROGRESS; scope locked, not revision-eligible (MOM #1)", () => {
     expect(workOrderActions("IN_PROGRESS")).toEqual({
       canEdit: true,
       canAssign: false,
@@ -47,10 +49,11 @@ describe("workOrderActions", () => {
       canDone: true,
       canCancel: true,
       isLocked: false,
+      canRevise: false,
     });
   });
 
-  it("locks DONE with no workflow actions", () => {
+  it("locks DONE with no workflow actions, including revision", () => {
     expect(workOrderActions("DONE")).toEqual({
       canEdit: false,
       canAssign: false,
@@ -58,11 +61,12 @@ describe("workOrderActions", () => {
       canDone: false,
       canCancel: false,
       isLocked: true,
+      canRevise: false,
     });
     expect(isWorkOrderTerminal("DONE")).toBe(true);
   });
 
-  it("locks CANCELLED with no workflow actions", () => {
+  it("locks CANCELLED with no workflow actions, including revision", () => {
     expect(workOrderActions("CANCELLED")).toEqual({
       canEdit: false,
       canAssign: false,
@@ -70,6 +74,7 @@ describe("workOrderActions", () => {
       canDone: false,
       canCancel: false,
       isLocked: true,
+      canRevise: false,
     });
     expect(isWorkOrderTerminal("CANCELLED")).toBe(true);
   });
