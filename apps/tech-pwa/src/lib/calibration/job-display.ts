@@ -4,10 +4,6 @@ export function declaredDeviceName(job: TechCalibrationJob): string {
   return job.customerDeclaredDeviceName ?? job.calibrationRequestItem?.customerDeviceName ?? "—";
 }
 
-export function declaredAkdAkl(job: TechCalibrationJob): string {
-  return job.customerDeclaredAkdAkl ?? job.calibrationRequestItem?.akdAkl ?? "—";
-}
-
 /**
  * Terminal job only. SUBMITTED is still open: waiting for MT review, or waiting
  * for the technician to complete after an APPROVED QualityReview.

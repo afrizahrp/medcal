@@ -33,7 +33,7 @@ import {
   type TechPhysicalCheckItem,
   type TechPhysicalCheckResult,
 } from "../../../lib/calibration/physical-check";
-import { declaredAkdAkl, declaredDeviceName } from "../../../lib/calibration/job-display";
+import { declaredDeviceName } from "../../../lib/calibration/job-display";
 import { RecordedReferenceEquipmentList } from "./reference-equipment/reference-equipment-ui";
 import { PhysicalCheckStatusRow } from "./physical-check/physical-check-ui";
 
@@ -108,7 +108,6 @@ export function DeclaredIdentitySection({ job }: { job: TechCalibrationJob }) {
   return (
     <Section title="Identitas Dinyatakan (Pelanggan)">
       <SectionRow label="Nama alat" value={declaredDeviceName(job)} />
-      <SectionRow label="AKD/AKL" value={declaredAkdAkl(job)} />
     </Section>
   );
 }
@@ -117,7 +116,6 @@ export function ObservedIdentitySection({ job }: { job: TechCalibrationJob }) {
   return (
     <Section title="Observasi Teknisi">
       <SectionRow label="Serial" value={job.technicianObservedSerial ?? "—"} />
-      <SectionRow label="AKD/AKL" value={job.technicianObservedAkdAkl ?? "—"} />
     </Section>
   );
 }
