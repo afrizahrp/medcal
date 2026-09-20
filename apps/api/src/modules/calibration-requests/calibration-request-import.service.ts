@@ -1,5 +1,6 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import * as ExcelJS from "exceljs";
+import * as unzipper from "unzipper";
 import { prisma } from "@medcal/db";
 import {
   normalizeDeviceTerm,
@@ -17,9 +18,21 @@ import {
 
 // ── Technical safeguards (NOT business rules) ────────────────────────────────
 /** Max accepted upload size. An import sheet is tiny; this only guards memory. */
-export const MAX_IMPORT_BYTES = 5 * 1024 * 1024; // 5 MiB
+export const MAX_IMPORT_BYTES = 1 * 1024 * 1024; // 5 MiB
 /** Max data rows read from the sheet = max CalibrationRequestItems (1 row = 1 item). */
-export const MAX_DATA_ROWS = 1000;
+export const MAX_DATA_ROWS = 100; // 100 rows
+
+// Decompression-bomb guard. The real requisition template is ~8 KB on disk,
+// and even MAX_DATA_ROWS (1000) rows of plain cell data stays well under 1 MiB
+// of uncompressed sheet XML. These caps sit orders of magnitude above any
+// legitimate Medcal import while staying well below anything that could
+// meaningfully pressure the `api` process — which currently has no container
+// memory ceiling of its own. See
+// docs/minutes-of-meeting/excel-import-decompression-bomb-decision-20260920.md.
+/** Max uncompressed size for a single ZIP entry inside the workbook. */
+export const MAX_ENTRY_UNCOMPRESSED_BYTES = 25 * 1024 * 1024; // 25 MiB
+/** Max total uncompressed size across all ZIP entries in the workbook. */
+export const MAX_TOTAL_UNCOMPRESSED_BYTES = 50 * 1024 * 1024; // 50 MiB
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -153,8 +166,57 @@ function parseAkdAkl(value: ExcelJS.CellValue | undefined): {
   return { akdAkl: text };
 }
 
+// ── Decompression-bomb guard ─────────────────────────────────────────────────
+// Reads only the ZIP central-directory metadata (entry names + declared
+// compressed/uncompressed sizes) via `unzipper.Open.buffer()` — this never
+// decompresses any entry. Must run, and complete, BEFORE `workbook.xlsx.load()`
+// is ever called, since that call is what would otherwise materialize the
+// full decompressed payload in memory with no size limit of its own.
+async function assertSafeToDecompress(buffer: Buffer): Promise<void> {
+  let directory: unzipper.UnzipperCentralDirectory;
+  try {
+    directory = await unzipper.Open.buffer(buffer);
+  } catch {
+    // Can't even read the central directory — fail closed exactly like an
+    // unreadable workbook. Nothing has been decompressed at this point.
+    throw new BadRequestException({
+      message: "File Excel tidak dapat dibaca (workbook rusak atau bukan .xlsx)",
+      code: "MALFORMED_WORKBOOK",
+    });
+  }
+
+  let totalUncompressedBytes = 0;
+  for (const entry of directory.files) {
+    const size = entry.uncompressedSize;
+    // A declared size that isn't a sane, finite, non-negative number means the
+    // pre-check cannot safely vouch for this entry — fail closed rather than
+    // let it proceed to decompression unverified.
+    if (typeof size !== "number" || !Number.isFinite(size) || size < 0) {
+      throw new BadRequestException({
+        message: "File Excel tidak dapat dibaca (workbook rusak atau bukan .xlsx)",
+        code: "MALFORMED_WORKBOOK",
+      });
+    }
+    if (size > MAX_ENTRY_UNCOMPRESSED_BYTES) {
+      throw new BadRequestException({
+        message: "File Excel melebihi batas ukuran setelah dekompresi",
+        code: "WORKBOOK_TOO_LARGE_UNCOMPRESSED",
+      });
+    }
+    totalUncompressedBytes += size;
+    if (totalUncompressedBytes > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+      throw new BadRequestException({
+        message: "File Excel melebihi batas ukuran setelah dekompresi",
+        code: "WORKBOOK_TOO_LARGE_UNCOMPRESSED",
+      });
+    }
+  }
+}
+
 // ── Workbook parsing ────────────────────────────────────────────────────────
 async function parseWorkbook(buffer: Buffer): Promise<ParsedRow[]> {
+  await assertSafeToDecompress(buffer);
+
   const workbook = new ExcelJS.Workbook();
   try {
     // exceljs's bundled .d.ts declares its own `Buffer` interface; a Node

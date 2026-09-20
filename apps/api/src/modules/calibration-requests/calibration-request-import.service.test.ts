@@ -4,7 +4,11 @@ import * as ExcelJS from "exceljs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@medcal/db";
 import type { UploadedFile } from "../files/files.constants";
-import { CalibrationRequestImportService } from "./calibration-request-import.service";
+import {
+  CalibrationRequestImportService,
+  MAX_ENTRY_UNCOMPRESSED_BYTES,
+  MAX_TOTAL_UNCOMPRESSED_BYTES,
+} from "./calibration-request-import.service";
 import { CalibrationRequestsService } from "./calibration-requests.service";
 
 const service = new CalibrationRequestImportService(new CalibrationRequestsService());
@@ -33,6 +37,97 @@ async function buildXlsx(header: string[], rows: Cell[][]): Promise<Buffer> {
 
 function asFile(buffer: Buffer, name = "sample.xlsx"): UploadedFile {
   return { originalname: name, mimetype: XLSX_MIME, size: buffer.length, buffer };
+}
+
+// ── Hand-built adversarial ZIP fixtures ─────────────────────────────────────
+// ExcelJS's own writer (`buildXlsx` above) always produces honest, tiny sizes,
+// so it can't construct the shape a decompression-bomb guard must catch: a
+// ZIP whose central directory *declares* an oversized uncompressed size. These
+// helpers write just enough of a syntactically valid ZIP (local file header +
+// central directory + End Of Central Directory record) for `unzipper.Open
+// .buffer()` to read the declared sizes — no real compressed payload is
+// needed, since a metadata-only pre-check must reject before ever looking at
+// entry contents.
+function u16le(n: number): Buffer {
+  const b = Buffer.alloc(2);
+  b.writeUInt16LE(n, 0);
+  return b;
+}
+function u32le(n: number): Buffer {
+  const b = Buffer.alloc(4);
+  b.writeUInt32LE(n, 0);
+  return b;
+}
+
+interface RawZipEntry {
+  name: string;
+  uncompressedSize: number;
+}
+
+function buildRawZip(entries: RawZipEntry[]): Buffer {
+  const localParts: Buffer[] = [];
+  const centralParts: Buffer[] = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const nameBuf = Buffer.from(entry.name, "utf8");
+    const localOffset = offset;
+
+    const local = Buffer.concat([
+      u32le(0x04034b50), // local file header signature
+      u16le(20), // version needed to extract
+      u16le(0), // flags
+      u16le(0), // compression method = stored
+      u16le(0), // last mod time
+      u16le(0), // last mod date
+      u32le(0), // crc32
+      u32le(0), // compressed size (no real payload follows)
+      u32le(entry.uncompressedSize), // declared uncompressed size
+      u16le(nameBuf.length),
+      u16le(0), // extra field length
+      nameBuf,
+    ]);
+    localParts.push(local);
+    offset += local.length;
+
+    centralParts.push(
+      Buffer.concat([
+        u32le(0x02014b50), // central directory file header signature
+        u16le(20), // version made by
+        u16le(20), // version needed to extract
+        u16le(0), // flags
+        u16le(0), // compression method = stored
+        u16le(0), // last mod time
+        u16le(0), // last mod date
+        u32le(0), // crc32
+        u32le(0), // compressed size
+        u32le(entry.uncompressedSize), // declared uncompressed size
+        u16le(nameBuf.length),
+        u16le(0), // extra field length
+        u16le(0), // file comment length
+        u16le(0), // disk number start
+        u16le(0), // internal file attributes
+        u32le(0), // external file attributes
+        u32le(localOffset), // offset to local file header
+        nameBuf,
+      ]),
+    );
+  }
+
+  const localData = Buffer.concat(localParts);
+  const centralData = Buffer.concat(centralParts);
+  const eocd = Buffer.concat([
+    u32le(0x06054b50), // end of central directory signature
+    u16le(0), // disk number
+    u16le(0), // disk where central directory starts
+    u16le(entries.length), // records on this disk
+    u16le(entries.length), // total records
+    u32le(centralData.length), // size of central directory
+    u32le(localData.length), // offset to start of central directory
+    u16le(0), // comment length
+  ]);
+
+  return Buffer.concat([localData, centralData, eocd]);
 }
 
 async function makeDeviceType(name: string): Promise<string> {
@@ -282,6 +377,44 @@ describe("CalibrationRequestImportService.preview", () => {
     expect(requestsForCustomer).toBe(0);
     // Preview reads aliases but never creates/mutates them.
     expect(aliasesTouched).toBe(2);
+  });
+});
+
+describe("CalibrationRequestImportService.preview — decompression-bomb guard", () => {
+  it("rejects a ZIP whose central directory declares a single entry above the per-entry cap", async () => {
+    const buf = buildRawZip([
+      { name: "xl/worksheets/sheet1.xml", uncompressedSize: MAX_ENTRY_UNCOMPRESSED_BYTES + 1 },
+    ]);
+    await expect(service.preview(asFile(buf))).rejects.toMatchObject({
+      response: { code: "WORKBOOK_TOO_LARGE_UNCOMPRESSED" },
+    });
+  });
+
+  it("rejects a ZIP whose entries are each under the per-entry cap but whose declared total exceeds the archive-wide cap", async () => {
+    // Three entries, each individually under MAX_ENTRY_UNCOMPRESSED_BYTES,
+    // but summing to more than MAX_TOTAL_UNCOMPRESSED_BYTES.
+    const perEntry = MAX_ENTRY_UNCOMPRESSED_BYTES - 1;
+    expect(perEntry * 3).toBeGreaterThan(MAX_TOTAL_UNCOMPRESSED_BYTES);
+    const buf = buildRawZip([
+      { name: "xl/worksheets/sheet1.xml", uncompressedSize: perEntry },
+      { name: "xl/worksheets/sheet2.xml", uncompressedSize: perEntry },
+      { name: "xl/worksheets/sheet3.xml", uncompressedSize: perEntry },
+    ]);
+    await expect(service.preview(asFile(buf))).rejects.toMatchObject({
+      response: { code: "WORKBOOK_TOO_LARGE_UNCOMPRESSED" },
+    });
+  });
+
+  it("does not reject a legitimate small workbook (guard is transparent to real files)", async () => {
+    const buf = await buildXlsx(HEADER, [[`Tensimeter ${SUFFIX}`, "AB-123", 1, ""]]);
+    await expect(service.preview(asFile(buf))).resolves.toBeDefined();
+  });
+
+  it("rejects a non-ZIP / malformed upload before any decompression, preserving MALFORMED_WORKBOOK", async () => {
+    const buf = Buffer.from("this is not a zip file at all");
+    await expect(service.preview(asFile(buf))).rejects.toMatchObject({
+      response: { code: "MALFORMED_WORKBOOK" },
+    });
   });
 });
 

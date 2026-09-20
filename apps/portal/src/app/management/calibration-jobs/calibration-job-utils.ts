@@ -267,7 +267,7 @@ export function formatCalibrationJobApiError(err: unknown, fallback: string): st
       FILE_MIME_NOT_ALLOWED: "Hanya gambar PNG/JPEG atau PDF yang diperbolehkan.",
       FILE_EXTENSION_NOT_ALLOWED: "Hanya gambar PNG/JPEG atau PDF yang diperbolehkan.",
       FILE_CONTENT_MISMATCH: "Isi file tidak sesuai dengan tipe yang dinyatakan.",
-      FILE_TOO_LARGE: "Ukuran file melebihi batas (5 MB).",
+      FILE_TOO_LARGE: "Ukuran file melebihi batas (1 MB).",
       FILE_OWNER_LOCKED: "BA sudah diputuskan — lampiran tidak dapat diubah.",
       // Reference equipment used (PUT /calibration-jobs/:id/reference-equipment-used)
       CALIBRATION_JOB_NOT_STARTED:
