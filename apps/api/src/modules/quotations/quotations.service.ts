@@ -49,7 +49,11 @@ const deviceTypeSelect = {
 } as const;
 
 const quotationInclude = {
+  // MOM #1 — Revision Scope Design: a retired (isActive: false) item is no
+  // longer part of the quotation's current desired scope; it stays in the
+  // database only for downstream traceability, never shown as a current row.
   items: {
+    where: { isActive: true },
     include: {
       requestItem: { include: { deviceType: { select: deviceTypeSelect } } },
       tariff: { select: { id: true, code: true, name: true, unitPrice: true, currency: true } },
@@ -246,13 +250,43 @@ async function assertDevicesBelongToCustomer(
   }
 }
 
+/**
+ * MOM #1 — Final Revision Scope Design §10 (cross-chain safety guard).
+ * Before retiring a consumed QuotationItem (isActive -> false), confirm no
+ * WorkOrderItem derived from it belongs to a WorkOrder that has already
+ * left PLANNED/ASSIGNED — retiring it past that point would silently
+ * invalidate scope a WorkOrder has already committed to (or fanned out
+ * CalibrationJobs for).
+ */
+async function assertRetirementSafe(
+  tx: Prisma.TransactionClient,
+  quotationItemIds: string[],
+): Promise<void> {
+  const blocking = await tx.workOrderItem.findFirst({
+    where: {
+      purchaseOrderItem: { quotationItemId: { in: quotationItemIds } },
+      workOrder: { status: { notIn: ["PLANNED", "ASSIGNED"] } },
+    },
+    select: { workOrder: { select: { number: true, status: true } } },
+  });
+  if (blocking) {
+    throw new BadRequestException({
+      message:
+        `This item has already reached Work Order ${blocking.workOrder.number} ` +
+        `(status ${blocking.workOrder.status}), which is no longer PLANNED/ASSIGNED. ` +
+        "It cannot be removed by a revision.",
+      code: "RETIREMENT_BLOCKED_BY_WORK_ORDER_PROGRESS",
+    });
+  }
+}
+
 async function assertFullScopeItems(
   tx: Prisma.TransactionClient,
   requestId: string,
   items: Array<{ requestItemId: string }>,
 ): Promise<void> {
   const requestItems = await tx.calibrationRequestItem.findMany({
-    where: { requestId },
+    where: { requestId, isActive: true },
     select: { id: true },
   });
   const requestItemIds = new Set(requestItems.map((item) => item.id));
@@ -398,7 +432,9 @@ export class QuotationsService {
     return prisma.$transaction(async (tx) => {
       const request = await tx.calibrationRequest.findFirst({
         where: { id: input.requestId, companyId },
-        include: { items: { include: { deviceType: { select: { name: true } } } } },
+        include: {
+          items: { where: { isActive: true }, include: { deviceType: { select: { name: true } } } },
+        },
       });
       if (!request) {
         throw new BadRequestException({
@@ -510,7 +546,9 @@ export class QuotationsService {
   async preview(companyId: string, input: QuotationPreviewInput): Promise<QuotationPreviewResult> {
     const request = await prisma.calibrationRequest.findFirst({
       where: { id: input.requestId, companyId },
-      include: { items: { include: { deviceType: { select: { name: true } } } } },
+      include: {
+        items: { where: { isActive: true }, include: { deviceType: { select: { name: true } } } },
+      },
     });
     if (!request) {
       throw new BadRequestException({
@@ -807,18 +845,26 @@ export class QuotationsService {
   }
 
   /**
-   * MOM #1 — Transaction Revision + Immutable History.
+   * MOM #1 — Final Revision Scope Design (desired-scope reconciliation).
+   * See mom-1-final-revision-scope-design-20260920.md.
    *
-   * The `Revise` counterpart to `update()`: reachable once the quotation has
-   * left DRAFT (see REVISABLE_QUOTATION_STATUSES). Snapshots the complete
-   * current header + items into QuotationHistory / QuotationItemHistory
-   * (append-only) before applying the change. The customer-facing `number`
-   * never changes.
+   * `input.items` is the COMPLETE desired active scope, not a set of edits:
+   * a current active item's `id` absent from `input.items` is REMOVED.
+   * Matching is by row `id` only. Device replacement is REMOVE (old id) +
+   * ADD (new, no id) — there is no separate "replace" persistence concept.
    *
-   * Per-item semantics (mom-1-item-revision-rule): a `qty` change on an item
-   * that has NOT yet been snapshotted into a PurchaseOrderItem is applied in
-   * place. Once a PurchaseOrderItem already references it, the row is frozen
-   * and additional quantity is carried by a new sibling row instead.
+   * Reachable once the quotation has left DRAFT (see
+   * REVISABLE_QUOTATION_STATUSES). Snapshots the complete current header +
+   * all current active items into QuotationHistory / QuotationItemHistory
+   * (append-only) before applying the reconciliation. The customer-facing
+   * `number` never changes.
+   *
+   * Per-item semantics: unconsumed rows are freely updated/deleted in
+   * place. A consumed row (already snapshotted into a PurchaseOrderItem) is
+   * frozen — removal retires it (`isActive: false`) instead of deleting it,
+   * a qty increase is a new active sibling row carrying the delta, and a
+   * qty decrease retires the frozen row and adds a new row carrying the
+   * full new desired qty.
    */
   async revise(
     companyId: string,
@@ -828,7 +874,7 @@ export class QuotationsService {
   ): Promise<QuotationWithItems> {
     const existing = await prisma.quotation.findFirst({
       where: { id, companyId },
-      include: { items: true },
+      include: { items: { where: { isActive: true } } },
     });
     if (!existing) {
       throw new NotFoundException({
@@ -851,15 +897,17 @@ export class QuotationsService {
       });
     }
 
-    const existingItemsById = new Map(existing.items.map((item) => [item.id, item]));
+    const currentItemsById = new Map(existing.items.map((item) => [item.id, item]));
     for (const item of input.items) {
-      if (item.id && !existingItemsById.has(item.id)) {
+      if (item.id && !currentItemsById.has(item.id)) {
         throw new BadRequestException({
           message: "One or more revised items do not belong to this quotation",
           code: "QUOTATION_ITEM_NOT_FOUND",
         });
       }
     }
+    const desiredIds = new Set(input.items.flatMap((item) => (item.id ? [item.id] : [])));
+    const removedItems = existing.items.filter((item) => !desiredIds.has(item.id));
 
     const result = await prisma.$transaction(async (tx) => {
       // Row lock for concurrent revise() calls on the same quotation — see
@@ -924,10 +972,25 @@ export class QuotationsService {
         },
       });
 
+      // REMOVED: a current active item whose id is absent from the desired scope.
+      for (const item of removedItems) {
+        const consumedCount = await tx.purchaseOrderItem.count({
+          where: { quotationItemId: item.id },
+        });
+        if (consumedCount === 0) {
+          await tx.quotationItem.delete({ where: { id: item.id } });
+        } else {
+          await assertRetirementSafe(tx, [item.id]);
+          await tx.quotationItem.update({ where: { id: item.id }, data: { isActive: false } });
+        }
+      }
+
+      // ADDED / UNCHANGED / QTY_CHANGED.
       for (const item of input.items) {
         if (!item.id) {
+          // ADDED — a genuinely new line, fresh lineage, no id carried over.
           const requestItem = await tx.calibrationRequestItem.findFirst({
-            where: { id: item.requestItemId, requestId: existing.requestId },
+            where: { id: item.requestItemId, requestId: existing.requestId, isActive: true },
             select: { id: true },
           });
           if (!requestItem) {
@@ -957,7 +1020,7 @@ export class QuotationsService {
           continue;
         }
 
-        const currentItem = existingItemsById.get(item.id);
+        const currentItem = currentItemsById.get(item.id);
         if (!currentItem) continue; // validated above
 
         const consumedCount = await tx.purchaseOrderItem.count({
@@ -965,6 +1028,7 @@ export class QuotationsService {
         });
 
         if (consumedCount === 0) {
+          // Unconsumed — freely updated in place.
           const qty = toDecimal(item.qty ?? currentItem.qty);
           const unitPrice = toDecimal(item.unitPrice);
           const line = computeItemLine(
@@ -989,23 +1053,42 @@ export class QuotationsService {
           continue;
         }
 
-        // Already snapshotted into a PurchaseOrderItem — the row is frozen
-        // (mom-1-item-revision-rule). Growth is represented by a new sibling
-        // row cloned from the frozen row's identity, carrying only the delta.
-        const requestedQty = item.qty !== undefined ? toDecimal(item.qty) : null;
-        if (!requestedQty || requestedQty.lessThanOrEqualTo(toDecimal(currentItem.qty))) {
-          throw new BadRequestException({
-            message:
-              "This item already has a Purchase Order generated from it and cannot be shrunk or edited in place. " +
-              "Provide a qty greater than the current value to add scope as a new line.",
-            code: "QUOTATION_ITEM_ALREADY_CONSUMED",
-            itemId: item.id,
-          });
+        // Consumed — the row is frozen, never mutated.
+        const requestedQty = item.qty !== undefined ? toDecimal(item.qty) : toDecimal(currentItem.qty);
+        if (requestedQty.equals(toDecimal(currentItem.qty))) {
+          continue; // UNCHANGED
         }
-
-        const deltaQty = requestedQty.minus(toDecimal(currentItem.qty));
+        if (requestedQty.greaterThan(toDecimal(currentItem.qty))) {
+          // QTY_CHANGED (increase) — additive sibling carrying only the delta.
+          const deltaQty = requestedQty.minus(toDecimal(currentItem.qty));
+          const line = computeItemLine(
+            deltaQty,
+            toDecimal(currentItem.unitPrice),
+            new Prisma.Decimal(0),
+          );
+          await tx.quotationItem.create({
+            data: {
+              companyId,
+              quotationId: id,
+              requestItemId: currentItem.requestItemId,
+              deviceId: currentItem.deviceId,
+              tariffId: currentItem.tariffId,
+              description: currentItem.description,
+              qty: deltaQty,
+              unitPrice: currentItem.unitPrice,
+              discountAmount: line.discountAmount,
+              lineTotal: line.lineTotal,
+              pricePending: currentItem.pricePending,
+            },
+          });
+          continue;
+        }
+        // QTY_CHANGED (decrease) — retire the frozen row, add a new one
+        // carrying the full new desired qty.
+        await assertRetirementSafe(tx, [item.id]);
+        await tx.quotationItem.update({ where: { id: item.id }, data: { isActive: false } });
         const line = computeItemLine(
-          deltaQty,
+          requestedQty,
           toDecimal(currentItem.unitPrice),
           new Prisma.Decimal(0),
         );
@@ -1017,7 +1100,7 @@ export class QuotationsService {
             deviceId: currentItem.deviceId,
             tariffId: currentItem.tariffId,
             description: currentItem.description,
-            qty: deltaQty,
+            qty: requestedQty,
             unitPrice: currentItem.unitPrice,
             discountAmount: line.discountAmount,
             lineTotal: line.lineTotal,
@@ -1033,7 +1116,9 @@ export class QuotationsService {
           ? toDecimal(input.headerDiscountAmount)
           : toDecimal(existing.headerDiscountAmount);
 
-      const itemRows = await tx.quotationItem.findMany({ where: { quotationId: id } });
+      const itemRows = await tx.quotationItem.findMany({
+        where: { quotationId: id, isActive: true },
+      });
       const totals = computeHeaderTotals(
         itemRows.map((row) => toDecimal(row.lineTotal)),
         headerDiscountAmount,

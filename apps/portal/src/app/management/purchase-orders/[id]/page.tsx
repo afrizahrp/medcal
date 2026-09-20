@@ -43,6 +43,7 @@ import {
   purchaseOrderPdfFilenameForRow,
   snapshotLinesFromPurchaseOrder,
 } from "../purchase-orders-ui";
+import { useQuotation } from "../../quotations/use-quotations-query";
 import {
   openPurchaseOrderPdf,
   useApprovePurchaseOrder,
@@ -68,6 +69,10 @@ export default function PurchaseOrderDetailPage() {
   const approveMutation = useApprovePurchaseOrder();
   const cancelMutation = useCancelPurchaseOrder();
   const reviseMutation = useRevisePurchaseOrder();
+  // MOM #1 — Final Revision Scope Design §12/§19: a minimal, client-side-only
+  // preview of what the pull-based revise() will change, computed from data
+  // already fetched for this page (no new preview API).
+  const revisionSourceQuotationQuery = useQuotation(query.data?.quotation.id);
   const workOrderQuery = useWorkOrders(
     {
       search: "",
@@ -126,6 +131,23 @@ export default function PurchaseOrderDetailPage() {
   }
 
   const actions = purchaseOrderActions(purchaseOrder.status);
+
+  // MOM #1 — client-side reconciliation preview, mirroring the backend's own
+  // pull logic: active Quotation items not yet on this PO (pending adds) vs.
+  // active PO items whose source Quotation line is no longer active
+  // (pending retirements). Read-only; never sent anywhere.
+  const sourceQuotation = revisionSourceQuotationQuery.data;
+  const activeQuotationItemIds = new Set((sourceQuotation?.items ?? []).map((item) => item.id));
+  const poItemQuotationItemIds = new Set(purchaseOrder.items.map((item) => item.quotationItemId));
+  const pendingAddCount = (sourceQuotation?.items ?? []).filter(
+    (item) => !poItemQuotationItemIds.has(item.id),
+  ).length;
+  const pendingRetireCount = purchaseOrder.items.filter(
+    (item) => !activeQuotationItemIds.has(item.quotationItemId),
+  ).length;
+  const revisePreviewText = revisionSourceQuotationQuery.isLoading
+    ? "Memuat preview…"
+    : `${pendingAddCount} item akan ditambahkan, ${pendingRetireCount} item akan di-retire (CANCELLED).`;
 
   async function runAction(action: "approve" | "cancel" | "revise") {
     setError(null);
@@ -359,7 +381,7 @@ export default function PurchaseOrderDetailPage() {
       <ConfirmDialog
         open={confirmAction === "revise"}
         title="Revise this Purchase Order?"
-        description="Kondisi Purchase Order saat ini akan disimpan sebagai riwayat, lalu scope terbaru dari Quotation akan diterapkan. Nomor PO tidak berubah."
+        description={`Kondisi Purchase Order saat ini akan disimpan sebagai riwayat, lalu scope terbaru dari Quotation akan diterapkan. Nomor PO tidak berubah. ${revisePreviewText}`}
         confirmLabel="Revise"
         onConfirm={() => runAction("revise")}
         onCancel={() => setConfirmAction(null)}

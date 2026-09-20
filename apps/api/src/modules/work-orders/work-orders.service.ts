@@ -224,7 +224,9 @@ export class WorkOrdersService {
         const purchaseOrder = await tx.purchaseOrder.findFirst({
           where: { id: input.purchaseOrderId, companyId },
           include: {
-            items: { orderBy: { createdAt: "asc" } },
+            // MOM #1 — Revision Scope Design: only active PO scope may ever
+            // propagate downstream.
+            items: { where: { status: { not: "CANCELLED" } }, orderBy: { createdAt: "asc" } },
             quotation: {
               include: { request: { select: { id: true, serviceMode: true } } },
             },
@@ -883,6 +885,7 @@ export class WorkOrdersService {
       where: { id: purchaseOrderId, companyId },
       include: {
         items: {
+          where: { status: { not: "CANCELLED" } },
           include: {
             quotationItem: { include: { requestItem: { select: { deviceTypeId: true } } } },
           },
@@ -1135,21 +1138,29 @@ export class WorkOrdersService {
   }
 
   /**
-   * MOM #1 — Transaction Revision + Immutable History.
+   * MOM #1 — Final Revision Scope Design (active-scope pull reconciliation).
+   * See mom-1-final-revision-scope-design-20260920.md §7, §8.
    *
-   * WorkOrderItem is "immutable after create" (schema.prisma) — `revise()` is
-   * therefore pull-based, not input-driven, exactly like
-   * PurchaseOrdersService.revise(): it re-reads the parent PurchaseOrder's
-   * CURRENT items and adds one new WorkOrderItem for each one not yet
-   * represented on this WorkOrder, never touching an existing row. Only
-   * PLANNED/ASSIGNED work orders are revision-eligible — once IN_PROGRESS,
-   * CalibrationJob fan-out has already run (or can run) and scope is locked
-   * (see fanOutCalibrationJobs; its idempotency guard is WorkOrder-wide, so a
-   * WorkOrderItem added after fan-out would never receive jobs through the
-   * existing mechanism — this MOM does not change that mechanism). Snapshots
-   * the complete current header + items into WorkOrderHistory /
-   * WorkOrderItemHistory (append-only) first. The customer-facing `number`
-   * never changes.
+   * WorkOrderItem is "immutable after create" (schema.prisma) — `revise()`
+   * keeps its NO-BODY, PULL-BASED contract, exactly like
+   * PurchaseOrdersService.revise(): it reconciles against the parent
+   * PurchaseOrder's CURRENT ACTIVE (non-CANCELLED) items only — adding one
+   * new WorkOrderItem for each active PO item not yet represented, and
+   * hard-deleting any current WorkOrderItem whose source PurchaseOrderItem
+   * is no longer active. This is always a safe hard delete (never
+   * retirement) because revision is only reachable while
+   * PLANNED/ASSIGNED — no CalibrationJob can exist yet for any item on this
+   * WorkOrder (fan-out only runs at `start()`), so there is nothing to
+   * invalidate. Never mutates an existing WorkOrderItem's qty or identity.
+   *
+   * Only PLANNED/ASSIGNED work orders are revision-eligible — once
+   * IN_PROGRESS, CalibrationJob fan-out has already run (or can run) and
+   * scope is locked (see fanOutCalibrationJobs; its idempotency guard is
+   * WorkOrder-wide, so a WorkOrderItem added after fan-out would never
+   * receive jobs through the existing mechanism — this MOM does not change
+   * that mechanism). Snapshots the complete current header + items into
+   * WorkOrderHistory / WorkOrderItemHistory (append-only) first. The
+   * customer-facing `number` never changes.
    */
   async revise(companyId: string, id: string, userId: string): Promise<WorkOrderWithItems> {
     const existing = await prisma.workOrder.findFirst({
@@ -1176,18 +1187,23 @@ export class WorkOrdersService {
 
     const purchaseOrder = await prisma.purchaseOrder.findFirstOrThrow({
       where: { id: existing.purchaseOrderId, companyId },
-      include: { items: true },
+      include: { items: { where: { status: { not: "CANCELLED" } } } },
     });
 
+    const activePurchaseOrderItemIds = new Set(purchaseOrder.items.map((item) => item.id));
     const consumedPurchaseOrderItemIds = new Set(
       existing.items.map((item) => item.purchaseOrderItemId),
     );
     const pendingPurchaseOrderItems = purchaseOrder.items.filter(
       (item) => !consumedPurchaseOrderItemIds.has(item.id),
     );
-    if (pendingPurchaseOrderItems.length === 0) {
+    const itemsToRemove = existing.items.filter(
+      (item) => !activePurchaseOrderItemIds.has(item.purchaseOrderItemId),
+    );
+
+    if (pendingPurchaseOrderItems.length === 0 && itemsToRemove.length === 0) {
       throw new BadRequestException({
-        message: "Purchase order has no additional scope for this work order to pick up",
+        message: "Purchase order has no scope change for this work order to pick up",
         code: "NO_PENDING_SCOPE_CHANGE",
       });
     }
@@ -1234,15 +1250,26 @@ export class WorkOrdersService {
         },
       });
 
-      await tx.workOrderItem.createMany({
-        data: pendingPurchaseOrderItems.map((item) => ({
-          companyId,
-          workOrderId: id,
-          purchaseOrderItemId: item.id,
-          description: item.description,
-          qty: item.qty,
-        })),
-      });
+      // REMOVED: source PurchaseOrderItem is no longer active. Always a safe
+      // hard delete — no CalibrationJob can exist yet at PLANNED/ASSIGNED.
+      if (itemsToRemove.length > 0) {
+        await tx.workOrderItem.deleteMany({
+          where: { id: { in: itemsToRemove.map((item) => item.id) } },
+        });
+      }
+
+      // ADDED: active PO item not yet represented on this WorkOrder.
+      if (pendingPurchaseOrderItems.length > 0) {
+        await tx.workOrderItem.createMany({
+          data: pendingPurchaseOrderItems.map((item) => ({
+            companyId,
+            workOrderId: id,
+            purchaseOrderItemId: item.id,
+            description: item.description,
+            qty: item.qty,
+          })),
+        });
+      }
 
       return tx.workOrder.findFirstOrThrow({
         where: { id, companyId },

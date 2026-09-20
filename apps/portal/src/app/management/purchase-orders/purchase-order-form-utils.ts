@@ -138,10 +138,12 @@ export function formatPurchaseOrderApiError(
       CANNOT_CANCEL_APPROVED: "Purchase Order yang sudah di-approve tidak dapat dibatalkan.",
       ALREADY_CANCELLED: "Purchase Order sudah dibatalkan.",
       PURCHASE_ORDER_HAS_NO_ITEMS: "Purchase Order tidak memiliki item.",
-      // MOM #1 — Transaction Revision + Immutable History
+      // MOM #1 — Final Revision Scope Design
       INVALID_STATUS_FOR_REVISE: "Purchase Order tidak dalam status yang bisa direvisi.",
       NO_PENDING_SCOPE_CHANGE:
         "Tidak ada perubahan scope dari Quotation untuk diterapkan ke Purchase Order ini.",
+      RETIREMENT_BLOCKED_BY_WORK_ORDER_PROGRESS:
+        "Item ini sudah mencapai Work Order yang sedang berjalan (bukan PLANNED/ASSIGNED) dan tidak dapat dihapus melalui revisi.",
     };
     if (code && messages[code]) {
       return { message: messages[code], purchaseOrderId };

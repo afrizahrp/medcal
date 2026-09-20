@@ -6,14 +6,18 @@ import { isValidDocumentNumber } from "@medcal/db";
 import { purchaseOrderCreateSchema, purchaseOrderUpdateSchema } from "@medcal/shared";
 import { CalibrationRequestsService } from "../calibration-requests/calibration-requests.service";
 import { QuotationsService } from "../quotations/quotations.service";
+import { WorkOrdersService } from "../work-orders/work-orders.service";
 import { PurchaseOrdersService } from "./purchase-orders.service";
 
 const purchaseOrdersService = new PurchaseOrdersService();
 const quotationsService = new QuotationsService();
 const requestsService = new CalibrationRequestsService();
+const workOrdersService = new WorkOrdersService();
 const realCompanyId = "PKM";
 const staffUserId = "po-staff-user";
 const createdPurchaseOrderIds: string[] = [];
+const createdWorkOrderIds: string[] = [];
+const createdUserIds: string[] = [];
 const createdQuotationIds: string[] = [];
 const createdCalibrationRequestIds: string[] = [];
 const createdCustomerIds: string[] = [];
@@ -264,7 +268,39 @@ async function createApprovedPurchaseOrder(
   return { ...created, quotation, purchaseOrder };
 }
 
+async function createTechnician(companyId: string) {
+  const user = await prisma.user.create({
+    data: {
+      email: `po-tech-${randomUUID().slice(0, 8)}@kalibrasimedika.co.id`,
+      name: "PO Technician",
+      status: "ACTIVE",
+    },
+  });
+  createdUserIds.push(user.id);
+  await prisma.userMembership.create({
+    data: { userId: user.id, companyId, role: "TECHNICIAN", isDefault: false },
+  });
+  return user;
+}
+
+/** Builds a full chain (Requisition -> Quotation -> PO -> WorkOrder) so the
+ * cross-chain safety guard tests can put a WorkOrder into IN_PROGRESS. */
+async function createWorkOrderFor(companyId: string, purchaseOrderId: string) {
+  const workOrder = await workOrdersService.create(companyId, { purchaseOrderId });
+  createdWorkOrderIds.push(workOrder.id);
+  return workOrder;
+}
+
 afterAll(async () => {
+  if (createdWorkOrderIds.length > 0) {
+    await prisma.calibrationJob.deleteMany({ where: { workOrderId: { in: createdWorkOrderIds } } });
+    await prisma.workOrderItem.deleteMany({ where: { workOrderId: { in: createdWorkOrderIds } } });
+    await prisma.workOrder.deleteMany({ where: { id: { in: createdWorkOrderIds } } });
+  }
+  if (createdUserIds.length > 0) {
+    await prisma.userMembership.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+  }
   await cleanupPurchaseOrders();
   if (createdTaxIds.length > 0) {
     await prisma.tax.deleteMany({ where: { id: { in: createdTaxIds } } });
@@ -1028,5 +1064,96 @@ describe("PurchaseOrdersService.revise", () => {
     ).rejects.toMatchObject({
       response: expect.objectContaining({ code: "NO_PENDING_SCOPE_CHANGE" }),
     });
+  });
+
+  // ===========================================================================
+  // MOM #1 — Final Revision Scope Design (active-scope pull reconciliation)
+  // ===========================================================================
+
+  it("retire: removing a consumed Quotation line already picked up by a WorkOrder sets PurchaseOrderItemStatus.CANCELLED (never a hard delete), preserving the other active item untouched", async () => {
+    const { quotation, purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      itemCount: 2,
+    });
+    expect(purchaseOrder.items).toHaveLength(2);
+    const [itemA, itemB] = purchaseOrder.items;
+    const workOrder = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+    expect(workOrder.items).toHaveLength(2);
+
+    // Remove itemA's Quotation line (unconsumed at the Quotation level is
+    // impossible here — a PO already exists — so this exercises the
+    // consumed-removal/retire path at the Quotation level too).
+    const quotationItemA = quotation.items.find(
+      (qi) => qi.id === itemA!.quotationItemId,
+    )!;
+    await quotationsService.revise(realCompanyId, quotation.id, staffUserId, {
+      items: quotation.items
+        .filter((qi) => qi.id !== quotationItemA.id)
+        .map((qi) => ({
+          id: qi.id,
+          requestItemId: qi.requestItemId!,
+          unitPrice: Number(qi.unitPrice),
+          qty: Number(qi.qty),
+        })),
+    });
+
+    const revised = await purchaseOrdersService.revise(realCompanyId, purchaseOrder.id, staffUserId);
+
+    expect(revised.items).toHaveLength(1); // CANCELLED item filtered out of the active view
+    expect(revised.items[0]!.id).toBe(itemB!.id);
+    expect(Number(revised.items[0]!.qty)).toBe(Number(itemB!.qty)); // preserved, untouched
+
+    const retiredRow = await prisma.purchaseOrderItem.findUniqueOrThrow({
+      where: { id: itemA!.id },
+    });
+    expect(retiredRow.status).toBe("CANCELLED");
+    expect(Number(retiredRow.qty)).toBe(Number(itemA!.qty)); // frozen — never mutated
+  });
+
+  it("cross-chain safety guard: retiring a consumed item is rejected once its WorkOrder has left PLANNED/ASSIGNED", async () => {
+    // A second, independent PurchaseOrderItem (itemB) is kept active
+    // throughout, purely so its WorkOrder has a second item and does not
+    // trip an unrelated "empty document" guard anywhere.
+    const { quotation, purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      itemCount: 2,
+    });
+    const [itemA] = purchaseOrder.items;
+    const workOrder = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+
+    // Retire itemA's Quotation line WHILE the WorkOrder is still PLANNED —
+    // safe at this point, so the guard correctly allows it here.
+    const quotationItemA = quotation.items.find((qi) => qi.id === itemA!.quotationItemId)!;
+    await quotationsService.revise(realCompanyId, quotation.id, staffUserId, {
+      items: quotation.items
+        .filter((qi) => qi.id !== quotationItemA.id)
+        .map((qi) => ({
+          id: qi.id,
+          requestItemId: qi.requestItemId!,
+          unitPrice: Number(qi.unitPrice),
+          qty: Number(qi.qty),
+        })),
+    });
+
+    // Now advance the WorkOrder past PLANNED/ASSIGNED BEFORE the PO-level
+    // reconciliation has had a chance to run — the exact ordering the guard
+    // exists to protect: PurchaseOrder.revise() has not yet retired itemA,
+    // so its WorkOrderItem is still present when start() fans out jobs.
+    const technician = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, workOrder.id, {
+      technicians: [{ technicianUserId: technician.id, roleOnJob: "LEAD" }],
+    });
+    await workOrdersService.start(realCompanyId, workOrder.id);
+
+    await expect(
+      purchaseOrdersService.revise(realCompanyId, purchaseOrder.id, staffUserId),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "RETIREMENT_BLOCKED_BY_WORK_ORDER_PROGRESS" }),
+    });
+
+    // Rolled back completely: the PurchaseOrderItem must remain exactly as
+    // it was (still OPEN, still active), not partially retired.
+    const unchangedRow = await prisma.purchaseOrderItem.findUniqueOrThrow({
+      where: { id: itemA!.id },
+    });
+    expect(unchangedRow.status).not.toBe("CANCELLED");
   });
 });

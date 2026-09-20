@@ -2067,4 +2067,39 @@ describe("WorkOrdersService.revise", () => {
       expect(siblingJobsCount).toBe(2);
     },
   );
+
+  it("remove: a WorkOrderItem whose source PurchaseOrderItem was retired (CANCELLED) upstream is hard-deleted on the next revise(), leaving the other item untouched", async () => {
+    const { quotation, purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+      itemCount: 2,
+    });
+    const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    expect(created.items).toHaveLength(2);
+    const [itemA, itemB] = purchaseOrder.items;
+    const workOrderItemA = created.items.find((wi) => wi.purchaseOrderItemId === itemA!.id)!;
+    const workOrderItemB = created.items.find((wi) => wi.purchaseOrderItemId === itemB!.id)!;
+
+    // Retire itemA all the way from the Quotation down through the
+    // PurchaseOrder — the WorkOrder is still PLANNED, so both guards allow it.
+    const quotationItemA = quotation.items.find((qi) => qi.id === itemA!.quotationItemId)!;
+    await quotationsService.revise(realCompanyId, quotation.id, staffUserId, {
+      items: quotation.items
+        .filter((qi) => qi.id !== quotationItemA.id)
+        .map((qi) => ({
+          id: qi.id,
+          requestItemId: qi.requestItemId!,
+          unitPrice: Number(qi.unitPrice),
+          qty: Number(qi.qty),
+        })),
+    });
+    await purchaseOrdersService.revise(realCompanyId, purchaseOrder.id, staffUserId);
+
+    const revised = await workOrdersService.revise(realCompanyId, created.id, staffUserId);
+
+    expect(revised.items).toHaveLength(1);
+    expect(revised.items[0]!.id).toBe(workOrderItemB.id);
+    expect(Number(revised.items[0]!.qty)).toBe(Number(workOrderItemB.qty)); // untouched
+
+    const removedRow = await prisma.workOrderItem.findUnique({ where: { id: workOrderItemA.id } });
+    expect(removedRow).toBeNull(); // hard-deleted — always safe pre-start()
+  });
 });

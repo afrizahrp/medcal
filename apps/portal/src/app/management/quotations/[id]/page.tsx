@@ -58,6 +58,8 @@ import {
 } from "../../purchase-orders/purchase-order-form-utils";
 import { StatusBadge as PurchaseOrderStatusBadge, type PurchaseOrderRow } from "../../purchase-orders/purchase-orders-ui";
 import { usePurchaseOrders } from "../../purchase-orders/use-purchase-orders-query";
+import { useCalibrationRequest } from "../../calibration-requests/use-calibration-requests-query";
+import { selectClassName } from "../../leads/leads-ui";
 
 export default function QuotationDetailPage() {
   const params = useParams<{ id: string }>();
@@ -490,6 +492,46 @@ export default function QuotationDetailPage() {
  * know which. Adding a brand-new line item is intentionally out of scope for
  * this first UI pass (see the implementation report's Known Constraints).
  */
+/**
+ * MOM #1 — Final Revision Scope Design §12/§19: the Revise editor represents
+ * the COMPLETE DESIRED SCOPE, not a quantity-only form. "Add Device" here
+ * means picking one of the underlying Requisition's active lines not yet
+ * represented on this Quotation — a Quotation line is always derived from a
+ * Requisition line, so there is no free-standing device-type picker at this
+ * level (that already exists one level up, on the Requisition). "Remove"
+ * marks a line as removed while keeping it visible; there is no "Change
+ * Device" action at this level for the same reason — a device swap here is
+ * just Remove one line + Add a different Requisition line, both already
+ * available.
+ */
+interface DesiredQuotationRow {
+  key: string;
+  id?: string;
+  requestItemId: string;
+  description: string;
+  deviceId: string | null;
+  tariffId: string | null;
+  unitPrice: number;
+  discountAmount: number;
+  qty: number;
+  removed: boolean;
+}
+
+function quotationRowsFromCurrent(quotation: QuotationRow): DesiredQuotationRow[] {
+  return quotation.items.map((item) => ({
+    key: item.id,
+    id: item.id,
+    requestItemId: item.requestItemId ?? "",
+    description: item.description,
+    deviceId: item.deviceId,
+    tariffId: item.tariffId,
+    unitPrice: Number(item.unitPrice),
+    discountAmount: Number(item.discountAmount),
+    qty: Number(item.qty),
+    removed: false,
+  }));
+}
+
 function ReviseQuotationDialog({
   quotation,
   onClose,
@@ -500,39 +542,93 @@ function ReviseQuotationDialog({
   onRevised: () => void;
 }) {
   const reviseMutation = useReviseQuotation();
-  const [qtyById, setQtyById] = useState<Record<string, string>>(() =>
-    Object.fromEntries(quotation.items.map((item) => [item.id, String(item.qty)])),
-  );
+  const originalById = new Map(quotation.items.map((item) => [item.id, item]));
+  const [rows, setRows] = useState<DesiredQuotationRow[]>(() => quotationRowsFromCurrent(quotation));
   const [error, setError] = useState<string | null>(null);
 
-  const changedItems = quotation.items.filter((item) => {
-    const value = Number(qtyById[item.id]);
-    return Number.isFinite(value) && value > 0 && value !== Number(item.qty);
-  });
+  // The Requisition behind this Quotation — its active lines not yet
+  // represented here are the "Add Device" candidates.
+  const requestQuery = useCalibrationRequest(quotation.request.id);
+  const usedRequestItemIds = new Set(
+    rows.filter((row) => !row.removed).map((row) => row.requestItemId),
+  );
+  const availableRequestItems = (requestQuery.data?.items ?? []).filter(
+    (item) => !usedRequestItemIds.has(item.id),
+  );
+  const [pendingAddRequestItemId, setPendingAddRequestItemId] = useState("");
+
+  function updateRow(key: string, patch: Partial<DesiredQuotationRow>) {
+    setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+  }
+
+  function removeRow(key: string) {
+    setRows((prev) => {
+      const target = prev.find((row) => row.key === key);
+      if (!target) return prev;
+      if (!target.id) return prev.filter((row) => row.key !== key);
+      return prev.map((row) => (row.key === key ? { ...row, removed: true } : row));
+    });
+  }
+
+  function undoRemove(key: string) {
+    updateRow(key, { removed: false });
+  }
+
+  function addSelectedRequestItem() {
+    const requestItem = availableRequestItems.find((item) => item.id === pendingAddRequestItemId);
+    if (!requestItem) return;
+    setRows((prev) => [
+      ...prev,
+      {
+        key: `new-${Math.random().toString(36).slice(2)}`,
+        requestItemId: requestItem.id,
+        description: requestItem.deviceType.name,
+        deviceId: null,
+        tariffId: null,
+        unitPrice: 0,
+        discountAmount: 0,
+        qty: requestItem.qty,
+        removed: false,
+      },
+    ]);
+    setPendingAddRequestItemId("");
+  }
+
+  function rowStatus(row: DesiredQuotationRow): "unchanged" | "changed" | "added" | "removed" {
+    if (row.removed) return "removed";
+    if (!row.id) return "added";
+    const original = originalById.get(row.id);
+    if (!original) return "changed";
+    return Number(original.qty) !== row.qty ? "changed" : "unchanged";
+  }
+
+  const activeRows = rows.filter((row) => !row.removed);
+  const hasChanges =
+    activeRows.length !== quotation.items.length || rows.some((row) => rowStatus(row) !== "unchanged");
 
   async function submit() {
     setError(null);
-    if (changedItems.length === 0) {
-      setError("Ubah qty setidaknya satu item untuk membuat revisi.");
+    if (activeRows.length === 0) {
+      setError("Quotation harus memiliki minimal satu item aktif.");
       return;
     }
-    if (!changedItems.every((item) => item.requestItemId)) {
-      setError("Item ini tidak memiliki tautan requisition dan tidak dapat direvisi dari sini.");
+    if (activeRows.some((row) => row.unitPrice <= 0)) {
+      setError("Isi unit price untuk setiap baris (termasuk baris baru) sebelum menyimpan.");
       return;
     }
     try {
       await reviseMutation.mutateAsync({
         id: quotation.id,
         input: {
-          items: changedItems.map((item) => ({
-            id: item.id,
-            requestItemId: item.requestItemId as string,
-            deviceId: item.deviceId ?? undefined,
-            tariffId: item.tariffId ?? undefined,
-            description: item.description,
-            unitPrice: Number(item.unitPrice),
-            discountAmount: Number(item.discountAmount),
-            qty: Number(qtyById[item.id]),
+          items: activeRows.map((row) => ({
+            id: row.id,
+            requestItemId: row.requestItemId,
+            deviceId: row.deviceId ?? undefined,
+            tariffId: row.tariffId ?? undefined,
+            description: row.description,
+            unitPrice: row.unitPrice,
+            discountAmount: row.discountAmount,
+            qty: row.qty,
           })),
         },
       });
@@ -542,39 +638,137 @@ function ReviseQuotationDialog({
     }
   }
 
+  const STATUS_BADGE: Record<string, { label: string; className: string }> = {
+    added: { label: "Added", className: "bg-emerald-100 text-emerald-700" },
+    changed: { label: "Changed", className: "bg-amber-100 text-amber-700" },
+    removed: { label: "Removed", className: "bg-red-100 text-red-700" },
+    unchanged: { label: "", className: "" },
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
         <h3 className="text-lg font-semibold text-slate-900">Revise {quotation.number}</h3>
         <p className="mt-2 text-sm text-slate-600">
-          Ubah qty item di bawah ini. Kondisi quotation saat ini akan disimpan sebagai riwayat
-          (revision) sebelum perubahan diterapkan. Nomor quotation tidak berubah.
+          Edit the complete desired scope below — add, remove, or change quantity, then save as
+          one revision. The current state is saved as history first. The quotation number never
+          changes.
         </p>
-        <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">
-          {quotation.items.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-slate-900">{item.description}</p>
-                <p className="text-xs text-slate-500">Qty saat ini: {formatQty(item.qty)}</p>
+        <div className="mt-4 space-y-2">
+          {rows.map((row) => {
+            const status = rowStatus(row);
+            const badge = STATUS_BADGE[status];
+            return (
+              <div
+                key={row.key}
+                className={cn(
+                  "rounded-lg border p-3",
+                  row.removed ? "border-slate-200 bg-slate-50 opacity-60" : "border-slate-200",
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    {badge?.label ? (
+                      <span
+                        className={cn(
+                          "mb-1 inline-block rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide",
+                          badge.className,
+                        )}
+                      >
+                        {badge.label}
+                      </span>
+                    ) : null}
+                    <p
+                      className={cn(
+                        "truncate text-sm font-medium text-slate-900",
+                        row.removed && "line-through",
+                      )}
+                    >
+                      {row.description}
+                    </p>
+                  </div>
+                  {row.removed ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => undoRemove(row.key)}>
+                      Undo
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-slate-400 hover:text-red-600"
+                      onClick={() => removeRow(row.key)}
+                      aria-label="Remove"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {!row.removed ? (
+                  <div className="mt-2 flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-slate-600">Qty</label>
+                      <Input
+                        type="number"
+                        min={1}
+                        step="1"
+                        className="w-20"
+                        value={row.qty}
+                        onChange={(e) => updateRow(row.key, { qty: Number(e.target.value) || 1 })}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-slate-600">Unit Price</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="w-32"
+                        value={row.unitPrice}
+                        onChange={(e) =>
+                          updateRow(row.key, { unitPrice: Number(e.target.value) || 0 })
+                        }
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
-              <Input
-                type="number"
-                min={1}
-                step="1"
-                className="w-24 shrink-0"
-                value={qtyById[item.id] ?? ""}
-                onChange={(e) =>
-                  setQtyById((prev) => ({ ...prev, [item.id]: e.target.value }))
-                }
-              />
-            </div>
-          ))}
+            );
+          })}
         </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <select
+            className={selectClassName}
+            value={pendingAddRequestItemId}
+            onChange={(e) => setPendingAddRequestItemId(e.target.value)}
+            disabled={requestQuery.isLoading || availableRequestItems.length === 0}
+          >
+            <option value="">
+              {availableRequestItems.length === 0
+                ? "Tidak ada requisition line lain untuk ditambahkan"
+                : "Pilih device dari requisition…"}
+            </option>
+            {availableRequestItems.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.deviceType.name} × {item.qty}
+              </option>
+            ))}
+          </select>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addSelectedRequestItem}
+            disabled={!pendingAddRequestItemId}
+          >
+            <Plus className="h-4 w-4" />
+            Add Device
+          </Button>
+        </div>
+
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
           <Button
             type="button"
             variant="outline"
@@ -586,7 +780,7 @@ function ReviseQuotationDialog({
           <Button
             type="button"
             onClick={submit}
-            disabled={reviseMutation.isPending || changedItems.length === 0}
+            disabled={reviseMutation.isPending || !hasChanges}
           >
             {reviseMutation.isPending ? "Menyimpan…" : "Simpan Revisi"}
           </Button>

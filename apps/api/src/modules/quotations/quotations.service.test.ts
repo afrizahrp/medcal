@@ -934,22 +934,57 @@ describe("QuotationsService.revise", () => {
     expect(Number(revised.subtotal)).toBe(3 * 100_000);
   });
 
-  it("rejects shrinking or no-op qty on an already-consumed item", async () => {
+  it("no-op: resubmitting the same qty on an already-consumed item changes nothing", async () => {
     const sent = await sentQuotation();
+    const itemId = sent.items[0]!.id;
     await consumeIntoPurchaseOrder(sent.id);
 
-    await expect(
-      quotationsService.revise(realCompanyId, sent.id, staffUserId, {
-        items: [
-          {
-            id: sent.items[0]!.id,
-            requestItemId: sent.items[0]!.requestItemId!,
-            unitPrice: Number(sent.items[0]!.unitPrice),
-            qty: 1,
-          },
-        ],
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const revised = await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [
+        {
+          id: itemId,
+          requestItemId: sent.items[0]!.requestItemId!,
+          unitPrice: Number(sent.items[0]!.unitPrice),
+          qty: 1,
+        },
+      ],
+    });
+
+    expect(revised.items).toHaveLength(1);
+    expect(revised.items[0]!.id).toBe(itemId);
+    expect(Number(revised.items[0]!.qty)).toBe(1);
+  });
+
+  it("MOM #1 Final Revision Scope Design: shrinking an already-consumed item retires the frozen row and adds a new active row with the full desired qty", async () => {
+    const sent = await sentQuotation();
+    const originalItemId = sent.items[0]!.id;
+    const requestItemId = sent.items[0]!.requestItemId!;
+    const unitPrice = Number(sent.items[0]!.unitPrice);
+
+    // Grow to qty 3 while still unconsumed (plain in-place update), then
+    // consume it into a PO, so the frozen row this test shrinks starts at 3.
+    const grown = await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [{ id: originalItemId, requestItemId, unitPrice, qty: 3 }],
+    });
+    const grownItemId = grown.items[0]!.id;
+    expect(Number(grown.items[0]!.qty)).toBe(3);
+    await consumeIntoPurchaseOrder(sent.id);
+
+    const revised = await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [{ id: grownItemId, requestItemId, unitPrice, qty: 1 }],
+    });
+
+    // The frozen row is retired (isActive: false), not deleted and not
+    // mutated — it no longer appears in the current active item list.
+    expect(revised.items).toHaveLength(1);
+    expect(revised.items[0]!.id).not.toBe(grownItemId);
+    expect(Number(revised.items[0]!.qty)).toBe(1);
+
+    const retiredRow = await prisma.quotationItem.findUniqueOrThrow({
+      where: { id: grownItemId },
+    });
+    expect(retiredRow.isActive).toBe(false);
+    expect(Number(retiredRow.qty)).toBe(3); // frozen — never mutated
   });
 
   it("rolls back everything (no history row committed) if the batch is invalid", async () => {
@@ -975,6 +1010,126 @@ describe("QuotationsService.revise", () => {
     const quotationAfter = await quotationsService.findOne(realCompanyId, sent.id);
     expect(quotationAfter.items).toHaveLength(1);
     expect(Number(quotationAfter.items[0]!.qty)).toBe(1);
+  });
+
+  // ===========================================================================
+  // MOM #1 — Final Revision Scope Design (desired-scope reconciliation)
+  // ===========================================================================
+
+  it("add: a genuinely new line (no id) is added once the Requisition itself has grown", async () => {
+    const dt = await makeDeviceType();
+    await seedPrice(realCompanyId, dt.id, 100_000);
+    const { request } = await createSubmittedRequest(realCompanyId, { deviceTypeId: dt.id });
+    const created = await createQuoted(realCompanyId, { requestId: request.id });
+    createdQuotationIds.push(created.id);
+    const sent = await quotationsService.send(realCompanyId, created.id);
+
+    // Grow the Requisition first (unconsumed CalibrationRequestItem -> new
+    // active line), then pick it up as a new Quotation line.
+    const revisedRequest = await requestsService.revise(realCompanyId, request.id, staffUserId, {
+      items: [
+        { id: request.items[0]!.id, deviceTypeId: dt.id },
+        { deviceTypeId: dt.id },
+      ],
+    });
+    const newRequestItemId = revisedRequest.items.find(
+      (item) => item.id !== request.items[0]!.id,
+    )!.id;
+
+    const revised = await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [
+        {
+          id: sent.items[0]!.id,
+          requestItemId: sent.items[0]!.requestItemId!,
+          unitPrice: Number(sent.items[0]!.unitPrice),
+          qty: 1,
+        },
+        { requestItemId: newRequestItemId, unitPrice: 50_000, description: "Added line", qty: 1 },
+      ],
+    });
+
+    expect(revised.items).toHaveLength(2);
+    expect(revised.items.some((item) => item.requestItemId === newRequestItemId)).toBe(true);
+  });
+
+  it("remove (unconsumed): an item absent from the desired scope is hard-deleted, not retired", async () => {
+    const dt = await makeDeviceType();
+    await seedPrice(realCompanyId, dt.id, 100_000);
+    const { request } = await createSubmittedRequest(realCompanyId, {
+      deviceTypeId: dt.id,
+      items: [{}, {}],
+    });
+    const created = await createQuoted(realCompanyId, { requestId: request.id });
+    createdQuotationIds.push(created.id);
+    const sent = await quotationsService.send(realCompanyId, created.id);
+    expect(sent.items).toHaveLength(2);
+    const keepId = sent.items[0]!.id;
+    const dropId = sent.items[1]!.id;
+
+    const revised = await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [
+        {
+          id: keepId,
+          requestItemId: sent.items[0]!.requestItemId!,
+          unitPrice: Number(sent.items[0]!.unitPrice),
+          description: sent.items[0]!.description,
+          qty: 1,
+        },
+      ],
+    });
+
+    expect(revised.items).toHaveLength(1);
+    expect(revised.items[0]!.id).toBe(keepId);
+    const dropped = await prisma.quotationItem.findUnique({ where: { id: dropId } });
+    expect(dropped).toBeNull(); // hard-deleted, not merely retired
+  });
+
+  it("remove (consumed): an item absent from the desired scope is retired (isActive: false), never hard-deleted", async () => {
+    const sent = await sentQuotation();
+    const itemId = sent.items[0]!.id;
+    await consumeIntoPurchaseOrder(sent.id);
+
+    const revised = await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [],
+    });
+
+    expect(revised.items).toHaveLength(0);
+    const retired = await prisma.quotationItem.findUniqueOrThrow({ where: { id: itemId } });
+    expect(retired.isActive).toBe(false);
+    expect(Number(retired.qty)).toBe(1); // frozen — never mutated
+  });
+
+  it("replace (unconsumed): old line removed (hard delete) + new line added, in one revision", async () => {
+    const dtA = await makeDeviceType();
+    const dtB = await makeDeviceType();
+    await seedPrice(realCompanyId, dtA.id, 100_000);
+    await seedPrice(realCompanyId, dtB.id, 120_000);
+    const { request } = await createSubmittedRequest(realCompanyId, {
+      deviceTypeId: dtA.id,
+      items: [{ deviceTypeId: dtA.id }, { deviceTypeId: dtB.id }],
+    });
+    const created = await createQuoted(realCompanyId, { requestId: request.id });
+    createdQuotationIds.push(created.id);
+    const sent = await quotationsService.send(realCompanyId, created.id);
+    const oldItem = sent.items.find((item) => item.description === dtA.name)!;
+    const otherRequestItemId = request.items.find((item) => item.deviceTypeId === dtB.id)!.id;
+
+    const revised = await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [
+        // oldItem's id omitted -> REMOVED (was unconsumed)
+        {
+          requestItemId: otherRequestItemId,
+          unitPrice: 120_000,
+          description: "Replacement line",
+          qty: 1,
+        },
+      ],
+    });
+
+    expect(revised.items).toHaveLength(1);
+    expect(revised.items[0]!.id).not.toBe(oldItem.id);
+    const oldRow = await prisma.quotationItem.findUnique({ where: { id: oldItem.id } });
+    expect(oldRow).toBeNull();
   });
 });
 

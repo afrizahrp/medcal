@@ -42,7 +42,11 @@ const deviceTypeSelect = {
 } as const;
 
 const purchaseOrderInclude = {
+  // MOM #1 — Revision Scope Design: a retired (status: CANCELLED) item is no
+  // longer part of the PO's current desired scope; it stays in the database
+  // only for downstream traceability, never shown as a current row.
   items: {
+    where: { status: { not: "CANCELLED" } },
     include: {
       quotationItem: {
         include: {
@@ -85,6 +89,36 @@ function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
+/**
+ * MOM #1 — Final Revision Scope Design §10 (cross-chain safety guard).
+ * Before retiring a consumed PurchaseOrderItem (status -> CANCELLED),
+ * confirm its WorkOrderItem's WorkOrder has not already left
+ * PLANNED/ASSIGNED — retiring it past that point would silently invalidate
+ * scope a WorkOrder has already committed to (or fanned out CalibrationJobs
+ * for).
+ */
+async function assertRetirementSafe(
+  tx: Prisma.TransactionClient,
+  purchaseOrderItemIds: string[],
+): Promise<void> {
+  const blocking = await tx.workOrderItem.findFirst({
+    where: {
+      purchaseOrderItemId: { in: purchaseOrderItemIds },
+      workOrder: { status: { notIn: ["PLANNED", "ASSIGNED"] } },
+    },
+    select: { workOrder: { select: { number: true, status: true } } },
+  });
+  if (blocking) {
+    throw new BadRequestException({
+      message:
+        `This item has already reached Work Order ${blocking.workOrder.number} ` +
+        `(status ${blocking.workOrder.status}), which is no longer PLANNED/ASSIGNED. ` +
+        "It cannot be removed by a revision.",
+      code: "RETIREMENT_BLOCKED_BY_WORK_ORDER_PROGRESS",
+    });
+  }
+}
+
 @Injectable()
 export class PurchaseOrdersService {
   async create(
@@ -95,7 +129,9 @@ export class PurchaseOrdersService {
       return await prisma.$transaction(async (tx) => {
         const quotation = await tx.quotation.findFirst({
           where: { id: input.quotationId, companyId },
-          include: { items: { orderBy: { createdAt: "asc" } } },
+          // MOM #1 — Revision Scope Design: only active quotation scope may
+          // ever propagate downstream.
+          include: { items: { where: { isActive: true }, orderBy: { createdAt: "asc" } } },
         });
         if (!quotation) {
           throw new NotFoundException({
@@ -381,16 +417,23 @@ export class PurchaseOrdersService {
   }
 
   /**
-   * MOM #1 — Transaction Revision + Immutable History.
+   * MOM #1 — Final Revision Scope Design (active-scope pull reconciliation).
+   * See mom-1-final-revision-scope-design-20260920.md §7.
    *
-   * PurchaseOrderItem has no client-facing item-edit surface (never mutated
-   * by any existing code, and mom-1-item-revision-rule forbids it once a
-   * WorkOrder has been created from it) — `revise()` is therefore pull-based,
-   * not input-driven: it re-reads the parent Quotation's CURRENT items and
-   * adds one new PurchaseOrderItem for each one not yet represented on this
-   * PO, never touching an existing row. Snapshots the complete current
-   * header + items into PurchaseOrderHistory / PurchaseOrderItemHistory
-   * (append-only) first. The customer-facing `number` never changes.
+   * PurchaseOrderItem keeps its NO-BODY, PULL-BASED contract — this is not a
+   * desired-scope input API. It reconciles against the parent Quotation's
+   * CURRENT ACTIVE items only:
+   *  - an active QuotationItem not yet represented by a PurchaseOrderItem
+   *    (of any status) is added;
+   *  - an active (non-CANCELLED) PurchaseOrderItem whose source QuotationItem
+   *    is no longer active is retired: hard-deleted if no WorkOrderItem
+   *    exists for it yet, otherwise `status = "CANCELLED"` (the existing,
+   *    previously-dormant `PurchaseOrderItemStatus.CANCELLED` value), subject
+   *    to the cross-chain safety guard.
+   * Never mutates an existing PurchaseOrderItem's qty. Snapshots the complete
+   * current header + ALL current items (every status) into
+   * PurchaseOrderHistory / PurchaseOrderItemHistory (append-only) first. The
+   * customer-facing `number` never changes.
    */
   async revise(
     companyId: string,
@@ -424,16 +467,24 @@ export class PurchaseOrdersService {
 
     const quotation = await prisma.quotation.findFirstOrThrow({
       where: { id: existing.quotationId, companyId },
-      include: { items: true },
+      include: { items: { where: { isActive: true } } },
     });
 
+    const activeQuotationItemIds = new Set(quotation.items.map((item) => item.id));
+    // @@unique([purchaseOrderId, quotationItemId]) means a quotationItemId is
+    // "represented" the moment any PurchaseOrderItem (any status) exists for
+    // it — a retired one is never re-created.
     const consumedQuotationItemIds = new Set(existing.items.map((item) => item.quotationItemId));
     const pendingQuotationItems = quotation.items.filter(
       (item) => !consumedQuotationItemIds.has(item.id),
     );
-    if (pendingQuotationItems.length === 0) {
+    const itemsToRetire = existing.items.filter(
+      (item) => item.status !== "CANCELLED" && !activeQuotationItemIds.has(item.quotationItemId),
+    );
+
+    if (pendingQuotationItems.length === 0 && itemsToRetire.length === 0) {
       throw new BadRequestException({
-        message: "Quotation has no additional scope for this purchase order to pick up",
+        message: "Quotation has no scope change for this purchase order to pick up",
         code: "NO_PENDING_SCOPE_CHANGE",
       });
     }
@@ -490,24 +541,45 @@ export class PurchaseOrdersService {
         },
       });
 
-      await tx.purchaseOrderItem.createMany({
-        data: pendingQuotationItems.map((item) => ({
-          companyId,
-          purchaseOrderId: id,
-          quotationItemId: item.id,
-          deviceId: item.deviceId,
-          tariffId: item.tariffId,
-          description: item.description,
-          qty: item.qty,
-          unitPrice: item.unitPrice,
-          discountAmount: item.discountAmount,
-          lineTotal: item.lineTotal,
-          status: "OPEN",
-        })),
-      });
+      // Retire PurchaseOrderItems whose source QuotationItem became inactive.
+      for (const item of itemsToRetire) {
+        const workOrderItem = await tx.workOrderItem.findFirst({
+          where: { purchaseOrderItemId: item.id },
+          select: { id: true },
+        });
+        if (!workOrderItem) {
+          await tx.purchaseOrderItem.delete({ where: { id: item.id } });
+        } else {
+          await assertRetirementSafe(tx, [item.id]);
+          await tx.purchaseOrderItem.update({
+            where: { id: item.id },
+            data: { status: "CANCELLED" },
+          });
+        }
+      }
+
+      // Add PurchaseOrderItems for newly active Quotation scope.
+      if (pendingQuotationItems.length > 0) {
+        await tx.purchaseOrderItem.createMany({
+          data: pendingQuotationItems.map((item) => ({
+            companyId,
+            purchaseOrderId: id,
+            quotationItemId: item.id,
+            deviceId: item.deviceId,
+            tariffId: item.tariffId,
+            description: item.description,
+            qty: item.qty,
+            unitPrice: item.unitPrice,
+            discountAmount: item.discountAmount,
+            lineTotal: item.lineTotal,
+            status: "OPEN",
+          })),
+        });
+      }
 
       // Mirror create()'s "copy the quotation's current commercial totals"
-      // rather than re-deriving them independently.
+      // rather than re-deriving them independently — the Quotation's own
+      // totals are already computed from its active items only.
       await tx.purchaseOrder.update({
         where: { id },
         data: {

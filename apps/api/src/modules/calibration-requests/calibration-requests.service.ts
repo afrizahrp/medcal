@@ -41,7 +41,10 @@ const deviceTypeSelect = {
 } as const;
 
 const calibrationRequestInclude = {
-  items: { include: { deviceType: { select: deviceTypeSelect } } },
+  // MOM #1 — Revision Scope Design: a retired (isActive: false) item is no
+  // longer part of the requisition's current desired scope; it stays in the
+  // database only for downstream traceability, never shown as a current row.
+  items: { where: { isActive: true }, include: { deviceType: { select: deviceTypeSelect } } },
   customer: true,
 } as const;
 
@@ -67,6 +70,37 @@ async function assertDeviceTypesExist(
     throw new BadRequestException({
       message: "One or more device types not found",
       code: "DEVICE_TYPE_NOT_FOUND",
+    });
+  }
+}
+
+/**
+ * MOM #1 — Final Revision Scope Design §10 (cross-chain safety guard).
+ * Before retiring a consumed CalibrationRequestItem (isActive -> false),
+ * confirm no WorkOrderItem derived from it belongs to a WorkOrder that has
+ * already left PLANNED/ASSIGNED. Retiring it past that point would silently
+ * invalidate scope a WorkOrder has already committed to (or fanned out
+ * CalibrationJobs for) — this MOM must not touch job/fan-out behavior, so
+ * the revision is rejected outright instead.
+ */
+async function assertRetirementSafe(
+  tx: Prisma.TransactionClient,
+  requestItemIds: string[],
+): Promise<void> {
+  const blocking = await tx.workOrderItem.findFirst({
+    where: {
+      purchaseOrderItem: { quotationItem: { requestItemId: { in: requestItemIds } } },
+      workOrder: { status: { notIn: ["PLANNED", "ASSIGNED"] } },
+    },
+    select: { workOrder: { select: { number: true, status: true } } },
+  });
+  if (blocking) {
+    throw new BadRequestException({
+      message:
+        `This item has already reached Work Order ${blocking.workOrder.number} ` +
+        `(status ${blocking.workOrder.status}), which is no longer PLANNED/ASSIGNED. ` +
+        "It cannot be removed by a revision.",
+      code: "RETIREMENT_BLOCKED_BY_WORK_ORDER_PROGRESS",
     });
   }
 }
@@ -374,18 +408,28 @@ export class CalibrationRequestsService {
   }
 
   /**
-   * MOM #1 — Transaction Revision + Immutable History.
+   * MOM #1 — Final Revision Scope Design (desired-scope reconciliation).
+   * See mom-1-final-revision-scope-design-20260920.md.
    *
-   * The `Revise` counterpart to `update()`: reachable once the requisition has
-   * left DRAFT (see REVISABLE_CALIBRATION_REQUEST_STATUSES). Snapshots the
-   * complete current header + items into CalibrationRequestHistory /
-   * CalibrationRequestItemHistory (append-only) before applying the change.
-   * The customer-facing `number` never changes.
+   * `input.items` is the COMPLETE desired active scope, not a set of edits:
+   * a current active item's `id` absent from `input.items` is REMOVED.
+   * Matching is by row `id` only — never by `deviceTypeId` or any other
+   * business attribute. Device replacement is REMOVE (old id) + ADD (new,
+   * no id) — there is no separate "replace" persistence concept.
    *
-   * Per-item semantics (mom-1-item-revision-rule): a `qty` change on an item
-   * that has NOT yet been snapshotted into a QuotationItem is applied in
-   * place. Once a QuotationItem already references it, the row is frozen and
-   * additional quantity is carried by a new sibling row instead.
+   * Reachable once the requisition has left DRAFT (see
+   * REVISABLE_CALIBRATION_REQUEST_STATUSES). Snapshots the complete current
+   * header + all current active items into CalibrationRequestHistory /
+   * CalibrationRequestItemHistory (append-only) before applying the
+   * reconciliation. The customer-facing `number` never changes.
+   *
+   * Per-item semantics: unconsumed rows are freely updated/deleted in
+   * place. A consumed row (already snapshotted into a QuotationItem) is
+   * frozen — removal retires it (`isActive: false`) instead of deleting it,
+   * a qty increase is a new active sibling row carrying the delta, and a
+   * qty decrease retires the frozen row and adds a new row carrying the
+   * full new desired qty (never a negative delta, never a mutation of the
+   * frozen row).
    */
   async revise(
     companyId: string,
@@ -395,7 +439,7 @@ export class CalibrationRequestsService {
   ): Promise<CalibrationRequestWithItems> {
     const existing = await prisma.calibrationRequest.findFirst({
       where: { id, companyId },
-      include: { items: true },
+      include: { items: { where: { isActive: true } } },
     });
     if (!existing) {
       throw new NotFoundException({
@@ -418,15 +462,17 @@ export class CalibrationRequestsService {
       });
     }
 
-    const existingItemsById = new Map(existing.items.map((item) => [item.id, item]));
+    const currentItemsById = new Map(existing.items.map((item) => [item.id, item]));
     for (const item of input.items) {
-      if (item.id && !existingItemsById.has(item.id)) {
+      if (item.id && !currentItemsById.has(item.id)) {
         throw new BadRequestException({
           message: "One or more revised items do not belong to this requisition",
           code: "CALIBRATION_REQUEST_ITEM_NOT_FOUND",
         });
       }
     }
+    const desiredIds = new Set(input.items.flatMap((item) => (item.id ? [item.id] : [])));
+    const removedItems = existing.items.filter((item) => !desiredIds.has(item.id));
 
     const result = await prisma.$transaction(async (tx) => {
       await assertDeviceTypesExist(
@@ -482,8 +528,26 @@ export class CalibrationRequestsService {
         },
       });
 
+      // REMOVED: a current active item whose id is absent from the desired scope.
+      for (const item of removedItems) {
+        const consumedCount = await tx.quotationItem.count({
+          where: { requestItemId: item.id },
+        });
+        if (consumedCount === 0) {
+          await tx.calibrationRequestItem.delete({ where: { id: item.id } });
+        } else {
+          await assertRetirementSafe(tx, [item.id]);
+          await tx.calibrationRequestItem.update({
+            where: { id: item.id },
+            data: { isActive: false },
+          });
+        }
+      }
+
+      // ADDED / UNCHANGED / QTY_CHANGED.
       for (const item of input.items) {
         if (!item.id) {
+          // ADDED — a genuinely new line, fresh lineage, no id carried over.
           await tx.calibrationRequestItem.create({
             data: {
               companyId,
@@ -502,14 +566,18 @@ export class CalibrationRequestsService {
           continue;
         }
 
-        const currentItem = existingItemsById.get(item.id);
+        const currentItem = currentItemsById.get(item.id);
         if (!currentItem) continue; // validated above
 
         const consumedCount = await tx.quotationItem.count({
           where: { requestItemId: item.id },
         });
+        const desiredQty = item.qty ?? currentItem.qty;
 
         if (consumedCount === 0) {
+          // Unconsumed — freely updated in place (UNCHANGED and QTY_CHANGED
+          // both flow through the same in-place update; applying identical
+          // values is a harmless no-op).
           await tx.calibrationRequestItem.update({
             where: { id: item.id },
             data: {
@@ -517,7 +585,7 @@ export class CalibrationRequestsService {
               customerDeviceName: item.customerDeviceName || null,
               model: item.model || null,
               deviceId: item.deviceId || null,
-              qty: item.qty ?? currentItem.qty,
+              qty: desiredQty,
               akdAkl: item.akdAkl || null,
               akdAklDeclaration:
                 item.akdAklDeclaration ??
@@ -528,19 +596,36 @@ export class CalibrationRequestsService {
           continue;
         }
 
-        // Already snapshotted into a QuotationItem — the row is frozen
-        // (mom-1-item-revision-rule). Growth is represented by a new sibling
-        // row cloned from the frozen row's identity, carrying only the delta.
-        if (item.qty === undefined || item.qty <= currentItem.qty) {
-          throw new BadRequestException({
-            message:
-              "This item already has a Quotation generated from it and cannot be shrunk or edited in place. " +
-              "Provide a qty greater than the current value to add scope as a new line.",
-            code: "CALIBRATION_REQUEST_ITEM_ALREADY_CONSUMED",
-            itemId: item.id,
-          });
+        // Consumed — the row is frozen, never mutated.
+        if (desiredQty === currentItem.qty) {
+          continue; // UNCHANGED
         }
-
+        if (desiredQty > currentItem.qty) {
+          // QTY_CHANGED (increase) — additive sibling carrying only the delta.
+          await tx.calibrationRequestItem.create({
+            data: {
+              companyId,
+              requestId: id,
+              deviceTypeId: currentItem.deviceTypeId,
+              customerDeviceName: currentItem.customerDeviceName,
+              model: currentItem.model,
+              deviceId: currentItem.deviceId,
+              qty: desiredQty - currentItem.qty,
+              akdAkl: currentItem.akdAkl,
+              akdAklDeclaration: currentItem.akdAklDeclaration,
+              notes: currentItem.notes,
+            },
+          });
+          continue;
+        }
+        // QTY_CHANGED (decrease) — retire the frozen row, add a new one
+        // carrying the full new desired qty. Never a negative delta, never
+        // a mutation of the frozen row.
+        await assertRetirementSafe(tx, [item.id]);
+        await tx.calibrationRequestItem.update({
+          where: { id: item.id },
+          data: { isActive: false },
+        });
         await tx.calibrationRequestItem.create({
           data: {
             companyId,
@@ -549,7 +634,7 @@ export class CalibrationRequestsService {
             customerDeviceName: currentItem.customerDeviceName,
             model: currentItem.model,
             deviceId: currentItem.deviceId,
-            qty: item.qty - currentItem.qty,
+            qty: desiredQty,
             akdAkl: currentItem.akdAkl,
             akdAklDeclaration: currentItem.akdAklDeclaration,
             notes: currentItem.notes,

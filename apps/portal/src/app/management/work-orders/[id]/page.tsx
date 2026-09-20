@@ -48,6 +48,7 @@ import {
   WorkOrderItemAccessoriesSection,
 } from "../work-order-request-review-section";
 import { fmtDateOnly } from "@/lib/date-utils";
+import { usePurchaseOrder } from "../../purchase-orders/use-purchase-orders-query";
 import {
   openWorkOrderPdf,
   useAssignWorkOrder,
@@ -73,6 +74,10 @@ export default function WorkOrderDetailPage() {
   const doneMutation = useDoneWorkOrder();
   const cancelMutation = useCancelWorkOrder();
   const reviseMutation = useReviseWorkOrder();
+  // MOM #1 — Final Revision Scope Design §12/§19: a minimal, client-side-only
+  // preview of what the pull-based revise() will change, computed from data
+  // already fetched for this page (no new preview API).
+  const revisionSourcePurchaseOrderQuery = usePurchaseOrder(query.data?.purchaseOrder?.id);
   const [assignOpen, setAssignOpen] = useState(false);
   const usersQuery = useAssignableUsers(Boolean(capabilities?.workOrderAssign && assignOpen));
 
@@ -123,6 +128,27 @@ export default function WorkOrderDetailPage() {
   }
 
   const actions = workOrderActions(workOrder.status);
+
+  // MOM #1 — client-side reconciliation preview, mirroring the backend's own
+  // pull logic: active PO items not yet on this WorkOrder (pending adds) vs.
+  // current WorkOrderItems whose source PO item is no longer active
+  // (pending removals). Read-only; never sent anywhere.
+  const sourcePurchaseOrder = revisionSourcePurchaseOrderQuery.data;
+  const activePurchaseOrderItemIds = new Set(
+    (sourcePurchaseOrder?.items ?? []).map((item) => item.id),
+  );
+  const woItemPurchaseOrderItemIds = new Set(
+    workOrder.items.map((item) => item.purchaseOrderItemId),
+  );
+  const pendingAddCount = (sourcePurchaseOrder?.items ?? []).filter(
+    (item) => !woItemPurchaseOrderItemIds.has(item.id),
+  ).length;
+  const pendingRemoveCount = workOrder.items.filter(
+    (item) => !activePurchaseOrderItemIds.has(item.purchaseOrderItemId),
+  ).length;
+  const revisePreviewText = revisionSourcePurchaseOrderQuery.isLoading
+    ? "Memuat preview…"
+    : `${pendingAddCount} item akan ditambahkan, ${pendingRemoveCount} item akan dihapus.`;
 
   const referenceEquipmentReviewPoiIds = new Set(
     (calibrationJobs.data?.data ?? [])
@@ -458,7 +484,7 @@ export default function WorkOrderDetailPage() {
       <ConfirmDialog
         open={confirmAction === "revise"}
         title="Revise this Work Order?"
-        description="Kondisi Work Order saat ini akan disimpan sebagai riwayat, lalu scope terbaru dari Purchase Order akan diterapkan sebagai item tambahan. Nomor Work Order tidak berubah."
+        description={`Kondisi Work Order saat ini akan disimpan sebagai riwayat, lalu scope terbaru dari Purchase Order akan diterapkan. Nomor Work Order tidak berubah. ${revisePreviewText}`}
         confirmLabel="Revise"
         onConfirm={() => runAction("revise")}
         onCancel={() => setConfirmAction(null)}

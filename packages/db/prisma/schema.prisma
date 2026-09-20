@@ -1618,6 +1618,13 @@ model CalibrationRequestItem {
   /// Provenance of `akdAkl` — see the AkdAklDeclaration enum.
   akdAklDeclaration  AkdAklDeclaration @default(NOT_PROVIDED)
   notes              String?
+  /// MOM #1 — Revision Scope Design. true = active (part of the requisition's
+  /// current desired scope); false = retired by a revision that removed this
+  /// line after a downstream Quotation had already been generated from it
+  /// (see mom-1-final-revision-scope-design-20260920.md §6). A row with no
+  /// downstream QuotationItem is hard-deleted on removal instead — this flag
+  /// only ever becomes false for an already-consumed row, never deleted.
+  isActive           Boolean           @default(true)
   createdAt          DateTime          @default(now())
 
   request         CalibrationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
@@ -1738,6 +1745,12 @@ model QuotationItem {
   /// line's DeviceType. unitPrice is stored as 0 and the Quotation cannot be
   /// sent/approved until a real price is entered (see QuotationsService.send).
   pricePending   Boolean  @default(false)
+  /// MOM #1 — Revision Scope Design. true = active (part of the quotation's
+  /// current desired scope); false = retired by a revision that removed this
+  /// line after a downstream PurchaseOrderItem had already been generated
+  /// from it (see mom-1-final-revision-scope-design-20260920.md §6). A row
+  /// with no downstream PurchaseOrderItem is hard-deleted on removal instead.
+  isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
 
   quotation          Quotation               @relation(fields: [quotationId], references: [id], onDelete: Cascade)

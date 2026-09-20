@@ -853,7 +853,7 @@ describe("CalibrationRequestsService.revise", () => {
     expect(siblingRow.deviceTypeId).toBe(originalRow.deviceTypeId);
   });
 
-  it("rejects shrinking or no-op qty on an already-consumed item", async () => {
+  it("no-op: resubmitting the same qty on an already-consumed item changes nothing", async () => {
     const customer = await createTestCustomer(realCompanyId);
     const deviceTypeId = await getTestDeviceTypeId();
     const created = await service.create(realCompanyId, testUserId, {
@@ -867,11 +867,45 @@ describe("CalibrationRequestsService.revise", () => {
 
     await consumeRequestIntoQuotation(created.id, deviceTypeId);
 
-    await expect(
-      service.revise(realCompanyId, created.id, testUserId, {
-        items: [{ id: originalItemId, deviceTypeId, qty: 2 }],
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const revised = await service.revise(realCompanyId, created.id, testUserId, {
+      items: [{ id: originalItemId, deviceTypeId, qty: 3 }],
+    });
+
+    expect(revised.items).toHaveLength(1);
+    expect(revised.items[0]!.id).toBe(originalItemId);
+    expect(revised.items[0]!.qty).toBe(3);
+  });
+
+  it("MOM #1 Final Revision Scope Design: shrinking an already-consumed item retires the frozen row and adds a new active row with the full desired qty", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, qty: 3 }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+    const submitted = await service.submit(realCompanyId, created.id, testUserId);
+    const originalItemId = submitted.items[0]!.id;
+
+    await consumeRequestIntoQuotation(created.id, deviceTypeId);
+
+    const revised = await service.revise(realCompanyId, created.id, testUserId, {
+      items: [{ id: originalItemId, deviceTypeId, qty: 2 }],
+    });
+
+    // The frozen row is retired (isActive: false), not deleted and not
+    // mutated — it no longer appears in the current active item list.
+    expect(revised.items).toHaveLength(1);
+    expect(revised.items[0]!.id).not.toBe(originalItemId);
+    expect(revised.items[0]!.qty).toBe(2);
+    expect(revised.items[0]!.deviceTypeId).toBe(deviceTypeId);
+
+    const retiredRow = await prisma.calibrationRequestItem.findUniqueOrThrow({
+      where: { id: originalItemId },
+    });
+    expect(retiredRow.isActive).toBe(false);
+    expect(retiredRow.qty).toBe(3); // frozen — never mutated
   });
 
   it("rolls back everything (no history, no item mutation) if any line in the batch is invalid", async () => {
@@ -901,5 +935,177 @@ describe("CalibrationRequestsService.revise", () => {
     const requestAfter = await service.findOne(realCompanyId, created.id);
     expect(requestAfter.items).toHaveLength(1);
     expect(requestAfter.items[0]!.qty).toBe(1);
+  });
+
+  // ===========================================================================
+  // MOM #1 — Final Revision Scope Design (desired-scope reconciliation)
+  // ===========================================================================
+
+  it("add: a genuinely new line (no id) is added alongside the unchanged existing line", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeA = await getTestDeviceTypeId();
+    const category = await prisma.deviceCategory.create({
+      data: { code: `C${randomUUID().slice(0, 8).toUpperCase()}`, name: "Test Category" },
+    });
+    createdDeviceCategoryIds.push(category.id);
+    const otherDeviceType = await prisma.deviceType.create({
+      data: {
+        categoryId: category.id,
+        code: `T${randomUUID().slice(0, 8).toUpperCase()}`,
+        name: "Other Device Type",
+      },
+    });
+    createdDeviceTypeIds.push(otherDeviceType.id);
+
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId: deviceTypeA, qty: 1 }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+    const submitted = await service.submit(realCompanyId, created.id, testUserId);
+    const originalItemId = submitted.items[0]!.id;
+
+    const revised = await service.revise(realCompanyId, created.id, testUserId, {
+      items: [
+        { id: originalItemId, deviceTypeId: deviceTypeA, qty: 1 },
+        { deviceTypeId: otherDeviceType.id, qty: 1 },
+      ],
+    });
+
+    expect(revised.items).toHaveLength(2);
+    expect(revised.items.some((item) => item.id === originalItemId)).toBe(true);
+    expect(revised.items.some((item) => item.deviceTypeId === otherDeviceType.id)).toBe(true);
+  });
+
+  it("remove (unconsumed): an item absent from the desired scope is hard-deleted, not retired", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, qty: 1, notes: "keep" }, { deviceTypeId, qty: 2, notes: "drop" }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+    const submitted = await service.submit(realCompanyId, created.id, testUserId);
+    const keepId = submitted.items.find((item) => item.notes === "keep")!.id;
+    const dropId = submitted.items.find((item) => item.notes === "drop")!.id;
+
+    const revised = await service.revise(realCompanyId, created.id, testUserId, {
+      items: [{ id: keepId, deviceTypeId, qty: 1, notes: "keep" }],
+    });
+
+    expect(revised.items).toHaveLength(1);
+    expect(revised.items[0]!.id).toBe(keepId);
+    const dropped = await prisma.calibrationRequestItem.findUnique({ where: { id: dropId } });
+    expect(dropped).toBeNull(); // hard-deleted, not merely retired
+  });
+
+  it("remove (consumed): an item absent from the desired scope is retired (isActive: false), never hard-deleted", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, qty: 1 }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+    const submitted = await service.submit(realCompanyId, created.id, testUserId);
+    const originalItemId = submitted.items[0]!.id;
+
+    await consumeRequestIntoQuotation(created.id, deviceTypeId);
+
+    const revised = await service.revise(realCompanyId, created.id, testUserId, {
+      items: [],
+    });
+
+    expect(revised.items).toHaveLength(0);
+    const retired = await prisma.calibrationRequestItem.findUniqueOrThrow({
+      where: { id: originalItemId },
+    });
+    expect(retired.isActive).toBe(false);
+    expect(retired.qty).toBe(1); // frozen — never mutated
+  });
+
+  it("replace (unconsumed): old device removed (hard delete) + new device added, in one revision", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeA = await getTestDeviceTypeId();
+    const category = await prisma.deviceCategory.create({
+      data: { code: `C${randomUUID().slice(0, 8).toUpperCase()}`, name: "Test Category" },
+    });
+    createdDeviceCategoryIds.push(category.id);
+    const deviceTypeB = await prisma.deviceType.create({
+      data: {
+        categoryId: category.id,
+        code: `T${randomUUID().slice(0, 8).toUpperCase()}`,
+        name: "Replacement Device Type",
+      },
+    });
+    createdDeviceTypeIds.push(deviceTypeB.id);
+
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId: deviceTypeA, qty: 1 }],
+    });
+    createdCalibrationRequestIds.push(created.id);
+    const submitted = await service.submit(realCompanyId, created.id, testUserId);
+    const originalItemId = submitted.items[0]!.id;
+
+    const revised = await service.revise(realCompanyId, created.id, testUserId, {
+      items: [{ deviceTypeId: deviceTypeB.id, qty: 1 }], // no id -> old id implicitly absent -> REMOVED
+    });
+
+    expect(revised.items).toHaveLength(1);
+    expect(revised.items[0]!.deviceTypeId).toBe(deviceTypeB.id);
+    expect(revised.items[0]!.id).not.toBe(originalItemId);
+    const oldRow = await prisma.calibrationRequestItem.findUnique({ where: { id: originalItemId } });
+    expect(oldRow).toBeNull(); // hard-deleted — was unconsumed
+  });
+
+  it("combined revision: add + remove + qty change all apply atomically in one call", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+    const category = await prisma.deviceCategory.create({
+      data: { code: `C${randomUUID().slice(0, 8).toUpperCase()}`, name: "Test Category" },
+    });
+    createdDeviceCategoryIds.push(category.id);
+    const newDeviceType = await prisma.deviceType.create({
+      data: {
+        categoryId: category.id,
+        code: `T${randomUUID().slice(0, 8).toUpperCase()}`,
+        name: "Newly Added Device Type",
+      },
+    });
+    createdDeviceTypeIds.push(newDeviceType.id);
+
+    const created = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [
+        { deviceTypeId, qty: 1, notes: "grow" },
+        { deviceTypeId, qty: 1, notes: "remove-me" },
+      ],
+    });
+    createdCalibrationRequestIds.push(created.id);
+    const submitted = await service.submit(realCompanyId, created.id, testUserId);
+    const growId = submitted.items.find((item) => item.notes === "grow")!.id;
+    const removeId = submitted.items.find((item) => item.notes === "remove-me")!.id;
+
+    const revised = await service.revise(realCompanyId, created.id, testUserId, {
+      items: [
+        { id: growId, deviceTypeId, qty: 5, notes: "grow" }, // QTY_CHANGED
+        { deviceTypeId: newDeviceType.id, qty: 1 }, // ADDED
+        // removeId omitted -> REMOVED
+      ],
+    });
+
+    expect(revised.items).toHaveLength(2);
+    const grown = revised.items.find((item) => item.id === growId)!;
+    expect(grown.qty).toBe(5);
+    expect(revised.items.some((item) => item.deviceTypeId === newDeviceType.id)).toBe(true);
+    expect(revised.items.some((item) => item.id === removeId)).toBe(false);
+    const removedRow = await prisma.calibrationRequestItem.findUnique({ where: { id: removeId } });
+    expect(removedRow).toBeNull(); // unconsumed -> hard-deleted
   });
 });

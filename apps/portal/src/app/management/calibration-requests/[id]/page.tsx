@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Send,
+  Upload,
   X,
 } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
@@ -30,14 +31,19 @@ import {
   DetailField,
   ConfirmDialog,
   SERVICE_MODE_LABELS,
+  DeviceTypeItemSelect,
   type CalibrationRequestRow,
+  type DeviceTypeOption,
 } from "../calibration-requests-ui";
+import { buildImportedDesiredRows, rowFromItem, type DesiredItemRow } from "./revision-desired-scope";
 import { formatRelativeTime } from "../../leads/leads-ui";
 import { formatDateTime } from "../../quotations/quotations-ui";
+import { useDeviceTypes } from "../../device-types/use-device-types-query";
 import {
   useCalibrationRequest,
   useCalibrationRequestHistory,
   useCalibrationRequestHistoryRevision,
+  useImportPreview,
   useReviseCalibrationRequest,
   useSubmitCalibrationRequest,
   useCancelCalibrationRequest,
@@ -421,6 +427,25 @@ export default function CalibrationRequestDetailPage() {
  * to know which. Adding a brand-new device line is intentionally out of
  * scope for this UI pass.
  */
+function rowsFromRequest(request: CalibrationRequestRow): DesiredItemRow[] {
+  return request.items.map(rowFromItem);
+}
+
+function emptyRow(): DesiredItemRow {
+  return {
+    key: `new-${Math.random().toString(36).slice(2)}`,
+    deviceTypeId: "",
+    customerDeviceName: "",
+    model: "",
+    deviceId: "",
+    qty: 1,
+    akdAkl: "",
+    akdAklDeclaration: "NOT_PROVIDED",
+    notes: "",
+    removed: false,
+  };
+}
+
 function ReviseRequestDialog({
   request,
   onClose,
@@ -431,36 +456,156 @@ function ReviseRequestDialog({
   onRevised: () => void;
 }) {
   const reviseMutation = useReviseCalibrationRequest();
-  const [qtyById, setQtyById] = useState<Record<string, string>>(() =>
-    Object.fromEntries(request.items.map((item) => [item.id, String(item.qty)])),
-  );
+  const importPreviewMutation = useImportPreview();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const originalById = new Map(request.items.map((item) => [item.id, item]));
+  const [rows, setRows] = useState<DesiredItemRow[]>(() => rowsFromRequest(request));
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Device types resolved by the existing Excel matcher for ADDED rows that
+   * are not yet on `request.items` and may not (yet) be present in
+   * `typesQuery`'s page — without this, the selector below has no option to
+   * match the imported row's `deviceTypeId` against and renders blank.
+   */
+  const [importedDeviceTypes, setImportedDeviceTypes] = useState<DeviceTypeOption[]>([]);
 
-  const changedItems = request.items.filter((item) => {
-    const value = Number(qtyById[item.id]);
-    return Number.isFinite(value) && value > 0 && value !== item.qty;
+  /**
+   * MOM #1 — Import Excel for Requisition Revision. Reuses the existing
+   * `/calibration-requests/import/preview` endpoint unchanged (it only
+   * resolves customerDeviceName -> deviceTypeId; it has no notion of "which
+   * requisition"). The uploaded file represents the COMPLETE desired scope:
+   * rows that resolve to a deviceTypeId already present on this requisition
+   * retain that item's id (update in place); rows that resolve to a new
+   * deviceTypeId become new rows with no id; current items whose
+   * deviceTypeId is absent from the file become Removed, via the same
+   * removed:true mechanism as manual removal. Never mutates the DB — only
+   * repopulates local `rows` state; Save Revision still calls the one
+   * existing revise() mutation below.
+   */
+  async function handleImportFile(file: File) {
+    setError(null);
+    try {
+      const preview = await importPreviewMutation.mutateAsync(file);
+      const result = buildImportedDesiredRows(request.items, preview.rows);
+      if ("errors" in result) {
+        setError(result.errors.join("\n"));
+        return;
+      }
+      setRows(result.rows);
+      setImportedDeviceTypes(result.resolvedDeviceTypes);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.data?.message ?? err.message);
+      } else {
+        setError("Gagal membaca file Excel.");
+      }
+    }
+  }
+
+  const typesQuery = useDeviceTypes({
+    search: "",
+    categoryId: "",
+    isActive: true,
+    sortBy: "name",
+    sortDir: "asc",
+    page: 1,
+    pageSize: 200,
   });
+  const deviceTypes: DeviceTypeOption[] = [
+    ...(typesQuery.data?.data ?? []),
+    ...request.items
+      .map((item) => item.deviceType)
+      .filter(
+        (type, index, all) =>
+          Boolean(type) &&
+          all.findIndex((candidate) => candidate.id === type.id) === index &&
+          !(typesQuery.data?.data ?? []).some((listed) => listed.id === type.id),
+      ),
+    ...importedDeviceTypes.filter(
+      (type) =>
+        !(typesQuery.data?.data ?? []).some((listed) => listed.id === type.id) &&
+        !request.items.some((item) => item.deviceTypeId === type.id),
+    ),
+  ];
+
+  function updateRow(key: string, patch: Partial<DesiredItemRow>) {
+    setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+  }
+
+  function addRow() {
+    setRows((prev) => [...prev, emptyRow()]);
+  }
+
+  function removeRow(key: string) {
+    setRows((prev) => {
+      const target = prev.find((row) => row.key === key);
+      if (!target) return prev;
+      // A newly-added row (no id) was never real — just drop it. An
+      // existing row is marked "removed" but stays visible, per §12/§19.
+      if (!target.id) return prev.filter((row) => row.key !== key);
+      return prev.map((row) => (row.key === key ? { ...row, removed: true } : row));
+    });
+  }
+
+  function undoRemove(key: string) {
+    updateRow(key, { removed: false });
+  }
+
+  /** "Change Device": retire the old row (stays visible as Removed) and
+   * insert a fresh row with no id right after it — never reusing the old id. */
+  function changeDevice(key: string) {
+    setRows((prev) => {
+      const index = prev.findIndex((row) => row.key === key);
+      if (index === -1) return prev;
+      const old = prev[index]!;
+      const next = [...prev];
+      next[index] = { ...old, removed: true };
+      next.splice(index + 1, 0, { ...emptyRow(), qty: old.qty });
+      return next;
+    });
+  }
+
+  function rowStatus(row: DesiredItemRow): "unchanged" | "changed" | "added" | "removed" {
+    if (row.removed) return "removed";
+    if (!row.id) return "added";
+    const original = originalById.get(row.id);
+    if (!original) return "changed";
+    return original.qty !== row.qty || original.deviceTypeId !== row.deviceTypeId
+      ? "changed"
+      : "unchanged";
+  }
+
+  const activeRows = rows.filter((row) => !row.removed);
+  const hasChanges =
+    activeRows.length !== request.items.length ||
+    rows.some((row) => rowStatus(row) !== "unchanged") ||
+    rows.some((row) => row.removed);
+  const allActiveRowsHaveDeviceType = activeRows.every((row) => row.deviceTypeId);
 
   async function submit() {
     setError(null);
-    if (changedItems.length === 0) {
-      setError("Ubah qty setidaknya satu item untuk membuat revisi.");
+    if (activeRows.length === 0) {
+      setError("Requisition harus memiliki minimal satu device aktif.");
+      return;
+    }
+    if (!allActiveRowsHaveDeviceType) {
+      setError("Pilih device name untuk setiap baris.");
       return;
     }
     try {
       await reviseMutation.mutateAsync({
         id: request.id,
         input: {
-          items: changedItems.map((item) => ({
-            id: item.id,
-            deviceTypeId: item.deviceTypeId,
-            customerDeviceName: item.customerDeviceName ?? undefined,
-            model: item.model ?? undefined,
-            deviceId: item.deviceId ?? undefined,
-            akdAkl: item.akdAkl ?? undefined,
-            akdAklDeclaration: item.akdAklDeclaration,
-            notes: item.notes ?? undefined,
-            qty: Number(qtyById[item.id]),
+          items: activeRows.map((row) => ({
+            id: row.id,
+            deviceTypeId: row.deviceTypeId,
+            customerDeviceName: row.customerDeviceName || undefined,
+            model: row.model || undefined,
+            deviceId: row.deviceId || undefined,
+            akdAkl: row.akdAkl || undefined,
+            akdAklDeclaration: row.akdAklDeclaration,
+            notes: row.notes || undefined,
+            qty: row.qty,
           })),
         },
       });
@@ -474,41 +619,139 @@ function ReviseRequestDialog({
     }
   }
 
+  const STATUS_BADGE: Record<string, { label: string; className: string }> = {
+    added: { label: "Added", className: "bg-emerald-100 text-emerald-700" },
+    changed: { label: "Changed", className: "bg-amber-100 text-amber-700" },
+    removed: { label: "Removed", className: "bg-red-100 text-red-700" },
+    unchanged: { label: "", className: "" },
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
         <h3 className="text-lg font-semibold text-slate-900">Revise {request.number}</h3>
         <p className="mt-2 text-sm text-slate-600">
-          Ubah qty item di bawah ini. Kondisi requisition saat ini akan disimpan sebagai riwayat
-          (revision) sebelum perubahan diterapkan. Nomor requisition tidak berubah.
+          Edit the complete desired scope below — add, remove, change device, or change
+          quantity, then save as one revision. The current state is saved as history first.
+          The requisition number never changes.
         </p>
-        <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">
-          {request.items.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-slate-900">
-                  {item.deviceType.name}
-                </p>
-                <p className="text-xs text-slate-500">Qty saat ini: {item.qty}</p>
+        <div className="mt-4 space-y-2">
+          {rows.map((row) => {
+            const status = rowStatus(row);
+            const badge = STATUS_BADGE[status];
+            return (
+              <div
+                key={row.key}
+                className={cn(
+                  "rounded-lg border p-3",
+                  row.removed ? "border-slate-200 bg-slate-50 opacity-60" : "border-slate-200",
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  {badge?.label ? (
+                    <span
+                      className={cn(
+                        "rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide",
+                        badge.className,
+                      )}
+                    >
+                      {badge.label}
+                    </span>
+                  ) : (
+                    <span />
+                  )}
+                  {row.removed ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => undoRemove(row.key)}>
+                      Undo
+                    </Button>
+                  ) : (
+                    <div className="flex gap-1">
+                      {row.id ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => changeDevice(row.key)}
+                        >
+                          Change Device
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-slate-400 hover:text-red-600"
+                        onClick={() => removeRow(row.key)}
+                        aria-label="Remove"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {row.removed ? (
+                  <p className="mt-1 text-sm text-slate-500 line-through">
+                    {deviceTypes.find((dt) => dt.id === row.deviceTypeId)?.name ?? "Device"} × {row.qty}
+                  </p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    <DeviceTypeItemSelect
+                      value={row.deviceTypeId}
+                      onChange={(id) => updateRow(row.key, { deviceTypeId: id })}
+                      deviceTypes={deviceTypes}
+                      loading={typesQuery.isLoading}
+                    />
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-slate-600">Qty</label>
+                      <Input
+                        type="number"
+                        min={1}
+                        step="1"
+                        className="w-24"
+                        value={row.qty}
+                        onChange={(e) => updateRow(row.key, { qty: Number(e.target.value) || 1 })}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
-              <Input
-                type="number"
-                min={1}
-                step="1"
-                className="w-24 shrink-0"
-                value={qtyById[item.id] ?? ""}
-                onChange={(e) =>
-                  setQtyById((prev) => ({ ...prev, [item.id]: e.target.value }))
-                }
-              />
-            </div>
-          ))}
+            );
+          })}
         </div>
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-        <div className="mt-5 flex justify-end gap-2">
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={addRow}>
+            <Plus className="h-4 w-4" />
+            Add Device
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleImportFile(file);
+              e.target.value = "";
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importPreviewMutation.isPending}
+          >
+            <Upload className="h-4 w-4" />
+            {importPreviewMutation.isPending ? "Memproses…" : "Import Excel"}
+          </Button>
+        </div>
+
+        {error ? (
+          <p className="mt-3 whitespace-pre-line text-sm text-red-600">{error}</p>
+        ) : null}
+        <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
           <Button
             type="button"
             variant="outline"
@@ -520,7 +763,7 @@ function ReviseRequestDialog({
           <Button
             type="button"
             onClick={submit}
-            disabled={reviseMutation.isPending || changedItems.length === 0}
+            disabled={reviseMutation.isPending || !hasChanges}
           >
             {reviseMutation.isPending ? "Menyimpan…" : "Simpan Revisi"}
           </Button>
