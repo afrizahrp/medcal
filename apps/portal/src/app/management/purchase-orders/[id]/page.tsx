@@ -94,6 +94,11 @@ export default function PurchaseOrderDetailPage() {
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
 
   const purchaseOrder = query.data;
+  // `Tax.isExclude` is read live from the Tax master via the purchase order's
+  // `taxCode` — mirrors the Quotation detail page (see quotations/[id]/page.tsx).
+  const purchaseOrderTax = purchaseOrder
+    ? (taxesQuery.data?.data.find((tax) => tax.taxCode === purchaseOrder.taxCode) ?? null)
+    : null;
 
   if (isForbidden(query.error)) {
     return <AccessDenied />;
@@ -298,6 +303,7 @@ export default function PurchaseOrderDetailPage() {
             totalAmount={purchaseOrder.totalAmount}
             currency={purchaseOrder.currency}
             taxDescription={taxDescriptionForCode(taxesQuery.data?.data, purchaseOrder.taxCode)}
+            taxIsExclude={purchaseOrderTax?.isExclude ?? null}
           />
         </div>
 

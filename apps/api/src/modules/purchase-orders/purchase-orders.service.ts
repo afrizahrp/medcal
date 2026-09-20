@@ -18,6 +18,22 @@ import { renderPurchaseOrderPdf, type PurchaseOrderPdfResult } from "./purchase-
 const DEFAULT_PAGE_SIZE = 10;
 
 /**
+ * Display-only lookup of the tax mode for a document that is being rendered.
+ * Mirrors findTaxIsExclude in quotations.service.ts: never throws, so a
+ * purchase order referencing a tax code that has since been deactivated or
+ * removed still prints — the caller then falls back to the previous
+ * "always show the tax line" behaviour.
+ */
+async function findTaxIsExclude(companyId: string, taxCode: string): Promise<boolean | null> {
+  if (!taxCode) return null;
+  const tax = await prisma.tax.findFirst({
+    where: { companyId, taxCode },
+    select: { isExclude: true },
+  });
+  return tax?.isExclude ?? null;
+}
+
+/**
  * MOM #1 — Transaction Revision + Immutable History.
  * Statuses eligible for `Revise` (as opposed to the normal DRAFT `Edit`/PATCH).
  * FULFILLED/CANCELLED are terminal/read-only.
@@ -316,7 +332,8 @@ export class PurchaseOrdersService {
         code: "COMPANY_NOT_FOUND",
       });
     }
-    return renderPurchaseOrderPdf({ purchaseOrder, company });
+    const taxIsExclude = await findTaxIsExclude(companyId, purchaseOrder.taxCode);
+    return renderPurchaseOrderPdf({ purchaseOrder: { ...purchaseOrder, taxIsExclude }, company });
   }
 
   async update(

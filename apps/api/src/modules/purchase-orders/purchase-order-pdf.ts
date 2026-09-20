@@ -7,6 +7,7 @@ import {
   deviceDescriptionLines,
   quotationAddresseeLine,
   quotationPdfFilename,
+  shouldRenderTaxLine,
 } from "../quotations/quotation-pdf";
 
 const LETTERHEAD_LOGO_WIDTH = 120;
@@ -34,6 +35,14 @@ export type PurchaseOrderPdfSource = {
   totalAmount: Prisma.Decimal | string | number;
   taxCode: string;
   taxRate: Prisma.Decimal | string | number;
+  /**
+   * `Tax.isExclude` of the document's tax, resolved live from the Tax master via
+   * `taxCode` (never snapshotted on the PurchaseOrder). `false` = Include: the tax
+   * is already inside Total, so the separate tax line is not printed. `true` =
+   * Exclude, and `null`/undefined (tax no longer resolvable) both print the line
+   * exactly as before. Mirrors QuotationPdfSource.taxIsExclude.
+   */
+  taxIsExclude?: boolean | null;
   customer: {
     name: string;
     number: string;
@@ -254,7 +263,7 @@ export function renderPurchaseOrderPdf(input: {
     });
     y = doc.y + 4;
 
-    if (purchaseOrder.taxCode || purchaseOrder.taxAmount != null) {
+    if (shouldRenderTaxLine(purchaseOrder)) {
       const rate = moneyNumber(purchaseOrder.taxRate);
       const rateLabel =
         purchaseOrder.taxCode && rate > 0

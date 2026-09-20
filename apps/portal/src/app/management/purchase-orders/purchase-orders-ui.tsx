@@ -24,6 +24,7 @@ import {
   type QuotationRow,
 } from "../quotations/quotations-ui";
 import { formatTaxHeaderLabel, type PurchaseOrderStatus } from "./purchase-order-form-utils";
+import { shouldShowTaxLine } from "../quotations/quotation-tax-display";
 
 export type { PurchaseOrderStatus };
 
@@ -337,6 +338,7 @@ export function PurchaseOrderSnapshot({
   totalAmount,
   currency,
   taxDescription,
+  taxIsExclude,
 }: {
   quotationNumber: string;
   quotationId: string;
@@ -352,7 +354,15 @@ export function PurchaseOrderSnapshot({
   totalAmount: MoneyValue;
   currency: string;
   taxDescription?: string | null;
+  /**
+   * `Tax.isExclude` of the document's tax, read live from the Tax master via
+   * `taxCode` — mirrors the Quotation detail pattern (see quotation-tax-display.ts).
+   * `false` = Include: the tax already sits inside Total, so the Tax/Tax Amount
+   * fields and the QuotationTotals breakdown line are both suppressed.
+   */
+  taxIsExclude?: boolean | null;
 }) {
+  const showTaxLine = shouldShowTaxLine({ taxCode, taxAmount, taxIsExclude });
   return (
     <section className="space-y-4">
       <h2 className="text-base font-semibold text-slate-900">Quotation Snapshot</h2>
@@ -434,12 +444,14 @@ export function PurchaseOrderSnapshot({
         </div>
       </div>
 
-      <dl className="grid gap-4 text-sm sm:grid-cols-2">
-        <DetailField label="Tax">
-          {formatTaxHeaderLabel(taxCode, taxRate, taxDescription)}
-        </DetailField>
-        <DetailField label="Tax Amount">{formatIdr(taxAmount)}</DetailField>
-      </dl>
+      {showTaxLine ? (
+        <dl className="grid gap-4 text-sm sm:grid-cols-2">
+          <DetailField label="Tax">
+            {formatTaxHeaderLabel(taxCode, taxRate, taxDescription)}
+          </DetailField>
+          <DetailField label="Tax Amount">{formatIdr(taxAmount)}</DetailField>
+        </dl>
+      ) : null}
 
       <QuotationTotals
         subtotal={subtotal}
@@ -447,6 +459,7 @@ export function PurchaseOrderSnapshot({
         taxCode={taxCode}
         taxRate={taxRate}
         taxAmount={taxAmount}
+        taxIsExclude={taxIsExclude}
         totalAmount={totalAmount}
       />
     </section>
