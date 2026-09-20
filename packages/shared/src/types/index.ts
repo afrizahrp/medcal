@@ -8,4 +8,5 @@ export type MembershipRole =
   | "TECHNICIAN_MANAGER"
   | "FINANCE"
   | "CUSTOMER"
-  | "CUSTOMER_SERVICE";
+  | "CUSTOMER_SERVICE"
+  | "GENERAL_MANAGER";

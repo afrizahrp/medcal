@@ -14,7 +14,8 @@ type MembershipRole =
   | "TECHNICIAN_MANAGER"
   | "FINANCE"
   | "CUSTOMER"
-  | "CUSTOMER_SERVICE";
+  | "CUSTOMER_SERVICE"
+  | "GENERAL_MANAGER";
 
 interface UserWithoutMembership {
   id: string;
@@ -30,6 +31,7 @@ const ROLE_LABELS: Record<MembershipRole, string> = {
   FINANCE: "Keuangan",
   CUSTOMER: "Customer",
   CUSTOMER_SERVICE: "Customer Service",
+  GENERAL_MANAGER: "General Manager",
 };
 
 const ROLE_OPTIONS: MembershipRole[] = [
@@ -40,6 +42,7 @@ const ROLE_OPTIONS: MembershipRole[] = [
   "FINANCE",
   "CUSTOMER",
   "CUSTOMER_SERVICE",
+  "GENERAL_MANAGER",
 ];
 
 const selectClassName =

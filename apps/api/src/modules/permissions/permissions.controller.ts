@@ -25,6 +25,7 @@ const roleEnum = z.enum([
   "FINANCE",
   "CUSTOMER",
   "CUSTOMER_SERVICE",
+  "GENERAL_MANAGER",
 ]);
 
 const replaceGrantsSchema = z.object({

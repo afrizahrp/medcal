@@ -17,7 +17,8 @@ type Role =
   | "TECHNICIAN_MANAGER"
   | "FINANCE"
   | "CUSTOMER"
-  | "CUSTOMER_SERVICE";
+  | "CUSTOMER_SERVICE"
+  | "GENERAL_MANAGER";
 
 interface Grant {
   resource: string;
@@ -39,6 +40,7 @@ const ROLES: Role[] = [
   "FINANCE",
   "CUSTOMER",
   "CUSTOMER_SERVICE",
+  "GENERAL_MANAGER",
 ];
 
 // Human-readable labels for the code-defined permission catalog's resources.

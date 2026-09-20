@@ -244,7 +244,100 @@ const CUSTOMER_SERVICE_GRANTS: GrantRow[] = [
   { role: "CUSTOMER_SERVICE", resource: "deviceType", action: "read" },
 ];
 
-const ROWS: GrantRow[] = [...PRESERVED_BASELINE, ...SUPERVISOR_ADDITIONS, ...CUSTOMER_SERVICE_GRANTS];
+// GENERAL_MANAGER (2026-09-20): mirrors SUPERADMIN's effective permission set
+// (packages/auth/src/access-control.ts's `ac` statements — the same catalog
+// hasPermission()'s SUPERADMIN bypass and PermissionsService.getRole()'s
+// fullCatalogGrants() treat as "SUPERADMIN has everything"), minus the User
+// Management surface. This file cannot import @medcal/auth (that package
+// depends on @medcal/db, so the reverse import would be circular), so the
+// catalog is mirrored verbatim below — keep it in sync with `ac` in
+// access-control.ts if that catalog changes.
+//
+// User Management, excluded: users:read/manage and membership:manage (both
+// live in UsersController — user listing/status + role assignment),
+// whitelist:manage and permission:manage (both under the "User Management"
+// Menu Registry group in seed-menu.ts). menu:manage is NOT excluded — Menu
+// Registry management sits under the separate "System Setting" menu group.
+const SUPERADMIN_PERMISSION_CATALOG: Record<string, readonly string[]> = {
+  contactMessage: ["read"],
+  whitelist: ["manage"],
+  lead: ["read", "update", "assign"],
+  customer: ["read", "create", "update"],
+  uom: ["read", "create", "update"],
+  deviceCategory: ["read", "create", "update", "delete"],
+  deviceType: ["read", "create", "update", "delete"],
+  deviceTypeAlias: ["read", "create", "update", "delete"],
+  deviceModel: ["read", "create", "update", "delete"],
+  deviceCapability: ["read", "create", "update", "delete"],
+  deviceCapabilityItem: ["read", "create", "update", "delete"],
+  deviceCalibrationParameter: ["read", "create", "update", "delete"],
+  devicePhysicalCheckItem: ["read", "create", "update", "delete"],
+  equipmentType: ["read", "create", "update", "delete"],
+  equipmentRequirement: ["read", "create", "update", "delete"],
+  equipment: ["read", "create", "update", "delete"],
+  equipmentCalibrationRecord: ["read", "create", "update", "delete"],
+  device: ["read", "create", "update", "delete"],
+  chat: ["read", "reply", "close"],
+  users: ["read", "manage"],
+  membership: ["manage"],
+  menu: ["manage"],
+  managementDashboard: ["read"],
+  customerDashboard: ["read"],
+  email: ["read", "send", "delete", "manage"],
+  permission: ["manage"],
+  notification: ["test"],
+  calibrationRequest: ["read", "create", "update", "cancel"],
+  quotation: ["read", "create", "update", "cancel", "approve"],
+  purchaseOrder: ["read", "create", "update", "cancel", "approve"],
+  workOrder: ["read", "create", "update", "cancel", "assign"],
+  calibrationJob: [
+    "read",
+    "create",
+    "update",
+    "complete",
+    "start",
+    "escalateIdentity",
+    "approveIdentity",
+    "submitIdentityCorrection",
+    "decideIdentityCorrection",
+    "recordReferenceEquipmentUsed",
+    "overrideReferenceEquipmentValidity",
+    "submitReferenceEquipmentApproval",
+    "decideReferenceEquipmentApproval",
+    "recordMeasurement",
+    "recordPhysicalCheck",
+    "recordKontrolAlat",
+    "submitForReview",
+    "decideQualityReview",
+    "resumeAfterRework",
+  ],
+  certificate: ["read", "create", "update", "issue"],
+  invoice: ["read", "create", "update", "void"],
+  payment: ["read", "create", "update", "reconcile"],
+  tax: ["manage"],
+  priceListItem: ["read", "create", "update", "delete"],
+};
+
+const USER_MANAGEMENT_EXCLUSIONS: Record<string, readonly string[]> = {
+  users: ["read", "manage"],
+  membership: ["manage"],
+  whitelist: ["manage"],
+  permission: ["manage"],
+};
+
+const GENERAL_MANAGER_GRANTS: GrantRow[] = Object.entries(SUPERADMIN_PERMISSION_CATALOG).flatMap(
+  ([resource, actions]) =>
+    actions
+      .filter((action) => !USER_MANAGEMENT_EXCLUSIONS[resource]?.includes(action))
+      .map((action) => ({ role: "GENERAL_MANAGER" as MembershipRole, resource, action })),
+);
+
+const ROWS: GrantRow[] = [
+  ...PRESERVED_BASELINE,
+  ...SUPERVISOR_ADDITIONS,
+  ...CUSTOMER_SERVICE_GRANTS,
+  ...GENERAL_MANAGER_GRANTS,
+];
 
 async function seedRolePermissions() {
   for (const row of ROWS) {

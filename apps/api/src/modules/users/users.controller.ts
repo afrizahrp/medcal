@@ -35,6 +35,7 @@ const userListQuerySchema = z.object({
       "FINANCE",
       "CUSTOMER",
       "CUSTOMER_SERVICE",
+      "GENERAL_MANAGER",
     ])
     .optional(),
 });
@@ -51,6 +52,7 @@ const membershipRoleValues = [
   "FINANCE",
   "CUSTOMER",
   "CUSTOMER_SERVICE",
+  "GENERAL_MANAGER",
 ] as const;
 
 const membershipAssignSchema = z.object({

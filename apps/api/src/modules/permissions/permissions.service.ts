@@ -58,6 +58,7 @@ export class PermissionsService {
       "FINANCE",
       "CUSTOMER",
       "CUSTOMER_SERVICE",
+      "GENERAL_MANAGER",
     ];
     return Promise.all(roles.map((role) => this.getRole(role)));
   }

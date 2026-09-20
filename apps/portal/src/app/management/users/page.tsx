@@ -22,7 +22,8 @@ type MembershipRole =
   | "TECHNICIAN_MANAGER"
   | "FINANCE"
   | "CUSTOMER"
-  | "CUSTOMER_SERVICE";
+  | "CUSTOMER_SERVICE"
+  | "GENERAL_MANAGER";
 
 interface UserListRow {
   id: string;
@@ -65,6 +66,7 @@ const ROLE_LABELS: Record<MembershipRole, string> = {
   FINANCE: "Keuangan",
   CUSTOMER: "Customer",
   CUSTOMER_SERVICE: "Customer Service",
+  GENERAL_MANAGER: "General Manager",
 };
 
 const URL_KEYS = ["search", "sortBy", "sortDir", "page"] as const;

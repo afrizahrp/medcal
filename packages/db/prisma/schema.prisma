@@ -40,6 +40,7 @@ enum MembershipRole {
   FINANCE
   CUSTOMER
   CUSTOMER_SERVICE
+  GENERAL_MANAGER
 }
 
 enum MenuApplication {
