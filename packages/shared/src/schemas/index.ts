@@ -1760,6 +1760,13 @@ export const deviceCalibrationParameterCreateSchema = z
     /** Phase 4B (Gap B). Omitted = DIRECT_REPLICATES, the existing default. */
     entryStyle: z.enum(DEVICE_CALIBRATION_PARAMETER_ENTRY_STYLE_VALUES).optional(),
     derivation: optionalDerivation,
+    /**
+     * Tech-PWA repetition UX (2026-09-20). Whether "+ Tambah ulangan" is
+     * offered for this parameter's applicable points. Omitted = true, the
+     * existing default — every parameter created without an opinion keeps
+     * today's behavior.
+     */
+    allowsRepeatedReadings: z.boolean().optional(),
   })
   .superRefine(refineToleranceBounds)
   .superRefine(refineLogicalTestPair);
@@ -1804,6 +1811,8 @@ export const deviceCalibrationParameterUpdateSchema = z
     /** Phase 4B (Gap B). Omitted = leave the current entryStyle unchanged. */
     entryStyle: z.enum(DEVICE_CALIBRATION_PARAMETER_ENTRY_STYLE_VALUES).optional(),
     derivation: optionalDerivation,
+    /** Tech-PWA repetition UX. Omitted = leave the current value unchanged. */
+    allowsRepeatedReadings: z.boolean().optional(),
     isActive: z.boolean().optional(),
   })
   .superRefine(refineToleranceBounds)

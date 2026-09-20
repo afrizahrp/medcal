@@ -475,7 +475,7 @@ export function SubmitForReviewAction({
   return (
     <div>
       <Button fullWidth disabled={pending || disabled} onClick={onSubmit}>
-        {pending ? "Mengirim…" : "Kirim hasil ke review mutu"}
+        {pending ? "Mengirim…" : "Kirim hasil ke Manajer Teknis"}
       </Button>
       {disabled && disabledReason ? (
         <p className="mt-1 text-center text-xs text-amber-700">{disabledReason}</p>

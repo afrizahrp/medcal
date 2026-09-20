@@ -44,6 +44,7 @@ const emptyForm: DeviceCalibrationParameterFormValue = {
   logicalTestSequence: "",
   entryStyle: "DIRECT_REPLICATES",
   derivation: "",
+  allowsRepeatedReadings: true,
   description: "",
 };
 

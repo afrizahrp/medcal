@@ -90,6 +90,12 @@ export interface DeviceCalibrationParameterRow {
    */
   logicalTestKey: string | null;
   logicalTestSequence: number | null;
+  /**
+   * Tech-PWA repetition UX (2026-09-20). Whether "+ Tambah ulangan" is offered
+   * for this parameter's applicable points in Tech-PWA. Default true — every
+   * parameter without explicit configuration keeps today's behavior.
+   */
+  allowsRepeatedReadings: boolean;
   createdAt: string;
   updatedAt: string;
   deviceType: DeviceCalibrationParameterTypeRef;

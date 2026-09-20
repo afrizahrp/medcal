@@ -147,11 +147,11 @@ export default function MeasurementsPage() {
         showSubmit ? (
           <StickyActionBar>
             <Button fullWidth disabled={pending || unresolved} onClick={() => void handleSubmit()}>
-              {pending ? "Mengirim…" : "Kirim hasil ke review mutu"}
+              {pending ? "Mengirim…" : "Kirim hasil ke Manajer Teknis"}
             </Button>
             {unresolved ? (
               <p className="mt-1 text-center text-xs text-amber-700">
-                Selesaikan persetujuan alat referensi sebelum mengirim hasil ke review mutu.
+                Selesaikan persetujuan alat referensi sebelum mengirim hasil ke Manajer Teknis.
               </p>
             ) : null}
           </StickyActionBar>

@@ -8,6 +8,7 @@ import {
   calibrationTestPointUpdateSchema,
   deviceCalibrationParameterCopySchema,
   deviceCalibrationParameterCreateSchema,
+  deviceCalibrationParameterUpdateSchema,
 } from "@medcal/shared";
 import { DeviceCalibrationParametersService } from "./device-calibration-parameters.service";
 import { DeviceCapabilitiesService } from "../device-capabilities/device-capabilities.service";
@@ -1535,5 +1536,137 @@ describe("DeviceCalibrationParametersService - CalibrationTestPoint schemas", ()
   it("requires a non-empty testPointIds array for reorder", () => {
     const parsed = calibrationTestPointReorderSchema.safeParse({ testPointIds: [] });
     expect(parsed.success).toBe(false);
+  });
+});
+
+// -- Tech-PWA repetition UX (2026-09-20) -- allowsRepeatedReadings CRUD ------
+// Presentation-only catalog flag. Default true preserves today's behavior for
+// every parameter created/updated without an explicit opinion.
+
+describe("DeviceCalibrationParametersService - allowsRepeatedReadings", () => {
+  it("defaults to true when omitted on create", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create(baseInput(deviceType.id, item.id, uom.id, "Suhu Ruangan"));
+    createdParameterIds.push(created.id);
+
+    expect(created.allowsRepeatedReadings).toBe(true);
+  });
+
+  it("persists false when explicitly set on create", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Suhu Ruangan (Awal/Akhir)"),
+      allowsRepeatedReadings: false,
+    });
+    createdParameterIds.push(created.id);
+
+    expect(created.allowsRepeatedReadings).toBe(false);
+  });
+
+  it("toggles from true to false via update", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create(baseInput(deviceType.id, item.id, uom.id, "Kelembaban"));
+    createdParameterIds.push(created.id);
+    expect(created.allowsRepeatedReadings).toBe(true);
+
+    const updated = await service.update(created.id, { allowsRepeatedReadings: false });
+    expect(updated.allowsRepeatedReadings).toBe(false);
+  });
+
+  it("toggles from false back to true via update", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Tegangan Input"),
+      allowsRepeatedReadings: false,
+    });
+    createdParameterIds.push(created.id);
+
+    const updated = await service.update(created.id, { allowsRepeatedReadings: true });
+    expect(updated.allowsRepeatedReadings).toBe(true);
+  });
+
+  it("leaves allowsRepeatedReadings untouched when an unrelated field is updated", async () => {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(deviceType.id, item.id, uom.id, "Titik Ukur Tetap"),
+      allowsRepeatedReadings: false,
+    });
+    createdParameterIds.push(created.id);
+
+    const updated = await service.update(created.id, { toleranceNote: "+/- 2" });
+    expect(updated.allowsRepeatedReadings).toBe(false);
+    expect(updated.toleranceNote).toBe("+/- 2");
+  });
+
+  it("does not carry allowsRepeatedReadings=false through copy -- the copied row defaults to true", async () => {
+    const source = await createDeviceType();
+    const target = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+
+    const created = await service.create({
+      ...baseInput(source.id, item.id, uom.id, "Suhu Ruangan (Sumber)"),
+      allowsRepeatedReadings: false,
+    });
+    createdParameterIds.push(created.id);
+
+    const result = await service.copy({
+      sourceDeviceTypeId: source.id,
+      targetDeviceTypeId: target.id,
+      parameterIds: [created.id],
+    });
+    expect(result.created).toHaveLength(1);
+
+    const copied = await prisma.deviceCalibrationParameter.findUniqueOrThrow({
+      where: { id: result.created[0]!.id },
+    });
+    expect(copied.allowsRepeatedReadings).toBe(true);
+  });
+});
+
+describe("deviceCalibrationParameterCreateSchema / UpdateSchema - allowsRepeatedReadings", () => {
+  it("accepts a boolean on create", () => {
+    const parsed = deviceCalibrationParameterCreateSchema.safeParse({
+      deviceTypeId: "dt-1",
+      capabilityItemId: "ci-1",
+      uomId: "uom-1",
+      name: "Suhu Ruangan",
+      allowsRepeatedReadings: false,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.allowsRepeatedReadings).toBe(false);
+  });
+
+  it("is optional on create (omitted stays undefined, not defaulted here)", () => {
+    const parsed = deviceCalibrationParameterCreateSchema.safeParse({
+      deviceTypeId: "dt-1",
+      capabilityItemId: "ci-1",
+      uomId: "uom-1",
+      name: "Suhu Ruangan",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.allowsRepeatedReadings).toBeUndefined();
+  });
+
+  it("accepts a boolean on update", () => {
+    const parsed = deviceCalibrationParameterUpdateSchema.safeParse({
+      allowsRepeatedReadings: true,
+    });
+    expect(parsed.success).toBe(true);
   });
 });

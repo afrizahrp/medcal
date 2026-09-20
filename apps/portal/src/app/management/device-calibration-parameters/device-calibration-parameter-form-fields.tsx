@@ -46,6 +46,12 @@ export interface DeviceCalibrationParameterFormValue {
    */
   entryStyle: "DIRECT_REPLICATES" | "DERIVED";
   derivation: string;
+  /**
+   * Tech-PWA repetition UX (2026-09-20). Whether "+ Tambah ulangan" is offered
+   * for this parameter's applicable points. true (default) preserves today's
+   * behavior for every parameter.
+   */
+  allowsRepeatedReadings: boolean;
   description: string;
 }
 
@@ -486,6 +492,26 @@ export function DeviceCalibrationParameterFormFields({
           </p>
         </div>
 
+        <div>
+          <label htmlFor="allowsRepeatedReadings" className="block text-sm font-medium text-slate-700">
+            Ulangan
+          </label>
+          <select
+            id="allowsRepeatedReadings"
+            value={value.allowsRepeatedReadings ? "true" : "false"}
+            onChange={(e) => onChange("allowsRepeatedReadings", e.target.value === "true")}
+            className={`${selectClassName} ${fieldClass}`}
+          >
+            <option value="true">Boleh diulang (default)</option>
+            <option value="false">Satu kali saja</option>
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            &quot;Satu kali saja&quot; menyembunyikan tombol &quot;+ Tambah ulangan&quot; di Tech-PWA
+            untuk titik ukur parameter ini (mis. Suhu Ruangan → Awal/Akhir). Bacaan yang sudah
+            tersimpan tetap tampil apa pun pilihannya.
+          </p>
+        </div>
+
         {!entryStyleLocked && value.entryStyle === "DERIVED" ? (
           <div>
             <label htmlFor="derivation" className="block text-sm font-medium text-slate-700">
@@ -589,6 +615,7 @@ export function buildDeviceCalibrationParameterCreatePayload(
     ...(form.entryStyle === "DERIVED" && derivationRaw !== ""
       ? { derivation: { description: derivationRaw } }
       : {}),
+    allowsRepeatedReadings: form.allowsRepeatedReadings,
   };
 }
 
@@ -630,6 +657,7 @@ export function buildDeviceCalibrationParameterUpdatePayload(
               ? { description: derivationRaw }
               : null,
         }),
+    allowsRepeatedReadings: form.allowsRepeatedReadings,
     ...(form.isActive !== undefined ? { isActive: form.isActive } : {}),
   };
 }

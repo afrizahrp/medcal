@@ -463,6 +463,7 @@ export class DeviceCalibrationParametersService {
           logicalTestSequence: input.logicalTestSequence ?? null,
           entryStyle: input.entryStyle ?? "DIRECT_REPLICATES",
           derivation: input.derivation ?? undefined,
+          allowsRepeatedReadings: input.allowsRepeatedReadings ?? true,
           sortOrder,
         },
         include: parameterInclude,
@@ -811,6 +812,9 @@ export class DeviceCalibrationParametersService {
       ...(input.entryStyle !== undefined ? { entryStyle: input.entryStyle } : {}),
       ...(input.derivation !== undefined
         ? { derivation: input.derivation === null ? Prisma.DbNull : input.derivation }
+        : {}),
+      ...(input.allowsRepeatedReadings !== undefined
+        ? { allowsRepeatedReadings: input.allowsRepeatedReadings }
         : {}),
       ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
     };

@@ -69,6 +69,7 @@ const emptyForm: DeviceCalibrationParameterFormValue = {
   logicalTestSequence: "",
   entryStyle: "DIRECT_REPLICATES",
   derivation: "",
+  allowsRepeatedReadings: true,
   description: "",
 };
 
@@ -93,6 +94,7 @@ function formFromRow(row: DeviceCalibrationParameterRow): DeviceCalibrationParam
     // (entryStyleLocked below), so this fallback is never actually submitted.
     entryStyle: row.entryStyle === "DERIVED" ? "DERIVED" : "DIRECT_REPLICATES",
     derivation: row.derivation?.description ?? "",
+    allowsRepeatedReadings: row.allowsRepeatedReadings,
     description: row.description ?? "",
   };
 }
@@ -509,6 +511,12 @@ export default function DeviceCalibrationParameterDetailPage() {
                     Diturunkan dari: {row.derivation.description}
                   </p>
                 ) : null}
+              </DetailField>
+
+              <DetailField label="Ulangan">
+                <span className="font-medium">
+                  {row.allowsRepeatedReadings ? "Boleh diulang" : "Satu kali saja"}
+                </span>
               </DetailField>
 
               <DetailField label="Deskripsi">
