@@ -56,16 +56,13 @@ describe("calibration-job identity gate helpers", () => {
     }
   });
 
-  it("describeMissingIdentityFields lists Device ID and/or Serial", () => {
-    expect(
-      describeMissingIdentityFields({ deviceId: null, technicianObservedSerial: null }),
-    ).toBe("Device ID dan Serial observasi teknisi");
-    expect(
-      describeMissingIdentityFields({ deviceId: "d1", technicianObservedSerial: null }),
-    ).toBe("Serial observasi teknisi");
-    expect(
-      describeMissingIdentityFields({ deviceId: null, technicianObservedSerial: "SN" }),
-    ).toBe("Device ID");
+  it("describeMissingIdentityFields lists Serial when missing", () => {
+    expect(describeMissingIdentityFields({ technicianObservedSerial: null })).toBe(
+      "Serial observasi teknisi",
+    );
+    expect(describeMissingIdentityFields({ technicianObservedSerial: "SN" })).toBe(
+      "identitas perangkat",
+    );
   });
 
   it("deep-links the first workflow-available job, skipping locked-incomplete siblings", () => {
@@ -73,7 +70,6 @@ describe("calibration-job identity gate helpers", () => {
     const locked = buildCalibrationJobActionSignals({
       status: "SUBMITTED",
       startedAt: started,
-      deviceId: null,
       technicianObservedSerial: null,
       hasPendingIdentityCorrection: false,
       needsReferenceEquipmentApproval: false,
@@ -81,7 +77,6 @@ describe("calibration-job identity gate helpers", () => {
     const pending = buildCalibrationJobActionSignals({
       status: "IN_PROGRESS",
       startedAt: started,
-      deviceId: "dev-1",
       technicianObservedSerial: "SN-1",
       hasPendingIdentityCorrection: true,
       needsReferenceEquipmentApproval: false,
@@ -101,7 +96,6 @@ describe("calibration-job identity gate helpers", () => {
           actionSignals: buildCalibrationJobActionSignals({
             status: "ACCEPTED_BY_QA",
             startedAt: started,
-            deviceId: null,
             technicianObservedSerial: null,
             hasPendingIdentityCorrection: false,
             needsReferenceEquipmentApproval: false,

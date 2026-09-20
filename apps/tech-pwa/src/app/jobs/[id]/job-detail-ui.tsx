@@ -120,21 +120,6 @@ export function ObservedIdentitySection({ job }: { job: TechCalibrationJob }) {
   );
 }
 
-export function AssignedDeviceSection({ job }: { job: TechCalibrationJob }) {
-  return (
-    <Section title="Alat Terpasang Saat Ini">
-      {job.device ? (
-        <>
-          <SectionRow label="Kode" value={job.device.code ?? "—"} />
-          <SectionRow label="Serial" value={job.device.serialNumber ?? "—"} />
-        </>
-      ) : (
-        <p className="text-sm text-slate-500">Alat belum diidentifikasi.</p>
-      )}
-    </Section>
-  );
-}
-
 /** Warning-only banner driven by `actionSignals.identityIncomplete` — does not block work. */
 export function IdentityIncompleteWarning({ job }: { job: TechCalibrationJob }) {
   if (!job.actionSignals?.identityIncomplete) return null;

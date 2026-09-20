@@ -80,18 +80,13 @@ export function canSubmitIdentityCorrection(job: Pick<IdentityGateJob, "status">
   return !isIdentityGateLocked(job);
 }
 
-/** Human-readable list of missing identity fields (Device ID / Serial). */
+/** Human-readable description of the missing identity field (observed Serial). */
 export function describeMissingIdentityFields(job: {
-  deviceId: string | null;
   technicianObservedSerial: string | null;
 }): string {
-  const missing: string[] = [];
-  if (job.deviceId == null) missing.push("Device ID");
   const serial = job.technicianObservedSerial?.trim() ?? "";
-  if (serial.length === 0) missing.push("Serial observasi teknisi");
-  if (missing.length === 0) return "identitas perangkat";
-  if (missing.length === 1) return missing[0]!;
-  return `${missing[0]} dan ${missing[1]}`;
+  if (serial.length === 0) return "Serial observasi teknisi";
+  return "identitas perangkat";
 }
 
 /** Deep-link into an existing detail section (Identity / corrections / ref-eq). */

@@ -531,8 +531,7 @@ export default function CalibrationJobDetailPage() {
                     role="status"
                     className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
                   >
-                    Identity perangkat belum lengkap. Device ID dan/atau serial observasi belum
-                    terisi.
+                    Identity perangkat belum lengkap. Serial observasi teknisi belum terisi.
                   </p>
                 ) : isIdentityIncomplete(job) ? (
                   <p

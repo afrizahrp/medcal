@@ -49,7 +49,6 @@ import {
   usePhysicalCheckResults,
 } from "./physical-check/use-physical-check-query";
 import {
-  AssignedDeviceSection,
   CorrectionsListSection,
   DeclaredIdentitySection,
   IdentityIncompleteWarning,
@@ -283,7 +282,6 @@ export default function JobDetailPage() {
       ) : null}
       <DeclaredIdentitySection job={job} />
       <ObservedIdentitySection job={job} />
-      <AssignedDeviceSection job={job} />
       {referenceEquipmentQuery.isPending ? (
         <LoadingState label="Memuat alat referensi…" />
       ) : referenceEquipmentQuery.isError ? (
