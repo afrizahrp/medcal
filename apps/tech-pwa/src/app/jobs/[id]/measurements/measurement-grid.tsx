@@ -7,6 +7,7 @@ import { Button } from "../../../../components/ui/button";
 import { ErrorBanner } from "../../../../components/feedback/error-banner";
 import { formatApiError } from "../../../../lib/api-errors";
 import {
+  canAddReplicateSlot,
   formatReadingDisplay,
   measuredValueDecimalPlacesExceededMessage,
   measuredValueInputStep,
@@ -314,7 +315,7 @@ export function MeasurementGridEntry({
                           );
                         })}
                       </ul>
-                      {editable ? (
+                      {canAddReplicateSlot(editable, param) ? (
                         <Button
                           variant="ghost"
                           onClick={() =>
@@ -336,8 +337,10 @@ export function MeasurementGridEntry({
         </div>
 
         <p className="text-xs text-slate-400">
-          Setiap titik ukur wajib terisi. Tambah ulangan bila alat ini butuh lebih dari satu
-          pembacaan per titik.
+          Setiap titik ukur wajib terisi.
+          {param.allowsRepeatedReadings
+            ? " Tambah ulangan bila alat ini butuh lebih dari satu pembacaan per titik."
+            : null}
         </p>
       </div>
     </Screen>

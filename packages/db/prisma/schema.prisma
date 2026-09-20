@@ -1381,35 +1381,44 @@ model DeviceCapabilityItem {
 // toleranceNote keeps the verbatim LK wording. Unique per
 // (deviceTypeId, capabilityItemId, code).
 model DeviceCalibrationParameter {
-  id                  String                         @id @default(cuid())
-  deviceTypeId        String
-  capabilityItemId    String
-  code                String
-  name                String
-  description         String?
-  valueType           CalibrationValueType           @default(NUMBER)
-  uomId               String?
-  toleranceMin        Decimal?                       @db.Decimal(18, 4)
-  toleranceMax        Decimal?                       @db.Decimal(18, 4)
-  toleranceNote       String?
+  id                     String                         @id @default(cuid())
+  deviceTypeId           String
+  capabilityItemId       String
+  code                   String
+  name                   String
+  description            String?
+  valueType              CalibrationValueType           @default(NUMBER)
+  uomId                  String?
+  toleranceMin           Decimal?                       @db.Decimal(18, 4)
+  toleranceMax           Decimal?                       @db.Decimal(18, 4)
+  toleranceNote          String?
   // Digits after the decimal point required for this parameter's measured
   // calibration result. Only meaningful for valueType = NUMBER; NULL for
   // RATIO/TEXT/BOOLEAN. Existing NUMBER rows were backfilled with a uniform
   // safe default of 0 (accurate per-parameter values are a separate follow-up).
   // A CHECK constraint bounds it to 0..10 (see migrations).
-  decimalPlaces       Int?
+  decimalPlaces          Int?
   // Display order of this parameter within its (deviceTypeId, capability) scope
   // on the calibration-parameter screen and the future generated worksheet.
   // Written in a single transactional pass (multiples of 10); reads tie-break
   // on `name`. Existing rows are seeded by backfill-calibration-ordering.ts.
-  sortOrder           Int                            @default(0)
-  isActive            Boolean                        @default(true)
+  sortOrder              Int                            @default(0)
+  isActive               Boolean                        @default(true)
   /// Which entry UI this catalog row needs. Default DIRECT_REPLICATES covers
   /// Pattern A (+ Pattern C-as-A) and Pattern B (which still uses typed
   /// readings; the grid is expressed by CalibrationTestPoint children).
   /// LOGGER_SUMMARY is backfilled for the 9 storage-temperature uniformity
   /// codes in CalibrationTestPoint_Seed_Extraction.md §6.4.
-  entryStyle          CalibrationParameterEntryStyle @default(DIRECT_REPLICATES)
+  entryStyle             CalibrationParameterEntryStyle @default(DIRECT_REPLICATES)
+  /// Tech-PWA repetition UX (2026-09-20). Catalog-level signal for whether the
+  /// "+ Tambah ulangan" control should be offered for this parameter's
+  /// applicable measurement points (Pattern A rows, or each named
+  /// CalibrationTestPoint in Pattern B). Presentation only — replicateIndex,
+  /// the natural key, and every persisted reading are unaffected either way;
+  /// this never hides or removes existing MeasurementResult rows, it only
+  /// controls whether the technician can grow the slot count further.
+  /// Default true preserves today's behavior for every existing parameter.
+  allowsRepeatedReadings Boolean                        @default(true)
   /// Phase 4A (Gap A) — CATALOG / PRESENTATION metadata only.
   ///
   /// Several LK worksheets record more than one independently measured quantity
@@ -1429,8 +1438,8 @@ model DeviceCalibrationParameter {
   /// `(deviceTypeId, logicalTestKey, logicalTestSequence)` is unique so two
   /// parameters can never claim the same column of the same logical test
   /// (see migrations for the paired-NULL and >= 1 CHECK constraints).
-  logicalTestKey      String?
-  logicalTestSequence Int?
+  logicalTestKey         String?
+  logicalTestSequence    Int?
   /// Phase 4B (Gap B) — DESCRIPTIVE ONLY. Only meaningful when
   /// `entryStyle = DERIVED`. Documents in structured but non-executable form
   /// what this value is derived from (e.g. `{ "description": "Difference
@@ -1439,9 +1448,9 @@ model DeviceCalibrationParameter {
   /// calculation — the technician still types the derived value into an
   /// ordinary MeasurementResult, exactly like every other reading. NULL for
   /// every non-DERIVED row and for every pre-existing row.
-  derivation          Json?
-  createdAt           DateTime                       @default(now())
-  updatedAt           DateTime                       @updatedAt
+  derivation             Json?
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
 
   deviceType     DeviceType           @relation(fields: [deviceTypeId], references: [id])
   capabilityItem DeviceCapabilityItem @relation(fields: [capabilityItemId], references: [id])

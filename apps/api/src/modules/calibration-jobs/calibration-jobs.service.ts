@@ -359,6 +359,16 @@ export interface MeasurementParameterSummary {
    */
   logicalTestKey: string | null;
   logicalTestSequence: number | null;
+  /**
+   * Tech-PWA repetition UX (2026-09-20). Whether "+ Tambah ulangan" should be
+   * offered for this parameter's applicable points (Pattern A rows, or each
+   * named CalibrationTestPoint in Pattern B). Presentation only — does not
+   * gate what is already recorded; existing readings beyond one slot still
+   * render regardless of this flag. Default true on the catalog row, so a
+   * parameter with no explicit configuration behaves exactly as before this
+   * field existed.
+   */
+  allowsRepeatedReadings: boolean;
 }
 
 /** One active CalibrationTestPoint nested under a Pattern B grid parameter. */
@@ -434,6 +444,7 @@ const measurementParameterSelect = {
   toleranceNote: true,
   logicalTestKey: true,
   logicalTestSequence: true,
+  allowsRepeatedReadings: true,
   uom: { select: { code: true, symbol: true } },
   capabilityItem: {
     select: {
@@ -471,6 +482,7 @@ function toParameterSummary(row: MeasurementParameterRow): MeasurementParameterS
     capabilityItemName: row.capabilityItem.name,
     logicalTestKey: row.logicalTestKey,
     logicalTestSequence: row.logicalTestSequence,
+    allowsRepeatedReadings: row.allowsRepeatedReadings,
   };
 }
 

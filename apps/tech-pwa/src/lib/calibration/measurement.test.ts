@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canAddReplicateSlot,
   canRecordMeasurement,
   capabilityGroupSections,
   formatMeasuredValue,
@@ -306,6 +307,27 @@ describe("visibleReplicateCount / usesDirection", () => {
   });
 });
 
+describe("canAddReplicateSlot", () => {
+  it("shows the button when editable and the parameter allows repeated readings", () => {
+    expect(canAddReplicateSlot(true, { allowsRepeatedReadings: true })).toBe(true);
+  });
+
+  it("hides the button when the parameter does not allow repeated readings, even if editable", () => {
+    expect(canAddReplicateSlot(true, { allowsRepeatedReadings: false })).toBe(false);
+  });
+
+  it("hides the button when not editable, regardless of allowsRepeatedReadings", () => {
+    expect(canAddReplicateSlot(false, { allowsRepeatedReadings: true })).toBe(false);
+    expect(canAddReplicateSlot(false, { allowsRepeatedReadings: false })).toBe(false);
+  });
+
+  it("is independent of parameter code — no device-specific hardcoding", () => {
+    // The predicate takes only the catalog flag, never a code/label — this
+    // test exists to pin that contract, not to exercise a specific device.
+    expect(canAddReplicateSlot(true, { allowsRepeatedReadings: true })).toBe(true);
+  });
+});
+
 describe("gridEntryStatus", () => {
   const cell = (
     testPointId: string,
@@ -395,6 +417,7 @@ describe("capabilityGroupSections / hasCapabilityGroups", () => {
     capabilityItemName: "unused",
     logicalTestKey: null,
     logicalTestSequence: null,
+    allowsRepeatedReadings: true,
     kind,
     testPoints: testPoints.map((tp) => ({
       ...tp,
@@ -492,6 +515,7 @@ describe("Pattern A vs Pattern B measurement-point labels", () => {
     capabilityItemName: "item",
     logicalTestKey: null,
     logicalTestSequence: null,
+    allowsRepeatedReadings: true,
     ...extras,
   });
 

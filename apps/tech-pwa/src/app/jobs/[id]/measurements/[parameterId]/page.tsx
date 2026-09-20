@@ -14,6 +14,7 @@ import {
   formatReadingDisplay,
   measuredValueDecimalPlacesExceededMessage,
   measuredValueInputStep,
+  canAddReplicateSlot,
   measurementLockedReason,
   readingDisplayValue,
   toleranceText,
@@ -340,15 +341,17 @@ export default function MeasurementParameterEntryPage() {
           })}
         </ul>
 
-        {editable ? (
+        {canAddReplicateSlot(editable, param) ? (
           <Button variant="ghost" onClick={() => setExtraRows((n) => n + 1)}>
             + Tambah ulangan
           </Button>
         ) : null}
 
-        <p className="text-xs text-slate-400">
-          Tambah ulangan bila alat ini butuh lebih dari satu pembacaan.
-        </p>
+        {param.allowsRepeatedReadings ? (
+          <p className="text-xs text-slate-400">
+            Tambah ulangan bila alat ini butuh lebih dari satu pembacaan.
+          </p>
+        ) : null}
       </div>
     </Screen>
   );

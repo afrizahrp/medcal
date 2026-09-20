@@ -67,6 +67,13 @@ export interface TechMeasurementParameter {
    */
   logicalTestKey: string | null;
   logicalTestSequence: number | null;
+  /**
+   * Repetition UX (2026-09-20). Whether the "+ Tambah ulangan" control should
+   * be offered for this parameter's applicable points. Presentation only:
+   * `visibleReplicateCount` still shows every existing reading regardless of
+   * this flag — it only gates the manual grow-the-slot-count affordance.
+   */
+  allowsRepeatedReadings: boolean;
   /** Present and non-empty on Pattern B (`gridParameters`). Absent or [] on A. */
   testPoints?: TechMeasurementTestPoint[];
 }
@@ -268,6 +275,22 @@ export function measuredReadingPayload(
  */
 export function visibleReplicateCount(maxExistingIndex: number, extraSlots: number): number {
   return Math.max(1, maxExistingIndex) + Math.max(0, extraSlots);
+}
+
+/**
+ * Whether the "+ Tambah ulangan" control should render at all (2026-09-20).
+ * Catalog-level, not device/code-specific — driven purely by
+ * `param.allowsRepeatedReadings` (default true, so every parameter without
+ * explicit catalog configuration keeps today's behavior). Does not affect
+ * `visibleReplicateCount`: a non-repeatable parameter with more than one
+ * existing reading still shows every one of them — this only gates the
+ * technician's ability to manually grow the slot count further.
+ */
+export function canAddReplicateSlot(
+  editable: boolean,
+  param: { allowsRepeatedReadings: boolean },
+): boolean {
+  return editable && param.allowsRepeatedReadings;
 }
 
 /** Anonymous repetition label for Pattern A, and nested reps under a named point. */
