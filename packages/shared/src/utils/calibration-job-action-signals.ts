@@ -28,9 +28,9 @@ export type CalibrationJobActionSignals = {
   referenceEquipmentNeedsApproval: boolean;
   /**
    * After technician work has started (`startedAt` set), the confirmed job
-   * identity is still missing Device ID and/or observed Serial — AND an
-   * identity correction can still be submitted (gate open). Does not block
-   * calibration, BA, or quality review.
+   * identity is still missing observed Serial — AND an identity correction
+   * can still be submitted (gate open). Does not block calibration, BA, or
+   * quality review.
    */
   identityIncomplete: boolean;
   // Future signals slot in here — e.g. measurementSubmissionPending,
@@ -52,24 +52,24 @@ export function isCalibrationJobBenchLocked(status: string): boolean {
 }
 
 /**
- * Pure factual predicate: Device ID and/or observed Serial missing after start.
- * AKD/AKL intentionally excluded — separate gate. Does NOT consider lifecycle
- * lock; use `buildCalibrationJobActionSignals` for the actionable list signal.
+ * Pure factual predicate: observed Serial missing after start. Device ID is
+ * intentionally excluded — it is a locked/legacy FK that no active workflow
+ * sets (MoM #6); checking it here would make this permanently true. AKD/AKL
+ * is also excluded — separate gate. Does NOT consider lifecycle lock; use
+ * `buildCalibrationJobActionSignals` for the actionable list signal.
  */
 export function isIdentityIncomplete(job: {
   startedAt: Date | string | null;
-  deviceId: string | null;
   technicianObservedSerial: string | null;
 }): boolean {
   if (job.startedAt == null) return false;
   const serial = job.technicianObservedSerial?.trim() ?? "";
-  return job.deviceId == null || serial.length === 0;
+  return serial.length === 0;
 }
 
 export type BuildCalibrationJobActionSignalsInput = {
   status: string;
   startedAt: Date | string | null;
-  deviceId: string | null;
   technicianObservedSerial: string | null;
   /** Raw: latest Identity Correction BA is PENDING_REVIEW (any job status). */
   hasPendingIdentityCorrection: boolean;

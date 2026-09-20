@@ -2364,7 +2364,7 @@ describe("CalibrationJobsService — list", () => {
     });
   });
 
-  it("sets identityIncomplete after start when Device ID and Serial are both missing", async () => {
+  it("sets identityIncomplete after start when Serial is missing", async () => {
     const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId);
     await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
     await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
@@ -2381,7 +2381,7 @@ describe("CalibrationJobsService — list", () => {
     expect(row.actionSignals.identityIncomplete).toBe(true);
   });
 
-  it("sets identityIncomplete false when Device ID and observed Serial are both present after start", async () => {
+  it("sets identityIncomplete false when observed Serial is present after start", async () => {
     const { workOrder, jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
     await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
     await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
@@ -2405,31 +2405,7 @@ describe("CalibrationJobsService — list", () => {
     expect(row.actionSignals.identityIncomplete).toBe(false);
   });
 
-  it("sets identityIncomplete false when Device ID equals Serial (allowed)", async () => {
-    const { workOrder, jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
-    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
-    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
-    const device = await devicesService.create(realCompanyId, {
-      customerId,
-      deviceTypeId,
-      serialNumber: "DVC-SAME",
-    });
-    await prisma.calibrationJob.update({
-      where: { id: jobs[0]!.id },
-      data: { deviceId: device.id, technicianObservedSerial: "DVC-SAME" },
-    });
-
-    const row = (
-      await calibrationJobsService.findAll(
-        realCompanyId,
-        { workOrderId: workOrder.id },
-        staffUserId,
-      )
-    ).data.find((j) => j.id === jobs[0]!.id)!;
-    expect(row.actionSignals.identityIncomplete).toBe(false);
-  });
-
-  it("sets identityIncomplete true when only Device ID is missing after start", async () => {
+  it("sets identityIncomplete false when Serial is present even though Device ID is missing (MoM #6: Device ID is a locked/legacy FK, no longer checked)", async () => {
     const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId);
     await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
     await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
@@ -2445,7 +2421,7 @@ describe("CalibrationJobsService — list", () => {
       )
     ).data.find((j) => j.id === jobs[0]!.id)!;
     expect(row.deviceId).toBeNull();
-    expect(row.actionSignals.identityIncomplete).toBe(true);
+    expect(row.actionSignals.identityIncomplete).toBe(false);
   });
 
   it("sets identityIncomplete true when only Serial is missing after start", async () => {

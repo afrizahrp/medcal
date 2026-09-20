@@ -664,7 +664,6 @@ export class CalibrationJobsService {
       actionSignals: buildCalibrationJobActionSignals({
         status: row.status,
         startedAt: row.startedAt,
-        deviceId: row.deviceId,
         technicianObservedSerial: row.technicianObservedSerial,
         hasPendingIdentityCorrection: row.identityCorrections[0]?.status === "PENDING_REVIEW",
         needsReferenceEquipmentApproval,

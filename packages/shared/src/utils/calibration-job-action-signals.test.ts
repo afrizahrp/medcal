@@ -47,41 +47,19 @@ describe("calibration job action signals", () => {
 describe("isIdentityIncomplete", () => {
   const started = "2026-09-12T00:00:00.000Z";
 
-  it("is false when Device ID and Serial are both present", () => {
+  it("is false when Serial is present", () => {
     expect(
       isIdentityIncomplete({
         startedAt: started,
-        deviceId: "dev-1",
         technicianObservedSerial: "SN-001",
       }),
     ).toBe(false);
-  });
-
-  it("is false when Device ID equals Serial (allowed)", () => {
-    expect(
-      isIdentityIncomplete({
-        startedAt: started,
-        deviceId: "DVC-001",
-        technicianObservedSerial: "DVC-001",
-      }),
-    ).toBe(false);
-  });
-
-  it("is true when Device ID is missing after start", () => {
-    expect(
-      isIdentityIncomplete({
-        startedAt: started,
-        deviceId: null,
-        technicianObservedSerial: "SN-001",
-      }),
-    ).toBe(true);
   });
 
   it("is true when Serial is missing after start", () => {
     expect(
       isIdentityIncomplete({
         startedAt: started,
-        deviceId: "dev-1",
         technicianObservedSerial: null,
       }),
     ).toBe(true);
@@ -91,27 +69,15 @@ describe("isIdentityIncomplete", () => {
     expect(
       isIdentityIncomplete({
         startedAt: started,
-        deviceId: "dev-1",
         technicianObservedSerial: "   ",
       }),
     ).toBe(true);
   });
 
-  it("is true when both Device ID and Serial are missing after start", () => {
-    expect(
-      isIdentityIncomplete({
-        startedAt: started,
-        deviceId: null,
-        technicianObservedSerial: null,
-      }),
-    ).toBe(true);
-  });
-
-  it("is false before technician work starts even when identity is null", () => {
+  it("is false before technician work starts even when Serial is null", () => {
     expect(
       isIdentityIncomplete({
         startedAt: null,
-        deviceId: null,
         technicianObservedSerial: null,
       }),
     ).toBe(false);
@@ -123,7 +89,6 @@ describe("buildCalibrationJobActionSignals", () => {
   const incompleteOpen = {
     status: "IN_PROGRESS",
     startedAt: started,
-    deviceId: null as string | null,
     technicianObservedSerial: null as string | null,
     hasPendingIdentityCorrection: false,
     needsReferenceEquipmentApproval: false,
@@ -154,7 +119,6 @@ describe("buildCalibrationJobActionSignals", () => {
   it("suppresses pending-correction and ref-equipment signals once the bench is locked", () => {
     const raw = {
       ...incompleteOpen,
-      deviceId: "dev-1",
       technicianObservedSerial: "SN-1",
       hasPendingIdentityCorrection: true,
       needsReferenceEquipmentApproval: true,
@@ -197,7 +161,6 @@ describe("buildCalibrationJobActionSignals", () => {
     const jobA = buildCalibrationJobActionSignals({ ...incompleteOpen, status: "SUBMITTED" });
     const jobB = buildCalibrationJobActionSignals({
       ...incompleteOpen,
-      deviceId: "dev-1",
       technicianObservedSerial: "SN-1",
       hasPendingIdentityCorrection: true,
     });
