@@ -612,12 +612,22 @@ export class WorkOrdersService {
     for (const item of workOrder.items) {
       const unitTotal = this.coerceFanOutQty(item.qty, item.id);
       const requestItem = item.purchaseOrderItem.quotationItem.requestItem ?? null;
+      // PurchaseOrderItem.deviceId is a real FK to the Master Device already
+      // identified upstream (Quotation/PO stage), not the technician's later
+      // on-site verification. Only propagate it for a qty-1 line: the FK names
+      // exactly one physical device, so fanning it out to every unit of a
+      // qty>1 line would misassign the same device to multiple jobs and trip
+      // @@unique([workOrderId, deviceId]). Ambiguous multi-unit lines stay
+      // null, same as before — identity is still resolved per unit via the
+      // (separate, out-of-scope-here) technician Device lookup task.
+      const knownDeviceId =
+        unitTotal === 1 ? (item.purchaseOrderItem.deviceId ?? null) : null;
       for (let unitOrdinal = 1; unitOrdinal <= unitTotal; unitOrdinal++) {
         rows.push({
           companyId: workOrder.companyId,
           workOrderId: workOrder.id,
           purchaseOrderItemId: item.purchaseOrderItemId,
-          deviceId: null,
+          deviceId: knownDeviceId,
           calibrationRequestItemId: requestItem?.id ?? null,
           customerDeclaredDeviceName: requestItem?.customerDeviceName ?? null,
           customerDeclaredAkdAkl: requestItem?.akdAkl ?? null,

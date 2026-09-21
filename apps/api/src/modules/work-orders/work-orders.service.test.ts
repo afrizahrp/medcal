@@ -27,6 +27,7 @@ const createdCalibrationRequestIds: string[] = [];
 const createdCustomerIds: string[] = [];
 const createdCompanyIds: string[] = [];
 const createdDeviceTypeIds: string[] = [];
+const createdDeviceIds: string[] = [];
 const createdDeviceCategoryIds: string[] = [];
 const createdTaxIds: string[] = [];
 const createdUserIds: string[] = [];
@@ -298,6 +299,9 @@ async function createTrackedWorkOrder(
 
 afterAll(async () => {
   await cleanupWorkOrders();
+  if (createdDeviceIds.length > 0) {
+    await prisma.device.deleteMany({ where: { id: { in: createdDeviceIds } } });
+  }
   await cleanupPurchaseOrders();
   if (createdTaxIds.length > 0) {
     await prisma.tax.deleteMany({ where: { id: { in: createdTaxIds } } });
@@ -1110,6 +1114,64 @@ describe("WorkOrdersService CalibrationJob fan-out on start()", () => {
       expect(job.customerDeclaredAkdAkl).toBe("AKL 12345678901");
       expect(job.status).toBe("PENDING");
       expect(job.akdAklApprovalStatus).toBe("NOT_REQUIRED");
+    }
+  });
+
+  it("propagates PurchaseOrderItem.deviceId (Master Device already known upstream) to the qty-1 CalibrationJob.deviceId", async () => {
+    const created = await assignedWorkOrderReadyToStart();
+    const item = created.items[0]!;
+    const device = await prisma.device.create({
+      data: {
+        companyId: realCompanyId,
+        code: `DEV/TEST/${randomUUID().slice(0, 8)}`,
+        customerId: created.customerId,
+        deviceTypeId: testDeviceTypeId!,
+        serialNumber: "1234567",
+      },
+    });
+    createdDeviceIds.push(device.id);
+    await prisma.purchaseOrderItem.update({
+      where: { id: item.purchaseOrderItemId },
+      data: { deviceId: device.id },
+    });
+
+    await workOrdersService.start(realCompanyId, created.id);
+
+    const jobs = await prisma.calibrationJob.findMany({ where: { workOrderId: created.id } });
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]!.deviceId).toBe(device.id);
+    // Independent of the FK: no technician observation has happened yet.
+    expect(jobs[0]!.technicianObservedSerial).toBeNull();
+  });
+
+  it("does not propagate PurchaseOrderItem.deviceId onto a qty>1 line (ambiguous — which unit is that device?)", async () => {
+    const created = await assignedWorkOrderReadyToStart();
+    const item = created.items[0]!;
+    const device = await prisma.device.create({
+      data: {
+        companyId: realCompanyId,
+        code: `DEV/TEST/${randomUUID().slice(0, 8)}`,
+        customerId: created.customerId,
+        deviceTypeId: testDeviceTypeId!,
+        serialNumber: "7654321",
+      },
+    });
+    createdDeviceIds.push(device.id);
+    await prisma.purchaseOrderItem.update({
+      where: { id: item.purchaseOrderItemId },
+      data: { deviceId: device.id },
+    });
+    await prisma.workOrderItem.update({
+      where: { id: item.id },
+      data: { qty: new Prisma.Decimal(2) },
+    });
+
+    await workOrdersService.start(realCompanyId, created.id);
+
+    const jobs = await prisma.calibrationJob.findMany({ where: { workOrderId: created.id } });
+    expect(jobs).toHaveLength(2);
+    for (const job of jobs) {
+      expect(job.deviceId).toBeNull();
     }
   });
 
