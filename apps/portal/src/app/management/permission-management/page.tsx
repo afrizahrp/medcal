@@ -60,6 +60,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   deviceCategory: "Device Category",
   deviceType: "Device Name",
   deviceTypeAlias: "Device Name Alias",
+  deviceManufacturer: "Device Manufacturer",
   deviceModel: "Device Model",
   deviceCapability: "Device Capability",
   deviceCapabilityItem: "Device Capability Item",

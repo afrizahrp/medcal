@@ -23,7 +23,8 @@ export type ManagementNavIcon =
   | "clipboardList"
   | "messageSquareQuote"
   | "wrench"
-  | "square-scissors";
+  | "square-scissors"
+  | "factory";
 
 export interface NavItem {
   label: string;

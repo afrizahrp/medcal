@@ -1522,13 +1522,54 @@ export const deviceTypeUpdateSchema = z.object({
 export type DeviceTypeUpdateInput = z.infer<typeof deviceTypeUpdateSchema>;
 
 // =============================================================================
+// DeviceManufacturer Master Data
+// =============================================================================
+
+/**
+ * POST /device-manufacturers body. `code` is not accepted — it is a
+ * system-issued, immutable business identifier (MFR-000001) allocated by
+ * MasterCodeService.
+ */
+export const deviceManufacturerCreateSchema = z.object({
+  name: z.string().trim().min(1).max(150),
+  description: optionalDescription,
+});
+
+export type DeviceManufacturerCreateInput = z.infer<typeof deviceManufacturerCreateSchema>;
+
+/** GET /device-manufacturers query params */
+export const deviceManufacturerListQuerySchema = baseListQuerySchema.extend({
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type DeviceManufacturerListQuery = z.infer<typeof deviceManufacturerListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /device-manufacturers — see resolveSortOrder. */
+export const DEVICE_MANUFACTURER_SORTABLE_FIELDS = ["createdAt", "code", "name"] as const;
+
+/** PATCH /device-manufacturers/:id body. `code` is immutable and cannot be changed. */
+export const deviceManufacturerUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(150).optional(),
+  description: z.string().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type DeviceManufacturerUpdateInput = z.infer<typeof deviceManufacturerUpdateSchema>;
+
+// =============================================================================
 // DeviceModel Master Data
 // =============================================================================
 
-/** POST /device-models body */
+/**
+ * POST /device-models body. `code` is not accepted — system-issued, immutable
+ * business identifier (MOD-000001). DeviceModel belongs only to
+ * DeviceManufacturer (locked rule, 2026-09-21) — it has no DeviceType relation.
+ */
 export const deviceModelCreateSchema = z.object({
-  deviceTypeId: z.string().min(1),
-  manufacturer: z.string().trim().min(1).max(150),
+  manufacturerId: z.string().min(1),
   model: z.string().trim().min(1).max(150),
   description: optionalDescription,
 });
@@ -1537,7 +1578,7 @@ export type DeviceModelCreateInput = z.infer<typeof deviceModelCreateSchema>;
 
 /** GET /device-models query params */
 export const deviceModelListQuerySchema = baseListQuerySchema.extend({
-  deviceTypeId: z.string().min(1).optional(),
+  manufacturerId: z.string().min(1).optional(),
   isActive: z
     .string()
     .transform((v) => v === "true")
@@ -1546,13 +1587,15 @@ export const deviceModelListQuerySchema = baseListQuerySchema.extend({
 
 export type DeviceModelListQuery = z.infer<typeof deviceModelListQuerySchema>;
 
-/** Whitelisted `sortBy` values for GET /device-models — see resolveSortOrder. */
-export const DEVICE_MODEL_SORTABLE_FIELDS = ["createdAt", "manufacturer", "model"] as const;
+/**
+ * Whitelisted `sortBy` values for GET /device-models — see resolveSortOrder.
+ * `manufacturer` is relational (DeviceManufacturer.name), mapped in the service.
+ */
+export const DEVICE_MODEL_SORTABLE_FIELDS = ["createdAt", "code", "manufacturer", "model"] as const;
 
-/** PATCH /device-models/:id body */
+/** PATCH /device-models/:id body. `code` is immutable and cannot be changed. */
 export const deviceModelUpdateSchema = z.object({
-  deviceTypeId: z.string().min(1).optional(),
-  manufacturer: z.string().trim().min(1).max(150).optional(),
+  manufacturerId: z.string().min(1).optional(),
   model: z.string().trim().min(1).max(150).optional(),
   description: z.string().max(500).nullable().optional(),
   isActive: z.boolean().optional(),

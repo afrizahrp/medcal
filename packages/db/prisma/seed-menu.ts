@@ -149,13 +149,41 @@ const ROWS: MenuSeedRow[] = [
   },
   {
     application: "MANAGEMENT",
+    code: "device-management.manufacturers",
+    parentCode: "device-management",
+    label: "Manufacturers",
+    href: "/device-manufacturers",
+    icon: "factory",
+    order: 2,
+    viewResource: "deviceManufacturer",
+    viewAction: "read",
+  },
+  {
+    application: "MANAGEMENT",
     code: "device-management.models",
     parentCode: "device-management",
     label: "Models",
     href: "/device-models",
     icon: "boxes",
-    order: 2,
+    order: 3,
     viewResource: "deviceModel",
+    viewAction: "read",
+  },
+  // Relocated from the System Setting group (2026-09-21) into Device
+  // Management, immediately after Models. `code` is intentionally left as
+  // `system-setting.uom` — the upsert key is (application, code), so keeping
+  // it identical reconciles any existing production row onto its new
+  // parent/order/label in place (no delete+recreate, no id change, no
+  // duplicate). Do not rename this code without a real reason.
+  {
+    application: "MANAGEMENT",
+    code: "system-setting.uom",
+    parentCode: "device-management",
+    label: "Units of Measure (UOM)",
+    href: "/uoms",
+    icon: "settings",
+    order: 4,
+    viewResource: "uom",
     viewAction: "read",
   },
   {
@@ -165,7 +193,7 @@ const ROWS: MenuSeedRow[] = [
     label: "Capabilities",
     href: "/device-capabilities",
     icon: "activity",
-    order: 3,
+    order: 5,
     viewResource: "deviceCapability",
     viewAction: "read",
   },
@@ -176,7 +204,7 @@ const ROWS: MenuSeedRow[] = [
     label: "Calibration Parameters",
     href: "/device-calibration-parameters",
     icon: "slidersHorizontal",
-    order: 4,
+    order: 6,
     viewResource: "deviceCalibrationParameter",
     viewAction: "read",
   },
@@ -187,7 +215,7 @@ const ROWS: MenuSeedRow[] = [
     label: "Physical Inspection",
     href: "/device-physical-check-items",
     icon: "clipboardList",
-    order: 5,
+    order: 7,
     viewResource: "devicePhysicalCheckItem",
     viewAction: "read",
   },
@@ -197,7 +225,7 @@ const ROWS: MenuSeedRow[] = [
     parentCode: "device-management",
     label: "Reference Equipment",
     icon: "square-scissors",
-    order: 6,
+    order: 8,
     isGroup: true,
   },
   {
@@ -400,17 +428,6 @@ const ROWS: MenuSeedRow[] = [
     order: 1,
     viewResource: "tax",
     viewAction: "manage",
-  },
-  {
-    application: "MANAGEMENT",
-    code: "system-setting.uom",
-    parentCode: "system-setting",
-    label: "UOM",
-    href: "/uoms",
-    icon: "settings",
-    order: 2,
-    viewResource: "uom",
-    viewAction: "read",
   },
 
   // ══════════════════════════════════════════════════════════════════════════

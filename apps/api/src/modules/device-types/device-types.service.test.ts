@@ -25,7 +25,6 @@ async function createCategory() {
 afterAll(async () => {
   if (createdTypeIds.length > 0) {
     await prisma.device.deleteMany({ where: { deviceTypeId: { in: createdTypeIds } } });
-    await prisma.deviceModel.deleteMany({ where: { deviceTypeId: { in: createdTypeIds } } });
     await prisma.deviceType.deleteMany({ where: { id: { in: createdTypeIds } } });
   }
   if (createdCustomerIds.length > 0) {
@@ -119,20 +118,6 @@ describe("DeviceTypesService.findAll / findOne / update / remove", () => {
     await expect(service.update("missing-device-type-id", { name: "Nope" })).rejects.toBeInstanceOf(
       NotFoundException,
     );
-  });
-
-  it("rejects delete when the device type still has device models", async () => {
-    const category = await createCategory();
-    const deviceType = await service.create({ categoryId: category.id, name: "With Models" });
-    createdTypeIds.push(deviceType.id);
-
-    const model = await prisma.deviceModel.create({
-      data: { deviceTypeId: deviceType.id, manufacturer: "TestCo", model: uniqueSlug() },
-    });
-
-    await expect(service.remove(deviceType.id)).rejects.toBeInstanceOf(BadRequestException);
-
-    await prisma.deviceModel.delete({ where: { id: model.id } });
   });
 
   it("rejects delete when the device type still has devices", async () => {

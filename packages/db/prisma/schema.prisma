@@ -1128,7 +1128,6 @@ model DeviceType {
   updatedAt   DateTime @updatedAt
 
   category                DeviceCategory                   @relation(fields: [categoryId], references: [id])
-  models                  DeviceModel[]
   devices                 Device[]
   calibrationParameters   DeviceCalibrationParameter[]
   physicalCheckItems      DevicePhysicalCheckItem[]
@@ -1311,24 +1310,43 @@ model DeviceTypeEquipmentRequirement {
   @@index([equipmentTypeId])
 }
 
-// Product/model master under a DeviceType — manufacturer is a plain string
-// this phase (not a DeviceManufacturer entity). Unique per
-// (deviceTypeId, manufacturer, model); the same model name may exist under
-// a different DeviceType. Do not FK Device to this model yet.
+// Manufacturer/brand master — independent master (global, no companyId), same
+// convention as DeviceType/DeviceCategory. `code` is system-issued (MFR-000001),
+// immutable, and never derived from `name`.
+model DeviceManufacturer {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  models DeviceModel[]
+
+  @@index([isActive])
+}
+
+// Product/model master — independent of DeviceType (locked business rule,
+// 2026-09-21 refactor): DeviceModel belongs ONLY to DeviceManufacturer.
+// Unique per (manufacturerId, model); the same model name may exist under a
+// different manufacturer, but not twice under the same one. `code` is
+// system-issued (MOD-000001), immutable, and never derived from `model`.
+// Do not FK DeviceType or Device to this model.
 model DeviceModel {
-  id           String   @id @default(cuid())
-  deviceTypeId String
-  manufacturer String
-  model        String
-  description  String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(cuid())
+  code           String   @unique
+  manufacturerId String
+  model          String
+  description    String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  deviceType DeviceType @relation(fields: [deviceTypeId], references: [id])
+  manufacturer DeviceManufacturer @relation(fields: [manufacturerId], references: [id])
 
-  @@unique([deviceTypeId, manufacturer, model])
-  @@index([deviceTypeId])
+  @@unique([manufacturerId, model])
+  @@index([manufacturerId])
   @@index([isActive])
 }
 

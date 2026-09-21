@@ -16,29 +16,19 @@ import { AccessDenied } from "../../../components/access-denied";
 import {
   PageHeader,
   Surface,
-  DeviceModelFilters,
-  DeviceModelTable,
-  DeviceModelEmptyState,
+  DeviceManufacturerFilters,
+  DeviceManufacturerTable,
+  DeviceManufacturerEmptyState,
   PaginationBar,
-} from "./device-models-ui";
-import { useDeviceModels } from "./use-device-models-query";
-import { useDeviceManufacturers } from "../device-manufacturers/use-device-manufacturers-query";
+} from "./device-manufacturers-ui";
+import { useDeviceManufacturers } from "./use-device-manufacturers-query";
 
-const URL_KEYS = [
-  "search",
-  "manufacturerId",
-  "isActive",
-  "sortBy",
-  "sortDir",
-  "page",
-  "pageSize",
-] as const;
+const URL_KEYS = ["search", "isActive", "sortBy", "sortDir", "page", "pageSize"] as const;
 
-export default function DeviceModelsPageClient() {
+export default function DeviceManufacturersPageClient() {
   const { capabilities } = useAuthz();
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
-  const manufacturerId = params.manufacturerId ?? "";
   const isActive: boolean | "" =
     params.isActive === "true" ? true : params.isActive === "false" ? false : "";
   const sort = useTableSort(params, setParams, "createdAt");
@@ -57,18 +47,8 @@ export default function DeviceModelsPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
 
-  const manufacturersQuery = useDeviceManufacturers({
-    search: "",
-    isActive: "",
-    sortBy: "name",
-    sortDir: "asc",
-    page: 1,
-    pageSize: 100,
-  });
-
-  const query = useDeviceModels({
+  const query = useDeviceManufacturers({
     search: committedSearch,
-    manufacturerId,
     isActive,
     sortBy,
     sortDir,
@@ -82,7 +62,7 @@ export default function DeviceModelsPageClient() {
     onClamp: (lastPage) => setParams({ page: lastPage <= 1 ? undefined : String(lastPage) }),
   });
 
-  if (!capabilities?.deviceModelRead) {
+  if (!capabilities?.deviceManufacturerRead) {
     return <AccessDenied />;
   }
 
@@ -90,7 +70,7 @@ export default function DeviceModelsPageClient() {
   const loading = query.isLoading;
   const fetching = query.isFetching && !loading;
   const forbidden = isForbidden(query.error);
-  const error = query.isError && !forbidden ? "Gagal memuat daftar Device Model." : null;
+  const error = query.isError && !forbidden ? "Gagal memuat daftar Device Manufacturer." : null;
   const totalPages = result ? Math.max(1, result.totalPages) : 1;
 
   if (forbidden) {
@@ -101,14 +81,15 @@ export default function DeviceModelsPageClient() {
     <div className="w-full px-4 py-6 md:px-6 md:py-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
-          title="Device Model"
-          crumbs={[{ href: "/", label: "Dashboard" }, { label: "Device Model" }]}
+          title="Device Manufacturer"
+          crumbs={[{ href: "/", label: "Dashboard" }, { label: "Device Manufacturer" }]}
         />
 
-        {capabilities.deviceModelCreate ? (
+        {capabilities.deviceManufacturerCreate ? (
           <Button asChild className="shrink-0">
-            <Link href="/device-models/new">
-              <Plus className="h-4 w-4" /> Device Model
+            <Link href="/device-manufacturers/new">
+              <Plus className="h-4 w-4" />
+              Device Manufacturer
             </Link>
           </Button>
         ) : null}
@@ -117,14 +98,9 @@ export default function DeviceModelsPageClient() {
       <Surface className={cn("mt-6 p-4 md:p-6", fetching && "opacity-70")}>
         {didClamp ? <ViewAdjustedBanner className="mb-4" onDismiss={dismiss} /> : null}
 
-        <DeviceModelFilters
+        <DeviceManufacturerFilters
           searchInput={searchInput}
           onSearchChange={setSearchInput}
-          manufacturerId={manufacturerId}
-          onManufacturerChange={(next) =>
-            setParams({ manufacturerId: next || undefined, page: undefined })
-          }
-          manufacturers={manufacturersQuery.data?.data ?? []}
           isActive={isActive}
           onIsActiveChange={(next) =>
             setParams({ isActive: next === "" ? undefined : String(next), page: undefined })
@@ -138,14 +114,13 @@ export default function DeviceModelsPageClient() {
         ) : didClamp && result && result.data.length === 0 ? (
           <p className="mt-6 text-sm text-slate-400">Menyesuaikan halaman…</p>
         ) : result && result.data.length === 0 ? (
-          <DeviceModelEmptyState
+          <DeviceManufacturerEmptyState
             onClearFilters={
-              committedSearch || manufacturerId || isActive !== ""
+              committedSearch || isActive !== ""
                 ? () => {
                     setSearchInput("");
                     setParams({
                       search: undefined,
-                      manufacturerId: undefined,
                       isActive: undefined,
                       page: undefined,
                     });
@@ -156,7 +131,7 @@ export default function DeviceModelsPageClient() {
         ) : result ? (
           <>
             <div className="mt-4">
-              <DeviceModelTable models={result.data} sort={sort} />
+              <DeviceManufacturerTable manufacturers={result.data} sort={sort} />
             </div>
             <PaginationBar
               className="mt-4"
@@ -164,7 +139,7 @@ export default function DeviceModelsPageClient() {
               totalPages={totalPages}
               total={result.total}
               pageSize={pageSize}
-              itemLabel="model"
+              itemLabel="manufacturer"
               onPageChange={(next) => setParams({ page: next <= 1 ? undefined : String(next) })}
               onPageSizeChange={(next) =>
                 setParams({ pageSize: next === 10 ? undefined : String(next), page: undefined })

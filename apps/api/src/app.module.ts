@@ -23,6 +23,7 @@ import { DeviceCategoriesModule } from "./modules/device-categories/device-categ
 import { DeviceTypesModule } from "./modules/device-types/device-types.module";
 import { DeviceTypeAliasesModule } from "./modules/device-type-aliases/device-type-aliases.module";
 import { DeviceModelsModule } from "./modules/device-models/device-models.module";
+import { DeviceManufacturersModule } from "./modules/device-manufacturers/device-manufacturers.module";
 import { DeviceCapabilitiesModule } from "./modules/device-capabilities/device-capabilities.module";
 import { DeviceCalibrationParametersModule } from "./modules/device-calibration-parameters/device-calibration-parameters.module";
 import { DevicePhysicalCheckItemsModule } from "./modules/device-physical-check-items/device-physical-check-items.module";
@@ -49,6 +50,7 @@ import { PriceListItemsModule } from "./modules/price-list-items/price-list-item
     DeviceTypesModule,
     DeviceTypeAliasesModule,
     DeviceModelsModule,
+    DeviceManufacturersModule,
     DeviceCapabilitiesModule,
     DeviceCalibrationParametersModule,
     DevicePhysicalCheckItemsModule,

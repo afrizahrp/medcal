@@ -191,9 +191,6 @@ export function formatDeviceTypeApiError(error: unknown): string {
     if (code === "INVALID_DEVICE_TYPE" || code === "INVALID_DEVICE_TYPE_UPDATE") {
       return "Data Device Name tidak valid. Periksa kembali isian form.";
     }
-    if (code === "DEVICE_TYPE_HAS_MODELS") {
-      return "Device Name tidak dapat dihapus karena masih memiliki Device Model.";
-    }
     if (code === "DEVICE_TYPE_HAS_CALIBRATION_REQUESTS") {
       return "Device Name tidak dapat dihapus karena masih dipakai Requisition.";
     }

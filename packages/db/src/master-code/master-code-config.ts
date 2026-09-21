@@ -18,6 +18,8 @@ export type MasterCodeEntity =
   | "EQUIPMENT"
   | "DEVICE_CATEGORY"
   | "DEVICE_TYPE"
+  | "DEVICE_MANUFACTURER"
+  | "DEVICE_MODEL"
   | "DEVICE_CAPABILITY"
   | "DEVICE_CALIBRATION_PARAMETER"
   | "EQUIPMENT_TYPE";
@@ -41,6 +43,8 @@ export const MASTER_CODE_CONFIG: Record<MasterCodeEntity, MasterCodeConfig> = {
   EQUIPMENT: { prefix: "EQU", width: 6, scope: "company", table: "Equipment" },
   DEVICE_CATEGORY: { prefix: "DVCAT", width: 3, scope: "global", table: "DeviceCategory" },
   DEVICE_TYPE: { prefix: "DVTP", width: 3, scope: "global", table: "DeviceType" },
+  DEVICE_MANUFACTURER: { prefix: "MFR", width: 6, scope: "global", table: "DeviceManufacturer" },
+  DEVICE_MODEL: { prefix: "MOD", width: 6, scope: "global", table: "DeviceModel" },
   DEVICE_CAPABILITY: { prefix: "DVCAP", width: 3, scope: "global", table: "DeviceCapability" },
   DEVICE_CALIBRATION_PARAMETER: {
     prefix: "DCP",

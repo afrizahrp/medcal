@@ -36,9 +36,11 @@ import type { MembershipRole } from "@medcal/db";
  *   SUPERADMIN-only by default (see hasPermission's hardcoded bypass) —
  *   granting it to another role is a deliberate, explicit admin action, not
  *   something this catalog entry does on its own.
- * - deviceCategory/deviceType/deviceModel:read/create/update/delete
- *   (Device taxonomy): Kemenkes-confirmed DeviceType list grouped by
- *   internal DeviceCategory; DeviceModel is manufacturer+model under a type.
+ * - deviceCategory/deviceType:read/create/update/delete (Device taxonomy):
+ *   Kemenkes-confirmed DeviceType list grouped by internal DeviceCategory.
+ * - deviceManufacturer/deviceModel:read/create/update/delete (Device product
+ *   masters, 2026-09-21 refactor — locked): both are independent masters with
+ *   NO relation to DeviceType. DeviceModel belongs only to DeviceManufacturer.
  * - deviceCapability/deviceCapabilityItem:read/create/update/delete
  *   (Device function master): DeviceCapability is a device function
  *   (e.g. NIBP); DeviceCapabilityItem is a child aspect of that function.
@@ -64,6 +66,7 @@ const ac = createAccessControl({
   // Requisition users USE aliases indirectly (server-side import matching)
   // and need no deviceTypeAlias grant for that.
   deviceTypeAlias: ["read", "create", "update", "delete"],
+  deviceManufacturer: ["read", "create", "update", "delete"],
   deviceModel: ["read", "create", "update", "delete"],
   deviceCapability: ["read", "create", "update", "delete"],
   deviceCapabilityItem: ["read", "create", "update", "delete"],

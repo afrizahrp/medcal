@@ -21,7 +21,7 @@ import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   DeviceModelsService,
   type DeviceModelListResult,
-  type DeviceModelWithType,
+  type DeviceModelWithManufacturer,
 } from "./device-models.service";
 
 @Controller("device-models")
@@ -34,7 +34,7 @@ export class DeviceModelsController {
 
   @Post()
   @RequirePermission("deviceModel", "create")
-  async create(@Body() rawBody: unknown): Promise<DeviceModelWithType> {
+  async create(@Body() rawBody: unknown): Promise<DeviceModelWithManufacturer> {
     const parsed = deviceModelCreateSchema.safeParse(rawBody);
     if (!parsed.success) {
       throw new BadRequestException({
@@ -62,7 +62,7 @@ export class DeviceModelsController {
 
   @Get(":id")
   @RequirePermission("deviceModel", "read")
-  async findOne(@Param("id") id: string): Promise<DeviceModelWithType> {
+  async findOne(@Param("id") id: string): Promise<DeviceModelWithManufacturer> {
     return this.service.findOne(id);
   }
 
@@ -71,7 +71,7 @@ export class DeviceModelsController {
   async update(
     @Param("id") id: string,
     @Body() rawBody: unknown,
-  ): Promise<DeviceModelWithType> {
+  ): Promise<DeviceModelWithManufacturer> {
     const parsed = deviceModelUpdateSchema.safeParse(rawBody);
     if (!parsed.success) {
       throw new BadRequestException({
@@ -85,7 +85,7 @@ export class DeviceModelsController {
 
   @Delete(":id")
   @RequirePermission("deviceModel", "delete")
-  async remove(@Param("id") id: string): Promise<DeviceModelWithType> {
+  async remove(@Param("id") id: string): Promise<DeviceModelWithManufacturer> {
     return this.service.remove(id);
   }
 }

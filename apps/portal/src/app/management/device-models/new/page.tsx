@@ -21,11 +21,10 @@ import {
   deviceModelFormSurfaceClass,
 } from "../device-models-ui";
 import { useCreateDeviceModel } from "../use-device-models-query";
-import { useDeviceTypes } from "../../device-types/use-device-types-query";
+import { useDeviceManufacturers } from "../../device-manufacturers/use-device-manufacturers-query";
 
 const emptyForm: DeviceModelFormValue = {
-  deviceTypeId: "",
-  manufacturer: "",
+  manufacturerId: "",
   model: "",
   description: "",
 };
@@ -34,9 +33,8 @@ export default function NewDeviceModelPage() {
   const router = useRouter();
   const { capabilities } = useAuthz();
   const createMutation = useCreateDeviceModel();
-  const typesQuery = useDeviceTypes({
+  const manufacturersQuery = useDeviceManufacturers({
     search: "",
-    categoryId: "",
     isActive: true,
     sortBy: "name",
     sortDir: "asc",
@@ -61,12 +59,8 @@ export default function NewDeviceModelPage() {
     setError(null);
     setSuccess(null);
 
-    if (!form.deviceTypeId) {
-      setError("Device Name wajib dipilih.");
-      return;
-    }
-    if (!form.manufacturer.trim()) {
-      setError("Manufacturer wajib diisi.");
+    if (!form.manufacturerId) {
+      setError("Manufacturer wajib dipilih.");
       return;
     }
     if (!form.model.trim()) {
@@ -76,7 +70,7 @@ export default function NewDeviceModelPage() {
 
     try {
       const row = await createMutation.mutateAsync(buildDeviceModelCreatePayload(form));
-      setSuccess(`Device Model ${row.manufacturer} ${row.model} berhasil dibuat.`);
+      setSuccess(`Device Model ${row.code} berhasil dibuat.`);
       router.push(`/device-models/${row.id}`);
     } catch (err) {
       setError(formatDeviceModelApiError(err));
@@ -102,8 +96,8 @@ export default function NewDeviceModelPage() {
           <DeviceModelFormFields
             value={form}
             onChange={setField}
-            deviceTypes={typesQuery.data?.data ?? []}
-            deviceTypesLoading={typesQuery.isLoading}
+            manufacturers={manufacturersQuery.data?.data ?? []}
+            manufacturersLoading={manufacturersQuery.isLoading}
           />
 
           <div className={deviceModelFormActionsClass}>

@@ -8,34 +8,36 @@ import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
 import {
-  DeviceModelFormFields,
-  buildDeviceModelUpdatePayload,
-  formatDeviceModelApiError,
-  type DeviceModelFormValue,
-} from "../device-model-form-fields";
+  DeviceManufacturerFormFields,
+  buildDeviceManufacturerUpdatePayload,
+  formatDeviceManufacturerApiError,
+  type DeviceManufacturerFormValue,
+} from "../device-manufacturer-form-fields";
 import {
-  type DeviceModelRow,
-  DeviceModelStatusBadge,
+  type DeviceManufacturerRow,
+  DeviceManufacturerStatusBadge,
   PageHeader,
   Surface,
-  deviceModelFormActionsClass,
-  deviceModelFormPageClass,
-  deviceModelFormSurfaceClass,
+  deviceManufacturerFormActionsClass,
+  deviceManufacturerFormPageClass,
+  deviceManufacturerFormSurfaceClass,
   selectClassName,
-} from "../device-models-ui";
-import { useDeviceModel, useUpdateDeviceModel } from "../use-device-models-query";
-import { useDeviceManufacturers } from "../../device-manufacturers/use-device-manufacturers-query";
+} from "../device-manufacturers-ui";
+import {
+  useDeviceManufacturer,
+  useUpdateDeviceManufacturer,
+} from "../use-device-manufacturers-query";
 
-const emptyForm: DeviceModelFormValue = {
-  manufacturerId: "",
-  model: "",
+const emptyForm: DeviceManufacturerFormValue = {
+  code: "",
+  name: "",
   description: "",
 };
 
-function formFromRow(row: DeviceModelRow): DeviceModelFormValue {
+function formFromRow(row: DeviceManufacturerRow): DeviceManufacturerFormValue {
   return {
-    manufacturerId: row.manufacturerId,
-    model: row.model,
+    code: row.code,
+    name: row.name,
     description: row.description ?? "",
   };
 }
@@ -49,23 +51,15 @@ function DetailField({ label, children }: { label: string; children: ReactNode }
   );
 }
 
-export default function DeviceModelDetailPage() {
+export default function DeviceManufacturerDetailPage() {
   const params = useParams<{ id: string }>();
   const { capabilities } = useAuthz();
-  const modelQuery = useDeviceModel(params.id);
-  const updateMutation = useUpdateDeviceModel();
-  const manufacturersQuery = useDeviceManufacturers({
-    search: "",
-    isActive: "",
-    sortBy: "name",
-    sortDir: "asc",
-    page: 1,
-    pageSize: 100,
-  });
+  const manufacturerQuery = useDeviceManufacturer(params.id);
+  const updateMutation = useUpdateDeviceManufacturer();
 
-  const row = modelQuery.data;
+  const row = manufacturerQuery.data;
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<DeviceModelFormValue>(emptyForm);
+  const [form, setForm] = useState<DeviceManufacturerFormValue>(emptyForm);
   const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -76,46 +70,49 @@ export default function DeviceModelDetailPage() {
     setIsActive(row.isActive);
   }, [row]);
 
-  if (!capabilities?.deviceModelRead) {
+  if (!capabilities?.deviceManufacturerRead) {
     return <AccessDenied />;
   }
 
-  if (modelQuery.isLoading) {
+  if (manufacturerQuery.isLoading) {
     return (
-      <div className={deviceModelFormPageClass}>
+      <div className={deviceManufacturerFormPageClass}>
         <p className="text-sm text-slate-400">Memuat…</p>
       </div>
     );
   }
 
-  if (isForbidden(modelQuery.error)) {
+  if (isForbidden(manufacturerQuery.error)) {
     return <AccessDenied />;
   }
 
-  if (modelQuery.error instanceof ApiError && modelQuery.error.status === 404) {
+  if (manufacturerQuery.error instanceof ApiError && manufacturerQuery.error.status === 404) {
     return (
-      <div className={deviceModelFormPageClass}>
+      <div className={deviceManufacturerFormPageClass}>
         <PageHeader
-          title="Device Model tidak ditemukan"
+          title="Device Manufacturer tidak ditemukan"
           crumbs={[
             { href: "/", label: "Dashboard" },
-            { href: "/device-models", label: "Device Model" },
+            { href: "/device-manufacturers", label: "Device Manufacturer" },
           ]}
         />
-        <p className="mt-5 text-sm text-slate-600">Device Model tidak ditemukan.</p>
+        <p className="mt-5 text-sm text-slate-600">Device Manufacturer tidak ditemukan.</p>
       </div>
     );
   }
 
   if (!row) {
     return (
-      <div className={deviceModelFormPageClass}>
-        <p className="text-sm text-red-600">Gagal memuat Device Model.</p>
+      <div className={deviceManufacturerFormPageClass}>
+        <p className="text-sm text-red-600">Gagal memuat Device Manufacturer.</p>
       </div>
     );
   }
 
-  function setField<K extends keyof DeviceModelFormValue>(field: K, next: DeviceModelFormValue[K]) {
+  function setField<K extends keyof DeviceManufacturerFormValue>(
+    field: K,
+    next: DeviceManufacturerFormValue[K],
+  ) {
     setForm((prev) => ({ ...prev, [field]: next }));
   }
 
@@ -127,39 +124,35 @@ export default function DeviceModelDetailPage() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!capabilities?.deviceModelUpdate) return;
+    if (!capabilities?.deviceManufacturerUpdate) return;
     setError(null);
     setSuccess(null);
 
-    if (!form.manufacturerId) {
-      setError("Manufacturer wajib dipilih.");
-      return;
-    }
-    if (!form.model.trim()) {
-      setError("Model wajib diisi.");
+    if (!form.name.trim()) {
+      setError("Nama Device Manufacturer wajib diisi.");
       return;
     }
 
     try {
       await updateMutation.mutateAsync({
         id: row!.id,
-        input: buildDeviceModelUpdatePayload({ ...form, isActive }),
+        input: buildDeviceManufacturerUpdatePayload({ ...form, isActive }),
       });
       setSuccess("Perubahan tersimpan.");
       setEditing(false);
-      await modelQuery.refetch();
+      await manufacturerQuery.refetch();
     } catch (err) {
-      setError(formatDeviceModelApiError(err));
+      setError(formatDeviceManufacturerApiError(err));
     }
   }
 
   return (
-    <div className={deviceModelFormPageClass}>
+    <div className={deviceManufacturerFormPageClass}>
       <PageHeader
-        title={`${row.manufacturer.name} ${row.model}`}
+        title={row.name}
         crumbs={[
           { href: "/", label: "Dashboard" },
-          { href: "/device-models", label: "Device Model" },
+          { href: "/device-manufacturers", label: "Device Manufacturer" },
           { label: row.code },
         ]}
       />
@@ -167,7 +160,7 @@ export default function DeviceModelDetailPage() {
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
       {success ? <p className="mt-3 text-sm text-emerald-700">{success}</p> : null}
 
-      <Surface className={deviceModelFormSurfaceClass}>
+      <Surface className={deviceManufacturerFormSurfaceClass}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="font-mono text-sm text-slate-600">{row.code}</p>
           {editing ? (
@@ -181,20 +174,15 @@ export default function DeviceModelDetailPage() {
               <option value="false">Nonaktif</option>
             </select>
           ) : (
-            <DeviceModelStatusBadge isActive={row.isActive} />
+            <DeviceManufacturerStatusBadge isActive={row.isActive} />
           )}
         </div>
 
         {editing ? (
           <form onSubmit={save} className="mt-3">
-            <DeviceModelFormFields
-              value={form}
-              onChange={setField}
-              manufacturers={manufacturersQuery.data?.data ?? []}
-              manufacturersLoading={manufacturersQuery.isLoading}
-            />
+            <DeviceManufacturerFormFields value={form} onChange={setField} mode="edit" />
 
-            <div className={deviceModelFormActionsClass}>
+            <div className={deviceManufacturerFormActionsClass}>
               <Button
                 type="button"
                 variant="outline"
@@ -218,14 +206,9 @@ export default function DeviceModelDetailPage() {
                 <span className="font-mono font-medium text-slate-900">{row.code}</span>
               </DetailField>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <DetailField label="Manufacturer">
-                  <span className="font-medium text-slate-900">{row.manufacturer.name}</span>
-                </DetailField>
-                <DetailField label="Model">
-                  <span className="font-medium text-slate-900">{row.model}</span>
-                </DetailField>
-              </div>
+              <DetailField label="Nama">
+                <span className="font-medium text-slate-900">{row.name}</span>
+              </DetailField>
 
               <DetailField label="Deskripsi">
                 {row.description ? (
@@ -237,7 +220,7 @@ export default function DeviceModelDetailPage() {
             </dl>
 
             <div className="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
-              {capabilities.deviceModelUpdate ? (
+              {capabilities.deviceManufacturerUpdate ? (
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   Edit
                 </Button>

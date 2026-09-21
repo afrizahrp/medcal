@@ -4,6 +4,7 @@ import {
   Boxes,
   ClipboardList,
   Cpu,
+  Factory,
   FileText,
   FolderTree,
   Gauge,
@@ -280,6 +281,8 @@ export function NavIcon({
       return <Tags {...props} />;
     case "boxes":
       return <Boxes {...props} />;
+    case "factory":
+      return <Factory {...props} />;
     case "activity":
       return <Activity {...props} />;
     case "slidersHorizontal":

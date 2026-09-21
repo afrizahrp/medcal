@@ -9,7 +9,7 @@ export const DEVICE_MODELS_QUERY_KEY = "device-models" as const;
 
 export interface DeviceModelsQueryParams {
   search: string;
-  deviceTypeId: string;
+  manufacturerId: string;
   isActive: boolean | "";
   sortBy: string;
   sortDir: "asc" | "desc";
@@ -20,7 +20,7 @@ export interface DeviceModelsQueryParams {
 function buildSearchParams(params: DeviceModelsQueryParams): URLSearchParams {
   const qs = new URLSearchParams();
   if (params.search.trim()) qs.set("search", params.search.trim());
-  if (params.deviceTypeId) qs.set("deviceTypeId", params.deviceTypeId);
+  if (params.manufacturerId) qs.set("manufacturerId", params.manufacturerId);
   if (params.isActive !== "") qs.set("isActive", String(params.isActive));
   qs.set("sortBy", params.sortBy);
   qs.set("sortDir", params.sortDir);
@@ -34,7 +34,7 @@ export function useDeviceModels(params: DeviceModelsQueryParams) {
     queryKey: [
       DEVICE_MODELS_QUERY_KEY,
       params.search,
-      params.deviceTypeId,
+      params.manufacturerId,
       params.isActive,
       params.sortBy,
       params.sortDir,

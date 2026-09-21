@@ -136,13 +136,6 @@ export class DeviceTypesService {
         code: "DEVICE_TYPE_HAS_DEVICES",
       });
     }
-    const modelCount = await prisma.deviceModel.count({ where: { deviceTypeId: id } });
-    if (modelCount > 0) {
-      throw new BadRequestException({
-        message: "Cannot delete a device type that still has device models",
-        code: "DEVICE_TYPE_HAS_MODELS",
-      });
-    }
     const requestItemCount = await prisma.calibrationRequestItem.count({
       where: { deviceTypeId: id },
     });

@@ -10,42 +10,33 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "../../../components/management/page-header";
 import { PaginationBar, Surface, selectClassName } from "../leads/leads-ui";
-import type { DeviceManufacturerRow } from "../device-manufacturers/device-manufacturers-ui";
 
-export interface DeviceModelManufacturerRef {
+export interface DeviceManufacturerRow {
   id: string;
   code: string;
   name: string;
-}
-
-export interface DeviceModelRow {
-  id: string;
-  code: string;
-  manufacturerId: string;
-  model: string;
   description: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  manufacturer: DeviceModelManufacturerRef;
 }
 
-export interface DeviceModelListResponse {
-  data: DeviceModelRow[];
+export interface DeviceManufacturerListResponse {
+  data: DeviceManufacturerRow[];
   page: number;
   pageSize: number;
   total: number;
   totalPages: number;
 }
 
-export const deviceModelFormPageClass = "mx-auto w-full max-w-[1000px] px-4 py-5 md:px-6";
-export const deviceModelFormSurfaceClass = "mt-5 p-4 md:p-5";
-export const deviceModelFormActionsClass =
+export const deviceManufacturerFormPageClass = "mx-auto w-full max-w-[1000px] px-4 py-5 md:px-6";
+export const deviceManufacturerFormSurfaceClass = "mt-5 p-4 md:p-5";
+export const deviceManufacturerFormActionsClass =
   "mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3";
 
 export { PageHeader, Surface, selectClassName };
 
-export function DeviceModelStatusBadge({ isActive }: { isActive: boolean }) {
+export function DeviceManufacturerStatusBadge({ isActive }: { isActive: boolean }) {
   return (
     <Badge
       variant={isActive ? "default" : "secondary"}
@@ -61,20 +52,14 @@ export function DeviceModelStatusBadge({ isActive }: { isActive: boolean }) {
   );
 }
 
-export function DeviceModelFilters({
+export function DeviceManufacturerFilters({
   searchInput,
   onSearchChange,
-  manufacturerId,
-  onManufacturerChange,
-  manufacturers,
   isActive,
   onIsActiveChange,
 }: {
   searchInput: string;
   onSearchChange: (value: string) => void;
-  manufacturerId: string;
-  onManufacturerChange: (value: string) => void;
-  manufacturers: DeviceManufacturerRow[];
   isActive: boolean | "";
   onIsActiveChange: (value: boolean | "") => void;
 }) {
@@ -85,24 +70,11 @@ export function DeviceModelFilters({
         <Input
           value={searchInput}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Cari kode, manufacturer, atau model…"
+          placeholder="Cari kode atau nama manufacturer…"
           className="pl-9"
-          aria-label="Cari Device Model"
+          aria-label="Cari Device Manufacturer"
         />
       </div>
-      <select
-        value={manufacturerId}
-        onChange={(e) => onManufacturerChange(e.target.value)}
-        className={cn(selectClassName, "w-full sm:w-56")}
-        aria-label="Filter manufacturer"
-      >
-        <option value="">Semua manufacturer</option>
-        {manufacturers.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.name}
-          </option>
-        ))}
-      </select>
       <select
         value={isActive === "" ? "" : isActive ? "true" : "false"}
         onChange={(e) => {
@@ -120,31 +92,31 @@ export function DeviceModelFilters({
   );
 }
 
-export function DeviceModelTable({ models, sort }: { models: DeviceModelRow[]; sort: TableSort }) {
+export function DeviceManufacturerTable({
+  manufacturers,
+  sort,
+}: {
+  manufacturers: DeviceManufacturerRow[];
+  sort: TableSort;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[720px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
             <SortableTh field="code" label="Kode" sort={sort} />
-            <SortableTh field="manufacturer" label="Manufacturer" sort={sort} />
-            <SortableTh field="model" label="Model" sort={sort} />
+            <SortableTh field="name" label="Nama" sort={sort} />
             <th className="px-4 py-3">Deskripsi</th>
             <th className="px-4 py-3">Status</th>
             <th className="px-4 py-3"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {models.map((row) => (
+          {manufacturers.map((row) => (
             <tr key={row.id} className="hover:bg-slate-50">
               <td className="px-4 py-3 font-mono text-xs text-slate-600">{row.code}</td>
               <td className="px-4 py-3">
-                <Badge variant="secondary" className="font-medium text-slate-600">
-                  {row.manufacturer.name}
-                </Badge>
-              </td>
-              <td className="px-4 py-3">
-                <p className="font-medium text-slate-900">{row.model}</p>
+                <p className="font-medium text-slate-900">{row.name}</p>
               </td>
               <td className="px-4 py-3 text-sm text-slate-600">
                 {row.description ? (
@@ -154,10 +126,10 @@ export function DeviceModelTable({ models, sort }: { models: DeviceModelRow[]; s
                 )}
               </td>
               <td className="px-4 py-3">
-                <DeviceModelStatusBadge isActive={row.isActive} />
+                <DeviceManufacturerStatusBadge isActive={row.isActive} />
               </td>
               <td className="px-4 py-3">
-                <Link href={`/device-models/${row.id}`}>
+                <Link href={`/device-manufacturers/${row.id}`}>
                   <Button variant="ghost" size="sm">
                     Edit
                   </Button>
@@ -171,10 +143,12 @@ export function DeviceModelTable({ models, sort }: { models: DeviceModelRow[]; s
   );
 }
 
-export function DeviceModelEmptyState({ onClearFilters }: { onClearFilters?: () => void }) {
+export function DeviceManufacturerEmptyState({ onClearFilters }: { onClearFilters?: () => void }) {
   return (
     <div className="py-10 text-center">
-      <p className="text-sm text-slate-500">Belum ada Device Model yang cocok dengan filter.</p>
+      <p className="text-sm text-slate-500">
+        Belum ada Device Manufacturer yang cocok dengan filter.
+      </p>
       {onClearFilters ? (
         <Button type="button" variant="outline" className="mt-3" onClick={onClearFilters}>
           Reset filter
