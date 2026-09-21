@@ -207,6 +207,7 @@ export class MeController {
         "calibrationJob",
         "decideIdentityCorrection",
       ),
+      calibrationJobSelectDevice: hasPermission(membership.role, "calibrationJob", "selectDevice"),
       calibrationJobRecordReferenceEquipmentUsed: hasPermission(
         membership.role,
         "calibrationJob",

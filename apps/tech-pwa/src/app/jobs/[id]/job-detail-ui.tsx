@@ -34,6 +34,8 @@ import {
   type TechPhysicalCheckResult,
 } from "../../../lib/calibration/physical-check";
 import { declaredDeviceName } from "../../../lib/calibration/job-display";
+import type { TechDeviceCandidate } from "../../../lib/calibration/device-lookup";
+import { EmptyState, ErrorState, LoadingState } from "../../../components/ui/state-views";
 import { RecordedReferenceEquipmentList } from "./reference-equipment/reference-equipment-ui";
 import { PhysicalCheckStatusRow } from "./physical-check/physical-check-ui";
 
@@ -116,6 +118,92 @@ export function ObservedIdentitySection({ job }: { job: TechCalibrationJob }) {
   return (
     <Section title="Observasi Teknisi">
       <SectionRow label="Serial" value={job.technicianObservedSerial ?? "—"} />
+    </Section>
+  );
+}
+
+/**
+ * Technician Device Lookup (2026-09-21). When job.device is already known,
+ * shows the same read-only Kode/Serial view this section always has. When
+ * deviceId is still null and the technician is eligible, shows a
+ * customer-scoped search-and-select control instead — deliberately rendering
+ * only brand/model/type + Serial No per candidate (never the internal id or
+ * business code), per the MoM decision that a technician never sees/enters
+ * Device ID during lookup. Once resolved/read-only, showing the code is fine
+ * (existing convention elsewhere) — it's only excluded from the *lookup* list.
+ */
+export function AssignedDeviceSection({
+  job,
+  canSelect,
+  search,
+  onSearchChange,
+  candidates,
+  candidatesPending,
+  candidatesError,
+  onRetryCandidates,
+  onSelectDevice,
+  selectPending,
+  selectError,
+}: {
+  job: TechCalibrationJob;
+  canSelect: boolean;
+  search: string;
+  onSearchChange: (value: string) => void;
+  candidates: TechDeviceCandidate[];
+  candidatesPending: boolean;
+  candidatesError: string | null;
+  onRetryCandidates: () => void;
+  onSelectDevice: (deviceId: string) => void;
+  selectPending: boolean;
+  selectError: string | null;
+}) {
+  return (
+    <Section title="Alat Terpasang Saat Ini">
+      {job.device ? (
+        <>
+          <SectionRow label="Kode" value={job.device.code ?? "—"} />
+          <SectionRow label="Serial" value={job.device.serialNumber ?? "—"} />
+        </>
+      ) : canSelect ? (
+        <div className="flex flex-col gap-3">
+          <input
+            type="search"
+            inputMode="search"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Cari nama/tipe/model/serial alat…"
+            className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm"
+          />
+          {candidatesPending ? (
+            <LoadingState label="Mencari alat…" />
+          ) : candidatesError ? (
+            <ErrorState message={candidatesError} onRetry={onRetryCandidates} />
+          ) : candidates.length === 0 ? (
+            <EmptyState title="Tidak ada alat yang cocok" subtitle="Coba kata kunci lain." />
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {candidates.map((d) => (
+                <li key={d.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelectDevice(d.id)}
+                    disabled={selectPending}
+                    className="w-full rounded-lg border border-slate-200 p-2.5 text-left active:bg-slate-50 disabled:opacity-50"
+                  >
+                    <p className="text-sm font-medium text-slate-900">
+                      {[d.brand, d.model].filter(Boolean).join(" ") || d.deviceType?.name || "—"}
+                    </p>
+                    <p className="text-xs text-slate-500">Serial: {d.serialNumber ?? "—"}</p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {selectError ? <p className="text-xs text-red-600">{selectError}</p> : null}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500">Alat belum diidentifikasi.</p>
+      )}
     </Section>
   );
 }

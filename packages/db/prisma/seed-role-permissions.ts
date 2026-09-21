@@ -155,6 +155,10 @@ const PRESERVED_BASELINE: GrantRow[] = [
   // observed serial / AKD-AKL — TECHNICIAN + TECHNICIAN_MANAGER, mirroring
   // escalateIdentity. decideIdentityCorrection (APPROVE/REJECT) is
   // TECHNICIAN_MANAGER-only, mirroring approveIdentity.
+  // Exception (2026-09-21, Technician Device Lookup): selectDevice below is a
+  // separate, BAI-independent path for first-time resolution of a still-null
+  // deviceId only — submitIdentityCorrection remains the only way to change a
+  // device that is already set.
   { role: "TECHNICIAN", resource: "calibrationJob", action: "read" },
   // Minimal "Mulai Kalibrasi" start action (2026-09-06): PENDING → IN_PROGRESS +
   // startedAt, the single gate unblocking reference-equipment recording. Granted
@@ -162,12 +166,18 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "TECHNICIAN", resource: "calibrationJob", action: "start" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "escalateIdentity" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "submitIdentityCorrection" },
+  // selectDevice (2026-09-21, Technician Device Lookup): first-time resolution
+  // of a still-null deviceId via customer-scoped Device search — TECHNICIAN +
+  // TECHNICIAN_MANAGER, both operating the same tech-pwa job-detail screen.
+  // Independent of the Identity Correction BA grants above.
+  { role: "TECHNICIAN", resource: "calibrationJob", action: "selectDevice" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "read" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "start" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "escalateIdentity" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "approveIdentity" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "submitIdentityCorrection" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "decideIdentityCorrection" },
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "selectDevice" },
   // JobReferenceEquipmentUsed (2026-09-05): recordReferenceEquipmentUsed is the
   // on-site actor recording which confirmed WorkOrderEquipment unit(s) were used
   // — TECHNICIAN + TECHNICIAN_MANAGER, mirroring submitIdentityCorrection.
@@ -300,6 +310,7 @@ const SUPERADMIN_PERMISSION_CATALOG: Record<string, readonly string[]> = {
     "approveIdentity",
     "submitIdentityCorrection",
     "decideIdentityCorrection",
+    "selectDevice",
     "recordReferenceEquipmentUsed",
     "overrideReferenceEquipmentValidity",
     "submitReferenceEquipmentApproval",

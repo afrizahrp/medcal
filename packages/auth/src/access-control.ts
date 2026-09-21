@@ -114,6 +114,10 @@ const ac = createAccessControl({
   //   resolution AND correction) plus the observed serial / AKD-AKL. Replaces
   //   the removed match-only assignDevice action. Also gates uploading the BA's
   //   signature images (see the IDENTITY_CORRECTION FileOwnerPolicy).
+  //   Exception (2026-09-21, Technician Device Lookup): first-time resolution
+  //   of a still-null deviceId can also happen via calibrationJob:selectDevice
+  //   (see that action below) — a separate, BAI-independent path. This action
+  //   remains the only way to CHANGE a device that is already set.
   // decideIdentityCorrection: TECHNICIAN_MANAGER APPROVE/REJECT of that BA (sole
   //   approver — mirrors approveIdentity; not granted to ADMIN/SUPERVISOR).
   // recordReferenceEquipmentUsed: on-site actor records which Equipment unit(s)
@@ -142,6 +146,13 @@ const ac = createAccessControl({
     "approveIdentity",
     "submitIdentityCorrection",
     "decideIdentityCorrection",
+    // selectDevice: Technician Device Lookup (2026-09-21) — a NEW, separate
+    // path for the FIRST-TIME resolution of a job's deviceId when the WO/SPK
+    // fan-out left it null (qty>1 lines, MoM #6 revision). Independent of the
+    // Identity Correction BA workflow above: does not replace/change
+    // submitIdentityCorrection, and is refused once deviceId is already set —
+    // changing an already-bound device still requires a BA.
+    "selectDevice",
     "recordReferenceEquipmentUsed",
     "overrideReferenceEquipmentValidity",
     "submitReferenceEquipmentApproval",

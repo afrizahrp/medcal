@@ -15,6 +15,7 @@ import {
   buildCalibrationJobActionSignals,
   jobNeedsAction,
   type CalibrationJobActionSignals,
+  type CalibrationJobDeviceCandidatesQuery,
   type CalibrationJobEscalateIdentityInput,
   type CalibrationJobIdentityDecisionInput,
   type CalibrationJobListQuery,
@@ -26,6 +27,7 @@ import {
 } from "@medcal/shared";
 
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
+import { DevicesService, type DeviceListResult } from "../devices/devices.service";
 import { FilesService } from "../files/files.service";
 import {
   renderIdentityCorrectionPdf,
@@ -635,7 +637,10 @@ export interface IdentityCorrectionSubmitResult {
 @Injectable()
 export class CalibrationJobsService {
 
-  constructor(@Inject(FilesService) private readonly files: FilesService) {}
+  constructor(
+    @Inject(FilesService) private readonly files: FilesService,
+    @Inject(DevicesService) private readonly devicesService: DevicesService,
+  ) {}
 
   private buildListWhere(
     companyId: string,
@@ -1280,6 +1285,61 @@ export class CalibrationJobsService {
     }
   }
 
+  /**
+   * Technician Device Lookup (2026-09-21) — sets CalibrationJob.deviceId for
+   * the FIRST TIME, via calibrationJob:selectDevice, independent of the
+   * Identity Correction BA workflow (see the updated comment on
+   * submitIdentityCorrection in access-control.ts). Refuses to run once
+   * deviceId is already set — changing an already-bound device still requires
+   * an Identity Correction BA (MoM #6 invariant preserved).
+   */
+  async selectDevice(
+    companyId: string,
+    jobId: string,
+    deviceId: string,
+  ): Promise<CalibrationJobDetail> {
+    const job = await this.findOne(companyId, jobId);
+    this.assertIdentityGateOpen(job.status);
+
+    if (job.deviceId !== null) {
+      throw new ConflictException({
+        message:
+          "This job's device has already been selected. Submit an Identity Correction BA to change it.",
+        code: "CALIBRATION_JOB_DEVICE_ALREADY_SET",
+        deviceId: job.deviceId,
+      });
+    }
+
+    const device = await prisma.device.findFirst({
+      where: { id: deviceId, companyId },
+      select: { id: true, customerId: true },
+    });
+    if (!device) {
+      throw new NotFoundException({ message: "Device not found", code: "DEVICE_NOT_FOUND" });
+    }
+    if (device.customerId !== job.workOrder.customerId) {
+      throw new BadRequestException({
+        message: "The selected device does not belong to this job's customer",
+        code: "CALIBRATION_JOB_DEVICE_CUSTOMER_MISMATCH",
+      });
+    }
+
+    try {
+      await prisma.calibrationJob.update({ where: { id: jobId }, data: { deviceId } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException({
+          message: "Another job on this Work Order is already bound to that device",
+          code: "CALIBRATION_JOB_DEVICE_ALREADY_BOUND_TO_WORK_ORDER",
+          deviceId,
+        });
+      }
+      throw error;
+    }
+
+    return this.findOne(companyId, jobId);
+  }
+
   // ───────────────────────────────────────────────────────────────────────────
   // Identity Correction — Berita Acara Identitas
   // ───────────────────────────────────────────────────────────────────────────
@@ -1797,6 +1857,25 @@ export class CalibrationJobsService {
   ): Promise<JobReferenceEquipmentCandidate[]> {
     const job = await this.loadReferenceEquipmentSource(companyId, jobId);
     return buildReferenceEquipmentCandidates(job, job.startedAt ?? new Date());
+  }
+
+  /**
+   * Technician Device Lookup (2026-09-21) — customer-scoped Device search for
+   * a job whose deviceId is still null. Reuses DevicesService.findAll's
+   * where-clause/search/pagination verbatim; customerId is forced from
+   * job.workOrder.customerId so a technician can never search another
+   * customer's Devices.
+   */
+  async getDeviceCandidates(
+    companyId: string,
+    jobId: string,
+    query: CalibrationJobDeviceCandidatesQuery,
+  ): Promise<DeviceListResult> {
+    const job = await this.findOne(companyId, jobId);
+    return this.devicesService.findAll(companyId, {
+      ...query,
+      customerId: job.workOrder.customerId,
+    });
   }
 
   async listReferenceEquipmentUsed(

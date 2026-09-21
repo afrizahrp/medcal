@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuthz } from "@medcal/auth/client";
 import { Screen } from "../../../components/layout/screen";
@@ -9,8 +10,10 @@ import { shouldShowLengkapiKontrolAlatCta } from "../../../lib/calibration/kontr
 import { LoadingState, ErrorState } from "../../../components/ui/state-views";
 import { formatApiError } from "../../../lib/api-errors";
 import {
+  canSelectDevice,
   canSubmitIdentityCorrection,
 } from "../../../lib/calibration/identity-gate";
+import { useDebouncedValue } from "../../../hooks/use-debounced-value";
 import {
   isReferenceEquipmentApprovalPending,
 } from "../../../lib/calibration/reference-equipment";
@@ -40,6 +43,7 @@ import {
   useSubmitForReview,
 } from "./use-job-query";
 import { useReferenceEquipmentUsed, useSubmitReferenceEquipmentApproval } from "./use-reference-equipment-query";
+import { useDeviceCandidates, useSelectDevice } from "./use-device-lookup-query";
 import {
   useMeasurementParameters,
   useMeasurementResults,
@@ -49,6 +53,7 @@ import {
   usePhysicalCheckResults,
 } from "./physical-check/use-physical-check-query";
 import {
+  AssignedDeviceSection,
   CorrectionsListSection,
   DeclaredIdentitySection,
   IdentityIncompleteWarning,
@@ -84,6 +89,17 @@ export default function JobDetailPage() {
   const resumeMutation = useResumeAfterRework(id);
   const completeMutation = useCompleteJob(id);
   const submitRefApprovalMutation = useSubmitReferenceEquipmentApproval(id);
+  const [deviceSearch, setDeviceSearch] = useState("");
+  const debouncedDeviceSearch = useDebouncedValue(deviceSearch, 500);
+  const showDeviceLookup =
+    (jobQuery.data?.deviceId ?? null) === null &&
+    Boolean(capabilities?.calibrationJobSelectDevice) &&
+    (jobQuery.data ? canSelectDevice(jobQuery.data) : false);
+  const deviceCandidatesQuery = useDeviceCandidates(
+    showDeviceLookup ? id : "",
+    debouncedDeviceSearch,
+  );
+  const selectDeviceMutation = useSelectDevice(id);
 
   if (jobQuery.isPending) {
     return (
@@ -282,6 +298,27 @@ export default function JobDetailPage() {
       ) : null}
       <DeclaredIdentitySection job={job} />
       <ObservedIdentitySection job={job} />
+      <AssignedDeviceSection
+        job={job}
+        canSelect={showDeviceLookup}
+        search={deviceSearch}
+        onSearchChange={setDeviceSearch}
+        candidates={deviceCandidatesQuery.data?.data ?? []}
+        candidatesPending={showDeviceLookup && deviceCandidatesQuery.isPending}
+        candidatesError={
+          deviceCandidatesQuery.isError
+            ? formatApiError(deviceCandidatesQuery.error, "Gagal memuat daftar alat.")
+            : null
+        }
+        onRetryCandidates={() => void deviceCandidatesQuery.refetch()}
+        onSelectDevice={(deviceId) => selectDeviceMutation.mutate(deviceId)}
+        selectPending={selectDeviceMutation.isPending}
+        selectError={
+          selectDeviceMutation.isError
+            ? formatApiError(selectDeviceMutation.error, "Gagal memilih alat.")
+            : null
+        }
+      />
       {referenceEquipmentQuery.isPending ? (
         <LoadingState label="Memuat alat referensi…" />
       ) : referenceEquipmentQuery.isError ? (

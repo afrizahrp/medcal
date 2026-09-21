@@ -1,5 +1,6 @@
 import { Inject, Module, type OnModuleInit } from "@nestjs/common";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
+import { DevicesModule } from "../devices/devices.module";
 import { FilesModule } from "../files/files.module";
 import { FileOwnerPolicyRegistry } from "../files/owner-policy";
 import { CalibrationJobsController } from "./calibration-jobs.controller";
@@ -11,7 +12,7 @@ import { KontrolAlatService } from "./kontrol-alat.service";
 import { LkDownloadService } from "./lk-download.service";
 
 @Module({
-  imports: [FilesModule],
+  imports: [FilesModule, DevicesModule],
   controllers: [CalibrationJobsController],
   providers: [
     CalibrationJobsService,

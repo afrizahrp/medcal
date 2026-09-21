@@ -814,6 +814,23 @@ export const calibrationJobAssignDeviceSchema = z.object({
 export type CalibrationJobAssignDeviceInput = z.infer<typeof calibrationJobAssignDeviceSchema>;
 
 // -----------------------------------------------------------------------------
+// Calibration Job — Device Lookup & Selection (Technician Device Lookup, 2026-09-21)
+// -----------------------------------------------------------------------------
+// A NEW, BAI-independent path — separate from the Identity Correction workflow
+// below. It exists only to finish a FIRST-TIME linkage that the WO/SPK fan-out
+// left unresolved for qty>1 lines (a known Master Device from the commercial
+// chain, just not yet bound to this specific physical job/unit) — it is not a
+// customer-acknowledged correction of an observed discrepancy, so it does not
+// require the Identity Correction BA's signature/KAN-evidence trail. Refused
+// once deviceId is already set: changing an already-bound device still goes
+// through Identity Correction.
+export const calibrationJobSelectDeviceSchema = z.object({
+  deviceId: z.string().min(1),
+});
+
+export type CalibrationJobSelectDeviceInput = z.infer<typeof calibrationJobSelectDeviceSchema>;
+
+// -----------------------------------------------------------------------------
 // Calibration Job — Identity Correction (Berita Acara Identitas)
 // -----------------------------------------------------------------------------
 // Sole path for correcting the technician-observed Brand / Model / Serial No /
@@ -2289,6 +2306,23 @@ export const DEVICE_SORTABLE_FIELDS = [
   "serialNumber",
   "status",
 ] as const;
+
+/**
+ * GET /calibration-jobs/:id/device-candidates query params — a slice of
+ * deviceListQuerySchema. customerId/deviceTypeId/status are deliberately
+ * excluded: the service derives customerId server-side from the job's own
+ * Work Order, so a technician can never widen the search to another
+ * customer's Devices (Technician Device Lookup, 2026-09-21).
+ */
+export const calibrationJobDeviceCandidatesQuerySchema = deviceListQuerySchema.pick({
+  search: true,
+  page: true,
+  pageSize: true,
+});
+
+export type CalibrationJobDeviceCandidatesQuery = z.infer<
+  typeof calibrationJobDeviceCandidatesQuerySchema
+>;
 
 /** PATCH /devices/:id body — deviceTypeId remains required when supplied (never null). */
 export const deviceUpdateSchema = z.object({

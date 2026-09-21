@@ -29,3 +29,11 @@ export function canEscalateIdentity(job: {
 export function canSubmitIdentityCorrection(job: { status: CalibrationJobStatus }): boolean {
   return !isIdentityGateLocked(job);
 }
+
+/**
+ * Technician Device Lookup (2026-09-21) — same boundary as identity
+ * correction: a first-time device pick also freezes once the gate closes.
+ */
+export function canSelectDevice(job: { status: CalibrationJobStatus }): boolean {
+  return !isIdentityGateLocked(job);
+}

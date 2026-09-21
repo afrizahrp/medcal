@@ -18,9 +18,11 @@ import {
 import type { Request } from "express";
 import type { MembershipRole } from "@medcal/db";
 import {
+  calibrationJobDeviceCandidatesQuerySchema,
   calibrationJobEscalateIdentitySchema,
   calibrationJobIdentityDecisionSchema,
   calibrationJobListQuerySchema,
+  calibrationJobSelectDeviceSchema,
   identityCorrectionDecisionSchema,
   identityCorrectionSubmitSchema,
   jobReferenceEquipmentApprovalDecisionSchema,
@@ -55,6 +57,7 @@ import {
   type IdentityCorrectionSubmitResult,
   type JobMeasurementParametersResult,
 } from "./calibration-jobs.service";
+import type { DeviceListResult } from "../devices/devices.service";
 import type {
   JobReferenceEquipmentApprovalDetail,
   JobReferenceEquipmentCandidate,
@@ -241,6 +244,48 @@ export class CalibrationJobsController {
   @RequirePermission("calibrationJob", "submitIdentityCorrection")
   async assignDevice(): Promise<never> {
     return this.service.assignDeviceRemoved();
+  }
+
+  /**
+   * Technician Device Lookup (2026-09-21). Deliberately a different route from
+   * the retired assign-device above: this is a NEW, BAI-independent path for
+   * first-time resolution of a still-null deviceId, not a resurrection of that
+   * removed match-only action.
+   */
+  @Get(":id/device-candidates")
+  @RequirePermission("calibrationJob", "read")
+  async deviceCandidates(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Query() rawQuery: unknown,
+  ): Promise<DeviceListResult> {
+    const parsed = calibrationJobDeviceCandidatesQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid device candidates query",
+        code: "INVALID_CALIBRATION_JOB_DEVICE_CANDIDATES_QUERY",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.getDeviceCandidates(companyId, id, parsed.data);
+  }
+
+  @Post(":id/select-device")
+  @RequirePermission("calibrationJob", "selectDevice")
+  async selectDevice(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<CalibrationJobDetail> {
+    const parsed = calibrationJobSelectDeviceSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid device selection payload",
+        code: "INVALID_CALIBRATION_JOB_SELECT_DEVICE",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.selectDevice(companyId, id, parsed.data.deviceId);
   }
 
   @Get(":id/identity-corrections")

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   GoneException,
   NotFoundException,
@@ -14,6 +15,7 @@ import { QuotationsService } from "../quotations/quotations.service";
 import { PurchaseOrdersService } from "../purchase-orders/purchase-orders.service";
 import { WorkOrdersService } from "../work-orders/work-orders.service";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
+import type { FilesService } from "../files/files.service";
 import { DevicesService } from "../devices/devices.service";
 import { DeviceCalibrationParametersService } from "../device-calibration-parameters/device-calibration-parameters.service";
 import { CalibrationJobsController } from "./calibration-jobs.controller";
@@ -36,10 +38,13 @@ vi.mock("@medcal/auth", async () => {
   return { ...actual, auth: { api: { getSession: getSessionMock } } };
 });
 
-const calibrationJobsService = new CalibrationJobsService();
+const devicesService = new DevicesService();
+const calibrationJobsService = new CalibrationJobsService(
+  undefined as unknown as FilesService,
+  devicesService,
+);
 const measurementResultsService = new MeasurementResultsService();
 const deviceCalibrationParametersService = new DeviceCalibrationParametersService();
-const devicesService = new DevicesService();
 const calibrationRequestsService = new CalibrationRequestsService();
 const quotationsService = new QuotationsService();
 const purchaseOrdersService = new PurchaseOrdersService();
@@ -3276,6 +3281,119 @@ describe("CalibrationJobsService — quality review REWORK lifecycle", () => {
   });
 });
 
+describe("CalibrationJobsService — Technician Device Lookup (selectDevice)", () => {
+  async function createDevice(
+    customerId: string,
+    deviceTypeId: string,
+    fields: { brand?: string; model?: string; serialNumber?: string } = {},
+  ) {
+    const device = await prisma.device.create({
+      data: {
+        companyId: realCompanyId,
+        code: `DEV/CJ/${randomUUID().slice(0, 8)}`,
+        customerId,
+        deviceTypeId,
+        brand: fields.brand ?? "Omron",
+        model: fields.model ?? "HEM-7121",
+        serialNumber: fields.serialNumber ?? randomUUID().slice(0, 8),
+      },
+    });
+    return device;
+  }
+
+  it("getDeviceCandidates returns only the job's customer's devices matching search", async () => {
+    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    const otherCustomer = await createTestCustomer(realCompanyId);
+    const matching = await createDevice(customerId, deviceTypeId, { brand: "UniqueBrandXYZ" });
+    await createDevice(otherCustomer.id, deviceTypeId, { brand: "UniqueBrandXYZ" });
+
+    const result = await calibrationJobsService.getDeviceCandidates(realCompanyId, jobs[0]!.id, {
+      search: "UniqueBrandXYZ",
+    });
+
+    expect(result.data.map((d) => d.id)).toEqual([matching.id]);
+  });
+
+  it("getDeviceCandidates returns an empty result when nothing matches", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+
+    const result = await calibrationJobsService.getDeviceCandidates(realCompanyId, jobs[0]!.id, {
+      search: "NoSuchDeviceAtAll",
+    });
+
+    expect(result.data).toEqual([]);
+  });
+
+  it("getDeviceCandidates 404s when the job does not exist in the company", async () => {
+    await expect(
+      calibrationJobsService.getDeviceCandidates(realCompanyId, "not-a-real-job-id", {}),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("selectDevice persists deviceId and returns the updated CalibrationJobDetail with device populated", async () => {
+    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    const device = await createDevice(customerId, deviceTypeId, { serialNumber: "9998887" });
+
+    const result = await calibrationJobsService.selectDevice(realCompanyId, jobs[0]!.id, device.id);
+
+    expect(result.deviceId).toBe(device.id);
+    expect(result.device?.serialNumber).toBe("9998887");
+    const persisted = await prisma.calibrationJob.findUniqueOrThrow({ where: { id: jobs[0]!.id } });
+    expect(persisted.deviceId).toBe(device.id);
+  });
+
+  it("selectDevice rejects re-selection once deviceId is already set (409)", async () => {
+    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    const device = await createDevice(customerId, deviceTypeId);
+    const other = await createDevice(customerId, deviceTypeId);
+    await calibrationJobsService.selectDevice(realCompanyId, jobs[0]!.id, device.id);
+
+    await expect(
+      calibrationJobsService.selectDevice(realCompanyId, jobs[0]!.id, other.id),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("selectDevice rejects a deviceId belonging to a different customer (400)", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const otherCustomer = await createTestCustomer(realCompanyId);
+    const foreignDeviceTypeId = await createDeviceTypeId();
+    const device = await createDevice(otherCustomer.id, foreignDeviceTypeId);
+
+    await expect(
+      calibrationJobsService.selectDevice(realCompanyId, jobs[0]!.id, device.id),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("selectDevice 404s on an unknown/foreign-company deviceId", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+
+    await expect(
+      calibrationJobsService.selectDevice(realCompanyId, jobs[0]!.id, "not-a-real-device-id"),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("selectDevice refuses once the job has passed the identity gate (400)", async () => {
+    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    const device = await createDevice(customerId, deviceTypeId);
+    await prisma.calibrationJob.update({ where: { id: jobs[0]!.id }, data: { status: "SUBMITTED" } });
+
+    await expect(
+      calibrationJobsService.selectDevice(realCompanyId, jobs[0]!.id, device.id),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("selectDevice surfaces a 409 when @@unique([workOrderId, deviceId]) fires (a realistic qty>1 fan-out scenario)", async () => {
+    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
+    expect(jobs).toHaveLength(2);
+    const device = await createDevice(customerId, deviceTypeId);
+    await calibrationJobsService.selectDevice(realCompanyId, jobs[0]!.id, device.id);
+
+    await expect(
+      calibrationJobsService.selectDevice(realCompanyId, jobs[1]!.id, device.id),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
 describe("CalibrationJobsController RBAC (guard chain)", () => {
   const guard = new CompanyRoleGuard(new Reflector());
 
@@ -3380,6 +3498,36 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     getSessionMock.mockResolvedValueOnce({ user: { id: finance.id, email: "f@x.co" } });
 
     await expect(guard.canActivate(contextFor("submitIdentityCorrection"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("allows a TECHNICIAN through the device-candidates endpoint", async () => {
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "dc-t@x.co" } });
+
+    await expect(guard.canActivate(contextFor("deviceCandidates"))).resolves.toBe(true);
+  });
+
+  it("allows a TECHNICIAN to select a device", async () => {
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "sd-t@x.co" } });
+
+    await expect(guard.canActivate(contextFor("selectDevice"))).resolves.toBe(true);
+  });
+
+  it("allows a TECHNICIAN_MANAGER to select a device", async () => {
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "sd-m@x.co" } });
+
+    await expect(guard.canActivate(contextFor("selectDevice"))).resolves.toBe(true);
+  });
+
+  it("blocks a FINANCE user from selecting a device (403)", async () => {
+    const finance = await makeMember(realCompanyId, "FINANCE");
+    getSessionMock.mockResolvedValueOnce({ user: { id: finance.id, email: "sd-f@x.co" } });
+
+    await expect(guard.canActivate(contextFor("selectDevice"))).rejects.toBeInstanceOf(
       ForbiddenException,
     );
   });
