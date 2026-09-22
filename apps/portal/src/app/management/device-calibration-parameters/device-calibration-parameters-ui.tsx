@@ -236,7 +236,7 @@ export function DeviceCalibrationParameterSearchBar({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Cari device name atau parameter…"
-          className="pl-9"
+          className="pl-9 placeholder:text-xs placeholder:font-normal placeholder:text-slate-400/70"
           aria-label="Cari device name atau calibration parameter"
         />
       </div>

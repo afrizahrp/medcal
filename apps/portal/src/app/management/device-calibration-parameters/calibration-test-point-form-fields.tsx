@@ -18,7 +18,8 @@ export {
   type CalibrationTestPointFormValue,
 } from "./calibration-test-point-form-utils";
 
-const fieldClass = "mt-1 w-full";
+const fieldClass =
+  "mt-1 w-full placeholder:text-xs placeholder:font-normal placeholder:text-slate-400/70";
 const gridClass = "grid gap-4 sm:grid-cols-2";
 
 export interface CalibrationTestPointFormFieldsProps {

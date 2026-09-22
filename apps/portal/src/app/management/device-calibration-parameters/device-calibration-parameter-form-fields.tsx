@@ -16,7 +16,8 @@ import type {
 import type { DeviceTypeRow } from "../device-types/device-types-ui";
 import type { UomRow } from "../uoms/uoms-ui";
 
-const fieldClass = "mt-1 w-full";
+const fieldClass =
+  "mt-1 w-full placeholder:text-xs placeholder:font-normal placeholder:text-slate-400/70";
 const gridClass = "grid gap-4 sm:grid-cols-2";
 
 export interface DeviceCalibrationParameterFormValue {
@@ -470,7 +471,9 @@ export function DeviceCalibrationParameterFormFields({
             Cara pengisian
           </label>
           {entryStyleLocked ? (
-            <p className={`${fieldClass} rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600`}>
+            <p
+              className={`${fieldClass} rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600`}
+            >
               Logger summary (grid dengan lampiran) — tidak dapat diubah dari sini.
             </p>
           ) : (
@@ -478,7 +481,10 @@ export function DeviceCalibrationParameterFormFields({
               id="entryStyle"
               value={value.entryStyle}
               onChange={(e) =>
-                onChange("entryStyle", e.target.value as DeviceCalibrationParameterFormValue["entryStyle"])
+                onChange(
+                  "entryStyle",
+                  e.target.value as DeviceCalibrationParameterFormValue["entryStyle"],
+                )
               }
               className={`${selectClassName} ${fieldClass}`}
             >
@@ -493,7 +499,10 @@ export function DeviceCalibrationParameterFormFields({
         </div>
 
         <div>
-          <label htmlFor="allowsRepeatedReadings" className="block text-sm font-medium text-slate-700">
+          <label
+            htmlFor="allowsRepeatedReadings"
+            className="block text-sm font-medium text-slate-700"
+          >
             Ulangan
           </label>
           <select
@@ -506,9 +515,9 @@ export function DeviceCalibrationParameterFormFields({
             <option value="false">Satu kali saja</option>
           </select>
           <p className="mt-1 text-xs text-slate-500">
-            &quot;Satu kali saja&quot; menyembunyikan tombol &quot;+ Tambah ulangan&quot; di Tech-PWA
-            untuk titik ukur parameter ini (mis. Suhu Ruangan → Awal/Akhir). Bacaan yang sudah
-            tersimpan tetap tampil apa pun pilihannya.
+            &quot;Satu kali saja&quot; menyembunyikan tombol &quot;+ Tambah ulangan&quot; di
+            Tech-PWA untuk titik ukur parameter ini (mis. Suhu Ruangan → Awal/Akhir). Bacaan yang
+            sudah tersimpan tetap tampil apa pun pilihannya.
           </p>
         </div>
 
