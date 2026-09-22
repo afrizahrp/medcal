@@ -5,6 +5,7 @@ import {
   canEscalateIdentity,
   canSubmitIdentityCorrection,
   canDecideQualityReview,
+  canReviseJobWorksheet,
   canReplaceReferenceEquipment,
   isReferenceEquipmentApprovalPending,
   calibrationJobActionFocusHref,
@@ -465,5 +466,15 @@ describe("reference equipment replace vs pending approval", () => {
         referenceEquipmentApprovals: [{ status: "PENDING_REVIEW" }],
       }),
     ).toBe(false);
+  });
+});
+
+describe("canReviseJobWorksheet", () => {
+  it("allows IN_PROGRESS and REWORK only", () => {
+    expect(canReviseJobWorksheet({ status: "IN_PROGRESS" })).toBe(true);
+    expect(canReviseJobWorksheet({ status: "REWORK" })).toBe(true);
+    expect(canReviseJobWorksheet({ status: "PENDING" })).toBe(false);
+    expect(canReviseJobWorksheet({ status: "SUBMITTED" })).toBe(false);
+    expect(canReviseJobWorksheet({ status: "ACCEPTED_BY_QA" })).toBe(false);
   });
 });

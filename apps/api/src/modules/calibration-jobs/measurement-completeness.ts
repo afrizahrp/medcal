@@ -43,6 +43,12 @@ export function evaluateMeasurementCompleteness(input: {
     measuredValue: { toString(): string } | string | number | null;
     measuredText: string | null;
   }[];
+  /**
+   * Parameter ids that had named snapshot rows at freeze (including later
+   * excluded rows). Prevents Pattern B → Pattern A fallback when every named
+   * point of a parameter is excluded from the worksheet.
+   */
+  frozenPatternBParameterIds?: readonly string[];
 }): MeasurementCompletenessResult {
   const requiredByParameter = new Map<string, string[]>();
   for (const parameterId of input.eligibleParameterIds) {
@@ -65,9 +71,11 @@ export function evaluateMeasurementCompleteness(input: {
     filledNamed.add(`${row.deviceCalibrationParameterId}:${row.calibrationTestPointId}`);
   }
 
+  const patternB = new Set(input.frozenPatternBParameterIds ?? []);
   const gaps: MeasurementCompletenessParameterGap[] = [];
   for (const [parameterId, sourceIds] of requiredByParameter) {
     if (sourceIds.length === 0) {
+      if (patternB.has(parameterId)) continue;
       if (!filledUnnamed.has(parameterId)) {
         gaps.push({ parameterId, missingTestPointIds: [] });
       }

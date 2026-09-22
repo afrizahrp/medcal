@@ -27,6 +27,7 @@ import {
   identityCorrectionSubmitSchema,
   jobReferenceEquipmentApprovalDecisionSchema,
   jobReferenceEquipmentReplaceSchema,
+  jobWorksheetRevisionSchema,
   lkDownloadReauthSchema,
   measurementResultBatchCreateSchema,
   measurementResultCreateSchema,
@@ -56,6 +57,7 @@ import {
   type IdentityCorrectionDetail,
   type IdentityCorrectionSubmitResult,
   type JobMeasurementParametersResult,
+  type JobWorksheetSnapshotResult,
 } from "./calibration-jobs.service";
 import type { DeviceListResult } from "../devices/devices.service";
 import type {
@@ -459,6 +461,34 @@ export class CalibrationJobsController {
     @Param("id") id: string,
   ): Promise<JobMeasurementParametersResult> {
     return this.service.listMeasurementParameters(companyId, id);
+  }
+
+  @Get(":id/worksheet-snapshot")
+  @RequirePermission("calibrationJob", "read")
+  async listWorksheetSnapshot(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<JobWorksheetSnapshotResult> {
+    return this.service.listWorksheetSnapshot(companyId, id);
+  }
+
+  @Post(":id/worksheet-revisions")
+  @RequirePermission("calibrationJob", "reviseWorksheet")
+  async reviseWorksheet(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<JobWorksheetSnapshotResult> {
+    const parsed = jobWorksheetRevisionSchema.safeParse(rawBody ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid worksheet revision payload",
+        code: "INVALID_JOB_WORKSHEET_REVISION",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.reviseWorksheet(companyId, id, userId, parsed.data);
   }
 
   @Get(":id/measurement-results")

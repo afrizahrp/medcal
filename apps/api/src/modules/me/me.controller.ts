@@ -257,6 +257,11 @@ export class MeController {
         "calibrationJob",
         "decideQualityReview",
       ),
+      calibrationJobReviseWorksheet: hasPermission(
+        membership.role,
+        "calibrationJob",
+        "reviseWorksheet",
+      ),
       calibrationJobResumeAfterRework: hasPermission(
         membership.role,
         "calibrationJob",

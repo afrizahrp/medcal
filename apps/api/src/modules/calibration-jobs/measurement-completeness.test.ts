@@ -309,4 +309,28 @@ describe("evaluateMeasurementCompleteness", () => {
       }).complete,
     ).toBe(true);
   });
+
+  it("excluding every Pattern B point does not fall back to Pattern A unnamed reading", () => {
+    expect(
+      evaluateMeasurementCompleteness({
+        eligibleParameterIds: [paramB],
+        snapshotRows: [],
+        frozenPatternBParameterIds: [paramB],
+        results: [],
+      }).complete,
+    ).toBe(true);
+  });
+
+  it("remaining Pattern B points stay required after a sibling is excluded", () => {
+    const verdict = evaluateMeasurementCompleteness({
+      eligibleParameterIds: [paramB],
+      snapshotRows: [{ deviceCalibrationParameterId: paramB, sourceCalibrationTestPointId: awal }],
+      frozenPatternBParameterIds: [paramB],
+      results: [],
+    });
+    expect(verdict).toEqual({
+      complete: false,
+      parameters: [{ parameterId: paramB, missingTestPointIds: [awal] }],
+    });
+  });
 });

@@ -56,6 +56,7 @@ import {
   canSubmitIdentityCorrection,
   isReferenceEquipmentApprovalPending,
   canDecideQualityReview,
+  canReviseJobWorksheet,
   correctionMissingImage,
   formatCalibrationJobApiError,
   formatMeasurementHasilDisplay,
@@ -104,6 +105,7 @@ import {
   useMeasurementResults,
   type PortalMeasurementResult,
 } from "../use-measurement-results-query";
+import { WorksheetRevisionPanel } from "../worksheet-revision-panel";
 
 const SIGNER_ROLES = ["TECHNICIAN", "CUSTOMER"] as const;
 type SignerRole = (typeof SIGNER_ROLES)[number];
@@ -385,6 +387,8 @@ export default function CalibrationJobDetailPage() {
   const canDecideCorrection = Boolean(capabilities?.calibrationJobDecideIdentityCorrection);
   const canApproveQualityReview =
     Boolean(capabilities?.calibrationJobDecideQualityReview) && canDecideQualityReview(job);
+  const canReviseWorksheet =
+    Boolean(capabilities?.calibrationJobReviseWorksheet) && canReviseJobWorksheet(job);
   const canRecordKontrolAlat = Boolean(capabilities?.calibrationJobRecordKontrolAlat);
   const canRecordRefEquipment = Boolean(capabilities?.calibrationJobRecordReferenceEquipmentUsed);
   const canOverrideRefEquipment = Boolean(
@@ -598,15 +602,18 @@ export default function CalibrationJobDetailPage() {
               Hasil Pengukuran
             </AccordionTrigger>
             <AccordionContent forceMount>
-              <QualityReviewPanel
-                job={job}
-                parametersQuery={measurementParameters}
-                resultsQuery={measurementResults}
-                canDecide={canApproveQualityReview}
-                decidePending={decideQualityReview.isPending}
-                onApprove={handleApproveQualityReview}
-                onReject={handleRejectQualityReview}
-              />
+              <div className="space-y-4">
+                <WorksheetRevisionPanel jobId={job.id} canRevise={canReviseWorksheet} />
+                <QualityReviewPanel
+                  job={job}
+                  parametersQuery={measurementParameters}
+                  resultsQuery={measurementResults}
+                  canDecide={canApproveQualityReview}
+                  decidePending={decideQualityReview.isPending}
+                  onApprove={handleApproveQualityReview}
+                  onReject={handleRejectQualityReview}
+                />
+              </div>
             </AccordionContent>
           </AccordionItem>
 

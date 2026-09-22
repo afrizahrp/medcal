@@ -567,6 +567,7 @@ model User {
   equipmentCalibrationsCreated          EquipmentCalibrationRecord[]    @relation("EquipmentCalibrationCreatedBy")
   equipmentCalibrationsAccepted         EquipmentCalibrationRecord[]    @relation("EquipmentCalibrationAcceptedBy")
   calibrationJobsAkdAklApproved         CalibrationJob[]                @relation("CalibrationJobAkdAklApprover")
+  jobTestPointsExcluded                 JobCalibrationTestPoint[]       @relation("JobCalibrationTestPointExcludedBy")
   identityCorrectionsSubmitted          IdentityCorrection[]            @relation("IdentityCorrectionSubmitter")
   identityCorrectionsDecided            IdentityCorrection[]            @relation("IdentityCorrectionDecider")
   jobReferenceEquipmentUsagesOverridden JobReferenceEquipmentUsed[]     @relation("JobReferenceEquipmentOverrider")
@@ -2575,6 +2576,7 @@ model CalibrationTestPoint {
 /// Frozen copy of one catalog CalibrationTestPoint for one CalibrationJob.
 /// Written once at start() (or backfill for jobs that already had startedAt).
 /// MeasurementResult still stores CalibrationTestPoint.id (sourceCalibrationTestPointId).
+/// excludedAt is an explicit per-job worksheet revision — never driven by master isActive.
 model JobCalibrationTestPoint {
   id                           String @id @default(cuid())
   calibrationJobId             String
@@ -2590,12 +2592,20 @@ model JobCalibrationTestPoint {
   toleranceMaxInclusive  Boolean  @default(true)
   toleranceNote          String?
 
+  /// Set by an authorized "Revisi Worksheet" action. Completeness and Tech-PWA
+  /// list only rows where this is null. The snapshot row and any MeasurementResult
+  /// history are retained.
+  excludedAt         DateTime?
+  excludedByUserId   String?
+  exclusionReason    String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   calibrationJob  CalibrationJob             @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
   parameter       DeviceCalibrationParameter @relation(fields: [deviceCalibrationParameterId], references: [id], onDelete: Restrict)
   sourceTestPoint CalibrationTestPoint       @relation(fields: [sourceCalibrationTestPointId], references: [id], onDelete: Restrict)
+  excludedBy      User?                      @relation("JobCalibrationTestPointExcludedBy", fields: [excludedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([calibrationJobId, sourceCalibrationTestPointId])
   @@index([calibrationJobId])

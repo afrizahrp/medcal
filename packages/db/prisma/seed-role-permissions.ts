@@ -224,6 +224,10 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "TECHNICIAN", resource: "calibrationJob", action: "resumeAfterRework" },
   { role: "TECHNICIAN", resource: "calibrationJob", action: "complete" },
   { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "decideQualityReview" },
+  // Revisi Worksheet (2026-09-22): explicit per-job snapshot exclude. MT only —
+  // Technician must not rewrite the frozen worksheet; ADMIN owns catalog, not
+  // the job snapshot.
+  { role: "TECHNICIAN_MANAGER", resource: "calibrationJob", action: "reviseWorksheet" },
   // FINANCE
   { role: "FINANCE", resource: "managementDashboard", action: "read" },
   // CUSTOMER
@@ -326,6 +330,7 @@ const SUPERADMIN_PERMISSION_CATALOG: Record<string, readonly string[]> = {
     "submitForReview",
     "decideQualityReview",
     "resumeAfterRework",
+    "reviseWorksheet",
   ],
   certificate: ["read", "create", "update", "issue"],
   invoice: ["read", "create", "update", "void"],

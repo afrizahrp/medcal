@@ -39,6 +39,7 @@
     "backfill:physical-check-permissions": "tsx prisma/backfill-physical-check-permissions.ts",
     "backfill:kontrol-alat-permissions": "tsx prisma/backfill-kontrol-alat-permissions.ts",
     "backfill:job-calibration-test-points": "tsx prisma/backfill-job-calibration-test-points.ts",
+    "backfill:worksheet-revision-permissions": "tsx prisma/backfill-worksheet-revision-permissions.ts",
     "backfill:decimal-places-from-results": "tsx prisma/backfill-decimal-places-from-results.ts"
   },
   "dependencies": {

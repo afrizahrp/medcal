@@ -506,7 +506,7 @@ export class MeasurementResultsService {
         },
       },
     });
-    if (!frozen || frozen.deviceCalibrationParameterId !== parameter.id) {
+    if (!frozen || frozen.deviceCalibrationParameterId !== parameter.id || frozen.excludedAt != null) {
       throw new BadRequestException({
         message: "Test point is not part of this job's frozen measurement definition",
         code: "MEASUREMENT_TEST_POINT_NOT_IN_JOB",

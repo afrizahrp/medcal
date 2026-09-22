@@ -3615,6 +3615,28 @@ describe("CalibrationJobsController RBAC (guard chain)", () => {
     await expect(guard.canActivate(contextFor("decideQualityReview"))).resolves.toBe(true);
   });
 
+  it("allows a TECHNICIAN_MANAGER to revise a job worksheet", async () => {
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "ws-m@x.co" } });
+    await expect(guard.canActivate(contextFor("reviseWorksheet"))).resolves.toBe(true);
+  });
+
+  it("blocks a TECHNICIAN from revising a job worksheet (403)", async () => {
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: tech.id, email: "ws-t@x.co" } });
+    await expect(guard.canActivate(contextFor("reviseWorksheet"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("blocks ADMIN from revising a job worksheet (403)", async () => {
+    const admin = await makeMember(realCompanyId, "ADMIN");
+    getSessionMock.mockResolvedValueOnce({ user: { id: admin.id, email: "ws-a@x.co" } });
+    await expect(guard.canActivate(contextFor("reviseWorksheet"))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
   it("blocks a TECHNICIAN_MANAGER from submit, complete, resume, and recordMeasurement", async () => {
     const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
     getSessionMock.mockResolvedValueOnce({ user: { id: manager.id, email: "mt-sub@x.co" } });
@@ -5102,5 +5124,268 @@ describe("DeviceCalibrationParametersService - CalibrationTestPoint does not tou
     expect(
       listed.gridParameters.find((p) => p.code === "PH4C_SNAP")?.testPoints.map((tp) => tp.settingLabel),
     ).toEqual(["Awal", "Akhir"]);
+  });
+});
+
+describe("CalibrationJobsService — Revisi Worksheet snapshot exclude", () => {
+  const createdJobDeviceTypeIds: string[] = [];
+  const createdCapabilityIdsLocal: string[] = [];
+
+  afterAll(async () => {
+    if (createdJobDeviceTypeIds.length > 0) {
+      await prisma.measurementResult.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdJobDeviceTypeIds } } },
+      });
+      await prisma.auditLog.deleteMany({
+        where: { action: "CALIBRATION_JOB_WORKSHEET_REVISE" },
+      });
+      await prisma.jobCalibrationTestPoint.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdJobDeviceTypeIds } } },
+      });
+      await prisma.calibrationTestPoint.deleteMany({
+        where: { parameter: { deviceTypeId: { in: createdJobDeviceTypeIds } } },
+      });
+      await prisma.deviceCalibrationParameter.deleteMany({
+        where: { deviceTypeId: { in: createdJobDeviceTypeIds } },
+      });
+    }
+    if (createdCapabilityIdsLocal.length > 0) {
+      await prisma.deviceCapabilityItem.deleteMany({
+        where: { capabilityId: { in: createdCapabilityIdsLocal } },
+      });
+      await prisma.deviceCapability.deleteMany({ where: { id: { in: createdCapabilityIdsLocal } } });
+    }
+  });
+
+  async function startEightPointJob() {
+    const ctx = await startedWorkOrderJobs(realCompanyId);
+    createdJobDeviceTypeIds.push(ctx.deviceTypeId);
+    const capability = await prisma.deviceCapability.create({
+      data: { code: `WSREV-${randomUUID().slice(0, 8).toUpperCase()}`, name: "Ws Rev Capability" },
+    });
+    createdCapabilityIdsLocal.push(capability.id);
+    const item = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: capability.id, name: "Ws Rev Item" },
+    });
+    const parameter = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId: ctx.deviceTypeId,
+        capabilityItemId: item.id,
+        code: "WS_SPO2",
+        name: "SpO2",
+        valueType: "NUMBER",
+        sortOrder: 10,
+        toleranceMin: 0,
+        toleranceMax: 100,
+      },
+    });
+    const labels = ["80 %SpO2", "85 %SpO2", "90 %SpO2", "92 %SpO2", "94 %SpO2", "96 %SpO2", "98 %SpO2", "100 %SpO2"];
+    await prisma.calibrationTestPoint.createMany({
+      data: labels.map((settingLabel, index) => ({
+        deviceCalibrationParameterId: parameter.id,
+        sequence: index + 1,
+        settingLabel,
+      })),
+    });
+    await completeKontrolAlatForStart(realCompanyId, ctx.jobs[0]!.id);
+    const job = await calibrationJobsService.start(realCompanyId, ctx.jobs[0]!.id);
+    const technician = await makeMember(realCompanyId, "TECHNICIAN");
+    const manager = await makeMember(realCompanyId, "TECHNICIAN_MANAGER");
+    const points = await prisma.calibrationTestPoint.findMany({
+      where: { deviceCalibrationParameterId: parameter.id },
+      orderBy: { sequence: "asc" },
+    });
+    return { ...ctx, job, parameter, points, technician, manager };
+  }
+
+  async function fillNamedPoints(
+    jobId: string,
+    parameterId: string,
+    pointIds: string[],
+    technicianId: string,
+  ) {
+    for (const [index, pointId] of pointIds.entries()) {
+      await measurementResultsService.create(
+        realCompanyId,
+        {
+          calibrationJobId: jobId,
+          deviceCalibrationParameterId: parameterId,
+          calibrationTestPointId: pointId,
+          replicateIndex: 1,
+          measuredValue: 90 + index,
+        },
+        technicianId,
+      );
+    }
+  }
+
+  it("Case 1: deactivating master point 8 leaves the started job at 8/8 incomplete", async () => {
+    const ctx = await startEightPointJob();
+    await fillNamedPoints(ctx.job.id, ctx.parameter.id, ctx.points.slice(0, 7).map((p) => p.id), ctx.technician.id);
+    await deviceCalibrationParametersService.updateTestPoint(ctx.parameter.id, ctx.points[7]!.id, {
+      isActive: false,
+    });
+
+    const snaps = await prisma.jobCalibrationTestPoint.findMany({
+      where: { calibrationJobId: ctx.job.id },
+    });
+    expect(snaps).toHaveLength(8);
+    expect(snaps.every((row) => row.excludedAt == null)).toBe(true);
+
+    const listed = await calibrationJobsService.listMeasurementParameters(realCompanyId, ctx.job.id);
+    expect(listed.gridParameters[0]?.testPoints).toHaveLength(8);
+    await expect(calibrationJobsService.submitForReview(realCompanyId, ctx.job.id)).rejects.toMatchObject({
+      response: { code: "CALIBRATION_MEASUREMENTS_INCOMPLETE" },
+    });
+  });
+
+  it("Case 2: explicit exclude of point 8 makes completeness 7/7 and submit succeed", async () => {
+    const ctx = await startEightPointJob();
+    await fillNamedPoints(ctx.job.id, ctx.parameter.id, ctx.points.slice(0, 7).map((p) => p.id), ctx.technician.id);
+    await deviceCalibrationParametersService.updateTestPoint(ctx.parameter.id, ctx.points[7]!.id, {
+      isActive: false,
+    });
+
+    const revised = await calibrationJobsService.reviseWorksheet(
+      realCompanyId,
+      ctx.job.id,
+      ctx.manager.id,
+      {
+        excludeSourceCalibrationTestPointIds: [ctx.points[7]!.id],
+        reason: "LK hanya membutuhkan 7 titik",
+      },
+    );
+    expect(revised.activeCount).toBe(7);
+    expect(revised.excludedCount).toBe(1);
+
+    const listed = await calibrationJobsService.listMeasurementParameters(realCompanyId, ctx.job.id);
+    expect(listed.gridParameters[0]?.testPoints).toHaveLength(7);
+    expect(listed.gridParameters[0]?.testPoints.map((tp) => tp.id)).not.toContain(ctx.points[7]!.id);
+
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, ctx.job.id);
+    expect(submitted.status).toBe("SUBMITTED");
+  });
+
+  it("Case 3: a new master point after start does not become required", async () => {
+    const ctx = await startedWorkOrderJobs(realCompanyId);
+    createdJobDeviceTypeIds.push(ctx.deviceTypeId);
+    const capability = await prisma.deviceCapability.create({
+      data: { code: `WSNEW-${randomUUID().slice(0, 8).toUpperCase()}`, name: "Ws New Capability" },
+    });
+    createdCapabilityIdsLocal.push(capability.id);
+    const item = await prisma.deviceCapabilityItem.create({
+      data: { capabilityId: capability.id, name: "Ws New Item" },
+    });
+    const parameter = await prisma.deviceCalibrationParameter.create({
+      data: {
+        deviceTypeId: ctx.deviceTypeId,
+        capabilityItemId: item.id,
+        code: "WS_NEW",
+        name: "SpO2",
+        valueType: "NUMBER",
+        sortOrder: 10,
+        toleranceMin: 0,
+        toleranceMax: 100,
+      },
+    });
+    await prisma.calibrationTestPoint.createMany({
+      data: Array.from({ length: 7 }, (_, index) => ({
+        deviceCalibrationParameterId: parameter.id,
+        sequence: index + 1,
+        settingLabel: `${80 + index} %SpO2`,
+      })),
+    });
+    await completeKontrolAlatForStart(realCompanyId, ctx.jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, ctx.jobs[0]!.id);
+    await prisma.calibrationTestPoint.create({
+      data: {
+        deviceCalibrationParameterId: parameter.id,
+        sequence: 8,
+        settingLabel: "100 %SpO2",
+      },
+    });
+
+    const listed = await calibrationJobsService.listMeasurementParameters(realCompanyId, ctx.jobs[0]!.id);
+    expect(listed.gridParameters[0]?.testPoints).toHaveLength(7);
+    expect(listed.gridParameters[0]?.testPoints.map((tp) => tp.settingLabel)).not.toContain("100 %SpO2");
+    expect(
+      await prisma.jobCalibrationTestPoint.count({ where: { calibrationJobId: ctx.jobs[0]!.id } }),
+    ).toBe(7);
+  });
+
+  it("Case 4: excluding a measured point keeps MeasurementResult and records audit", async () => {
+    const ctx = await startEightPointJob();
+    await fillNamedPoints(ctx.job.id, ctx.parameter.id, ctx.points.map((p) => p.id), ctx.technician.id);
+
+    const revised = await calibrationJobsService.reviseWorksheet(
+      realCompanyId,
+      ctx.job.id,
+      ctx.manager.id,
+      {
+        excludeSourceCalibrationTestPointIds: [ctx.points[7]!.id],
+        reason: "Titik 8 tidak berlaku",
+      },
+    );
+    expect(revised.excludedCount).toBe(1);
+
+    const remaining = await prisma.measurementResult.count({
+      where: {
+        calibrationJobId: ctx.job.id,
+        calibrationTestPointId: ctx.points[7]!.id,
+      },
+    });
+    expect(remaining).toBe(1);
+
+    await expect(
+      measurementResultsService.create(
+        realCompanyId,
+        {
+          calibrationJobId: ctx.job.id,
+          deviceCalibrationParameterId: ctx.parameter.id,
+          calibrationTestPointId: ctx.points[7]!.id,
+          replicateIndex: 2,
+          measuredValue: 99,
+        },
+        ctx.technician.id,
+      ),
+    ).rejects.toMatchObject({ response: { code: "MEASUREMENT_TEST_POINT_NOT_IN_JOB" } });
+
+    const logs = await prisma.auditLog.findMany({
+      where: { targetId: ctx.job.id, action: "CALIBRATION_JOB_WORKSHEET_REVISE" },
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.userId).toBe(ctx.manager.id);
+    expect(logs[0]?.metadata).toMatchObject({
+      reason: "Titik 8 tidak berlaku",
+      beforeCount: 8,
+      afterCount: 7,
+    });
+
+    const submitted = await calibrationJobsService.submitForReview(realCompanyId, ctx.job.id);
+    expect(submitted.status).toBe("SUBMITTED");
+  });
+
+  it("Case 6: submitted and accepted jobs cannot be revised", async () => {
+    const ctx = await startEightPointJob();
+    await fillNamedPoints(ctx.job.id, ctx.parameter.id, ctx.points.map((p) => p.id), ctx.technician.id);
+    await calibrationJobsService.submitForReview(realCompanyId, ctx.job.id);
+
+    await expect(
+      calibrationJobsService.reviseWorksheet(realCompanyId, ctx.job.id, ctx.manager.id, {
+        excludeSourceCalibrationTestPointIds: [ctx.points[7]!.id],
+        reason: "terlambat",
+      }),
+    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_WORKSHEET_NOT_REVISABLE" } });
+
+    await prisma.calibrationJob.update({
+      where: { id: ctx.job.id },
+      data: { status: "ACCEPTED_BY_QA" },
+    });
+    await expect(
+      calibrationJobsService.reviseWorksheet(realCompanyId, ctx.job.id, ctx.manager.id, {
+        excludeSourceCalibrationTestPointIds: [ctx.points[7]!.id],
+        reason: "sudah final",
+      }),
+    ).rejects.toMatchObject({ response: { code: "CALIBRATION_JOB_WORKSHEET_NOT_REVISABLE" } });
   });
 });

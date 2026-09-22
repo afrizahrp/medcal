@@ -23,6 +23,7 @@ import {
   type IdentityCorrectionSubmitInput,
   type JobReferenceEquipmentApprovalDecisionInput,
   type JobReferenceEquipmentReplaceInput,
+  type JobWorksheetRevisionInput,
   type QualityReviewDecisionInput,
 } from "@medcal/shared";
 
@@ -51,6 +52,7 @@ import {
 } from "./job-reference-equipment";
 import { assertKontrolAlatReadyForStart } from "./kontrol-alat.service";
 import { copyActiveTestPointsIntoJobSnapshot } from "./job-calibration-test-point-snapshot";
+import { CALIBRATION_JOB_WORKSHEET_REVISE, recordAuditLog } from "./audit-log";
 import {
   CALIBRATION_MEASUREMENTS_INCOMPLETE,
   evaluateMeasurementCompleteness,
@@ -241,6 +243,8 @@ const GRID_EXCLUDED_PARAMETER_CODES = MEASUREMENT_WORKSHEET_EXCLUDED_PARAMETER_C
 export const IDENTITY_CORRECTION_UNRESOLVED = "IDENTITY_CORRECTION_UNRESOLVED";
 
 const PRE_SUBMIT_EXCLUDED_STATUSES = ["SUBMITTED", "ACCEPTED_BY_QA"] as const;
+
+const WORKSHEET_REVISABLE_STATUSES = new Set<string>(["IN_PROGRESS", "REWORK"]);
 
 /**
  * MoM #6 race guard. Conditionally touches the CalibrationJob row *inside* the
@@ -441,6 +445,26 @@ export interface JobMeasurementParametersResult {
   capabilityGroups: MeasurementCapabilityGroup[];
 }
 
+export interface JobWorksheetSnapshotItem {
+  id: string;
+  sourceCalibrationTestPointId: string;
+  deviceCalibrationParameterId: string;
+  parameterCode: string;
+  parameterName: string;
+  sequence: number;
+  settingLabel: string;
+  excludedAt: string | null;
+  excludedByUserId: string | null;
+  excludedByName: string | null;
+  exclusionReason: string | null;
+}
+
+export interface JobWorksheetSnapshotResult {
+  activeCount: number;
+  excludedCount: number;
+  items: JobWorksheetSnapshotItem[];
+}
+
 const measurementParameterSelect = {
   id: true,
   code: true,
@@ -507,6 +531,33 @@ function toTestPointSummary(tp: MeasurementTestPointRow): MeasurementTestPointSu
     toleranceMin: tp.toleranceMin?.toString() ?? null,
     toleranceMax: tp.toleranceMax?.toString() ?? null,
     toleranceNote: tp.toleranceNote,
+  };
+}
+
+function toWorksheetSnapshotItem(row: {
+  id: string;
+  sourceCalibrationTestPointId: string;
+  deviceCalibrationParameterId: string;
+  sequence: number;
+  settingLabel: string;
+  excludedAt: Date | null;
+  excludedByUserId: string | null;
+  exclusionReason: string | null;
+  parameter: { code: string; name: string };
+  excludedBy: { name: string | null } | null;
+}): JobWorksheetSnapshotItem {
+  return {
+    id: row.id,
+    sourceCalibrationTestPointId: row.sourceCalibrationTestPointId,
+    deviceCalibrationParameterId: row.deviceCalibrationParameterId,
+    parameterCode: row.parameter.code,
+    parameterName: row.parameter.name,
+    sequence: row.sequence,
+    settingLabel: row.settingLabel,
+    excludedAt: row.excludedAt?.toISOString() ?? null,
+    excludedByUserId: row.excludedByUserId,
+    excludedByName: row.excludedBy?.name ?? null,
+    exclusionReason: row.exclusionReason,
   };
 }
 
@@ -1806,15 +1857,19 @@ export class CalibrationJobsService {
 
     for (const row of eligible) {
       if (excluded.has(row.code)) continue;
-      const frozen = snapshotsByParameterId.get(row.id) ?? [];
+      const frozenAll = snapshotsByParameterId.get(row.id) ?? [];
+      const frozenActive = frozenAll.filter((tp) => tp.excludedAt == null);
       const livePoints = row.testPoints;
-      const isGrid = useSnapshot ? frozen.length > 0 : livePoints.length > 0;
+      const isGrid = useSnapshot ? frozenAll.length > 0 : livePoints.length > 0;
       if (!isGrid) {
         if (useSnapshot || livePoints.length === 0) directRows.push(row);
         continue;
       }
+      if (useSnapshot && frozenActive.length === 0) {
+        continue;
+      }
       const testPoints = useSnapshot
-        ? frozen.map((tp) =>
+        ? frozenActive.map((tp) =>
             toTestPointSummary({
               id: tp.sourceCalibrationTestPointId,
               sequence: tp.sequence,
@@ -1859,6 +1914,99 @@ export class CalibrationJobsService {
         sortOrderByCapabilityId,
       ),
     };
+  }
+
+  async listWorksheetSnapshot(
+    companyId: string,
+    jobId: string,
+  ): Promise<JobWorksheetSnapshotResult> {
+    await this.findOne(companyId, jobId);
+    const rows = await prisma.jobCalibrationTestPoint.findMany({
+      where: { calibrationJobId: jobId },
+      include: {
+        parameter: { select: { code: true, name: true } },
+        excludedBy: { select: { name: true } },
+      },
+      orderBy: [{ sequence: "asc" }, { settingLabel: "asc" }],
+    });
+    const items = rows.map(toWorksheetSnapshotItem);
+    return {
+      activeCount: items.filter((item) => item.excludedAt === null).length,
+      excludedCount: items.filter((item) => item.excludedAt !== null).length,
+      items,
+    };
+  }
+
+  async reviseWorksheet(
+    companyId: string,
+    jobId: string,
+    userId: string,
+    input: JobWorksheetRevisionInput,
+  ): Promise<JobWorksheetSnapshotResult> {
+    const job = await this.findOne(companyId, jobId);
+    if (job.measurementTestPointsSnapshottedAt === null || !WORKSHEET_REVISABLE_STATUSES.has(job.status)) {
+      throw new BadRequestException({
+        message: "Worksheet can only be revised while the job is in progress or in rework",
+        code: "CALIBRATION_JOB_WORKSHEET_NOT_REVISABLE",
+      });
+    }
+
+    const sourceIds = [...new Set(input.excludeSourceCalibrationTestPointIds)];
+    const snapshotRows = await prisma.jobCalibrationTestPoint.findMany({
+      where: { calibrationJobId: jobId, sourceCalibrationTestPointId: { in: sourceIds } },
+    });
+    if (snapshotRows.length !== sourceIds.length) {
+      throw new BadRequestException({
+        message: "One or more test points are not part of this job's worksheet snapshot",
+        code: "WORKSHEET_TEST_POINT_NOT_IN_JOB",
+      });
+    }
+    const alreadyExcluded = snapshotRows.filter((row) => row.excludedAt != null);
+    if (alreadyExcluded.length > 0) {
+      throw new BadRequestException({
+        message: "One or more test points are already excluded from this worksheet",
+        code: "WORKSHEET_TEST_POINT_ALREADY_EXCLUDED",
+      });
+    }
+
+    const beforeCount = await prisma.jobCalibrationTestPoint.count({
+      where: { calibrationJobId: jobId, excludedAt: null },
+    });
+    const excludedAt = new Date();
+    await prisma.jobCalibrationTestPoint.updateMany({
+      where: {
+        calibrationJobId: jobId,
+        sourceCalibrationTestPointId: { in: sourceIds },
+        excludedAt: null,
+      },
+      data: {
+        excludedAt,
+        excludedByUserId: userId,
+        exclusionReason: input.reason,
+      },
+    });
+    const afterCount = beforeCount - sourceIds.length;
+
+    await recordAuditLog({
+      companyId,
+      userId,
+      action: CALIBRATION_JOB_WORKSHEET_REVISE,
+      outcome: "SUCCESS",
+      targetType: "CalibrationJob",
+      targetId: jobId,
+      metadata: {
+        reason: input.reason,
+        beforeCount,
+        afterCount,
+        excluded: snapshotRows.map((row) => ({
+          sourceCalibrationTestPointId: row.sourceCalibrationTestPointId,
+          settingLabel: row.settingLabel,
+          deviceCalibrationParameterId: row.deviceCalibrationParameterId,
+        })),
+      },
+    });
+
+    return this.listWorksheetSnapshot(companyId, jobId);
   }
 
   async getReferenceEquipmentCandidates(
@@ -2206,6 +2354,7 @@ export class CalibrationJobsService {
         select: {
           deviceCalibrationParameterId: true,
           sourceCalibrationTestPointId: true,
+          excludedAt: true,
         },
       }),
       prisma.measurementResult.findMany({
@@ -2224,9 +2373,18 @@ export class CalibrationJobsService {
     ]);
 
     const eligibleParameterIds = eligible.filter((row) => !excluded.has(row.code)).map((row) => row.id);
+    const frozenPatternBParameterIds = [
+      ...new Set(snapshotRows.map((row) => row.deviceCalibrationParameterId)),
+    ];
     const verdict = evaluateMeasurementCompleteness({
       eligibleParameterIds,
-      snapshotRows,
+      snapshotRows: snapshotRows
+        .filter((row) => row.excludedAt == null)
+        .map((row) => ({
+          deviceCalibrationParameterId: row.deviceCalibrationParameterId,
+          sourceCalibrationTestPointId: row.sourceCalibrationTestPointId,
+        })),
+      frozenPatternBParameterIds,
       results,
     });
     if (verdict.complete) return;

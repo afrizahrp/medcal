@@ -112,6 +112,7 @@ export type MeCapabilities = {
   calibrationJobRecordKontrolAlat: boolean;
   calibrationJobSubmitForReview: boolean;
   calibrationJobDecideQualityReview: boolean;
+  calibrationJobReviseWorksheet: boolean;
   calibrationJobResumeAfterRework: boolean;
   calibrationJobComplete: boolean;
   taxManage: boolean;

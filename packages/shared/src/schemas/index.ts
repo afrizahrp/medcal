@@ -1016,6 +1016,20 @@ export const qualityReviewDecisionSchema = z
 export type QualityReviewDecisionInput = z.infer<typeof qualityReviewDecisionSchema>;
 
 // -----------------------------------------------------------------------------
+// Calibration Job — worksheet revision (explicit snapshot exclude)
+// -----------------------------------------------------------------------------
+// Does not sync master. Targeted exclude of JobCalibrationTestPoint rows on
+// one job. Reason is required (same convention as Identity Correction submit).
+
+/** POST /calibration-jobs/:id/worksheet-revisions body (TECHNICIAN_MANAGER). */
+export const jobWorksheetRevisionSchema = z.object({
+  excludeSourceCalibrationTestPointIds: z.array(z.string().min(1)).min(1),
+  reason: z.string().trim().min(1).max(2000),
+});
+
+export type JobWorksheetRevisionInput = z.infer<typeof jobWorksheetRevisionSchema>;
+
+// -----------------------------------------------------------------------------
 // Calibration Job — MeasurementResult (Stage 2c)
 // -----------------------------------------------------------------------------
 // Technician measurement entry over HTTP. The service (Stage 2b) runs the

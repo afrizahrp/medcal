@@ -178,9 +178,12 @@ const ac = createAccessControl({
     // decideQualityReview: TECHNICIAN_MANAGER APPROVE or REJECT (REJECT → REWORK).
     // resumeAfterRework: technician REWORK → IN_PROGRESS (does not increment attempt).
     // complete: technician SUBMITTED + QualityReview APPROVED → ACCEPTED_BY_QA.
+    // reviseWorksheet: TECHNICIAN_MANAGER explicit per-job snapshot exclude.
+    // Does not grant TECHNICIAN or ADMIN. Does not sync master → job.
     "submitForReview",
     "decideQualityReview",
     "resumeAfterRework",
+    "reviseWorksheet",
   ],
   certificate: ["read", "create", "update", "issue"],
   invoice: ["read", "create", "update", "void"],

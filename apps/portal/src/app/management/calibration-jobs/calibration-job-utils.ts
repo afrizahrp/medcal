@@ -131,6 +131,10 @@ export function canDecideQualityReview(job: JobWithQualityReview): boolean {
   return isAwaitingQualityReview(job);
 }
 
+export function canReviseJobWorksheet(job: { status: string }): boolean {
+  return job.status === "IN_PROGRESS" || job.status === "REWORK";
+}
+
 /**
  * Show MT rejection notes. SUBMITTED + latest REJECTED is a new review cycle.
  */

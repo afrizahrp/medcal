@@ -526,7 +526,7 @@ export class LkDownloadService {
       }),
       snapshottedAt != null
         ? prisma.jobCalibrationTestPoint.findMany({
-            where: { calibrationJobId },
+            where: { calibrationJobId, excludedAt: null },
             orderBy: { sequence: "asc" },
             select: {
               deviceCalibrationParameterId: true,

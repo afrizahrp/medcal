@@ -407,6 +407,14 @@ describe("gridEntryStatus", () => {
     expect(gridEntryStatus([], points)).toMatchObject({ filled: 0, total: 2, complete: false });
     expect(gridEntryStatus([], [])).toMatchObject({ filled: 0, total: 0, complete: false });
   });
+  it("7 filled of 7 listed points is complete after a worksheet revision 8→7", () => {
+    const listed = ["tp-1", "tp-2", "tp-3", "tp-4", "tp-5", "tp-6", "tp-7"];
+    const rows = listed.map((id, i) => cell(id, 1, String(i + 1), true));
+    expect(gridEntryStatus(rows, listed)).toMatchObject({ filled: 7, total: 7, complete: true });
+    expect(
+      gridEntryStatus(rows, [...listed, "tp-8"]),
+    ).toMatchObject({ filled: 7, total: 8, complete: false });
+  });
 });
 
 describe("capabilityGroupSections / hasCapabilityGroups", () => {
