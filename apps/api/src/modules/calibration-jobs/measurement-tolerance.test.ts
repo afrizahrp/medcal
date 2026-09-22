@@ -127,6 +127,57 @@ describe("resolveEffectiveTolerance", () => {
     expect([num(r.effectiveToleranceMin), num(r.effectiveToleranceMax)]).toEqual([null, null]);
   });
 
+  it("keeps omitted operators inclusive and passes a stored exclusive lower bound", () => {
+    const inclusive = resolveEffectiveTolerance({
+      valueType: "NUMBER",
+      parameter: { toleranceMin: 2, toleranceMax: null, toleranceNote: "> 2 MΩ" },
+      testPoint: null,
+    });
+    expect(inclusive.toleranceMinInclusive).toBe(true);
+    expect(inclusive.toleranceMaxInclusive).toBe(true);
+
+    const exclusive = resolveEffectiveTolerance({
+      valueType: "NUMBER",
+      parameter: {
+        toleranceMin: 2,
+        toleranceMax: null,
+        toleranceMinInclusive: false,
+        toleranceNote: "> 2 MΩ",
+      },
+      testPoint: null,
+    });
+    expect(exclusive.source).toBe("PARAMETER_BOUNDS");
+    expect(exclusive.toleranceMinInclusive).toBe(false);
+  });
+
+  it("takes exclusivity from a test-point override, not the parent", () => {
+    const r = resolveEffectiveTolerance({
+      valueType: "NUMBER",
+      parameter: { toleranceMin: 0, toleranceMax: 1, toleranceMinInclusive: false, toleranceNote: null },
+      testPoint: {
+        settingValue: null,
+        toleranceMin: 2,
+        toleranceMax: null,
+        toleranceMinInclusive: false,
+        toleranceNote: null,
+      },
+    });
+    expect(r.source).toBe("TEST_POINT_OVERRIDE");
+    expect(num(r.effectiveToleranceMin)).toBe(2);
+    expect(r.toleranceMinInclusive).toBe(false);
+  });
+
+  it("keeps note-parsed bounds inclusive even when the note says >", () => {
+    const r = resolveEffectiveTolerance({
+      valueType: "NUMBER",
+      parameter: { toleranceMin: null, toleranceMax: null, toleranceNote: "> 2 MΩ" },
+      testPoint: null,
+    });
+    expect(r.source).toBe("NOTE");
+    expect(r.toleranceMinInclusive).toBe(true);
+    expect(r.toleranceMaxInclusive).toBe(true);
+  });
+
   it("stays NULL for a ± note with no nominal to resolve against", () => {
     const r = resolveEffectiveTolerance({
       valueType: "NUMBER",
@@ -196,6 +247,108 @@ describe("computeIsWithinTolerance", () => {
         effectiveToleranceMax: null,
       }),
     ).toBeNull();
+  });
+
+  it("inclusive upper bound keeps the boundary itself (≤ 0.3)", () => {
+    const bound = {
+      valueType: "NUMBER" as const,
+      measuredBool: null,
+      effectiveToleranceMin: null,
+      effectiveToleranceMax: "0.3",
+      toleranceMaxInclusive: true,
+    };
+    expect(computeIsWithinTolerance({ ...bound, measuredValue: "0.3" })).toBe(true);
+    expect(computeIsWithinTolerance({ ...bound, measuredValue: "0.3001" })).toBe(false);
+  });
+
+  it("strict lower bound excludes the boundary itself (> 2)", () => {
+    const bound = {
+      valueType: "NUMBER" as const,
+      measuredBool: null,
+      effectiveToleranceMin: 2,
+      effectiveToleranceMax: null,
+      toleranceMinInclusive: false,
+    };
+    expect(computeIsWithinTolerance({ ...bound, measuredValue: 2 })).toBe(false);
+    expect(computeIsWithinTolerance({ ...bound, measuredValue: "2.0001" })).toBe(true);
+    expect(computeIsWithinTolerance({ ...bound, measuredValue: "1.9999" })).toBe(false);
+    expect(computeIsWithinTolerance({ ...bound, measuredValue: 1 })).toBe(false);
+    expect(computeIsWithinTolerance({ ...bound, measuredValue: 3 })).toBe(true);
+    expect(computeIsWithinTolerance({ ...bound, measuredValue: "2.1" })).toBe(true);
+  });
+
+  it("evaluates over-range OR only for a lower-bound-only limit", () => {
+    const insulation = {
+      valueType: "NUMBER" as const,
+      measuredValue: null,
+      measuredBool: null,
+      measuredText: "OR",
+      effectiveToleranceMin: 2,
+      effectiveToleranceMax: null,
+      toleranceMinInclusive: false,
+    };
+    expect(computeIsWithinTolerance(insulation)).toBe(true);
+    expect(computeIsWithinTolerance({ ...insulation, measuredText: " or " })).toBe(true);
+    expect(
+      computeIsWithinTolerance({
+        ...insulation,
+        valueType: "TEXT",
+      }),
+    ).toBeNull();
+    expect(
+      computeIsWithinTolerance({
+        ...insulation,
+        effectiveToleranceMax: 10,
+      }),
+    ).toBeNull();
+    expect(
+      computeIsWithinTolerance({
+        ...insulation,
+        effectiveToleranceMin: null,
+      }),
+    ).toBeNull();
+  });
+
+  it("does not treat arbitrary text as conforming", () => {
+    expect(
+      computeIsWithinTolerance({
+        valueType: "NUMBER",
+        measuredValue: null,
+        measuredBool: null,
+        measuredText: "ABC",
+        effectiveToleranceMin: 2,
+        effectiveToleranceMax: null,
+        toleranceMinInclusive: false,
+      }),
+    ).toBeNull();
+    expect(
+      computeIsWithinTolerance({
+        valueType: "NUMBER",
+        measuredValue: null,
+        measuredBool: null,
+        measuredText: "OL",
+        effectiveToleranceMin: 2,
+        effectiveToleranceMax: null,
+        toleranceMinInclusive: false,
+      }),
+    ).toBeNull();
+  });
+
+  it("keeps existing inclusive upper bounds for the BSM electrical limits", () => {
+    const upper = (max: string, value: string) =>
+      computeIsWithinTolerance({
+        valueType: "NUMBER",
+        measuredValue: value,
+        measuredBool: null,
+        effectiveToleranceMin: null,
+        effectiveToleranceMax: max,
+      });
+    expect(upper("0.3", "0.3")).toBe(true);
+    expect(upper("0.3", "0.3001")).toBe(false);
+    expect(upper("500", "500")).toBe(true);
+    expect(upper("500", "500.1")).toBe(false);
+    expect(upper("50", "50")).toBe(true);
+    expect(upper("50", "50.1")).toBe(false);
   });
 
   it("TEXT is always NULL", () => {

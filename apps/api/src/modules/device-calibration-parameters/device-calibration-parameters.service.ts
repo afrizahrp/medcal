@@ -457,6 +457,8 @@ export class DeviceCalibrationParametersService {
           uomId: input.uomId,
           toleranceMin: input.toleranceMin ?? null,
           toleranceMax: input.toleranceMax ?? null,
+          toleranceMinInclusive: input.toleranceMinInclusive ?? true,
+          toleranceMaxInclusive: input.toleranceMaxInclusive ?? true,
           toleranceNote: input.toleranceNote ?? null,
           decimalPlaces: input.decimalPlaces ?? null,
           logicalTestKey: input.logicalTestKey ?? null,
@@ -561,6 +563,8 @@ export class DeviceCalibrationParametersService {
             uomId: source.uomId,
             toleranceMin: source.toleranceMin,
             toleranceMax: source.toleranceMax,
+            toleranceMinInclusive: source.toleranceMinInclusive,
+            toleranceMaxInclusive: source.toleranceMaxInclusive,
             toleranceNote: source.toleranceNote,
             decimalPlaces: source.decimalPlaces,
             isActive: true,
@@ -803,6 +807,12 @@ export class DeviceCalibrationParametersService {
       ...(input.uomId !== undefined ? { uomId: input.uomId } : {}),
       ...(input.toleranceMin !== undefined ? { toleranceMin: input.toleranceMin } : {}),
       ...(input.toleranceMax !== undefined ? { toleranceMax: input.toleranceMax } : {}),
+      ...(input.toleranceMinInclusive !== undefined
+        ? { toleranceMinInclusive: input.toleranceMinInclusive }
+        : {}),
+      ...(input.toleranceMaxInclusive !== undefined
+        ? { toleranceMaxInclusive: input.toleranceMaxInclusive }
+        : {}),
       ...(input.toleranceNote !== undefined ? { toleranceNote: input.toleranceNote } : {}),
       ...(input.decimalPlaces !== undefined ? { decimalPlaces: input.decimalPlaces } : {}),
       ...(input.logicalTestKey !== undefined ? { logicalTestKey: input.logicalTestKey } : {}),
@@ -1056,6 +1066,8 @@ export class DeviceCalibrationParametersService {
         sequence,
         toleranceMin: input.toleranceMin ?? null,
         toleranceMax: input.toleranceMax ?? null,
+        toleranceMinInclusive: input.toleranceMinInclusive ?? true,
+        toleranceMaxInclusive: input.toleranceMaxInclusive ?? true,
         toleranceNote: input.toleranceNote ?? null,
       },
     });
@@ -1101,6 +1113,12 @@ export class DeviceCalibrationParametersService {
         ...(input.settingValue !== undefined ? { settingValue: input.settingValue } : {}),
         ...(input.toleranceMin !== undefined ? { toleranceMin: input.toleranceMin } : {}),
         ...(input.toleranceMax !== undefined ? { toleranceMax: input.toleranceMax } : {}),
+        ...(input.toleranceMinInclusive !== undefined
+          ? { toleranceMinInclusive: input.toleranceMinInclusive }
+          : {}),
+        ...(input.toleranceMaxInclusive !== undefined
+          ? { toleranceMaxInclusive: input.toleranceMaxInclusive }
+          : {}),
         ...(input.toleranceNote !== undefined ? { toleranceNote: input.toleranceNote } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
       },

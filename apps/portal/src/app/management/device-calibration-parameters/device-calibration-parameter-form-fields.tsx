@@ -8,7 +8,7 @@ import { CommandGroup, CommandItem } from "@/components/ui/command";
 import { CommandPopover } from "@/components/ui/command-popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { selectClassName } from "./device-calibration-parameters-ui";
+import { ToleranceBoundOperatorSelect, selectClassName } from "./device-calibration-parameters-ui";
 import type {
   DeviceCapabilityItemRow,
   DeviceCapabilityRow,
@@ -29,6 +29,10 @@ export interface DeviceCalibrationParameterFormValue {
   uomId: string;
   toleranceMin: string;
   toleranceMax: string;
+  /** true = ≥, false = >. Ignored when toleranceMin is empty. */
+  toleranceMinInclusive: boolean;
+  /** true = ≤, false = <. Ignored when toleranceMax is empty. */
+  toleranceMaxInclusive: boolean;
   toleranceNote: string;
   decimalPlaces: string;
   /**
@@ -357,33 +361,53 @@ export function DeviceCalibrationParameterFormFields({
             <label htmlFor="toleranceMin" className="block text-sm font-medium text-slate-700">
               Toleransi min
             </label>
-            <Input
-              id="toleranceMin"
-              type="number"
-              step="any"
-              value={value.toleranceMin}
-              onChange={(e) => onChange("toleranceMin", e.target.value)}
-              className={fieldClass}
-              placeholder="19"
-            />
+            <div className="mt-1 flex gap-2">
+              <ToleranceBoundOperatorSelect
+                id="toleranceMinInclusive"
+                side="min"
+                inclusive={value.toleranceMinInclusive}
+                disabled={value.toleranceMin.trim() === ""}
+                onChange={(inclusive) => onChange("toleranceMinInclusive", inclusive)}
+              />
+              <Input
+                id="toleranceMin"
+                type="number"
+                step="any"
+                value={value.toleranceMin}
+                onChange={(e) => onChange("toleranceMin", e.target.value)}
+                className="w-full placeholder:text-xs placeholder:font-normal placeholder:text-slate-400/70"
+                placeholder="19"
+              />
+            </div>
           </div>
           <div>
             <label htmlFor="toleranceMax" className="block text-sm font-medium text-slate-700">
               Toleransi max
             </label>
-            <Input
-              id="toleranceMax"
-              type="number"
-              step="any"
-              value={value.toleranceMax}
-              onChange={(e) => onChange("toleranceMax", e.target.value)}
-              className={fieldClass}
-              placeholder="31"
-            />
+            <div className="mt-1 flex gap-2">
+              <ToleranceBoundOperatorSelect
+                id="toleranceMaxInclusive"
+                side="max"
+                inclusive={value.toleranceMaxInclusive}
+                disabled={value.toleranceMax.trim() === ""}
+                onChange={(inclusive) => onChange("toleranceMaxInclusive", inclusive)}
+              />
+              <Input
+                id="toleranceMax"
+                type="number"
+                step="any"
+                value={value.toleranceMax}
+                onChange={(e) => onChange("toleranceMax", e.target.value)}
+                className="w-full placeholder:text-xs placeholder:font-normal placeholder:text-slate-400/70"
+                placeholder="31"
+              />
+            </div>
           </div>
         </div>
         <p className="-mt-2 text-xs text-slate-500">
-          Isi keduanya untuk rentang (25 ± 6°C → 19–31). Hanya max untuk batas atas (≤500 µA).
+          Isi keduanya untuk rentang (25 ± 6°C → 19–31). Hanya max untuk batas atas. Default
+          termasuk batas (≥ / ≤). Pilih &quot;tidak termasuk&quot; untuk &gt; atau &lt;, misalnya
+          &gt; 2 MΩ.
         </p>
         <div>
           <label htmlFor="toleranceNote" className="block text-sm font-medium text-slate-700">
@@ -614,8 +638,12 @@ export function buildDeviceCalibrationParameterCreatePayload(
     name: form.name.trim(),
     uomId: form.uomId,
     ...(description ? { description } : {}),
-    ...(minRaw !== "" ? { toleranceMin: Number(minRaw) } : {}),
-    ...(maxRaw !== "" ? { toleranceMax: Number(maxRaw) } : {}),
+    ...(minRaw !== ""
+      ? { toleranceMin: Number(minRaw), toleranceMinInclusive: form.toleranceMinInclusive }
+      : {}),
+    ...(maxRaw !== ""
+      ? { toleranceMax: Number(maxRaw), toleranceMaxInclusive: form.toleranceMaxInclusive }
+      : {}),
     ...(note ? { toleranceNote: note } : {}),
     ...(dpRaw !== "" ? { decimalPlaces: Number(dpRaw) } : {}),
     ...(keyRaw !== "" ? { logicalTestKey: keyRaw } : {}),
@@ -653,6 +681,8 @@ export function buildDeviceCalibrationParameterUpdatePayload(
     description: form.description.trim() ? form.description.trim() : null,
     toleranceMin: minRaw === "" ? null : Number(minRaw),
     toleranceMax: maxRaw === "" ? null : Number(maxRaw),
+    toleranceMinInclusive: minRaw === "" ? true : form.toleranceMinInclusive,
+    toleranceMaxInclusive: maxRaw === "" ? true : form.toleranceMaxInclusive,
     toleranceNote: form.toleranceNote.trim() ? form.toleranceNote.trim() : null,
     decimalPlaces: dpRaw === "" ? null : Number(dpRaw),
     logicalTestKey: keyRaw === "" ? null : keyRaw,

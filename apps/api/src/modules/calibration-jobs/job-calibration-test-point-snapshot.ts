@@ -10,6 +10,8 @@ const activeTestPointSelect = {
   settingValue: true,
   toleranceMin: true,
   toleranceMax: true,
+  toleranceMinInclusive: true,
+  toleranceMaxInclusive: true,
   toleranceNote: true,
 } as const;
 
@@ -43,6 +45,8 @@ export async function copyActiveTestPointsIntoJobSnapshot(
       settingValue: tp.settingValue,
       toleranceMin: tp.toleranceMin,
       toleranceMax: tp.toleranceMax,
+      toleranceMinInclusive: tp.toleranceMinInclusive,
+      toleranceMaxInclusive: tp.toleranceMaxInclusive,
       toleranceNote: tp.toleranceNote,
     })),
     skipDuplicates: true,

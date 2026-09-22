@@ -70,6 +70,8 @@ describe("calibrationTestPointFormFromRow", () => {
       settingValue: "25",
       toleranceMin: "20",
       toleranceMax: "30",
+      toleranceMinInclusive: true,
+      toleranceMaxInclusive: true,
       toleranceNote: "25 +/- 5",
       isActive: false,
     });
@@ -113,6 +115,8 @@ describe("buildCalibrationTestPointCreatePayload", () => {
       settingValue: 25,
       toleranceMin: 20,
       toleranceMax: 30,
+      toleranceMinInclusive: true,
+      toleranceMaxInclusive: true,
       toleranceNote: "25 +/- 5",
     });
   });
@@ -135,6 +139,8 @@ describe("buildCalibrationTestPointUpdatePayload", () => {
       settingValue: null,
       toleranceMin: null,
       toleranceMax: null,
+      toleranceMinInclusive: true,
+      toleranceMaxInclusive: true,
       toleranceNote: null,
       isActive: true,
     });

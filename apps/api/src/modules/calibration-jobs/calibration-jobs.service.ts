@@ -371,6 +371,12 @@ export interface MeasurementParameterSummary {
    * field existed.
    */
   allowsRepeatedReadings: boolean;
+  /**
+   * Structured bound operators. `false` is strict (`>` / `<`). Omitted clients
+   * can treat a missing value as inclusive; this API always sends the flag.
+   */
+  toleranceMinInclusive: boolean;
+  toleranceMaxInclusive: boolean;
 }
 
 /** One active CalibrationTestPoint nested under a Pattern B grid parameter. */
@@ -444,6 +450,8 @@ const measurementParameterSelect = {
   toleranceMin: true,
   toleranceMax: true,
   toleranceNote: true,
+  toleranceMinInclusive: true,
+  toleranceMaxInclusive: true,
   logicalTestKey: true,
   logicalTestSequence: true,
   allowsRepeatedReadings: true,
@@ -480,6 +488,8 @@ function toParameterSummary(row: MeasurementParameterRow): MeasurementParameterS
     toleranceMin: row.toleranceMin?.toString() ?? null,
     toleranceMax: row.toleranceMax?.toString() ?? null,
     toleranceNote: row.toleranceNote,
+    toleranceMinInclusive: row.toleranceMinInclusive,
+    toleranceMaxInclusive: row.toleranceMaxInclusive,
     capabilityName: row.capabilityItem.capability.name,
     capabilityItemName: row.capabilityItem.name,
     logicalTestKey: row.logicalTestKey,
@@ -2222,7 +2232,7 @@ export class CalibrationJobsService {
     if (verdict.complete) return;
 
     throw new BadRequestException({
-      message: "Measurement results are incomplete for this attempt",
+      message: "Lengkapi hasil pengukuran",
       code: CALIBRATION_MEASUREMENTS_INCOMPLETE,
       details: { parameters: verdict.parameters },
     });

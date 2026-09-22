@@ -1409,6 +1409,13 @@ model DeviceCalibrationParameter {
   uomId                  String?
   toleranceMin           Decimal?                       @db.Decimal(18, 4)
   toleranceMax           Decimal?                       @db.Decimal(18, 4)
+  /// Whether `toleranceMin` is inclusive (≥). False means strict (>).
+  /// Ignored when `toleranceMin` is NULL. Default true keeps every pre-existing
+  /// row on the inclusive comparison the evaluator used before this column.
+  toleranceMinInclusive  Boolean                        @default(true)
+  /// Whether `toleranceMax` is inclusive (≤). False means strict (<).
+  /// Ignored when `toleranceMax` is NULL. Default true is the historical behavior.
+  toleranceMaxInclusive  Boolean                        @default(true)
   toleranceNote          String?
   // Digits after the decimal point required for this parameter's measured
   // calibration result. Only meaningful for valueType = NUMBER; NULL for
@@ -2542,9 +2549,15 @@ model CalibrationTestPoint {
   settingValue Decimal? @db.Decimal(18, 4)
 
   /// Optional per-point tolerance override. NULL = inherit parent parameter.
-  toleranceMin  Decimal? @db.Decimal(18, 4)
-  toleranceMax  Decimal? @db.Decimal(18, 4)
-  toleranceNote String?
+  toleranceMin           Decimal? @db.Decimal(18, 4)
+  toleranceMax           Decimal? @db.Decimal(18, 4)
+  /// Inclusive (≥) unless false (>). Used only when this point supplies its own
+  /// `toleranceMin`. Default true matches the parent parameter's historical bound.
+  toleranceMinInclusive  Boolean  @default(true)
+  /// Inclusive (≤) unless false (<). Used only when this point supplies its own
+  /// `toleranceMax`.
+  toleranceMaxInclusive  Boolean  @default(true)
+  toleranceNote          String?
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -2571,9 +2584,11 @@ model JobCalibrationTestPoint {
   sequence      Int
   settingLabel  String
   settingValue  Decimal? @db.Decimal(18, 4)
-  toleranceMin  Decimal? @db.Decimal(18, 4)
-  toleranceMax  Decimal? @db.Decimal(18, 4)
-  toleranceNote String?
+  toleranceMin           Decimal? @db.Decimal(18, 4)
+  toleranceMax           Decimal? @db.Decimal(18, 4)
+  toleranceMinInclusive  Boolean  @default(true)
+  toleranceMaxInclusive  Boolean  @default(true)
+  toleranceNote          String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -14,6 +14,8 @@ export interface CalibrationTestPointApiRow {
   settingValue: string | number | null;
   toleranceMin: string | number | null;
   toleranceMax: string | number | null;
+  toleranceMinInclusive: boolean;
+  toleranceMaxInclusive: boolean;
   toleranceNote: string | null;
   isActive: boolean;
   createdAt: string;
@@ -25,6 +27,8 @@ export interface CalibrationTestPointCreateRequest {
   settingValue?: number;
   toleranceMin?: number;
   toleranceMax?: number;
+  toleranceMinInclusive?: boolean;
+  toleranceMaxInclusive?: boolean;
   toleranceNote?: string;
 }
 
@@ -33,6 +37,8 @@ export interface CalibrationTestPointUpdateRequest {
   settingValue?: number | null;
   toleranceMin?: number | null;
   toleranceMax?: number | null;
+  toleranceMinInclusive?: boolean;
+  toleranceMaxInclusive?: boolean;
   toleranceNote?: string | null;
   isActive?: boolean;
 }

@@ -115,6 +115,8 @@ const parameterSelect = {
   decimalPlaces: true,
   toleranceMin: true,
   toleranceMax: true,
+  toleranceMinInclusive: true,
+  toleranceMaxInclusive: true,
   toleranceNote: true,
 } as const;
 
@@ -124,6 +126,8 @@ const testPointSelect = {
   settingValue: true,
   toleranceMin: true,
   toleranceMax: true,
+  toleranceMinInclusive: true,
+  toleranceMaxInclusive: true,
   toleranceNote: true,
 } as const;
 
@@ -165,8 +169,11 @@ export class MeasurementResultsService {
       valueType: parameter.valueType,
       measuredValue: input.measuredValue,
       measuredBool: input.measuredBool,
+      measuredText: input.measuredText,
       effectiveToleranceMin: resolved.effectiveToleranceMin,
       effectiveToleranceMax: resolved.effectiveToleranceMax,
+      toleranceMinInclusive: resolved.toleranceMinInclusive,
+      toleranceMaxInclusive: resolved.toleranceMaxInclusive,
     });
 
     return this.translateUnique(() =>
@@ -256,8 +263,11 @@ export class MeasurementResultsService {
             valueType: parameter.valueType,
             measuredValue: input.measuredValue,
             measuredBool: input.measuredBool,
+            measuredText: input.measuredText,
             effectiveToleranceMin: resolved.effectiveToleranceMin,
             effectiveToleranceMax: resolved.effectiveToleranceMax,
+            toleranceMinInclusive: resolved.toleranceMinInclusive,
+            toleranceMaxInclusive: resolved.toleranceMaxInclusive,
           }),
           attachmentFileObjectId: input.attachmentFileObjectId ?? null,
           recordedByUserId: userId,
@@ -342,8 +352,11 @@ export class MeasurementResultsService {
         valueType: parameter.valueType,
         measuredValue: input.measuredValue !== undefined ? input.measuredValue : row.measuredValue,
         measuredBool: input.measuredBool !== undefined ? input.measuredBool : row.measuredBool,
+        measuredText: input.measuredText !== undefined ? input.measuredText : row.measuredText,
         effectiveToleranceMin: resolved.effectiveToleranceMin,
         effectiveToleranceMax: resolved.effectiveToleranceMax,
+        toleranceMinInclusive: resolved.toleranceMinInclusive,
+        toleranceMaxInclusive: resolved.toleranceMaxInclusive,
       });
     }
 
@@ -507,6 +520,8 @@ export class MeasurementResultsService {
         settingValue: frozen.settingValue,
         toleranceMin: frozen.toleranceMin,
         toleranceMax: frozen.toleranceMax,
+        toleranceMinInclusive: frozen.toleranceMinInclusive,
+        toleranceMaxInclusive: frozen.toleranceMaxInclusive,
         toleranceNote: frozen.toleranceNote,
       },
     };

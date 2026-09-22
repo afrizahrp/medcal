@@ -54,6 +54,10 @@ export interface TechMeasurementParameter {
   uom: { code: string; symbol: string } | null;
   toleranceMin: string | null;
   toleranceMax: string | null;
+  /** `false` = strict `>`. Missing or true = inclusive `≥`. */
+  toleranceMinInclusive?: boolean;
+  /** `false` = strict `<`. Missing or true = inclusive `≤`. */
+  toleranceMaxInclusive?: boolean;
   toleranceNote: string | null;
   capabilityName: string;
   capabilityItemName: string;
@@ -293,14 +297,43 @@ export function canAddReplicateSlot(
   return editable && param.allowsRepeatedReadings;
 }
 
-/** Anonymous repetition label for Pattern A, and nested reps under a named point. */
-export function replicateLabel(replicateIndex: number): string {
-  return `Ulangan ${replicateIndex}`;
+export interface ReplicateLabelOptions {
+  /**
+   * Catalog `allowsRepeatedReadings`. Omitted or true → numbered slots
+   * ("Pembacaan 1"). False with a single visible slot → "Pembacaan".
+   */
+  allowsRepeatedReadings?: boolean;
+  /**
+   * How many slots are on screen. A single-reading parameter that already has
+   * more than one stored reading still numbers them so each row stays distinct.
+   */
+  visibleCount?: number;
 }
 
-export function patternASlotLabels(maxExistingIndex: number, extraSlots: number): string[] {
+/**
+ * Anonymous repetition label for Pattern A, and nested reps under a named point.
+ * Presentation only — does not change replicateIndex or persistence.
+ */
+export function replicateLabel(replicateIndex: number, options?: ReplicateLabelOptions): string {
+  const allowsRepeated = options?.allowsRepeatedReadings !== false;
+  const singleReading =
+    !allowsRepeated && (options?.visibleCount == null || options.visibleCount <= 1);
+  if (singleReading) return "Pembacaan";
+  return `Pembacaan ${replicateIndex}`;
+}
+
+export function patternASlotLabels(
+  maxExistingIndex: number,
+  extraSlots: number,
+  options?: Pick<ReplicateLabelOptions, "allowsRepeatedReadings">,
+): string[] {
   const count = visibleReplicateCount(maxExistingIndex, extraSlots);
-  return Array.from({ length: count }, (_, i) => replicateLabel(i + 1));
+  return Array.from({ length: count }, (_, i) =>
+    replicateLabel(i + 1, {
+      allowsRepeatedReadings: options?.allowsRepeatedReadings,
+      visibleCount: count,
+    }),
+  );
 }
 
 export function sortNamedMeasurementPoints<T extends { sequence: number }>(points: readonly T[]): T[] {
@@ -309,7 +342,7 @@ export function sortNamedMeasurementPoints<T extends { sequence: number }>(point
 
 export interface NamedPointSlotView {
   replicateIndex: number;
-  /** settingLabel when this point has a single visible slot; otherwise "Ulangan N". */
+  /** settingLabel when this point has a single visible slot; otherwise "Pembacaan N". */
   slotLabel: string;
 }
 
@@ -324,7 +357,7 @@ export interface NamedPointGroupView {
 
 /**
  * Pattern B presentation: named-point identity is `settingLabel` from the job
- * payload. Nested "Ulangan N" appears only when that point has more than one
+ * payload. Nested "Pembacaan N" appears only when that point has more than one
  * visible repetition slot. Labels are never inferred from replicateIndex.
  */
 export function namedPointGroupView(args: {
@@ -355,7 +388,7 @@ export function namedPointGroupView(args: {
 /**
  * Historical Pattern A rows (`calibrationTestPointId` null) must not receive an
  * invented named-point label. Unknown ids also yield null — never a fallback
- * "Ulangan" or hardcoded Awal/Akhir.
+ * "Pembacaan" or hardcoded Awal/Akhir.
  */
 export function namedLabelForResult(
   calibrationTestPointId: string | null,
@@ -596,6 +629,8 @@ export function isValidMeasuredValue(
 export function toleranceText(param: {
   toleranceMin: string | null;
   toleranceMax: string | null;
+  toleranceMinInclusive?: boolean;
+  toleranceMaxInclusive?: boolean;
   toleranceNote: string | null;
   uom: { symbol: string } | null;
 }): string {
@@ -603,9 +638,16 @@ export function toleranceText(param: {
   if (note) return note;
   const unit = param.uom?.symbol ? ` ${param.uom.symbol}` : "";
   const { toleranceMin: min, toleranceMax: max } = param;
-  if (min !== null && max !== null) return `${min}${unit} – ${max}${unit}`;
-  if (min !== null) return `≥ ${min}${unit}`;
-  if (max !== null) return `≤ ${max}${unit}`;
+  const minOp = param.toleranceMinInclusive === false ? ">" : "≥";
+  const maxOp = param.toleranceMaxInclusive === false ? "<" : "≤";
+  if (min !== null && max !== null) {
+    if (param.toleranceMinInclusive === false || param.toleranceMaxInclusive === false) {
+      return `${minOp} ${min}${unit} – ${maxOp} ${max}${unit}`;
+    }
+    return `${min}${unit} – ${max}${unit}`;
+  }
+  if (min !== null) return `${minOp} ${min}${unit}`;
+  if (max !== null) return `${maxOp} ${max}${unit}`;
   return "Tanpa toleransi terukur";
 }
 

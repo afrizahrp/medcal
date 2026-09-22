@@ -291,6 +291,69 @@ describe("MeasurementResultsService — CRUD", () => {
     expect(row.isWithinTolerance).toBe(true);
   });
 
+  it("evaluates a strict lower bound and stores over-range OR as text", async () => {
+    const ctx = await startedJob();
+    const param = await makeParameter(ctx, {
+      toleranceMin: 2,
+      toleranceMax: null,
+      toleranceMinInclusive: false,
+      toleranceNote: "> 2 MΩ",
+    });
+
+    const overRange = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        measuredValue: null,
+        measuredText: "OR",
+      },
+      ctx.technician.id,
+    );
+    expect(overRange.measuredValue).toBeNull();
+    expect(overRange.measuredText).toBe("OR");
+    expect(overRange.isWithinTolerance).toBe(true);
+
+    const atBound = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 2,
+        measuredValue: 2,
+      },
+      ctx.technician.id,
+    );
+    expect(atBound.isWithinTolerance).toBe(false);
+
+    const above = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 3,
+        measuredValue: 3,
+      },
+      ctx.technician.id,
+    );
+    expect(above.isWithinTolerance).toBe(true);
+
+    const arbitrary = await svc.create(
+      companyId,
+      {
+        calibrationJobId: ctx.jobId,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 4,
+        measuredValue: null,
+        measuredText: "ABC",
+      },
+      ctx.technician.id,
+    );
+    expect(arbitrary.measuredText).toBe("ABC");
+    expect(arbitrary.isWithinTolerance).toBeNull();
+  });
+
   it("create rejects when the job has not started (CALIBRATION_JOB_NOT_STARTED)", async () => {
     const ctx = await startedJob();
     await prisma.calibrationJob.update({

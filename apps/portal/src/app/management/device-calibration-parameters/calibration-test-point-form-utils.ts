@@ -16,6 +16,8 @@ export interface CalibrationTestPointFormValue {
   settingValue: string;
   toleranceMin: string;
   toleranceMax: string;
+  toleranceMinInclusive: boolean;
+  toleranceMaxInclusive: boolean;
   toleranceNote: string;
   isActive: boolean;
 }
@@ -25,6 +27,8 @@ export const emptyCalibrationTestPointForm: CalibrationTestPointFormValue = {
   settingValue: "",
   toleranceMin: "",
   toleranceMax: "",
+  toleranceMinInclusive: true,
+  toleranceMaxInclusive: true,
   toleranceNote: "",
   isActive: true,
 };
@@ -34,6 +38,8 @@ export function calibrationTestPointFormFromRow(row: {
   settingValue: string | number | null;
   toleranceMin: string | number | null;
   toleranceMax: string | number | null;
+  toleranceMinInclusive?: boolean;
+  toleranceMaxInclusive?: boolean;
   toleranceNote: string | null;
   isActive: boolean;
 }): CalibrationTestPointFormValue {
@@ -45,6 +51,8 @@ export function calibrationTestPointFormFromRow(row: {
       row.toleranceMin == null || row.toleranceMin === "" ? "" : String(Number(row.toleranceMin)),
     toleranceMax:
       row.toleranceMax == null || row.toleranceMax === "" ? "" : String(Number(row.toleranceMax)),
+    toleranceMinInclusive: row.toleranceMinInclusive !== false,
+    toleranceMaxInclusive: row.toleranceMaxInclusive !== false,
     toleranceNote: row.toleranceNote ?? "",
     isActive: row.isActive,
   };
@@ -80,8 +88,12 @@ export function buildCalibrationTestPointCreatePayload(form: CalibrationTestPoin
   return {
     settingLabel: form.settingLabel.trim(),
     ...(svRaw !== "" ? { settingValue: Number(svRaw) } : {}),
-    ...(minRaw !== "" ? { toleranceMin: Number(minRaw) } : {}),
-    ...(maxRaw !== "" ? { toleranceMax: Number(maxRaw) } : {}),
+    ...(minRaw !== ""
+      ? { toleranceMin: Number(minRaw), toleranceMinInclusive: form.toleranceMinInclusive }
+      : {}),
+    ...(maxRaw !== ""
+      ? { toleranceMax: Number(maxRaw), toleranceMaxInclusive: form.toleranceMaxInclusive }
+      : {}),
     ...(note ? { toleranceNote: note } : {}),
   };
 }
@@ -95,6 +107,8 @@ export function buildCalibrationTestPointUpdatePayload(form: CalibrationTestPoin
     settingValue: svRaw === "" ? null : Number(svRaw),
     toleranceMin: minRaw === "" ? null : Number(minRaw),
     toleranceMax: maxRaw === "" ? null : Number(maxRaw),
+    toleranceMinInclusive: minRaw === "" ? true : form.toleranceMinInclusive,
+    toleranceMaxInclusive: maxRaw === "" ? true : form.toleranceMaxInclusive,
     toleranceNote: form.toleranceNote.trim() ? form.toleranceNote.trim() : null,
     isActive: form.isActive,
   };

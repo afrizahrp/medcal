@@ -38,6 +38,8 @@ const emptyForm: DeviceCalibrationParameterFormValue = {
   uomId: "",
   toleranceMin: "",
   toleranceMax: "",
+  toleranceMinInclusive: true,
+  toleranceMaxInclusive: true,
   toleranceNote: "",
   decimalPlaces: "",
   logicalTestKey: "",

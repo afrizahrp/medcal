@@ -1,7 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
-import { selectClassName } from "./device-calibration-parameters-ui";
+import { ToleranceBoundOperatorSelect, selectClassName } from "./device-calibration-parameters-ui";
 import type { CalibrationTestPointFormValue } from "./calibration-test-point-form-utils";
 
 // Pure form-state logic (payload builders, validation, error formatting) lives
@@ -89,15 +89,24 @@ export function CalibrationTestPointFormFields({
           >
             Toleransi Minimum
           </label>
-          <Input
-            id={`${idPrefix}-toleranceMin`}
-            type="number"
-            step="any"
-            value={value.toleranceMin}
-            onChange={(e) => onChange("toleranceMin", e.target.value)}
-            className={fieldClass}
-            placeholder="19"
-          />
+          <div className="mt-1 flex gap-2">
+            <ToleranceBoundOperatorSelect
+              id={`${idPrefix}-toleranceMinInclusive`}
+              side="min"
+              inclusive={value.toleranceMinInclusive}
+              disabled={value.toleranceMin.trim() === ""}
+              onChange={(inclusive) => onChange("toleranceMinInclusive", inclusive)}
+            />
+            <Input
+              id={`${idPrefix}-toleranceMin`}
+              type="number"
+              step="any"
+              value={value.toleranceMin}
+              onChange={(e) => onChange("toleranceMin", e.target.value)}
+              className="w-full placeholder:text-xs placeholder:font-normal placeholder:text-slate-400/70"
+              placeholder="19"
+            />
+          </div>
         </div>
         <div>
           <label
@@ -106,19 +115,29 @@ export function CalibrationTestPointFormFields({
           >
             Toleransi Maksimum
           </label>
-          <Input
-            id={`${idPrefix}-toleranceMax`}
-            type="number"
-            step="any"
-            value={value.toleranceMax}
-            onChange={(e) => onChange("toleranceMax", e.target.value)}
-            className={fieldClass}
-            placeholder="31"
-          />
+          <div className="mt-1 flex gap-2">
+            <ToleranceBoundOperatorSelect
+              id={`${idPrefix}-toleranceMaxInclusive`}
+              side="max"
+              inclusive={value.toleranceMaxInclusive}
+              disabled={value.toleranceMax.trim() === ""}
+              onChange={(inclusive) => onChange("toleranceMaxInclusive", inclusive)}
+            />
+            <Input
+              id={`${idPrefix}-toleranceMax`}
+              type="number"
+              step="any"
+              value={value.toleranceMax}
+              onChange={(e) => onChange("toleranceMax", e.target.value)}
+              className="w-full placeholder:text-xs placeholder:font-normal placeholder:text-slate-400/70"
+              placeholder="31"
+            />
+          </div>
         </div>
       </div>
       <p className="-mt-2 text-xs text-slate-500">
-        Kosongkan untuk mewarisi toleransi parameter induk.
+        Kosongkan untuk mewarisi toleransi parameter induk. Default termasuk batas
+        (≥ / ≤). Pilih &quot;tidak termasuk&quot; untuk &gt; atau &lt;.
       </p>
 
       <div>

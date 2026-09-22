@@ -65,6 +65,10 @@ export interface DeviceCalibrationParameterRow {
   uomId: string | null;
   toleranceMin: string | number | null;
   toleranceMax: string | number | null;
+  /** `false` = strict `>`. Missing or true = inclusive `≥`. */
+  toleranceMinInclusive: boolean;
+  /** `false` = strict `<`. Missing or true = inclusive `≤`. */
+  toleranceMaxInclusive: boolean;
   toleranceNote: string | null;
   decimalPlaces: number | null;
   sortOrder: number;
@@ -113,19 +117,57 @@ function formatBound(value: string | number): string {
 export function formatCalibrationTolerance(row: {
   toleranceMin: string | number | null;
   toleranceMax: string | number | null;
+  toleranceMinInclusive?: boolean;
+  toleranceMaxInclusive?: boolean;
   toleranceNote: string | null;
 }): string | null {
   const min = row.toleranceMin == null || row.toleranceMin === "" ? null : Number(row.toleranceMin);
   const max = row.toleranceMax == null || row.toleranceMax === "" ? null : Number(row.toleranceMax);
   const hasMin = min != null && Number.isFinite(min);
   const hasMax = max != null && Number.isFinite(max);
+  const minOp = row.toleranceMinInclusive === false ? ">" : "≥";
+  const maxOp = row.toleranceMaxInclusive === false ? "<" : "≤";
   let bounds: string | null = null;
-  if (hasMin && hasMax) bounds = `${formatBound(min)} – ${formatBound(max)}`;
-  else if (hasMax) bounds = `≤ ${formatBound(max)}`;
-  else if (hasMin) bounds = `≥ ${formatBound(min)}`;
+  if (hasMin && hasMax) {
+    bounds =
+      row.toleranceMinInclusive === false || row.toleranceMaxInclusive === false
+        ? `${minOp} ${formatBound(min)} – ${maxOp} ${formatBound(max)}`
+        : `${formatBound(min)} – ${formatBound(max)}`;
+  } else if (hasMax) bounds = `${maxOp} ${formatBound(max)}`;
+  else if (hasMin) bounds = `${minOp} ${formatBound(min)}`;
   const note = row.toleranceNote?.trim() || null;
   if (bounds && note) return `${bounds} (${note})`;
   return bounds ?? note;
+}
+
+export function ToleranceBoundOperatorSelect({
+  id,
+  side,
+  inclusive,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  side: "min" | "max";
+  inclusive: boolean;
+  disabled?: boolean;
+  onChange: (inclusive: boolean) => void;
+}) {
+  const inclusiveSymbol = side === "min" ? "≥" : "≤";
+  const exclusiveSymbol = side === "min" ? ">" : "<";
+  return (
+    <select
+      id={id}
+      aria-label={side === "min" ? "Operator batas minimum" : "Operator batas maksimum"}
+      disabled={disabled}
+      value={inclusive ? "true" : "false"}
+      onChange={(e) => onChange(e.target.value === "true")}
+      className={`${selectClassName} w-28 shrink-0`}
+    >
+      <option value="true">{inclusiveSymbol} termasuk</option>
+      <option value="false">{exclusiveSymbol} tidak termasuk</option>
+    </select>
+  );
 }
 
 /** "DXRAY_REPRODUCIBILITY #2" for a grouped quantity, "—" for a standalone one. */

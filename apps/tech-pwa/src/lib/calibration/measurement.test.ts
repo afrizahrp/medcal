@@ -198,6 +198,17 @@ describe("toleranceText", () => {
       toleranceText({ toleranceMin: "2", toleranceMax: "8", toleranceNote: null, uom: { symbol: "°C" } }),
     ).toBe("2 °C – 8 °C");
   });
+  it("uses a strict lower operator when the structured flag is exclusive", () => {
+    expect(
+      toleranceText({
+        toleranceMin: "2",
+        toleranceMax: null,
+        toleranceMinInclusive: false,
+        toleranceNote: null,
+        uom: { symbol: "MΩ" },
+      }),
+    ).toBe("> 2 MΩ");
+  });
   it("handles the no-tolerance case", () => {
     expect(
       toleranceText({ toleranceMin: null, toleranceMax: null, toleranceNote: null, uom: null }),
@@ -519,14 +530,27 @@ describe("Pattern A vs Pattern B measurement-point labels", () => {
     ...extras,
   });
 
-  it("Pattern A still displays Ulangan 1, Ulangan 2", () => {
-    expect(patternASlotLabels(0, 0)).toEqual(["Ulangan 1"]);
-    expect(patternASlotLabels(2, 0)).toEqual(["Ulangan 1", "Ulangan 2"]);
-    expect(replicateLabel(1)).toBe("Ulangan 1");
-    expect(replicateLabel(2)).toBe("Ulangan 2");
+  it("Pattern A numbers Pembacaan when repeated readings are allowed", () => {
+    expect(patternASlotLabels(0, 0)).toEqual(["Pembacaan 1"]);
+    expect(patternASlotLabels(2, 0)).toEqual(["Pembacaan 1", "Pembacaan 2"]);
+    expect(patternASlotLabels(0, 0, { allowsRepeatedReadings: true })).toEqual(["Pembacaan 1"]);
+    expect(replicateLabel(1)).toBe("Pembacaan 1");
+    expect(replicateLabel(2)).toBe("Pembacaan 2");
   });
 
-  it("Pattern B shows settingLabel Awal / Akhir, not Ulangan", () => {
+  it("Pattern A shows Pembacaan without an index when the parameter is single-reading", () => {
+    expect(patternASlotLabels(0, 0, { allowsRepeatedReadings: false })).toEqual(["Pembacaan"]);
+    expect(replicateLabel(1, { allowsRepeatedReadings: false, visibleCount: 1 })).toBe("Pembacaan");
+  });
+
+  it("numbers legacy extra readings on a single-reading parameter so rows stay distinct", () => {
+    expect(patternASlotLabels(2, 0, { allowsRepeatedReadings: false })).toEqual([
+      "Pembacaan 1",
+      "Pembacaan 2",
+    ]);
+  });
+
+  it("Pattern B shows settingLabel Awal / Akhir, not Pembacaan", () => {
     const awal = namedPointGroupView({
       testPoint: tp("tp-a", 1, "Awal"),
       maxExistingReplicateIndex: 1,
@@ -561,7 +585,7 @@ describe("Pattern A vs Pattern B measurement-point labels", () => {
     expect(ordered.map((p) => p.settingLabel)).toEqual(["Awal", "Akhir"]);
   });
 
-  it("keeps nested Ulangan labels only inside a named point with extra repetitions", () => {
+  it("keeps nested Pembacaan labels only inside a named point with extra repetitions", () => {
     const group = namedPointGroupView({
       testPoint: tp("tp-a", 1, "Awal"),
       maxExistingReplicateIndex: 2,
@@ -570,8 +594,8 @@ describe("Pattern A vs Pattern B measurement-point labels", () => {
     expect(group.settingLabel).toBe("Awal");
     expect(group.showGroupHeader).toBe(true);
     expect(group.slots.map((s) => ({ index: s.replicateIndex, label: s.slotLabel }))).toEqual([
-      { index: 1, label: "Ulangan 1" },
-      { index: 2, label: "Ulangan 2" },
+      { index: 1, label: "Pembacaan 1" },
+      { index: 2, label: "Pembacaan 2" },
     ]);
   });
 
@@ -582,7 +606,7 @@ describe("Pattern A vs Pattern B measurement-point labels", () => {
       extraSlots: 1,
     });
     expect(group.slots).toHaveLength(2);
-    expect(group.slots.map((s) => s.slotLabel)).toEqual(["Ulangan 1", "Ulangan 2"]);
+    expect(group.slots.map((s) => s.slotLabel)).toEqual(["Pembacaan 1", "Pembacaan 2"]);
   });
 
   it("preserves settingValue on the named-point view without using it as identity", () => {
@@ -710,12 +734,12 @@ describe("Pattern A vs Pattern B measurement-point labels", () => {
     expect(groups.map((g) => g.settingLabel)).toEqual(["Awal", "Akhir"]);
     expect(groups.map((g) => g.slots.map((s) => s.slotLabel))).toEqual([["Awal"], ["Akhir"]]);
     expect(groups.map((g) => g.slots.map((s) => s.measuredValue))).toEqual([["25"], ["6"]]);
-    expect(groups.flatMap((g) => g.slots.map((s) => s.slotLabel)).some((l) => l.startsWith("Ulangan"))).toBe(
+    expect(groups.flatMap((g) => g.slots.map((s) => s.slotLabel)).some((l) => l.startsWith("Pembacaan"))).toBe(
       false,
     );
   });
 
-  it("does not collapse two named points into Ulangan 1 / Ulangan 2 by replicateIndex", () => {
+  it("does not collapse two named points into Pembacaan 1 / Pembacaan 2 by replicateIndex", () => {
     const groups = patternBEntryPresentation(
       [tp("awal", 1, "Awal"), tp("akhir", 2, "Akhir")],
       [
@@ -740,13 +764,13 @@ describe("Pattern A vs Pattern B measurement-point labels", () => {
     );
     expect(groups[0]?.settingLabel).toBe("Awal");
     expect(groups[0]?.slots.map((s) => ({ label: s.slotLabel, value: s.measuredValue }))).toEqual([
-      { label: "Ulangan 1", value: "25" },
-      { label: "Ulangan 2", value: "25.1" },
+      { label: "Pembacaan 1", value: "25" },
+      { label: "Pembacaan 2", value: "25.1" },
     ]);
     expect(groups[1]?.settingLabel).toBe("Akhir");
     expect(groups[1]?.slots.map((s) => ({ label: s.slotLabel, value: s.measuredValue }))).toEqual([
-      { label: "Ulangan 1", value: "26" },
-      { label: "Ulangan 2", value: "26.2" },
+      { label: "Pembacaan 1", value: "26" },
+      { label: "Pembacaan 2", value: "26.2" },
     ]);
   });
 
@@ -763,7 +787,7 @@ describe("Pattern A vs Pattern B measurement-point labels", () => {
     expect(namedLabelForResult(null, [tp("awal", 1, "Awal")])).toBeNull();
   });
 
-  it("Suhu Ruangan with zero snapshot test points remains Pattern A (Ulangan), not invented Awal/Akhir", () => {
+  it("Suhu Ruangan with zero snapshot test points remains Pattern A (Pembacaan), not invented Awal/Akhir", () => {
     const data: TechMeasurementParametersResponse = {
       deviceType: { id: "dt", name: "Bed Side Monitor" },
       parameters: [param("suhu", { name: "Suhu Ruangan" })],
@@ -771,6 +795,7 @@ describe("Pattern A vs Pattern B measurement-point labels", () => {
     };
     const target = resolveMeasurementEntryTarget(data, "suhu");
     expect(target?.kind).toBe("DIRECT");
-    expect(patternASlotLabels(2, 0)).toEqual(["Ulangan 1", "Ulangan 2"]);
+    expect(patternASlotLabels(2, 0)).toEqual(["Pembacaan 1", "Pembacaan 2"]);
+    expect(patternASlotLabels(0, 0, { allowsRepeatedReadings: false })).toEqual(["Pembacaan"]);
   });
 });

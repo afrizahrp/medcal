@@ -63,6 +63,8 @@ const emptyForm: DeviceCalibrationParameterFormValue = {
   uomId: "",
   toleranceMin: "",
   toleranceMax: "",
+  toleranceMinInclusive: true,
+  toleranceMaxInclusive: true,
   toleranceNote: "",
   decimalPlaces: "",
   logicalTestKey: "",
@@ -85,6 +87,8 @@ function formFromRow(row: DeviceCalibrationParameterRow): DeviceCalibrationParam
       row.toleranceMin == null || row.toleranceMin === "" ? "" : String(Number(row.toleranceMin)),
     toleranceMax:
       row.toleranceMax == null || row.toleranceMax === "" ? "" : String(Number(row.toleranceMax)),
+    toleranceMinInclusive: row.toleranceMinInclusive !== false,
+    toleranceMaxInclusive: row.toleranceMaxInclusive !== false,
     toleranceNote: row.toleranceNote ?? "",
     decimalPlaces: row.decimalPlaces == null ? "" : String(row.decimalPlaces),
     logicalTestKey: row.logicalTestKey ?? "",

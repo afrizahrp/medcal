@@ -285,7 +285,7 @@ export function MeasurementGridEntry({
                               key={key}
                               className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3"
                             >
-                              <span className="min-w-16 shrink-0 text-xs font-medium text-slate-500">
+                              <span className="min-w-16 shrink-0 whitespace-nowrap text-xs font-medium text-slate-500">
                                 {cardLabel}
                               </span>
                               {editable ? (

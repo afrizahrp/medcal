@@ -1813,6 +1813,10 @@ export const deviceCalibrationParameterCreateSchema = z
     uomId: z.string().min(1),
     toleranceMin: optionalFiniteNumber,
     toleranceMax: optionalFiniteNumber,
+    /** Omitted = inclusive (≥). `false` = strict (>). Ignored when min is null. */
+    toleranceMinInclusive: z.boolean().optional(),
+    /** Omitted = inclusive (≤). `false` = strict (<). Ignored when max is null. */
+    toleranceMaxInclusive: z.boolean().optional(),
     toleranceNote: z.string().max(500).nullable().optional(),
     decimalPlaces: optionalDecimalPlaces,
     logicalTestKey: optionalLogicalTestKey,
@@ -1864,6 +1868,10 @@ export const deviceCalibrationParameterUpdateSchema = z
     uomId: z.string().min(1).optional(),
     toleranceMin: optionalFiniteNumber,
     toleranceMax: optionalFiniteNumber,
+    /** Omitted = leave unchanged. `false` = strict (>). */
+    toleranceMinInclusive: z.boolean().optional(),
+    /** Omitted = leave unchanged. `false` = strict (<). */
+    toleranceMaxInclusive: z.boolean().optional(),
     toleranceNote: z.string().max(500).nullable().optional(),
     decimalPlaces: optionalDecimalPlaces,
     logicalTestKey: optionalLogicalTestKey,
@@ -1972,6 +1980,8 @@ export const calibrationTestPointCreateSchema = z
     sequence: z.coerce.number().int().min(1).optional(),
     toleranceMin: optionalFiniteNumber,
     toleranceMax: optionalFiniteNumber,
+    toleranceMinInclusive: z.boolean().optional(),
+    toleranceMaxInclusive: z.boolean().optional(),
     toleranceNote: z.string().max(500).nullable().optional(),
   })
   .superRefine(refineToleranceBounds);
@@ -1992,6 +2002,8 @@ export const calibrationTestPointUpdateSchema = z
     settingValue: optionalFiniteNumber,
     toleranceMin: optionalFiniteNumber,
     toleranceMax: optionalFiniteNumber,
+    toleranceMinInclusive: z.boolean().optional(),
+    toleranceMaxInclusive: z.boolean().optional(),
     toleranceNote: z.string().max(500).nullable().optional(),
     isActive: z.boolean().optional(),
   })

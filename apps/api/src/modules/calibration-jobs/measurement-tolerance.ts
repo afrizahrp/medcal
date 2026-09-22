@@ -107,6 +107,13 @@ export interface ToleranceResolutionInput {
   parameter: {
     toleranceMin: DecimalInput;
     toleranceMax: DecimalInput;
+    /**
+     * `true`/omitted = ≥. `false` = >. Ignored when `toleranceMin` is null.
+     * Omitted means the historical inclusive bound.
+     */
+    toleranceMinInclusive?: boolean;
+    /** `true`/omitted = ≤. `false` = <. Ignored when `toleranceMax` is null. */
+    toleranceMaxInclusive?: boolean;
     toleranceNote: string | null;
   };
   /** The test point this reading belongs to, or `null` for Pattern A / note-only. */
@@ -114,6 +121,8 @@ export interface ToleranceResolutionInput {
     settingValue: DecimalInput;
     toleranceMin: DecimalInput;
     toleranceMax: DecimalInput;
+    toleranceMinInclusive?: boolean;
+    toleranceMaxInclusive?: boolean;
     toleranceNote: string | null;
   } | null;
   /**
@@ -127,6 +136,14 @@ export interface ToleranceResolutionInput {
 export interface ResolvedTolerance {
   effectiveToleranceMin: Prisma.Decimal | null;
   effectiveToleranceMax: Prisma.Decimal | null;
+  /**
+   * Inclusive (≥) unless false (>). Always true for note-parsed bounds: the
+   * note stays display text, and a strict operator has to be stored on the
+   * parameter or test point.
+   */
+  toleranceMinInclusive: boolean;
+  /** Inclusive (≤) unless false (<). Note-parsed bounds stay inclusive. */
+  toleranceMaxInclusive: boolean;
   /** Snapshot of the nominal used to resolve a `± delta` note; `null` otherwise. */
   appliedNominalValue: Prisma.Decimal | null;
   /**
@@ -134,6 +151,10 @@ export interface ResolvedTolerance {
    * `NONE` ⇒ both bounds are NULL and isWithinTolerance will be NULL.
    */
   source: "TEST_POINT_OVERRIDE" | "PARAMETER_BOUNDS" | "NOTE" | "NONE";
+}
+
+function inclusiveFlag(value: boolean | undefined): boolean {
+  return value !== false;
 }
 
 function fromDelta(
@@ -160,6 +181,8 @@ export function resolveEffectiveTolerance(input: ToleranceResolutionInput): Reso
     return {
       effectiveToleranceMin: tpMin,
       effectiveToleranceMax: tpMax,
+      toleranceMinInclusive: inclusiveFlag(tp?.toleranceMinInclusive),
+      toleranceMaxInclusive: inclusiveFlag(tp?.toleranceMaxInclusive),
       appliedNominalValue,
       source: "TEST_POINT_OVERRIDE",
     };
@@ -172,6 +195,8 @@ export function resolveEffectiveTolerance(input: ToleranceResolutionInput): Reso
     return {
       effectiveToleranceMin: pMin,
       effectiveToleranceMax: pMax,
+      toleranceMinInclusive: inclusiveFlag(input.parameter.toleranceMinInclusive),
+      toleranceMaxInclusive: inclusiveFlag(input.parameter.toleranceMaxInclusive),
       appliedNominalValue,
       source: "PARAMETER_BOUNDS",
     };
@@ -184,6 +209,10 @@ export function resolveEffectiveTolerance(input: ToleranceResolutionInput): Reso
       return {
         effectiveToleranceMin: parsed.min,
         effectiveToleranceMax: parsed.max,
+        // The note is not an operator. `>` and `≥` in free text stay inclusive
+        // until a structured flag says otherwise.
+        toleranceMinInclusive: true,
+        toleranceMaxInclusive: true,
         appliedNominalValue,
         source: "NOTE",
       };
@@ -198,6 +227,8 @@ export function resolveEffectiveTolerance(input: ToleranceResolutionInput): Reso
       return {
         effectiveToleranceMin: min,
         effectiveToleranceMax: max,
+        toleranceMinInclusive: true,
+        toleranceMaxInclusive: true,
         appliedNominalValue,
         source: "NOTE",
       };
@@ -208,6 +239,8 @@ export function resolveEffectiveTolerance(input: ToleranceResolutionInput): Reso
   return {
     effectiveToleranceMin: null,
     effectiveToleranceMax: null,
+    toleranceMinInclusive: true,
+    toleranceMaxInclusive: true,
     appliedNominalValue,
     source: "NONE",
   };
@@ -219,8 +252,40 @@ export interface WithinToleranceInput {
   valueType: CalibrationValueType;
   measuredValue: DecimalInput;
   measuredBool: boolean | null | undefined;
+  /** Symbol/text reading. Evaluated only when `measuredValue` is empty. */
+  measuredText?: string | null;
   effectiveToleranceMin: DecimalInput;
   effectiveToleranceMax: DecimalInput;
+  /** Omitted = inclusive (≥), the historical lower bound. */
+  toleranceMinInclusive?: boolean;
+  /** Omitted = inclusive (≤), the historical upper bound. */
+  toleranceMaxInclusive?: boolean;
+}
+
+/**
+ * Instrument symbol for a reading above the meter's scale ("over range").
+ * It is not a number and is not rewritten into one.
+ */
+const OVER_RANGE_READING = "OR";
+
+export function isOverRangeReading(measuredText: string | null | undefined): boolean {
+  return measuredText?.trim().toUpperCase() === OVER_RANGE_READING;
+}
+
+/**
+ * Over-range means the true value is above the instrument scale.
+ * That satisfies a lower-bound-only limit (the reading is higher than the
+ * minimum). It does not prove an upper bound, so those stay unevaluated
+ * rather than an automatic pass or fail. Any other text stays unevaluated.
+ */
+function evaluateOverRangeReading(
+  measuredText: string | null | undefined,
+  min: Prisma.Decimal | null,
+  max: Prisma.Decimal | null,
+): boolean | null {
+  if (!isOverRangeReading(measuredText)) return null;
+  if (max !== null || min === null) return null;
+  return true;
 }
 
 /**
@@ -229,9 +294,13 @@ export interface WithinToleranceInput {
  * - BOOLEAN: mirrors measuredBool directly — never NULL for a recorded boolean
  *   reading (§4.4c). `true` = pass.
  * - NUMBER / RATIO: evaluate the numeric `measuredValue` against the effective
- *   bounds. Lower-bound-only and upper-bound-only are both supported. NULL when
+ *   bounds. Lower-bound-only and upper-bound-only are both supported. An empty
+ *   numeric cell with measuredText `OR` is over-range (see above). NULL when
  *   there is no measured value or no computable bound.
- * - TEXT: always NULL (no automatic evaluation).
+ * - TEXT: always NULL (no automatic evaluation), including the symbol `OR`.
+ *
+ * Inclusive bounds (≥ / ≤) are the default. `toleranceMinInclusive: false` is
+ * `>`; `toleranceMaxInclusive: false` is `<`.
  */
 export function computeIsWithinTolerance(input: WithinToleranceInput): boolean | null {
   if (input.valueType === "BOOLEAN") {
@@ -239,14 +308,23 @@ export function computeIsWithinTolerance(input: WithinToleranceInput): boolean |
   }
   if (input.valueType === "TEXT") return null;
 
-  const value = toDecimal(input.measuredValue);
-  if (value === null) return null;
-
   const min = toDecimal(input.effectiveToleranceMin);
   const max = toDecimal(input.effectiveToleranceMax);
+  const value = toDecimal(input.measuredValue);
+  if (value === null) {
+    return evaluateOverRangeReading(input.measuredText, min, max);
+  }
   if (min === null && max === null) return null;
 
-  if (min !== null && value.lessThan(min)) return false;
-  if (max !== null && value.greaterThan(max)) return false;
+  const minInclusive = inclusiveFlag(input.toleranceMinInclusive);
+  const maxInclusive = inclusiveFlag(input.toleranceMaxInclusive);
+  if (min !== null) {
+    const below = minInclusive ? value.lessThan(min) : value.lessThanOrEqualTo(min);
+    if (below) return false;
+  }
+  if (max !== null) {
+    const above = maxInclusive ? value.greaterThan(max) : value.greaterThanOrEqualTo(max);
+    if (above) return false;
+  }
   return true;
 }
