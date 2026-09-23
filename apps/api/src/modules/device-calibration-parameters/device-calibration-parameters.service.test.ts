@@ -1492,6 +1492,248 @@ describe("DeviceCalibrationParametersService - CalibrationTestPoint CRUD", () =>
   });
 });
 
+// -- Portal "grouped titik ukur entry" -- one shared row (a setpoint slot)
+// created across N sibling DeviceCalibrationParameters in a single
+// all-or-nothing batch (e.g. one NIBP sweep across Systole/MAP/Diastole).
+
+describe("DeviceCalibrationParametersService - createTestPointsBulk", () => {
+  async function createParameter(overrides: Partial<{ name: string }> = {}) {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const parameter = await service.create(
+      baseInput(deviceType.id, item.id, uom.id, overrides.name ?? "Suhu Ruangan"),
+    );
+    createdParameterIds.push(parameter.id);
+    return { deviceType, item, uom, parameter };
+  }
+
+  it("creates one row per selected sibling parameter for every row in the batch", async () => {
+    const a = await createParameter({ name: "Systole" });
+    const b = await createParameter({ name: "MAP" });
+    const c = await createParameter({ name: "Diastole" });
+
+    const created = await service.createTestPointsBulk({
+      parameterIds: [a.parameter.id, b.parameter.id, c.parameter.id],
+      rows: [
+        {
+          settingLabel: "Titik 1",
+          sequence: 1,
+          values: {
+            [a.parameter.id]: { settingValue: 120 },
+            [b.parameter.id]: { settingValue: 93 },
+            [c.parameter.id]: { settingValue: 80 },
+          },
+        },
+        {
+          settingLabel: "Titik 2",
+          sequence: 2,
+          values: {
+            [a.parameter.id]: { settingValue: 150 },
+            [b.parameter.id]: { settingValue: 116 },
+            [c.parameter.id]: { settingValue: 100 },
+          },
+        },
+      ],
+    });
+
+    expect(created).toHaveLength(6);
+
+    const aPoints = await service.findTestPoints(a.parameter.id);
+    const bPoints = await service.findTestPoints(b.parameter.id);
+    const cPoints = await service.findTestPoints(c.parameter.id);
+    expect(aPoints.map((p) => Number(p.settingValue))).toEqual([120, 150]);
+    expect(bPoints.map((p) => Number(p.settingValue))).toEqual([93, 116]);
+    expect(cPoints.map((p) => Number(p.settingValue))).toEqual([80, 100]);
+    expect(aPoints.map((p) => p.sequence)).toEqual([1, 2]);
+    expect(bPoints.map((p) => p.sequence)).toEqual([1, 2]);
+    expect(cPoints.map((p) => p.sequence)).toEqual([1, 2]);
+  });
+
+  it("skips a parameter for a row whose cell is null", async () => {
+    const a = await createParameter({ name: "Systole" });
+    const b = await createParameter({ name: "MAP" });
+
+    await service.createTestPointsBulk({
+      parameterIds: [a.parameter.id, b.parameter.id],
+      rows: [
+        {
+          settingLabel: "Titik 1",
+          sequence: 1,
+          values: {
+            [a.parameter.id]: { settingValue: 120 },
+            [b.parameter.id]: null,
+          },
+        },
+      ],
+    });
+
+    expect(await service.findTestPoints(a.parameter.id)).toHaveLength(1);
+    expect(await service.findTestPoints(b.parameter.id)).toHaveLength(0);
+  });
+
+  it("rolls back the whole batch when one cell has a duplicate label, persisting nothing", async () => {
+    const a = await createParameter({ name: "Systole" });
+    const b = await createParameter({ name: "MAP" });
+    await service.createTestPoint(b.parameter.id, { settingLabel: "Titik 1" });
+
+    await expect(
+      service.createTestPointsBulk({
+        parameterIds: [a.parameter.id, b.parameter.id],
+        rows: [
+          {
+            settingLabel: "Titik 1",
+            sequence: 1,
+            values: {
+              [a.parameter.id]: { settingValue: 120 },
+              [b.parameter.id]: { settingValue: 93 },
+            },
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(await service.findTestPoints(a.parameter.id)).toHaveLength(0);
+    expect(await service.findTestPoints(b.parameter.id)).toHaveLength(1);
+  });
+
+  it("rolls back the whole batch when one cell's sequence is already occupied (out-of-sync sibling)", async () => {
+    const a = await createParameter({ name: "Systole" });
+    const b = await createParameter({ name: "MAP" });
+    await service.createTestPoint(b.parameter.id, { settingLabel: "Existing", sequence: 1 });
+
+    await expect(
+      service.createTestPointsBulk({
+        parameterIds: [a.parameter.id, b.parameter.id],
+        rows: [
+          {
+            settingLabel: "Titik 1",
+            sequence: 1,
+            values: {
+              [a.parameter.id]: { settingValue: 120 },
+              [b.parameter.id]: { settingValue: 93 },
+            },
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(await service.findTestPoints(a.parameter.id)).toHaveLength(0);
+    expect(await service.findTestPoints(b.parameter.id)).toHaveLength(1);
+  });
+
+  it("rejects the batch when a parameterId does not exist", async () => {
+    const a = await createParameter({ name: "Systole" });
+    await expect(
+      service.createTestPointsBulk({
+        parameterIds: [a.parameter.id, "missing-parameter-id"],
+        rows: [
+          {
+            settingLabel: "Titik 1",
+            sequence: 1,
+            values: { [a.parameter.id]: { settingValue: 120 }, "missing-parameter-id": { settingValue: 1 } },
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+// -- Grouped Titik Ukur table's block-level chevron -- moves every sibling
+// present in one block together, atomically (one shared transaction).
+
+describe("DeviceCalibrationParametersService - reorderTestPointsGrouped", () => {
+  async function createParameter(overrides: Partial<{ name: string }> = {}) {
+    const deviceType = await createDeviceType();
+    const { item } = await createCapabilityItem();
+    const uom = await createUom();
+    const parameter = await service.create(
+      baseInput(deviceType.id, item.id, uom.id, overrides.name ?? "Suhu Ruangan"),
+    );
+    createdParameterIds.push(parameter.id);
+    return { deviceType, item, uom, parameter };
+  }
+
+  it("moves every sibling present in the block together", async () => {
+    const a = await createParameter({ name: "Systole" });
+    const b = await createParameter({ name: "MAP" });
+    const c = await createParameter({ name: "Diastole" });
+
+    const aP1 = await service.createTestPoint(a.parameter.id, { settingLabel: "Titik 1" });
+    const aP2 = await service.createTestPoint(a.parameter.id, { settingLabel: "Titik 2" });
+    const bP1 = await service.createTestPoint(b.parameter.id, { settingLabel: "Titik 1" });
+    const bP2 = await service.createTestPoint(b.parameter.id, { settingLabel: "Titik 2" });
+    const cP1 = await service.createTestPoint(c.parameter.id, { settingLabel: "Titik 1" });
+    const cP2 = await service.createTestPoint(c.parameter.id, { settingLabel: "Titik 2" });
+
+    // Move block 2 up -- swap each sibling's own #1/#2, all in one call.
+    await service.reorderTestPointsGrouped([
+      { parameterId: a.parameter.id, testPointIds: [aP2.id, aP1.id] },
+      { parameterId: b.parameter.id, testPointIds: [bP2.id, bP1.id] },
+      { parameterId: c.parameter.id, testPointIds: [cP2.id, cP1.id] },
+    ]);
+
+    const aPoints = await service.findTestPoints(a.parameter.id);
+    const bPoints = await service.findTestPoints(b.parameter.id);
+    const cPoints = await service.findTestPoints(c.parameter.id);
+    expect(aPoints.map((p) => p.id)).toEqual([aP2.id, aP1.id]);
+    expect(bPoints.map((p) => p.id)).toEqual([bP2.id, bP1.id]);
+    expect(cPoints.map((p) => p.id)).toEqual([cP2.id, cP1.id]);
+    expect(aPoints.map((p) => p.sequence)).toEqual([1, 2]);
+  });
+
+  it("skips a sibling with no test point in the moved block without erroring", async () => {
+    const a = await createParameter({ name: "Systole" });
+    const b = await createParameter({ name: "MAP" });
+
+    const aP1 = await service.createTestPoint(a.parameter.id, { settingLabel: "Titik 1" });
+    const aP2 = await service.createTestPoint(a.parameter.id, { settingLabel: "Titik 2" });
+    // b has no point at this block at all -- omitted from `moves` entirely.
+    const bOnly = await service.createTestPoint(b.parameter.id, { settingLabel: "Titik 1" });
+
+    await service.reorderTestPointsGrouped([
+      { parameterId: a.parameter.id, testPointIds: [aP2.id, aP1.id] },
+    ]);
+
+    const aPoints = await service.findTestPoints(a.parameter.id);
+    const bPoints = await service.findTestPoints(b.parameter.id);
+    expect(aPoints.map((p) => p.id)).toEqual([aP2.id, aP1.id]);
+    expect(bPoints.map((p) => p.id)).toEqual([bOnly.id]);
+  });
+
+  it("rolls back every sibling when one sibling's move set is invalid, persisting no change", async () => {
+    const a = await createParameter({ name: "Systole" });
+    const b = await createParameter({ name: "MAP" });
+
+    const aP1 = await service.createTestPoint(a.parameter.id, { settingLabel: "Titik 1" });
+    const aP2 = await service.createTestPoint(a.parameter.id, { settingLabel: "Titik 2" });
+    const bP1 = await service.createTestPoint(b.parameter.id, { settingLabel: "Titik 1" });
+    await service.createTestPoint(b.parameter.id, { settingLabel: "Titik 2" });
+
+    await expect(
+      service.reorderTestPointsGrouped([
+        { parameterId: a.parameter.id, testPointIds: [aP2.id, aP1.id] },
+        // Omits b's second test point -- an incomplete set, rejected.
+        { parameterId: b.parameter.id, testPointIds: [bP1.id] },
+      ]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    // a's swap must NOT have persisted either -- one shared transaction.
+    const aPoints = await service.findTestPoints(a.parameter.id);
+    expect(aPoints.map((p) => p.id)).toEqual([aP1.id, aP2.id]);
+  });
+
+  it("rejects the batch when a parameterId does not exist", async () => {
+    const a = await createParameter({ name: "Systole" });
+    const aP1 = await service.createTestPoint(a.parameter.id, { settingLabel: "Titik 1" });
+    await expect(
+      service.reorderTestPointsGrouped([
+        { parameterId: "missing-parameter-id", testPointIds: [aP1.id] },
+      ]),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
 describe("DeviceCalibrationParametersService - CalibrationTestPoint schemas", () => {
   it("rejects a create payload with an empty settingLabel", () => {
     const parsed = calibrationTestPointCreateSchema.safeParse({ settingLabel: "" });

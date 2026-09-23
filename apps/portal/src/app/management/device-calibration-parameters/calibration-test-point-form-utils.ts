@@ -135,7 +135,8 @@ export function formatCalibrationTestPointApiError(error: unknown): string {
     if (
       code === "INVALID_CALIBRATION_TEST_POINT" ||
       code === "INVALID_CALIBRATION_TEST_POINT_UPDATE" ||
-      code === "INVALID_CALIBRATION_TEST_POINT_ORDER"
+      code === "INVALID_CALIBRATION_TEST_POINT_ORDER" ||
+      code === "INVALID_CALIBRATION_TEST_POINT_BULK"
     ) {
       return "Data titik ukur tidak valid. Periksa kembali isian form.";
     }

@@ -2037,6 +2037,71 @@ export const calibrationTestPointReorderSchema = z.object({
 
 export type CalibrationTestPointReorderInput = z.infer<typeof calibrationTestPointReorderSchema>;
 
+/**
+ * POST /device-calibration-parameters/bulk-test-points body. Adds one shared
+ * "row" (a setpoint slot) across N sibling DeviceCalibrationParameters at
+ * once, e.g. entering one NIBP sweep across Systole/MAP/Diastole in a single
+ * submit instead of one "+ Tambah Titik Ukur" per parameter. `sequence` is
+ * REQUIRED and explicit per row (unlike `calibrationTestPointCreateSchema`,
+ * where it's optional/auto-appended) — the caller computes one synchronized
+ * sequence per row across all parameterIds so the same physical setpoint
+ * lands on the same sequence number for every sibling; there is no
+ * per-parameter auto-append path here.
+ */
+const calibrationTestPointBulkCellSchema = z
+  .object({
+    settingValue: optionalFiniteNumber,
+    toleranceMin: optionalFiniteNumber,
+    toleranceMax: optionalFiniteNumber,
+    toleranceMinInclusive: z.boolean().optional(),
+    toleranceMaxInclusive: z.boolean().optional(),
+    toleranceNote: z.string().max(500).nullable().optional(),
+  })
+  .superRefine(refineToleranceBounds)
+  .nullable(); // null = skip this parameter for this row
+
+const calibrationTestPointBulkRowSchema = z.object({
+  settingLabel: z.string().trim().min(1).max(150),
+  sequence: z.coerce.number().int().min(1),
+  values: z.record(z.string().min(1), calibrationTestPointBulkCellSchema),
+});
+
+export const calibrationTestPointBulkCreateSchema = z.object({
+  parameterIds: z.array(z.string().min(1)).min(2),
+  rows: z.array(calibrationTestPointBulkRowSchema).min(1),
+});
+
+export type CalibrationTestPointBulkCreateInput = z.infer<
+  typeof calibrationTestPointBulkCreateSchema
+>;
+
+/**
+ * PATCH /device-calibration-parameters/grouped-test-points/reorder body. The
+ * grouped Titik Ukur table's block-level chevron (NIBP-style: one shared NO.
+ * per aligned sequence across sibling parameters) moves every sibling
+ * present in that block together as one atomic operation. Each entry in
+ * `moves` is exactly one sibling's own full ordered test-point id list —
+ * same shape/contract as `calibrationTestPointReorderSchema` — so the
+ * server can reuse that same per-parameter validation/rewrite logic for
+ * each one, just inside one shared transaction instead of one call per
+ * sibling. A sibling with no test point in the moved block is simply
+ * omitted from `moves`, not included with an unchanged list.
+ */
+export const calibrationTestPointGroupedReorderSchema = z.object({
+  moves: z
+    .array(
+      z.object({
+        parameterId: z.string().min(1),
+        testPointIds: z.array(z.string().min(1)).min(1),
+      }),
+    )
+    .min(1),
+});
+
+export type CalibrationTestPointGroupedReorderInput = z.infer<
+  typeof calibrationTestPointGroupedReorderSchema
+>;
+
 // =============================================================================
 // DevicePhysicalCheckItem Master Data
 // (Portal Device Management → Physical Inspection)

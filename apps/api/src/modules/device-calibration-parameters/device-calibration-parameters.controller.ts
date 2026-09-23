@@ -12,7 +12,9 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import {
+  calibrationTestPointBulkCreateSchema,
   calibrationTestPointCreateSchema,
+  calibrationTestPointGroupedReorderSchema,
   calibrationTestPointReorderSchema,
   calibrationTestPointUpdateSchema,
   deviceCalibrationParameterCapabilityOrderSchema,
@@ -164,6 +166,28 @@ export class DeviceCalibrationParametersController {
     return this.service.createTestPoint(id, parsed.data);
   }
 
+  /**
+   * Portal "grouped titik ukur entry" — one shared row (setpoint slot)
+   * created across N sibling DeviceCalibrationParameters at once (e.g. one
+   * NIBP sweep across Systole/MAP/Diastole instead of one "+ Tambah Titik
+   * Ukur" per parameter). Static top-level route, not `:id`-nested, since it
+   * spans multiple parameters. Same permission as the single-row create —
+   * no new permission type introduced.
+   */
+  @Post("bulk-test-points")
+  @RequirePermission("deviceCalibrationParameter", "create")
+  async createTestPointsBulk(@Body() rawBody: unknown): Promise<CalibrationTestPointRow[]> {
+    const parsed = calibrationTestPointBulkCreateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid bulk calibration test point payload",
+        code: "INVALID_CALIBRATION_TEST_POINT_BULK",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.createTestPointsBulk(parsed.data);
+  }
+
   @Patch(":id/test-points/reorder")
   @RequirePermission("deviceCalibrationParameter", "update")
   async reorderTestPoints(
@@ -179,6 +203,26 @@ export class DeviceCalibrationParametersController {
       });
     }
     return this.service.reorderTestPoints(id, parsed.data.testPointIds);
+  }
+
+  /**
+   * Grouped Titik Ukur table's block-level chevron — moves every sibling
+   * present in one block together, atomically. Static top-level route (not
+   * `:id`-nested), since it spans multiple parameters, mirroring
+   * `bulk-test-points`.
+   */
+  @Patch("grouped-test-points/reorder")
+  @RequirePermission("deviceCalibrationParameter", "update")
+  async reorderTestPointsGrouped(@Body() rawBody: unknown): Promise<CalibrationTestPointRow[]> {
+    const parsed = calibrationTestPointGroupedReorderSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid grouped calibration test point order payload",
+        code: "INVALID_CALIBRATION_TEST_POINT_GROUPED_ORDER",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.reorderTestPointsGrouped(parsed.data.moves);
   }
 
   @Patch(":id/test-points/:testPointId")

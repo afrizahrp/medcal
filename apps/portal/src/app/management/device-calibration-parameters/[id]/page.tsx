@@ -38,14 +38,19 @@ import {
 } from "../device-calibration-parameters-ui";
 import {
   useDeviceCalibrationParameter,
+  useDeviceCalibrationParameters,
   useUpdateDeviceCalibrationParameter,
 } from "../use-device-calibration-parameters-query";
 import {
   useCalibrationTestPoints,
+  useCalibrationTestPointsForMany,
   useCreateCalibrationTestPoint,
+  useCreateCalibrationTestPointsBulk,
   useReorderCalibrationTestPoints,
+  useReorderCalibrationTestPointsGrouped,
   useUpdateCalibrationTestPoint,
   type CalibrationTestPointApiRow,
+  type CalibrationTestPointGroupedReorderMove,
 } from "../use-calibration-test-points-query";
 import {
   useDeviceCapabilities,
@@ -103,6 +108,21 @@ function formFromRow(row: DeviceCalibrationParameterRow): DeviceCalibrationParam
   };
 }
 
+/**
+ * Capabilities whose sibling DeviceCalibrationParameters share matching
+ * setpoints per sequence slot (e.g. NIBP's Systole/Mean/Diastole triples) and
+ * so belong grouped under one shared NO. index in the Titik Ukur table.
+ * Explicit CODE allowlist, not a raw DeviceCapability.id (ids are not stable
+ * across environments) and NOT "any capability with multiple GRID
+ * siblings" — most multi-item capabilities (e.g. ENVIRONMENTAL_CONDITIONS's
+ * Room Temperature/Humidity/Voltage, ELECTRICAL_SAFETY's four checks, or
+ * VITAL_SIGNS_MONITORING's independently-swept Heart Rate/Respirasi/SPO2)
+ * are unrelated readings that must keep rendering flat. Mirrors the
+ * capability-code-Set convention already used for gating in
+ * apps/tech-pwa/src/lib/calibration/measurement.ts (DIRECTION_PARAMETER_CODES).
+ */
+const GROUPED_TITIK_UKUR_CAPABILITY_CODES = new Set(["NIBP"]);
+
 function DetailField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
@@ -142,6 +162,64 @@ export default function DeviceCalibrationParameterDetailPage() {
   const [reorderingTestPointId, setReorderingTestPointId] = useState<string | null>(null);
   const [testPointError, setTestPointError] = useState<string | null>(null);
   const [testPointSuccess, setTestPointSuccess] = useState<string | null>(null);
+
+  // ── Grouped Titik Ukur rendering — ONLY for capabilities on the
+  // GROUPED_TITIK_UKUR_CAPABILITY_CODES allowlist (matching-setpoint sibling
+  // families like NIBP's Systole/MAP/Diastole). Every other multi-sibling
+  // capability (e.g. ENVIRONMENTAL_CONDITIONS, ELECTRICAL_SAFETY,
+  // VITAL_SIGNS_MONITORING) renders the flat single-row table, unchanged.
+  const isGroupedCapability = Boolean(
+    row && GROUPED_TITIK_UKUR_CAPABILITY_CODES.has(row.capabilityItem.capability.code),
+  );
+  const siblingsQuery = useDeviceCalibrationParameters(
+    {
+      search: "",
+      deviceTypeId: row?.deviceTypeId ?? "",
+      capabilityId: row?.capabilityItem.capabilityId ?? "",
+      capabilityItemId: "",
+      uomId: "",
+      isActive: true,
+      sortBy: "name",
+      sortDir: "asc",
+      page: 1,
+      pageSize: 100,
+    },
+    { enabled: isGroupedCapability },
+  );
+  // sortOrder is the persisted, MT-editable order within a capability (see
+  // the parameter-order reorder endpoint) — NOT exposed as an API `sortBy`
+  // option, so siblings are re-sorted client-side rather than relying on the
+  // query's own order.
+  const siblings = [...(siblingsQuery.data?.data ?? [])].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+  );
+  const isGroupedTestPoints = isGroupedCapability && siblings.length > 1;
+  const siblingIds = siblings.map((s) => s.id);
+  const siblingTestPointQueries = useCalibrationTestPointsForMany(siblingIds);
+  const groupedBulkMutation = useCreateCalibrationTestPointsBulk();
+  const groupedReorderMutation = useReorderCalibrationTestPointsGrouped();
+
+  const groupedSequences = Array.from(
+    new Set(siblingTestPointQueries.flatMap((q) => (q.data ?? []).map((p) => p.sequence))),
+  ).sort((a, b) => a - b);
+  const groupedBaseline = groupedSequences.length ? Math.max(...groupedSequences) : 0;
+
+  const [groupedEditing, setGroupedEditing] = useState<{
+    parameterId: string;
+    testPointId: string;
+  } | null>(null);
+  const [groupedEditForm, setGroupedEditForm] = useState<CalibrationTestPointFormValue>(
+    emptyCalibrationTestPointForm,
+  );
+  const [groupedTogglingId, setGroupedTogglingId] = useState<string | null>(null);
+  // Which block (by union-sequence index) the shared NO. chevron is
+  // currently moving — one chevron pair per block, not one per sibling.
+  const [groupedReorderingBlock, setGroupedReorderingBlock] = useState<number | null>(null);
+  const [groupedAdding, setGroupedAdding] = useState(false);
+  const [groupedAddLabel, setGroupedAddLabel] = useState("");
+  const [groupedAddValues, setGroupedAddValues] = useState<Record<string, string>>({});
+  const [groupedError, setGroupedError] = useState<string | null>(null);
+  const [groupedSuccess, setGroupedSuccess] = useState<string | null>(null);
 
   const typesQuery = useDeviceTypes({
     search: "",
@@ -378,6 +456,139 @@ export default function DeviceCalibrationParameterDetailPage() {
     }
   }
 
+  // ── Grouped Titik Ukur handlers — same mutations as above, parameterized
+  // by the specific sibling's own id, since each sub-row belongs to a
+  // different DeviceCalibrationParameter than the one this page is for. ──
+
+  function setGroupedEditField<K extends keyof CalibrationTestPointFormValue>(
+    field: K,
+    next: CalibrationTestPointFormValue[K],
+  ) {
+    setGroupedEditForm((prev) => ({ ...prev, [field]: next }));
+  }
+
+  async function toggleGroupedTestPointActive(
+    parameterId: string,
+    testPoint: CalibrationTestPointApiRow,
+  ) {
+    if (!capabilities?.deviceCalibrationParameterUpdate) return;
+    setGroupedError(null);
+    setGroupedSuccess(null);
+    setGroupedTogglingId(testPoint.id);
+    try {
+      await updateTestPointMutation.mutateAsync({
+        parameterId,
+        testPointId: testPoint.id,
+        input: { isActive: !testPoint.isActive },
+      });
+    } catch (err) {
+      setGroupedError(formatCalibrationTestPointApiError(err));
+    } finally {
+      setGroupedTogglingId(null);
+    }
+  }
+
+  /**
+   * The grouped table's single chevron pair per NO. block — moves every
+   * sibling present at this block's sequence together, in one atomic
+   * request. A sibling with no test point at this sequence (blank sub-row)
+   * is skipped, not errored; a sibling already at its own boundary is also
+   * skipped (nothing to move for it), matching the approved corrective spec.
+   */
+  async function moveGroupedBlock(groupIndex: number, direction: "up" | "down") {
+    if (!capabilities?.deviceCalibrationParameterUpdate) return;
+    const sequence = groupedSequences[groupIndex];
+    if (sequence === undefined) return;
+
+    const moves: CalibrationTestPointGroupedReorderMove[] = [];
+    siblings.forEach((sibling, siblingIndex) => {
+      const ownPoints = siblingTestPointQueries[siblingIndex]?.data ?? [];
+      const ownIds = ownPoints.map((p) => p.id);
+      const testPoint = ownPoints.find((p) => p.sequence === sequence);
+      if (!testPoint) return;
+      const nextIds = moveAdjacent(ownIds, testPoint.id, direction);
+      if (nextIds === ownIds) return;
+      moves.push({ parameterId: sibling.id, testPointIds: nextIds });
+    });
+    if (moves.length === 0) return;
+
+    setGroupedError(null);
+    setGroupedSuccess(null);
+    setGroupedReorderingBlock(groupIndex);
+    try {
+      await groupedReorderMutation.mutateAsync(moves);
+    } catch (err) {
+      setGroupedError(formatCalibrationTestPointApiError(err));
+    } finally {
+      setGroupedReorderingBlock(null);
+    }
+  }
+
+  async function saveGroupedTestPoint(e: React.FormEvent) {
+    e.preventDefault();
+    if (!capabilities?.deviceCalibrationParameterUpdate || !groupedEditing) return;
+    setGroupedError(null);
+    setGroupedSuccess(null);
+
+    const validationError = validateCalibrationTestPointForm(groupedEditForm);
+    if (validationError) {
+      setGroupedError(validationError);
+      return;
+    }
+
+    try {
+      await updateTestPointMutation.mutateAsync({
+        parameterId: groupedEditing.parameterId,
+        testPointId: groupedEditing.testPointId,
+        input: buildCalibrationTestPointUpdatePayload(groupedEditForm),
+      });
+      setGroupedSuccess("Titik ukur berhasil diubah.");
+      setGroupedEditing(null);
+    } catch (err) {
+      setGroupedError(formatCalibrationTestPointApiError(err));
+    }
+  }
+
+  async function submitGroupedAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!capabilities?.deviceCalibrationParameterCreate) return;
+    setGroupedError(null);
+    setGroupedSuccess(null);
+
+    const label = groupedAddLabel.trim();
+    if (!label) {
+      setGroupedError("Nama Titik wajib diisi.");
+      return;
+    }
+
+    const values: Record<string, { settingValue: number } | null> = {};
+    for (const siblingId of siblingIds) {
+      const raw = (groupedAddValues[siblingId] ?? "").trim();
+      if (raw === "") {
+        values[siblingId] = null;
+        continue;
+      }
+      if (!Number.isFinite(Number(raw))) {
+        setGroupedError("Setting tidak valid.");
+        return;
+      }
+      values[siblingId] = { settingValue: Number(raw) };
+    }
+
+    try {
+      await groupedBulkMutation.mutateAsync({
+        parameterIds: siblingIds,
+        rows: [{ settingLabel: label, sequence: groupedBaseline + 1, values }],
+      });
+      setGroupedSuccess("Titik ukur grup berhasil ditambahkan.");
+      setGroupedAdding(false);
+      setGroupedAddLabel("");
+      setGroupedAddValues({});
+    } catch (err) {
+      setGroupedError(formatCalibrationTestPointApiError(err));
+    }
+  }
+
   return (
     <div className={deviceCalibrationParameterFormPageClass}>
       <PageHeader
@@ -549,17 +760,26 @@ export default function DeviceCalibrationParameterDetailPage() {
             <h2 className="text-sm font-semibold text-slate-900">Titik Ukur</h2>
             <p className="text-xs text-slate-500">Named Measurement Points</p>
           </div>
-          {capabilities.deviceCalibrationParameterCreate && !addingTestPoint ? (
+          {capabilities.deviceCalibrationParameterCreate && !addingTestPoint && !groupedAdding ? (
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => {
-                setAddingTestPoint(true);
                 setEditingTestPointId(null);
-                setTestPointForm(emptyCalibrationTestPointForm);
                 setTestPointError(null);
                 setTestPointSuccess(null);
+                setGroupedEditing(null);
+                setGroupedError(null);
+                setGroupedSuccess(null);
+                if (isGroupedTestPoints) {
+                  setGroupedAdding(true);
+                  setGroupedAddLabel("");
+                  setGroupedAddValues({});
+                } else {
+                  setAddingTestPoint(true);
+                  setTestPointForm(emptyCalibrationTestPointForm);
+                }
               }}
             >
               <Plus className="h-4 w-4" />
@@ -572,8 +792,12 @@ export default function DeviceCalibrationParameterDetailPage() {
         {testPointSuccess ? (
           <p className="mt-3 text-sm text-emerald-700">{testPointSuccess}</p>
         ) : null}
+        {groupedError ? <p className="mt-3 text-sm text-red-600">{groupedError}</p> : null}
+        {groupedSuccess ? (
+          <p className="mt-3 text-sm text-emerald-700">{groupedSuccess}</p>
+        ) : null}
 
-        {addingTestPoint ? (
+        {!isGroupedTestPoints && addingTestPoint ? (
           <form onSubmit={submitTestPoint} className="mt-4 rounded-md border border-slate-200 p-4">
             <CalibrationTestPointFormFields
               value={testPointForm}
@@ -600,7 +824,240 @@ export default function DeviceCalibrationParameterDetailPage() {
           </form>
         ) : null}
 
-        {testPointsQuery.isLoading ? (
+        {isGroupedTestPoints && groupedAdding ? (
+          <form
+            onSubmit={submitGroupedAdd}
+            className="mt-4 rounded-md border border-slate-200 p-4"
+          >
+            <div>
+              <label
+                htmlFor="grouped-add-settingLabel"
+                className="block text-sm font-medium text-slate-700"
+              >
+                Nama Titik <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="grouped-add-settingLabel"
+                value={groupedAddLabel}
+                onChange={(e) => setGroupedAddLabel(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm placeholder:text-xs placeholder:text-slate-400"
+                placeholder="Titik 1"
+                maxLength={150}
+                required
+              />
+              <p className="mt-1 text-xs text-slate-500">Berlaku untuk semua parameter di bawah ini.</p>
+            </div>
+            <div className="mt-3 space-y-3">
+              {siblings.map((sibling) => (
+                <div key={sibling.id}>
+                  <label
+                    htmlFor={`grouped-add-value-${sibling.id}`}
+                    className="block text-sm font-medium text-slate-700"
+                  >
+                    Setting — {sibling.capabilityItem.name}
+                  </label>
+                  <input
+                    id={`grouped-add-value-${sibling.id}`}
+                    type="number"
+                    step="any"
+                    value={groupedAddValues[sibling.id] ?? ""}
+                    onChange={(e) =>
+                      setGroupedAddValues((prev) => ({ ...prev, [sibling.id]: e.target.value }))
+                    }
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm placeholder:text-xs placeholder:text-slate-400"
+                    placeholder="25"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setGroupedAdding(false);
+                  setGroupedAddLabel("");
+                  setGroupedAddValues({});
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={groupedBulkMutation.isPending}>
+                <Save className="h-4 w-4" />
+                {groupedBulkMutation.isPending ? "Saving…" : "Save Titik Ukur"}
+              </Button>
+            </div>
+          </form>
+        ) : null}
+
+        {isGroupedTestPoints ? (
+          siblingsQuery.isLoading || siblingTestPointQueries.some((q) => q.isLoading) ? (
+            <p className="mt-4 text-sm text-slate-400">Memuat titik ukur…</p>
+          ) : groupedSequences.length === 0 && !groupedAdding ? (
+            <div className="mt-4 text-sm text-slate-500">
+              <p className="font-medium text-slate-600">Tidak ada titik ukur</p>
+              <p className="mt-0.5">Grup parameter ini belum memiliki titik ukur bernama.</p>
+            </div>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[720px]">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+                    <th className="px-4 py-3">No.</th>
+                    <th className="px-4 py-3">Nama Titik</th>
+                    <th className="px-4 py-3">Setting</th>
+                    <th className="px-4 py-3">Toleransi</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {groupedSequences.map((sequence, groupIndex) =>
+                    siblings.map((sibling, siblingIndex) => {
+                      const ownPoints = siblingTestPointQueries[siblingIndex]?.data ?? [];
+                      const testPoint = ownPoints.find((p) => p.sequence === sequence);
+                      const rowKey = `${sequence}-${sibling.id}`;
+                      const isEditingThis =
+                        testPoint != null &&
+                        groupedEditing?.parameterId === sibling.id &&
+                        groupedEditing.testPointId === testPoint.id;
+
+                      return (
+                        <tr key={rowKey} className="align-top hover:bg-slate-50">
+                          {siblingIndex === 0 ? (
+                            <td
+                              rowSpan={siblings.length}
+                              className="border-r border-slate-100 px-4 py-3 text-sm text-slate-600"
+                            >
+                              <div className="flex items-center gap-1">
+                                <span className="tabular-nums">{groupIndex + 1}</span>
+                                {capabilities.deviceCalibrationParameterUpdate ? (
+                                  <div className="flex flex-col">
+                                    <button
+                                      type="button"
+                                      aria-label={`Naikkan urutan blok ${groupIndex + 1}`}
+                                      className="text-slate-400 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                                      disabled={groupIndex === 0 || groupedReorderingBlock !== null}
+                                      onClick={() => moveGroupedBlock(groupIndex, "up")}
+                                    >
+                                      ▲
+                                    </button>
+                                    <button
+                                      type="button"
+                                      aria-label={`Turunkan urutan blok ${groupIndex + 1}`}
+                                      className="text-slate-400 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+                                      disabled={
+                                        groupIndex === groupedSequences.length - 1 ||
+                                        groupedReorderingBlock !== null
+                                      }
+                                      onClick={() => moveGroupedBlock(groupIndex, "down")}
+                                    >
+                                      ▼
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </td>
+                          ) : null}
+
+                          {testPoint == null ? (
+                            <>
+                              <td className="px-4 py-3 font-medium text-slate-900">
+                                {sibling.capabilityItem.name}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-slate-400" colSpan={4}>
+                                — belum ada titik ukur pada urutan ini
+                              </td>
+                            </>
+                          ) : isEditingThis ? (
+                            <td colSpan={5} className="px-4 py-3">
+                              <form onSubmit={saveGroupedTestPoint}>
+                                <CalibrationTestPointFormFields
+                                  value={groupedEditForm}
+                                  onChange={setGroupedEditField}
+                                  mode="edit"
+                                  idPrefix={`grouped-edit-test-point-${testPoint.id}`}
+                                />
+                                <div className="mt-3 flex justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setGroupedEditing(null)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button type="submit" disabled={updateTestPointMutation.isPending}>
+                                    <Save className="h-4 w-4" />
+                                    {updateTestPointMutation.isPending ? "Saving…" : "Save"}
+                                  </Button>
+                                </div>
+                              </form>
+                            </td>
+                          ) : (
+                            <>
+                              <td className="px-4 py-3 font-medium text-slate-900">
+                                {sibling.capabilityItem.name}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-slate-600">
+                                {testPoint.settingValue == null || testPoint.settingValue === ""
+                                  ? "—"
+                                  : String(Number(testPoint.settingValue))}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-slate-600">
+                                {formatCalibrationTolerance(testPoint) ?? "—"}
+                              </td>
+                              <td className="px-4 py-3">
+                                <DeviceCalibrationParameterStatusBadge isActive={testPoint.isActive} />
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex justify-end gap-1">
+                                  {capabilities.deviceCalibrationParameterUpdate ? (
+                                    <>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                          toggleGroupedTestPointActive(sibling.id, testPoint)
+                                        }
+                                        disabled={groupedTogglingId === testPoint.id}
+                                      >
+                                        {testPoint.isActive ? "Nonaktifkan" : "Aktifkan"}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          setGroupedEditing({
+                                            parameterId: sibling.id,
+                                            testPointId: testPoint.id,
+                                          });
+                                          setGroupedAdding(false);
+                                          setGroupedEditForm(
+                                            calibrationTestPointFormFromRow(testPoint),
+                                          );
+                                          setGroupedError(null);
+                                          setGroupedSuccess(null);
+                                        }}
+                                      >
+                                        Edit
+                                      </Button>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      );
+                    }),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : testPointsQuery.isLoading ? (
           <p className="mt-4 text-sm text-slate-400">Memuat titik ukur…</p>
         ) : testPointsQuery.isError ? (
           <p className="mt-4 text-sm text-red-600">Gagal memuat titik ukur.</p>

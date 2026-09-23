@@ -8,6 +8,7 @@ import { MasterCodeService, Prisma, prisma } from "@medcal/db";
 import type { CalibrationTestPoint } from "@medcal/db";
 import {
   DEVICE_CALIBRATION_PARAMETER_SORTABLE_FIELDS,
+  type CalibrationTestPointBulkCreateInput,
   type CalibrationTestPointCreateInput,
   type CalibrationTestPointUpdateInput,
   type DeviceCalibrationParameterCopyInput,
@@ -992,8 +993,9 @@ export class DeviceCalibrationParametersService {
     deviceCalibrationParameterId: string,
     settingLabel: string,
     excludeId?: string,
+    client: Prisma.TransactionClient | typeof prisma = prisma,
   ): Promise<void> {
-    const duplicate = await prisma.calibrationTestPoint.findFirst({
+    const duplicate = await client.calibrationTestPoint.findFirst({
       where: {
         deviceCalibrationParameterId,
         settingLabel: { equals: settingLabel, mode: "insensitive" },
@@ -1013,8 +1015,9 @@ export class DeviceCalibrationParametersService {
   private async assertSequenceAvailable(
     deviceCalibrationParameterId: string,
     sequence: number,
+    client: Prisma.TransactionClient | typeof prisma = prisma,
   ): Promise<void> {
-    const duplicate = await prisma.calibrationTestPoint.findFirst({
+    const duplicate = await client.calibrationTestPoint.findFirst({
       where: { deviceCalibrationParameterId, sequence },
       select: { id: true },
     });
@@ -1070,6 +1073,53 @@ export class DeviceCalibrationParametersService {
         toleranceMaxInclusive: input.toleranceMaxInclusive ?? true,
         toleranceNote: input.toleranceNote ?? null,
       },
+    });
+  }
+
+  /**
+   * Creates the same row (a shared setpoint slot) across N sibling
+   * DeviceCalibrationParameters in one all-or-nothing batch — the Portal
+   * "grouped titik ukur entry" flow (e.g. one NIBP sweep across
+   * Systole/MAP/Diastole instead of one "+ Tambah Titik Ukur" per parameter).
+   * `sequence` is explicit per row (no auto-append path here — the caller is
+   * responsible for synchronizing sequence numbers across siblings) and is
+   * validated with the same `assertSequenceAvailable`/`assertUniqueTestPointLabel`
+   * checks `createTestPoint` already uses, just run against the transaction
+   * client so a conflict on any single cell rolls back the entire batch.
+   */
+  async createTestPointsBulk(
+    input: CalibrationTestPointBulkCreateInput,
+  ): Promise<CalibrationTestPointRow[]> {
+    await Promise.all(input.parameterIds.map((id) => this.findOne(id)));
+
+    return prisma.$transaction(async (tx) => {
+      const created: CalibrationTestPointRow[] = [];
+      for (const row of input.rows) {
+        for (const parameterId of input.parameterIds) {
+          const cell = row.values[parameterId];
+          if (cell === undefined || cell === null) continue;
+
+          await this.assertUniqueTestPointLabel(parameterId, row.settingLabel, undefined, tx);
+          await this.assertSequenceAvailable(parameterId, row.sequence, tx);
+
+          created.push(
+            await tx.calibrationTestPoint.create({
+              data: {
+                deviceCalibrationParameterId: parameterId,
+                sequence: row.sequence,
+                settingLabel: row.settingLabel,
+                settingValue: cell.settingValue ?? null,
+                toleranceMin: cell.toleranceMin ?? null,
+                toleranceMax: cell.toleranceMax ?? null,
+                toleranceMinInclusive: cell.toleranceMinInclusive ?? true,
+                toleranceMaxInclusive: cell.toleranceMaxInclusive ?? true,
+                toleranceNote: cell.toleranceNote ?? null,
+              },
+            }),
+          );
+        }
+      }
+      return created;
     });
   }
 
@@ -1138,12 +1188,23 @@ export class DeviceCalibrationParametersService {
    * with the `(deviceCalibrationParameterId, sequence)` unique constraint on
    * whichever row hasn't been updated yet (e.g. swapping #1 and #2 head-on).
    */
-  async reorderTestPoints(
+  /**
+   * Core of a reorder: validate `testPointIds` is exactly this parameter's
+   * current full set, then rewrite `sequence` in two passes (every row first
+   * to a temporary value far outside the real 1..N range, then to its final
+   * 1-based position) against whichever `client` is given, so a single-pass
+   * rewrite never transiently collides with the
+   * `(deviceCalibrationParameterId, sequence)` unique constraint on a row
+   * that hasn't been updated yet (e.g. swapping #1 and #2 head-on). Takes no
+   * transaction of its own — callers decide the atomicity boundary (one
+   * parameter for `reorderTestPoints`, several for `reorderTestPointsGrouped`).
+   */
+  private async performReorder(
+    client: Prisma.TransactionClient,
     deviceCalibrationParameterId: string,
     testPointIds: string[],
-  ): Promise<CalibrationTestPointRow[]> {
-    await this.findOne(deviceCalibrationParameterId);
-    const scoped = await prisma.calibrationTestPoint.findMany({
+  ): Promise<void> {
+    const scoped = await client.calibrationTestPoint.findMany({
       where: { deviceCalibrationParameterId },
       select: { id: true },
     });
@@ -1154,24 +1215,63 @@ export class DeviceCalibrationParametersService {
     );
 
     const TEMP_SEQUENCE_OFFSET = 1_000_000;
-    await prisma.$transaction([
-      ...testPointIds.map((id, index) =>
-        prisma.calibrationTestPoint.update({
-          where: { id },
-          data: { sequence: TEMP_SEQUENCE_OFFSET + index + 1 },
-        }),
-      ),
-      ...testPointIds.map((id, index) =>
-        prisma.calibrationTestPoint.update({
-          where: { id },
-          data: { sequence: index + 1 },
-        }),
-      ),
-    ]);
+    for (const [index, id] of testPointIds.entries()) {
+      await client.calibrationTestPoint.update({
+        where: { id },
+        data: { sequence: TEMP_SEQUENCE_OFFSET + index + 1 },
+      });
+    }
+    for (const [index, id] of testPointIds.entries()) {
+      await client.calibrationTestPoint.update({
+        where: { id },
+        data: { sequence: index + 1 },
+      });
+    }
+  }
+
+  async reorderTestPoints(
+    deviceCalibrationParameterId: string,
+    testPointIds: string[],
+  ): Promise<CalibrationTestPointRow[]> {
+    await this.findOne(deviceCalibrationParameterId);
+
+    await prisma.$transaction((tx) =>
+      this.performReorder(tx, deviceCalibrationParameterId, testPointIds),
+    );
 
     return prisma.calibrationTestPoint.findMany({
       where: { deviceCalibrationParameterId },
       orderBy: { sequence: "asc" },
+    });
+  }
+
+  /**
+   * The grouped Titik Ukur table's block-level chevron (see
+   * `calibrationTestPointGroupedReorderSchema`) — moves every sibling
+   * present in one block together, atomically. Each `move` reuses
+   * `performReorder` exactly as `reorderTestPoints` does for a single
+   * parameter, just run inside one shared transaction spanning every
+   * sibling so a mid-way failure rolls every sibling back rather than
+   * leaving the group at mismatched sequences.
+   */
+  async reorderTestPointsGrouped(
+    moves: Array<{ parameterId: string; testPointIds: string[] }>,
+  ): Promise<CalibrationTestPointRow[]> {
+    await Promise.all(moves.map((move) => this.findOne(move.parameterId)));
+
+    return prisma.$transaction(async (tx) => {
+      for (const move of moves) {
+        await this.performReorder(tx, move.parameterId, move.testPointIds);
+      }
+      const results: CalibrationTestPointRow[] = [];
+      for (const move of moves) {
+        const rows = await tx.calibrationTestPoint.findMany({
+          where: { deviceCalibrationParameterId: move.parameterId },
+          orderBy: { sequence: "asc" },
+        });
+        results.push(...rows);
+      }
+      return results;
     });
   }
 }
