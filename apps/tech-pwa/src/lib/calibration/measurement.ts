@@ -123,6 +123,7 @@ export function hasCapabilityGroups(
 
 export interface MeasurementCapabilitySectionView {
   id: string;
+  code: string;
   name: string;
   parameters: Array<{
     parameter: TechMeasurementGroupedParameter;
@@ -140,12 +141,28 @@ export function capabilityGroupSections(
 ): MeasurementCapabilitySectionView[] {
   return groups.map((group) => ({
     id: group.capability.id,
+    code: group.capability.code,
     name: group.capability.name,
     parameters: group.parameters.map((parameter) => ({
       parameter,
       pointCount: parameter.kind === "GRID" ? (parameter.testPoints?.length ?? 0) : undefined,
     })),
   }));
+}
+
+/**
+ * Capabilities whose siblings are entered as one combined stacked-row screen
+ * instead of separate per-parameter screens (tech-pwa NIBP grouped entry).
+ * Explicit capability-CODE allowlist, not capability id and not a generic
+ * "any capability with multiple GRID siblings" rule — ids aren't stable
+ * across environments, and a general multi-sibling rule previously grouped
+ * unrelated multi-sibling capabilities (e.g. Vital Signs) incorrectly.
+ * Mirrors Portal's `GROUPED_TITIK_UKUR_CAPABILITY_CODES` for the same reason.
+ */
+export const GROUPED_MEASUREMENT_CAPABILITY_CODES: ReadonlySet<string> = new Set(["NIBP"]);
+
+export function isGroupedMeasurementCapability(capabilityCode: string): boolean {
+  return GROUPED_MEASUREMENT_CAPABILITY_CODES.has(capabilityCode);
 }
 
 export type MeasurementDirection = "NONE" | "UP" | "DOWN";

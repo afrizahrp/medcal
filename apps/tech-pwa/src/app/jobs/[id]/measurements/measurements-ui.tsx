@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   gridEntryStatus,
+  isGroupedMeasurementCapability,
   parameterEntryStatus,
   passFailChip,
   toleranceText,
@@ -79,6 +80,50 @@ export function MeasurementParameterListRow({
   );
 }
 
+/** One combined link row for a grouped capability (e.g. NIBP), replacing its per-parameter rows. */
+export function MeasurementGroupedCapabilityLinkRow({
+  jobId,
+  capabilityCode,
+  capabilityName,
+  section,
+  gridRowsByParameter,
+}: {
+  jobId: string;
+  capabilityCode: string;
+  capabilityName: string;
+  section: MeasurementCapabilitySectionView;
+  gridRowsByParameter: Map<string, TechMeasurementResult[]>;
+}) {
+  let filled = 0;
+  let total = 0;
+  let anyFail = false;
+  for (const { parameter, pointCount } of section.parameters) {
+    if (pointCount === undefined) continue;
+    const status = gridEntryStatus(
+      gridRowsByParameter.get(parameter.id) ?? [],
+      (parameter.testPoints ?? []).map((tp) => tp.id),
+    );
+    filled += status.filled;
+    total += status.total;
+    anyFail = anyFail || status.anyFail;
+  }
+  const complete = total > 0 && filled >= total;
+  return (
+    <Link
+      href={`/jobs/${jobId}/measurements/${capabilityCode.toLowerCase()}`}
+      className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 active:bg-slate-50"
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-slate-900">{capabilityName}</span>
+        <span className="mt-1 block text-xs text-slate-600">{total} titik ukur</span>
+      </span>
+      <span className="flex shrink-0 flex-col items-end gap-1">
+        <StatusChip status={{ filled, total, complete, anyFail }} />
+      </span>
+    </Link>
+  );
+}
+
 /** Static capability sections wrapping existing parameter list rows. No accordion. */
 export function MeasurementCapabilityGroupList({
   jobId,
@@ -93,29 +138,42 @@ export function MeasurementCapabilityGroupList({
 }) {
   return (
     <>
-      {sections.map((section) => (
-        <section key={section.id} className="flex flex-col gap-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {section.name}
-          </h2>
-          <ul className="flex flex-col gap-2">
-            {section.parameters.map(({ parameter, pointCount }) => (
-              <li key={parameter.id}>
-                <MeasurementParameterListRow
-                  jobId={jobId}
-                  param={parameter}
-                  rows={
-                    pointCount !== undefined
-                      ? (gridRowsByParameter.get(parameter.id) ?? [])
-                      : (rowsByParameter.get(parameter.id) ?? [])
-                  }
-                  pointCount={pointCount}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      {sections.map((section) => {
+        const grouped = isGroupedMeasurementCapability(section.code);
+        return (
+          <section key={section.id} className="flex flex-col gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {section.name}
+            </h2>
+            {grouped ? (
+              <MeasurementGroupedCapabilityLinkRow
+                jobId={jobId}
+                capabilityCode={section.code}
+                capabilityName={section.name}
+                section={section}
+                gridRowsByParameter={gridRowsByParameter}
+              />
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {section.parameters.map(({ parameter, pointCount }) => (
+                  <li key={parameter.id}>
+                    <MeasurementParameterListRow
+                      jobId={jobId}
+                      param={parameter}
+                      rows={
+                        pointCount !== undefined
+                          ? (gridRowsByParameter.get(parameter.id) ?? [])
+                          : (rowsByParameter.get(parameter.id) ?? [])
+                      }
+                      pointCount={pointCount}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })}
     </>
   );
 }
