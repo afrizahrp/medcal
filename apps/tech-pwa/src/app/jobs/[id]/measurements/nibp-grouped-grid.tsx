@@ -8,6 +8,7 @@ import { ErrorBanner } from "../../../../components/feedback/error-banner";
 import { formatApiError } from "../../../../lib/api-errors";
 import {
   canAddReplicateSlot,
+  formatReadingDisplay,
   measuredReadingPayload,
   measuredValueDecimalPlacesExceededMessage,
   measuredValueInputStep,
@@ -27,6 +28,7 @@ import {
 } from "../../../../lib/calibration/measurement";
 import type { TechCalibrationJob } from "../../../../lib/calibration/types";
 import { JobHeaderBlock } from "../job-detail-ui";
+import { PassFailChip } from "./measurements-ui";
 
 const BATCH_LIMIT = 200;
 
@@ -39,8 +41,13 @@ function cellKey(
   return `${parameterId}:${testPointId}:${direction}:${replicateIndex}`;
 }
 
-function extraKey(parameterId: string, testPointId: string, direction: MeasurementDirection): string {
-  return `${parameterId}:${testPointId}:${direction}`;
+/**
+ * One physical reading on the simulator produces Systole + Mean + Diastole at
+ * once, so "+ Tambah ulangan" adds a slot to all 3 siblings simultaneously —
+ * keyed by block (sequence + direction), not by sibling.
+ */
+function blockExtraKey(sequence: number, direction: MeasurementDirection): string {
+  return `${sequence}:${direction}`;
 }
 
 type NibpGroupedGridProps = {
@@ -67,7 +74,7 @@ export function NibpGroupedGrid({
   onRefetch,
 }: NibpGroupedGridProps) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [extraByGroup, setExtraByGroup] = useState<Record<string, number>>({});
+  const [extraByBlock, setExtraByBlock] = useState<Record<string, number>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -104,8 +111,8 @@ export function NibpGroupedGrid({
   const groups = siblingsWithPoints.flatMap(({ sibling, testPoints, directions }) =>
     testPoints.flatMap((tp) =>
       directions.map((direction) => {
-        const groupKey = extraKey(sibling.id, tp.id, direction);
-        const extra = extraByGroup[groupKey] ?? 0;
+        const blockKey = blockExtraKey(tp.sequence, direction);
+        const extra = extraByBlock[blockKey] ?? 0;
         const [view] = patternBEntryPresentation(
           [tp],
           existingRows.filter(
@@ -117,7 +124,7 @@ export function NibpGroupedGrid({
           sibling,
           tp,
           direction,
-          groupKey,
+          blockKey,
           view:
             view ??
             namedPointGroupView({ testPoint: tp, maxExistingReplicateIndex: 0, extraSlots: extra }),
@@ -256,7 +263,7 @@ export function NibpGroupedGrid({
     if (!group) return null;
     const dp = sibling.decimalPlaces;
     return (
-      <div className="flex flex-wrap items-center gap-2">
+      <ul className="flex flex-col gap-2">
         {group.view.slots.map((slot) => {
           const key = cellKey(sibling.id, tp.id, direction, slot.replicateIndex);
           const existing = rowByKey.get(key);
@@ -266,8 +273,13 @@ export function NibpGroupedGrid({
             touched && trimmed !== "" ? validateMeasuredDraft(trimmed, dp) : { ok: true as const };
           const invalid = !validation.ok;
           return (
-            <div key={key} className="flex flex-col items-center gap-1">
-              <span className="text-[10px] text-slate-400">{slot.slotLabel}</span>
+            <li
+              key={key}
+              className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3"
+            >
+              <span className="min-w-16 shrink-0 whitespace-nowrap text-xs font-medium text-slate-500">
+                {slot.slotLabel}
+              </span>
               {editable ? (
                 <input
                   inputMode="decimal"
@@ -276,33 +288,25 @@ export function NibpGroupedGrid({
                   value={value}
                   onChange={(e) => setDraft(key, e.target.value)}
                   className={[
-                    "w-16 rounded-lg border px-2 py-2 text-center text-sm",
+                    "min-w-0 flex-1 rounded-lg border px-3 py-2 text-base",
                     invalid ? "border-red-400" : "border-slate-300",
                   ].join(" ")}
                   placeholder={dp == null || dp === 0 ? "0" : (0).toFixed(dp)}
                 />
               ) : (
-                <span className="w-16 text-center text-sm text-slate-900">
-                  {readingDisplayValue(existing) || "—"}
+                <span className="min-w-0 flex-1 text-base text-slate-900">
+                  {formatReadingDisplay(existing, dp)}
                 </span>
               )}
-            </div>
+              {existing ? (
+                <PassFailChip isWithinTolerance={existing.isWithinTolerance} />
+              ) : (
+                <span className="text-[11px] text-slate-400">belum disimpan</span>
+              )}
+            </li>
           );
         })}
-        {canAddReplicateSlot(editable, sibling) ? (
-          <Button
-            variant="ghost"
-            onClick={() =>
-              setExtraByGroup((prev) => ({
-                ...prev,
-                [group.groupKey]: (prev[group.groupKey] ?? 0) + 1,
-              }))
-            }
-          >
-            +
-          </Button>
-        ) : null}
-      </div>
+      </ul>
     );
   }
 
@@ -341,54 +345,81 @@ export function NibpGroupedGrid({
         {submitError ? <ErrorBanner message={submitError} /> : null}
 
         <div className="flex flex-col gap-3">
-          {sequences.map((sequence) => (
-            <div key={sequence} className="rounded-xl border border-slate-300 bg-slate-50 p-3">
-              <p className="sticky top-0 z-10 -mx-3 -mt-3 mb-2 border-b border-slate-200 bg-slate-50 px-3 pb-2 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Titik {sequence}
-              </p>
-              <div className="flex flex-col gap-2">
-                {siblingsWithPoints.map(({ sibling, testPoints, directions }) => {
-                  const tp = testPoints.find((p) => p.sequence === sequence);
+          {sequences.map((sequence) => {
+            const siblingsAtSequence = siblingsWithPoints.filter(({ testPoints }) =>
+              testPoints.some((p) => p.sequence === sequence),
+            );
+            // All siblings share the same direction set in practice (one
+            // simulator reading yields Systole+Mean+Diastole together); take
+            // the first present sibling's directions for the block.
+            const blockDirections = siblingsAtSequence[0]?.directions ?? (["NONE"] as MeasurementDirection[]);
+            const canAddBlock =
+              editable &&
+              siblingsAtSequence.length > 0 &&
+              siblingsAtSequence.every(({ sibling }) => canAddReplicateSlot(editable, sibling));
+            return (
+              <div key={sequence} className="rounded-xl border border-slate-300 bg-slate-50 p-3">
+                <p className="sticky top-0 z-10 -mx-3 -mt-3 mb-2 border-b border-slate-200 bg-slate-50 px-3 pb-2 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Titik {sequence}
+                </p>
+                {blockDirections.map((direction) => {
+                  const directionLabel =
+                    direction === "UP" ? "Naik" : direction === "DOWN" ? "Turun" : null;
+                  const blockKey = blockExtraKey(sequence, direction);
                   return (
-                    <div
-                      key={sibling.id}
-                      className="rounded-lg border border-slate-200 bg-white p-3"
-                    >
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-sm font-medium text-slate-800">{sibling.name}</span>
-                        <span className="text-[11px] text-slate-500">{toleranceText(sibling)}</span>
-                      </div>
-                      {!tp ? (
-                        <p className="mt-2 text-xs text-slate-400">
-                          Belum ada titik ukur pada urutan ini.
-                        </p>
-                      ) : (
-                        <>
-                          {tp.settingValue ? (
-                            <p className="mt-0.5 text-xs text-slate-500">{tp.settingValue}</p>
-                          ) : null}
-                          <div className="mt-2 flex flex-col gap-2">
-                            {directions.map((direction) => {
-                              const directionLabel =
-                                direction === "UP" ? "Naik" : direction === "DOWN" ? "Turun" : null;
-                              return (
-                                <div key={direction} className="flex flex-col gap-1">
-                                  {directionLabel ? (
-                                    <span className="text-[11px] text-slate-500">{directionLabel}</span>
-                                  ) : null}
-                                  {renderCell(sibling, tp, direction)}
-                                </div>
-                              );
-                            })}
+                    <div key={direction} className="flex flex-col gap-2">
+                      {directionLabel ? (
+                        <span className="text-[11px] text-slate-500">{directionLabel}</span>
+                      ) : null}
+                      {siblingsWithPoints.map(({ sibling, testPoints }) => {
+                        const tp = testPoints.find((p) => p.sequence === sequence);
+                        return (
+                          <div
+                            key={sibling.id}
+                            className="rounded-lg border border-slate-200 bg-white p-3"
+                          >
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="text-sm font-medium text-slate-800">
+                                {sibling.name}
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                {toleranceText(sibling)}
+                              </span>
+                            </div>
+                            {!tp ? (
+                              <p className="mt-2 text-xs text-slate-400">
+                                Belum ada titik ukur pada urutan ini.
+                              </p>
+                            ) : (
+                              <>
+                                {tp.settingValue ? (
+                                  <p className="mt-0.5 text-xs text-slate-500">{tp.settingValue}</p>
+                                ) : null}
+                                <div className="mt-2">{renderCell(sibling, tp, direction)}</div>
+                              </>
+                            )}
                           </div>
-                        </>
-                      )}
+                        );
+                      })}
+                      {canAddBlock ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() =>
+                            setExtraByBlock((prev) => ({
+                              ...prev,
+                              [blockKey]: (prev[blockKey] ?? 0) + 1,
+                            }))
+                          }
+                        >
+                          + Tambah ulangan
+                        </Button>
+                      ) : null}
                     </div>
                   );
                 })}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </Screen>
