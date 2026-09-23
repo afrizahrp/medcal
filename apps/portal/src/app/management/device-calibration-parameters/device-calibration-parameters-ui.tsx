@@ -54,6 +54,34 @@ export interface DeviceCalibrationParameterUomRef {
   symbol: string;
 }
 
+/**
+ * Capabilities whose sibling DeviceCalibrationParameters share matching
+ * setpoints per sequence slot (e.g. NIBP's Systole/Mean/Diastole triples) and
+ * so are collapsed into one row in the list and one tabbed detail page,
+ * instead of one row/page per sibling. Explicit CODE allowlist, not a raw
+ * DeviceCapability.id (ids are not stable across environments) and NOT "any
+ * capability with multiple GRID siblings" — most multi-item capabilities
+ * (e.g. ENVIRONMENTAL_CONDITIONS's Room Temperature/Humidity/Voltage,
+ * ELECTRICAL_SAFETY's four checks, or VITAL_SIGNS_MONITORING's
+ * independently-swept Heart Rate/Respirasi/SPO2) are unrelated readings that
+ * must keep rendering flat. Single shared source for both the list page
+ * (`CapabilitySection` below) and the detail page (`[id]/page.tsx`)'s tab
+ * switcher — mirrors the capability-code-Set convention already used in
+ * apps/tech-pwa/src/lib/calibration/measurement.ts (DIRECTION_PARAMETER_CODES).
+ */
+export const GROUPED_TITIK_UKUR_CAPABILITY_CODES = new Set(["NIBP"]);
+
+export function isGroupedTitikUkurCapability(capabilityCode: string): boolean {
+  return GROUPED_TITIK_UKUR_CAPABILITY_CODES.has(capabilityCode);
+}
+
+/** Siblings ordered by their persisted `sortOrder` (ties by name) — the lowest is the canonical entry point (e.g. Systole). */
+export function sortSiblingsByOrder<T extends { sortOrder: number; name: string }>(
+  rows: readonly T[],
+): T[] {
+  return [...rows].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+}
+
 export interface DeviceCalibrationParameterRow {
   id: string;
   deviceTypeId: string;
@@ -427,6 +455,68 @@ function SortableParameterRow({
   );
 }
 
+/**
+ * Collapsed single row for a grouped capability (e.g. NIBP): one row stands
+ * in for all 3 siblings (Systole/Mean/Diastone), linking to the
+ * lowest-sortOrder sibling's detail page — which lands on that sibling's tab
+ * by default, per the tab switcher's own default-tab rule. Not draggable:
+ * the underlying siblings still each have their own `sortOrder` (unaffected
+ * by this collapsing), but there is no single meaningful drag target for a
+ * merged row, so per-parameter reordering is unavailable for grouped
+ * capabilities from this list (capability-level reordering is unaffected).
+ */
+function GroupedParameterRow({
+  parameters,
+}: {
+  parameters: DeviceCalibrationParameterRow[];
+}) {
+  const ordered = sortSiblingsByOrder(parameters);
+  const canonical = ordered[0]!;
+  const allSameUom = ordered.every((p) => p.uom?.id === canonical.uom?.id);
+  const allSameDecimals = ordered.every((p) => p.decimalPlaces === canonical.decimalPlaces);
+  const allActive = ordered.every((p) => p.isActive);
+  const allInactive = ordered.every((p) => !p.isActive);
+
+  return (
+    <tr className="border-b border-slate-100 text-sm last:border-0 hover:bg-slate-50">
+      <td className="px-4 py-2 pl-6">
+        <span className="inline-block w-6" />
+      </td>
+      <td className="px-4 py-2 font-medium text-slate-900">
+        {ordered.map((p) => p.capabilityItem.name).join(" / ")}
+        <Badge variant="secondary" className="ml-2 font-mono text-[10px] text-slate-500">
+          {ordered.length} parameter
+        </Badge>
+      </td>
+      <td className="px-4 py-2 text-slate-600">
+        {allSameUom ? (canonical.uom ? canonical.uom.symbol : "—") : "—"}
+      </td>
+      <td className="px-4 py-2 tabular-nums text-slate-700">
+        {allSameDecimals ? formatDecimalPlaces(canonical) : "—"}
+      </td>
+      <td className="px-4 py-2 text-slate-600">
+        <span className="text-slate-400">— (per titik ukur)</span>
+      </td>
+      <td className="px-4 py-2">
+        {allActive || allInactive ? (
+          <DeviceCalibrationParameterStatusBadge isActive={allActive} />
+        ) : (
+          <Badge variant="secondary" className="text-slate-600">
+            Campuran
+          </Badge>
+        )}
+      </td>
+      <td className="px-4 py-2 text-right">
+        <Link href={`/device-calibration-parameters/${canonical.id}`}>
+          <Button variant="ghost" size="sm">
+            Edit
+          </Button>
+        </Link>
+      </td>
+    </tr>
+  );
+}
+
 function ChildRows({
   group,
   canCreate,
@@ -529,23 +619,30 @@ function CapabilitySection({
   cap: DeviceCalibrationParameterCapabilityGroupRow;
   canReorder: boolean;
 }) {
+  const grouped =
+    isGroupedTitikUkurCapability(cap.capability.code) && cap.parameters.length > 1;
+
   return (
     <>
       <SortableCapabilityHeaderRow deviceTypeId={deviceTypeId} cap={cap} canReorder={canReorder} />
-      <SortableContext
-        items={cap.parameters.map((p) => p.id)}
-        strategy={verticalListSortingStrategy}
-      >
-        {cap.parameters.map((row) => (
-          <SortableParameterRow
-            key={row.id}
-            deviceTypeId={deviceTypeId}
-            capabilityId={cap.capability.id}
-            row={row}
-            canReorder={canReorder}
-          />
-        ))}
-      </SortableContext>
+      {grouped ? (
+        <GroupedParameterRow parameters={cap.parameters} />
+      ) : (
+        <SortableContext
+          items={cap.parameters.map((p) => p.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {cap.parameters.map((row) => (
+            <SortableParameterRow
+              key={row.id}
+              deviceTypeId={deviceTypeId}
+              capabilityId={cap.capability.id}
+              row={row}
+              canReorder={canReorder}
+            />
+          ))}
+        </SortableContext>
+      )}
     </>
   );
 }

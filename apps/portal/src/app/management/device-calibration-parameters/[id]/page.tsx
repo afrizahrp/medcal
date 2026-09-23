@@ -6,7 +6,9 @@ import { Plus, Save } from "lucide-react";
 import { ApiError, isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { AccessDenied } from "../../../../components/access-denied";
+import { ConfirmDialog } from "../../calibration-requests/calibration-requests-ui";
 import {
   DeviceCalibrationParameterFormFields,
   buildDeviceCalibrationParameterUpdatePayload,
@@ -34,7 +36,9 @@ import {
   deviceCalibrationParameterFormPageClass,
   deviceCalibrationParameterFormSurfaceClass,
   formatCalibrationTolerance,
+  isGroupedTitikUkurCapability,
   selectClassName,
+  sortSiblingsByOrder,
 } from "../device-calibration-parameters-ui";
 import {
   useDeviceCalibrationParameter,
@@ -108,21 +112,6 @@ function formFromRow(row: DeviceCalibrationParameterRow): DeviceCalibrationParam
   };
 }
 
-/**
- * Capabilities whose sibling DeviceCalibrationParameters share matching
- * setpoints per sequence slot (e.g. NIBP's Systole/Mean/Diastole triples) and
- * so belong grouped under one shared NO. index in the Titik Ukur table.
- * Explicit CODE allowlist, not a raw DeviceCapability.id (ids are not stable
- * across environments) and NOT "any capability with multiple GRID
- * siblings" — most multi-item capabilities (e.g. ENVIRONMENTAL_CONDITIONS's
- * Room Temperature/Humidity/Voltage, ELECTRICAL_SAFETY's four checks, or
- * VITAL_SIGNS_MONITORING's independently-swept Heart Rate/Respirasi/SPO2)
- * are unrelated readings that must keep rendering flat. Mirrors the
- * capability-code-Set convention already used for gating in
- * apps/tech-pwa/src/lib/calibration/measurement.ts (DIRECTION_PARAMETER_CODES).
- */
-const GROUPED_TITIK_UKUR_CAPABILITY_CODES = new Set(["NIBP"]);
-
 function DetailField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
@@ -144,6 +133,14 @@ export default function DeviceCalibrationParameterDetailPage() {
   const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // ── Config-card tab switcher (Systole/Mean/Diastole-style siblings) ──────
+  // null = "use the default (lowest-sortOrder) sibling" — set explicitly only
+  // once the technician picks a different tab.
+  const [activeSiblingId, setActiveSiblingId] = useState<string | null>(null);
+  // Set while the edit form has unsaved changes and the technician clicked a
+  // different tab — holds that tab's id until they confirm or cancel.
+  const [pendingSiblingId, setPendingSiblingId] = useState<string | null>(null);
 
   // ── Phase 4C — Named Measurement Points (CalibrationTestPoint), embedded ──
   const testPointsQuery = useCalibrationTestPoints(params.id);
@@ -169,7 +166,7 @@ export default function DeviceCalibrationParameterDetailPage() {
   // capability (e.g. ENVIRONMENTAL_CONDITIONS, ELECTRICAL_SAFETY,
   // VITAL_SIGNS_MONITORING) renders the flat single-row table, unchanged.
   const isGroupedCapability = Boolean(
-    row && GROUPED_TITIK_UKUR_CAPABILITY_CODES.has(row.capabilityItem.capability.code),
+    row && isGroupedTitikUkurCapability(row.capabilityItem.capability.code),
   );
   const siblingsQuery = useDeviceCalibrationParameters(
     {
@@ -189,11 +186,20 @@ export default function DeviceCalibrationParameterDetailPage() {
   // sortOrder is the persisted, MT-editable order within a capability (see
   // the parameter-order reorder endpoint) — NOT exposed as an API `sortBy`
   // option, so siblings are re-sorted client-side rather than relying on the
-  // query's own order.
-  const siblings = [...(siblingsQuery.data?.data ?? [])].sort(
-    (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
-  );
+  // query's own order. Same helper the list page's collapsed row uses, so
+  // "lowest sortOrder" means the same thing everywhere.
+  const siblings = sortSiblingsByOrder(siblingsQuery.data?.data ?? []);
   const isGroupedTestPoints = isGroupedCapability && siblings.length > 1;
+  const hasSiblingTabs = isGroupedCapability && siblings.length > 1;
+
+  // Config-card tab switcher — Systole/Mean/Diastole-style siblings. Default
+  // (and fallback while loading, or if a stale id lingers) is the
+  // lowest-sortOrder sibling, per the approved design, regardless of which
+  // sibling's id happens to be in the URL.
+  const activeSibling: DeviceCalibrationParameterRow | undefined = hasSiblingTabs
+    ? (siblings.find((s) => s.id === activeSiblingId) ?? siblings[0])
+    : row;
+  const pendingSibling = siblings.find((s) => s.id === pendingSiblingId) ?? null;
   const siblingIds = siblings.map((s) => s.id);
   const siblingTestPointQueries = useCalibrationTestPointsForMany(siblingIds);
   const groupedBulkMutation = useCreateCalibrationTestPointsBulk();
@@ -250,10 +256,10 @@ export default function DeviceCalibrationParameterDetailPage() {
   });
 
   useEffect(() => {
-    if (!row) return;
-    setForm(formFromRow(row));
-    setIsActive(row.isActive);
-  }, [row]);
+    if (!activeSibling) return;
+    setForm(formFromRow(activeSibling));
+    setIsActive(activeSibling.isActive);
+  }, [activeSibling]);
 
   if (!capabilities?.deviceCalibrationParameterRead) {
     return <AccessDenied />;
@@ -302,9 +308,34 @@ export default function DeviceCalibrationParameterDetailPage() {
   }
 
   function resetForm() {
-    setForm(formFromRow(row!));
-    setIsActive(row!.isActive);
+    setForm(formFromRow(activeSibling!));
+    setIsActive(activeSibling!.isActive);
     setError(null);
+  }
+
+  /** True while the edit form holds changes not yet saved for `activeSibling`. */
+  function hasUnsavedChanges(): boolean {
+    if (!editing || !activeSibling) return false;
+    return (
+      JSON.stringify(form) !== JSON.stringify(formFromRow(activeSibling)) ||
+      isActive !== activeSibling.isActive
+    );
+  }
+
+  function switchToSibling(siblingId: string) {
+    setActiveSiblingId(siblingId);
+    setEditing(false);
+    setError(null);
+    setSuccess(null);
+  }
+
+  function requestSwitchToSibling(siblingId: string) {
+    if (siblingId === activeSibling?.id) return;
+    if (hasUnsavedChanges()) {
+      setPendingSiblingId(siblingId);
+      return;
+    }
+    switchToSibling(siblingId);
   }
 
   async function save(e: React.FormEvent) {
@@ -325,7 +356,7 @@ export default function DeviceCalibrationParameterDetailPage() {
       setError("Nama wajib diisi.");
       return;
     }
-    if (!form.uomId && row?.valueType === "NUMBER") {
+    if (!form.uomId && activeSibling?.valueType === "NUMBER") {
       setError("UOM wajib dipilih.");
       return;
     }
@@ -337,15 +368,21 @@ export default function DeviceCalibrationParameterDetailPage() {
 
     try {
       await updateMutation.mutateAsync({
-        id: row!.id,
+        id: activeSibling!.id,
         input: buildDeviceCalibrationParameterUpdatePayload(
           { ...form, isActive },
-          row!.entryStyle === "LOGGER_SUMMARY",
+          activeSibling!.entryStyle === "LOGGER_SUMMARY",
         ),
       });
       setSuccess("Perubahan tersimpan.");
       setEditing(false);
-      await parameterQuery.refetch();
+      // The edited sibling may not be the URL's own `row` (e.g. editing Mean
+      // while the URL still names Systole) — refetch both so the config
+      // card's own tab and the Titik Ukur card's sibling list stay correct.
+      await Promise.all([
+        parameterQuery.refetch(),
+        isGroupedCapability ? siblingsQuery.refetch() : Promise.resolve(),
+      ]);
     } catch (err) {
       setError(formatDeviceCalibrationParameterApiError(err));
     }
@@ -592,11 +629,11 @@ export default function DeviceCalibrationParameterDetailPage() {
   return (
     <div className={deviceCalibrationParameterFormPageClass}>
       <PageHeader
-        title={row.name}
+        title={activeSibling!.name}
         crumbs={[
           { href: "/", label: "Dashboard" },
           { href: "/device-calibration-parameters", label: "Calibration Parameter" },
-          { label: row.name },
+          { label: activeSibling!.name },
         ]}
       />
 
@@ -604,8 +641,30 @@ export default function DeviceCalibrationParameterDetailPage() {
       {success ? <p className="mt-3 text-sm text-emerald-700">{success}</p> : null}
 
       <Surface className={deviceCalibrationParameterFormSurfaceClass}>
+        {hasSiblingTabs ? (
+          <div className="mb-3 flex gap-1 border-b border-slate-200 pb-2" role="tablist">
+            {siblings.map((sibling) => (
+              <button
+                key={sibling.id}
+                type="button"
+                role="tab"
+                aria-selected={sibling.id === activeSibling!.id}
+                onClick={() => requestSwitchToSibling(sibling.id)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  sibling.id === activeSibling!.id
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-600 hover:bg-slate-100",
+                )}
+              >
+                {sibling.capabilityItem.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-slate-600">{row.deviceType.name}</p>
+          <p className="text-sm text-slate-600">{activeSibling!.deviceType.name}</p>
           {editing ? (
             <select
               value={isActive ? "true" : "false"}
@@ -617,7 +676,7 @@ export default function DeviceCalibrationParameterDetailPage() {
               <option value="false">Nonaktif</option>
             </select>
           ) : (
-            <DeviceCalibrationParameterStatusBadge isActive={row.isActive} />
+            <DeviceCalibrationParameterStatusBadge isActive={activeSibling!.isActive} />
           )}
         </div>
 
@@ -627,8 +686,8 @@ export default function DeviceCalibrationParameterDetailPage() {
               value={form}
               onChange={setField}
               mode="edit"
-              valueType={row.valueType}
-              entryStyleLocked={row.entryStyle === "LOGGER_SUMMARY"}
+              valueType={activeSibling!.valueType}
+              entryStyleLocked={activeSibling!.entryStyle === "LOGGER_SUMMARY"}
               deviceTypes={typesQuery.data?.data ?? []}
               deviceTypesLoading={typesQuery.isLoading}
               capabilities={capabilitiesQuery.data?.data ?? []}
@@ -660,83 +719,92 @@ export default function DeviceCalibrationParameterDetailPage() {
           <>
             <dl className="mt-3 space-y-3 text-sm">
               <DetailField label="Device Name">
-                <span className="font-medium">{row.deviceType.name}</span>
+                <span className="font-medium">{activeSibling!.deviceType.name}</span>
               </DetailField>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <DetailField label="Capability">
-                  <span className="font-medium">{row.capabilityItem.capability.name}</span>
+                  <span className="font-medium">
+                    {activeSibling!.capabilityItem.capability.name}
+                  </span>
                 </DetailField>
                 <DetailField label="Capability Item">
-                  <span className="font-medium">{row.capabilityItem.name}</span>
+                  <span className="font-medium">{activeSibling!.capabilityItem.name}</span>
                 </DetailField>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <DetailField label="Kode">
-                  <span className="font-mono font-medium text-slate-900">{row.code}</span>
+                  <span className="font-mono font-medium text-slate-900">
+                    {activeSibling!.code}
+                  </span>
                 </DetailField>
                 <DetailField label="Nama">
-                  <span className="font-medium text-slate-900">{row.name}</span>
+                  <span className="font-medium text-slate-900">{activeSibling!.name}</span>
                 </DetailField>
               </div>
 
               <DetailField label="Tipe nilai">
-                <span className="font-mono font-medium">{row.valueType}</span>
+                <span className="font-mono font-medium">{activeSibling!.valueType}</span>
               </DetailField>
 
               <DetailField label="UOM">
                 <span className="font-medium">
-                  {row.uom ? `${row.uom.symbol} — ${row.uom.name}` : "—"}
+                  {activeSibling!.uom
+                    ? `${activeSibling!.uom.symbol} — ${activeSibling!.uom.name}`
+                    : "—"}
                 </span>
               </DetailField>
 
               <DetailField label="Batas penerimaan">
-                <span className="font-medium">{formatCalibrationTolerance(row) ?? "—"}</span>
+                <span className="font-medium">
+                  {formatCalibrationTolerance(activeSibling!) ?? "—"}
+                </span>
               </DetailField>
 
               <DetailField label="Decimal places">
                 <span className="font-medium">
-                  {row.valueType !== "NUMBER"
+                  {activeSibling!.valueType !== "NUMBER"
                     ? "— (tidak berlaku)"
-                    : row.decimalPlaces == null
+                    : activeSibling!.decimalPlaces == null
                       ? "Belum diatur"
-                      : `${row.decimalPlaces} digit`}
+                      : `${activeSibling!.decimalPlaces} digit`}
                 </span>
               </DetailField>
 
               <DetailField label="Uji gabungan">
                 <span className="font-medium">
-                  {row.logicalTestKey == null || row.logicalTestSequence == null
+                  {activeSibling!.logicalTestKey == null ||
+                  activeSibling!.logicalTestSequence == null
                     ? "— (parameter berdiri sendiri)"
-                    : `${row.logicalTestKey} — urutan ${row.logicalTestSequence}`}
+                    : `${activeSibling!.logicalTestKey} — urutan ${activeSibling!.logicalTestSequence}`}
                 </span>
               </DetailField>
 
               <DetailField label="Cara pengisian">
                 <span className="font-medium">
-                  {row.entryStyle === "DERIVED"
+                  {activeSibling!.entryStyle === "DERIVED"
                     ? "Nilai turunan (dihitung manual oleh teknisi)"
-                    : row.entryStyle === "LOGGER_SUMMARY"
+                    : activeSibling!.entryStyle === "LOGGER_SUMMARY"
                       ? "Logger summary"
                       : "Terukur langsung"}
                 </span>
-                {row.entryStyle === "DERIVED" && row.derivation?.description ? (
+                {activeSibling!.entryStyle === "DERIVED" && activeSibling!.derivation?.description ? (
                   <p className="mt-0.5 text-xs text-slate-500">
-                    Diturunkan dari: {row.derivation.description}
+                    Diturunkan dari: {activeSibling!.derivation.description}
                   </p>
                 ) : null}
               </DetailField>
 
               <DetailField label="Ulangan">
                 <span className="font-medium">
-                  {row.allowsRepeatedReadings ? "Boleh diulang" : "Satu kali saja"}
+                  {activeSibling!.allowsRepeatedReadings ? "Boleh diulang" : "Satu kali saja"}
                 </span>
               </DetailField>
 
               <DetailField label="Deskripsi">
-                {row.description ? (
-                  <span>{row.description}</span>
+                {activeSibling!.description ? (
+                  <span>{activeSibling!.description}</span>
                 ) : (
                   <span className="text-slate-400">—</span>
                 )}
@@ -753,6 +821,20 @@ export default function DeviceCalibrationParameterDetailPage() {
           </>
         )}
       </Surface>
+
+      {pendingSibling ? (
+        <ConfirmDialog
+          open={true}
+          title="Perubahan belum disimpan"
+          description={`Ada perubahan belum disimpan pada ${activeSibling!.capabilityItem.name}, tetap pindah ke ${pendingSibling.capabilityItem.name}?`}
+          confirmLabel="Tetap pindah"
+          onConfirm={() => {
+            switchToSibling(pendingSibling.id);
+            setPendingSiblingId(null);
+          }}
+          onCancel={() => setPendingSiblingId(null)}
+        />
+      ) : null}
 
       <Surface className={deviceCalibrationParameterFormSurfaceClass}>
         <div className="flex flex-wrap items-center justify-between gap-3">
