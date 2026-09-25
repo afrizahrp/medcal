@@ -48,6 +48,11 @@ const ALLOWLISTED_FILES: Record<string, string> = {
     "application JS (including this file) can read or override it, so there is " +
     "nothing to add here. This is the actual production path the whole " +
     "Origin-aware design exists for.",
+  "apps/customer-portal/src/app/sign-in/register/page.tsx":
+    "Real browser call via authClient.signUp.email() — same as apps/portal's " +
+    "register page above: Origin is set automatically by the browser from " +
+    "this app's own customer.* origin, which resolveRegistrationContext " +
+    "resolves to CUSTOMER_PORTAL. Nothing to add here.",
 };
 
 const SIGNUP_CALL_PATTERN = /\b(?:auth\.api\.signUpEmail|authClient\.signUp\.email)\s*\(/g;

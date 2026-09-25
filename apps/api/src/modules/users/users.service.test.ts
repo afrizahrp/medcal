@@ -9,6 +9,7 @@ const realCompanyId = "PKM";
 const createdUserIds: string[] = [];
 const createdMembershipKeys: Array<{ userId: string; companyId: string }> = [];
 const createdCompanyIds: string[] = [];
+const createdCustomerIds: string[] = [];
 
 async function makeUser(overrides: Record<string, unknown> = {}) {
   const user = await prisma.user.create({
@@ -35,10 +36,25 @@ async function makeMembership(
   return membership;
 }
 
+async function makeCustomer(companyId: string) {
+  const customer = await prisma.customer.create({
+    data: {
+      companyId,
+      number: `CUL-${randomUUID().slice(0, 8)}`,
+      name: `Test Customer ${randomUUID().slice(0, 8)}`,
+      status: "ACTIVE",
+    },
+  });
+  createdCustomerIds.push(customer.id);
+  return customer;
+}
+
 afterAll(async () => {
   for (const key of createdMembershipKeys) {
     await prisma.userMembership.deleteMany({ where: key }).catch(() => {});
   }
+  await prisma.customerUserLink.deleteMany({ where: { customerId: { in: createdCustomerIds } } }).catch(() => {});
+  await prisma.customer.deleteMany({ where: { id: { in: createdCustomerIds } } }).catch(() => {});
   await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
   await prisma.company.deleteMany({ where: { id: { in: createdCompanyIds } } });
 });
@@ -230,8 +246,9 @@ describe("UsersService.assignMembership", () => {
 
   it("activates an INVITED user when assigning membership (G5 provisioning)", async () => {
     const user = await makeUser({ status: "INVITED" });
+    const customer = await makeCustomer(realCompanyId);
 
-    const membership = await service.assignMembership(realCompanyId, user.id, "CUSTOMER");
+    const membership = await service.assignMembership(realCompanyId, user.id, "CUSTOMER", customer.id);
     createdMembershipKeys.push({ userId: user.id, companyId: realCompanyId });
 
     expect(membership.role).toBe("CUSTOMER");
@@ -241,8 +258,9 @@ describe("UsersService.assignMembership", () => {
 
   it("does not re-enable a DISABLED user when assigning membership", async () => {
     const user = await makeUser({ status: "DISABLED" });
+    const customer = await makeCustomer(realCompanyId);
 
-    const membership = await service.assignMembership(realCompanyId, user.id, "CUSTOMER");
+    const membership = await service.assignMembership(realCompanyId, user.id, "CUSTOMER", customer.id);
     createdMembershipKeys.push({ userId: user.id, companyId: realCompanyId });
 
     expect(membership.role).toBe("CUSTOMER");
@@ -295,9 +313,122 @@ describe("UsersService.assignMembership", () => {
 
     it("still allows assigning CUSTOMER to an external-domain user (G4 preserved)", async () => {
       const user = await makeUser({ email: `customer-${randomUUID().slice(0, 8)}@gmail.com` });
-      const membership = await service.assignMembership(realCompanyId, user.id, "CUSTOMER");
+      const customer = await makeCustomer(realCompanyId);
+      const membership = await service.assignMembership(
+        realCompanyId,
+        user.id,
+        "CUSTOMER",
+        customer.id,
+      );
       createdMembershipKeys.push({ userId: user.id, companyId: realCompanyId });
       expect(membership.role).toBe("CUSTOMER");
+    });
+  });
+
+  describe("CustomerUserLink (Customer Portal authorization foundation)", () => {
+    it("creates a CustomerUserLink when approving a CUSTOMER membership with a valid customerId", async () => {
+      const user = await makeUser({ email: `customer-${randomUUID().slice(0, 8)}@gmail.com` });
+      const customer = await makeCustomer(realCompanyId);
+
+      const membership = await service.assignMembership(
+        realCompanyId,
+        user.id,
+        "CUSTOMER",
+        customer.id,
+      );
+      createdMembershipKeys.push({ userId: user.id, companyId: realCompanyId });
+
+      expect(membership.role).toBe("CUSTOMER");
+      const link = await prisma.customerUserLink.findUnique({
+        where: { userId_customerId: { userId: user.id, customerId: customer.id } },
+      });
+      expect(link).not.toBeNull();
+    });
+
+    it("resolves the relationship in both directions (User -> Customer and Customer -> User)", async () => {
+      const user = await makeUser({ email: `customer-${randomUUID().slice(0, 8)}@gmail.com` });
+      const customer = await makeCustomer(realCompanyId);
+      await service.assignMembership(realCompanyId, user.id, "CUSTOMER", customer.id);
+      createdMembershipKeys.push({ userId: user.id, companyId: realCompanyId });
+
+      const viaUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        include: { customerLinks: { include: { customer: true } } },
+      });
+      expect(viaUser?.customerLinks.some((l) => l.customerId === customer.id)).toBe(true);
+
+      const viaCustomer = await prisma.customer.findUnique({
+        where: { id: customer.id },
+        include: { userLinks: { include: { user: true } } },
+      });
+      expect(viaCustomer?.userLinks.some((l) => l.userId === user.id)).toBe(true);
+    });
+
+    it("throws BadRequestException when role is CUSTOMER and customerId is missing", async () => {
+      const user = await makeUser({ email: `customer-${randomUUID().slice(0, 8)}@gmail.com` });
+
+      await expect(
+        service.assignMembership(realCompanyId, user.id, "CUSTOMER"),
+      ).rejects.toMatchObject({
+        status: 400,
+        response: expect.objectContaining({ code: "CUSTOMER_ID_REQUIRED" }),
+      });
+
+      const membership = await prisma.userMembership.findUnique({
+        where: { userId_companyId: { userId: user.id, companyId: realCompanyId } },
+      });
+      expect(membership).toBeNull();
+    });
+
+    it("rejects an invalid/non-existent customerId and creates neither membership nor link", async () => {
+      const user = await makeUser({ email: `customer-${randomUUID().slice(0, 8)}@gmail.com` });
+
+      await expect(
+        service.assignMembership(realCompanyId, user.id, "CUSTOMER", "non-existent-customer-id"),
+      ).rejects.toMatchObject({
+        status: 404,
+        response: expect.objectContaining({ code: "CUSTOMER_NOT_FOUND" }),
+      });
+
+      const membership = await prisma.userMembership.findUnique({
+        where: { userId_companyId: { userId: user.id, companyId: realCompanyId } },
+      });
+      expect(membership).toBeNull();
+    });
+
+    it("rejects a customerId belonging to a different company (tenant isolation)", async () => {
+      const otherCompanyId = `Z${randomUUID().slice(0, 2).toUpperCase()}`;
+      await prisma.company.create({ data: { id: otherCompanyId, name: "Other CUL", status: "ACTIVE" } });
+      createdCompanyIds.push(otherCompanyId);
+      const otherCustomer = await makeCustomer(otherCompanyId);
+
+      const user = await makeUser({ email: `customer-${randomUUID().slice(0, 8)}@gmail.com` });
+
+      await expect(
+        service.assignMembership(realCompanyId, user.id, "CUSTOMER", otherCustomer.id),
+      ).rejects.toMatchObject({
+        status: 404,
+        response: expect.objectContaining({ code: "CUSTOMER_NOT_FOUND" }),
+      });
+    });
+
+    it("is idempotent when re-approving the same User/Customer pair after membership removal", async () => {
+      const user = await makeUser({ email: `customer-${randomUUID().slice(0, 8)}@gmail.com` });
+      const customer = await makeCustomer(realCompanyId);
+
+      await service.assignMembership(realCompanyId, user.id, "CUSTOMER", customer.id);
+      createdMembershipKeys.push({ userId: user.id, companyId: realCompanyId });
+
+      await service.removeMembership(realCompanyId, user.id);
+
+      await expect(
+        service.assignMembership(realCompanyId, user.id, "CUSTOMER", customer.id),
+      ).resolves.toMatchObject({ role: "CUSTOMER" });
+
+      const links = await prisma.customerUserLink.findMany({
+        where: { userId: user.id, customerId: customer.id },
+      });
+      expect(links).toHaveLength(1);
     });
   });
 });

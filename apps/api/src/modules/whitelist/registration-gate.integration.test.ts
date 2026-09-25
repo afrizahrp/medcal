@@ -13,6 +13,7 @@ import { getRegistrationRejectionReasonForContext } from "./registration-gate";
 
 const APPS_ORIGIN = "http://apps.localhost:3003";
 const PORTAL_ORIGIN = "http://portal.localhost:3003";
+const CUSTOMER_PORTAL_ORIGIN = "http://customer.localhost:3005";
 
 // User.email is @db.VarChar(50) — keep this short.
 const shortId = randomUUID().slice(0, 8);
@@ -238,14 +239,41 @@ describe("registration hooks — real sign-up via auth.api.signUpEmail (Registra
     await expect(prisma.user.findUnique({ where: { email } })).resolves.toBeNull();
   });
 
-  // No end-to-end case for "Origin trusted by Better Auth but unresolved by
-  // resolveRegistrationContext" here: every entry in this environment's
-  // TRUSTED_ORIGINS (.env) resolves to apps./portal./the DEV_DEFAULT_HOST_GROUP
-  // localhost fallback, so no trusted-but-unresolved Origin exists to exercise
-  // against a real signUpEmail call. An Origin outside TRUSTED_ORIGINS entirely
-  // is rejected earlier, by Better Auth's own origin-check middleware, before
-  // this hook ever runs. The null-context branch itself is covered directly by
-  // "unrecognized/missing Origin → REJECT ORIGIN_NOT_ALLOWED" above.
+  it("allows an external Gmail sign-up via apps/customer-portal's customer.* origin, with zero UserMembership rows", async () => {
+    const email = `sg-cp-${randomUUID().slice(0, 8)}@gmail.com`;
+    const result = await auth.api.signUpEmail({
+      body: { email, password: "Password123!", name: "Customer Portal Signup" },
+      headers: new Headers({ origin: CUSTOMER_PORTAL_ORIGIN }),
+    });
+    expect(result.user.email).toBe(email);
+    const memberships = await prisma.userMembership.findMany({ where: { userId: result.user.id } });
+    expect(memberships).toHaveLength(0);
+    await prisma.session.deleteMany({ where: { userId: result.user.id } });
+    await prisma.account.deleteMany({ where: { userId: result.user.id } });
+    await prisma.user.delete({ where: { id: result.user.id } });
+  });
+
+  it("allows a company-domain sign-up via apps/customer-portal's customer.* origin without whitelist (G4, same as portal.*)", async () => {
+    const email = `cp-co-${randomUUID().slice(0, 8)}@kalibrasimedika.co.id`;
+    const result = await auth.api.signUpEmail({
+      body: { email, password: "Password123!", name: "Customer Portal Company Email" },
+      headers: new Headers({ origin: CUSTOMER_PORTAL_ORIGIN }),
+    });
+    expect(result.user.email).toBe(email);
+    await prisma.session.deleteMany({ where: { userId: result.user.id } });
+    await prisma.account.deleteMany({ where: { userId: result.user.id } });
+    await prisma.user.delete({ where: { id: result.user.id } });
+  });
+
+  // No end-to-end case remains for "Origin trusted by Better Auth but
+  // unresolved by resolveRegistrationContext": every entry in this
+  // environment's TRUSTED_ORIGINS (.env) resolves to apps./portal./customer./
+  // the DEV_DEFAULT_HOST_GROUP localhost fallback, so no trusted-but-unresolved
+  // Origin exists to exercise against a real signUpEmail call. An Origin
+  // outside TRUSTED_ORIGINS entirely is rejected earlier, by Better Auth's own
+  // origin-check middleware, before this hook ever runs. The null-context
+  // branch itself is covered directly by "unrecognized/missing Origin → REJECT
+  // ORIGIN_NOT_ALLOWED" above.
 
   it("ignores a spoofed registrationContext body field and still rejects a gmail sign-up via apps.*", async () => {
     const email = `origin-spoof-${randomUUID().slice(0, 8)}@gmail.com`;

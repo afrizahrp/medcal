@@ -16,6 +16,16 @@ const CTA_LABEL = "Konsultasikan Kebutuhan Anda";
 const CTA_DESCRIPTION =
   "Konsultasikan kebutuhan kalibrasi alat kesehatan Anda dan kami bantu menentukan layanan yang sesuai";
 
+// The "nav" variant is the site's one entry point into apps/customer-portal
+// (sign-in), deliberately distinct from every other variant's "Konsultasikan
+// Kebutuhan Anda" -> /kontak lead CTA (hero included) — those stay unchanged.
+// Not exposed via props: nav has exactly one caller pattern (site-header.tsx)
+// and isn't meant to be a generic customizable CTA.
+const NAV_CTA_LABEL = "Masuk";
+const CUSTOMER_PORTAL_URL =
+  process.env.NEXT_PUBLIC_CUSTOMER_PORTAL_URL ?? "http://customer.localhost:3005";
+const NAV_CTA_HREF = `${CUSTOMER_PORTAL_URL}/sign-in`;
+
 function joinClasses(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -56,9 +66,9 @@ export function SectionCta({
   if (variant === "nav") {
     return (
       <PrimaryCtaLink
-        href={href}
+        href={NAV_CTA_HREF}
         onClick={onCtaClick}
-        label={ctaLabel}
+        label={NAV_CTA_LABEL}
         className={
           className ??
           "inline-flex items-center justify-center rounded-full bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"

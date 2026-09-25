@@ -6,6 +6,8 @@ import Link from "next/link";
 import { ArrowLeft, UserPlus, Users } from "lucide-react";
 import { ApiError, apiFetch, isAllowedRegistrationDomain } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
+import { CustomerCommandSelect } from "../../calibration-requests/calibration-requests-ui";
+import { useCustomers } from "../../customers/use-customers-query";
 
 type MembershipRole =
   | "ADMIN"
@@ -55,7 +57,22 @@ export default function AssignUserPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [selectedRole, setSelectedRole] = useState<MembershipRole>("ADMIN");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
   const [assigning, setAssigning] = useState(false);
+
+  // Only fetched/shown when the CUSTOMER role is selected — this is the
+  // explicit staff action that creates the User -> CustomerUserLink ->
+  // Customer authorization relationship. Never inferred from the user's
+  // email domain or any registration-time input.
+  const customersQuery = useCustomers({
+    search: "",
+    status: "ACTIVE",
+    sortBy: "name",
+    sortDir: "asc",
+    page: 1,
+    pageSize: 100,
+  });
+  const customers = customersQuery.data?.data ?? [];
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,14 +107,33 @@ export default function AssignUserPage() {
     }
   }, [staffEligible, selectedRole]);
 
+  // Reset the Customer selection whenever it's no longer applicable, so a
+  // stale pick from a previous role/user can never be submitted silently.
+  useEffect(() => {
+    if (selectedRole !== "CUSTOMER") {
+      setSelectedCustomerId("");
+    }
+  }, [selectedRole]);
+
+  useEffect(() => {
+    setSelectedCustomerId("");
+  }, [selectedUserId]);
+
+  const customerRequired = selectedRole === "CUSTOMER";
+  const canAssign = !!selectedUserId && (!customerRequired || !!selectedCustomerId);
+
   async function assignMembership() {
-    if (!selectedUserId) return;
+    if (!canAssign) return;
     setAssigning(true);
     setError(null);
     try {
       await apiFetch(`/users/${selectedUserId}/memberships`, {
         method: "POST",
-        body: JSON.stringify({ role: selectedRole }),
+        body: JSON.stringify(
+          customerRequired
+            ? { role: selectedRole, customerId: selectedCustomerId }
+            : { role: selectedRole },
+        ),
       });
       router.push("/users");
     } catch (err) {
@@ -105,6 +141,10 @@ export default function AssignUserPage() {
         setError("User sudah memiliki membership di company ini.");
       } else if (err instanceof ApiError && err.data?.code === "INTERNAL_STAFF_DOMAIN_REQUIRED") {
         setError("Role internal (Admin/Supervisor/Teknisi/Keuangan) hanya untuk email @kalibrasimedika.co.id.");
+      } else if (err instanceof ApiError && err.data?.code === "CUSTOMER_ID_REQUIRED") {
+        setError("Pilih Customer untuk role Customer.");
+      } else if (err instanceof ApiError && err.data?.code === "CUSTOMER_NOT_FOUND") {
+        setError("Customer yang dipilih tidak ditemukan.");
       } else {
         setError("Gagal assign membership.");
       }
@@ -183,7 +223,28 @@ export default function AssignUserPage() {
               )}
             </div>
 
-            <Button onClick={assignMembership} disabled={assigning || !selectedUserId} className="w-full">
+            {customerRequired && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700">
+                  Customer <span className="text-red-500">*</span>
+                </label>
+                <div className="mt-1.5">
+                  <CustomerCommandSelect
+                    value={selectedCustomerId}
+                    onChange={setSelectedCustomerId}
+                    customers={customers}
+                    loading={customersQuery.isLoading}
+                    disabled={assigning}
+                  />
+                </div>
+                <p className="mt-1.5 text-xs text-slate-400">
+                  User akan diberi akses hanya ke data milik Customer yang dipilih di sini. Pilihan ini
+                  wajib dan tidak ditentukan otomatis dari email atau nama perusahaan.
+                </p>
+              </div>
+            )}
+
+            <Button onClick={assignMembership} disabled={assigning || !canAssign} className="w-full">
               <UserPlus className="h-4 w-4" />
               Assign Membership
             </Button>

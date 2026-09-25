@@ -55,9 +55,30 @@ const membershipRoleValues = [
   "GENERAL_MANAGER",
 ] as const;
 
-const membershipAssignSchema = z.object({
-  role: z.enum(membershipRoleValues),
-});
+const membershipAssignSchema = z
+  .object({
+    role: z.enum(membershipRoleValues),
+    // Required exactly when role is CUSTOMER — see superRefine below. This is
+    // the User -> CustomerUserLink -> Customer authorization link (G-series
+    // Customer Portal foundation); never inferred from email/company name.
+    customerId: z.string().min(1).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.role === "CUSTOMER" && !data.customerId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["customerId"],
+        message: "customerId is required when role is CUSTOMER",
+      });
+    }
+    if (data.role !== "CUSTOMER" && data.customerId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["customerId"],
+        message: "customerId is only allowed when role is CUSTOMER",
+      });
+    }
+  });
 
 const membershipUpdateSchema = z.object({
   role: z.enum(membershipRoleValues),
@@ -134,7 +155,7 @@ export class UsersController {
         issues: parsed.error.flatten(),
       });
     }
-    return this.service.assignMembership(companyId, id, parsed.data.role);
+    return this.service.assignMembership(companyId, id, parsed.data.role, parsed.data.customerId);
   }
 
   @Patch(":id/memberships")

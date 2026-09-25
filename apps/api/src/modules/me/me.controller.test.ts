@@ -20,6 +20,7 @@ vi.mock("@medcal/auth", async () => {
 const companyId = "PKM";
 const createdUserIds: string[] = [];
 const createdMembershipKeys: Array<{ userId: string; companyId: string }> = [];
+const createdCustomerIds: string[] = [];
 
 async function makeUser(status: "INVITED" | "ACTIVE" | "DISABLED") {
   const user = await prisma.user.create({
@@ -40,10 +41,25 @@ async function makeMembership(userId: string) {
   createdMembershipKeys.push({ userId, companyId });
 }
 
+async function makeCustomer() {
+  const customer = await prisma.customer.create({
+    data: {
+      companyId,
+      number: `ME-${randomUUID().slice(0, 8)}`,
+      name: `Me Controller Test Customer ${randomUUID().slice(0, 8)}`,
+      status: "ACTIVE",
+    },
+  });
+  createdCustomerIds.push(customer.id);
+  return customer;
+}
+
 afterAll(async () => {
   for (const key of createdMembershipKeys) {
     await prisma.userMembership.deleteMany({ where: key }).catch(() => {});
   }
+  await prisma.customerUserLink.deleteMany({ where: { customerId: { in: createdCustomerIds } } }).catch(() => {});
+  await prisma.customer.deleteMany({ where: { id: { in: createdCustomerIds } } }).catch(() => {});
   await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
 });
 
@@ -107,5 +123,49 @@ describe("MeController.getMe — account lifecycle codes", () => {
     getSessionMock.mockResolvedValueOnce(null);
 
     await expect(controller.getMe(request())).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe("MeController.getCustomerLink", () => {
+  process.env.COMPANY_ID = companyId;
+
+  afterAll(() => {
+    process.env.COMPANY_ID = originalCompanyId;
+  });
+
+  it("returns customerId: null when the session's user has no CustomerUserLink", async () => {
+    const user = await makeUser("INVITED");
+    getSessionMock.mockResolvedValueOnce({ user: { id: user.id, email: user.email } });
+
+    const result = await controller.getCustomerLink(request());
+    expect(result).toEqual({ customerId: null });
+  });
+
+  it("returns the linked customerId once a CustomerUserLink exists, without requiring ACTIVE membership", async () => {
+    const user = await makeUser("INVITED");
+    const customer = await makeCustomer();
+    await prisma.customerUserLink.create({ data: { userId: user.id, customerId: customer.id } });
+    getSessionMock.mockResolvedValueOnce({ user: { id: user.id, email: user.email } });
+
+    const result = await controller.getCustomerLink(request());
+    expect(result).toEqual({ customerId: customer.id });
+  });
+
+  it("does not use a CUSTOMER-role membership alone as proof of a link", async () => {
+    const user = await makeUser("ACTIVE");
+    await prisma.userMembership.create({
+      data: { userId: user.id, companyId, role: "CUSTOMER", isDefault: false },
+    });
+    createdMembershipKeys.push({ userId: user.id, companyId });
+    getSessionMock.mockResolvedValueOnce({ user: { id: user.id, email: user.email } });
+
+    const result = await controller.getCustomerLink(request());
+    expect(result).toEqual({ customerId: null });
+  });
+
+  it("throws a plain 403 when there is no session", async () => {
+    getSessionMock.mockResolvedValueOnce(null);
+
+    await expect(controller.getCustomerLink(request())).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

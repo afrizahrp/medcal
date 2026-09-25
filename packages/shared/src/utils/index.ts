@@ -44,21 +44,28 @@ export type RegistrationContext = "INTERNAL_STAFF" | "CUSTOMER_PORTAL";
 
 const MANAGEMENT_HOST_PREFIX = "apps.";
 const CLIENT_HOST_PREFIX = "portal.";
+// apps/customer-portal (isolated Customer Portal app, separate from
+// apps/portal's own portal.* client surface) — production domain is planned
+// as customer.kalibrasimedika.co.id. Added alongside portal.* rather than
+// replacing it: apps/portal's /client surface still exists and may still
+// register CUSTOMER_PORTAL-context users too.
+const CUSTOMER_PORTAL_HOST_PREFIX = "customer.";
 
 /**
  * Server-trusted registration context, derived only from the request's Origin
  * header (never a client-supplied body field — see F4 registration gate).
- * Mirrors apps/portal/src/proxy.ts's apps./portal. host-prefix matching so
- * the two hostname discriminators can never drift apart.
+ * Mirrors apps/portal/src/proxy.ts's apps./portal. host-prefix matching (plus
+ * apps/customer-portal's own customer.* host) so these hostname discriminators
+ * can never drift apart.
  *
  * WARNING for anyone calling Better Auth's signUpEmail/authClient.signUp.email
- * directly (scripts, tests, fixtures — not the real browser register page,
+ * directly (scripts, tests, fixtures — not a real browser register page,
  * which gets Origin from the browser automatically): if the request carries
  * no Origin this function recognizes, apps/api/src/modules/whitelist's
  * registration-origin.hook.ts and registration-gate.hook.ts both fail closed
  * with REGISTRATION_ORIGIN_NOT_ALLOWED. Pass an explicit `headers: new
- * Headers({ origin: "http://apps.localhost:3003" })` (or the portal.*
- * equivalent) on every such call — see bootstrap-superadmin.ts or
+ * Headers({ origin: "http://apps.localhost:3003" })` (or the portal./
+ * customer. equivalent) on every such call — see bootstrap-superadmin.ts or
  * registration-gate.integration.test.ts for the pattern. This is enforced
  * structurally by registration-origin-callers.test.ts, which scans the repo
  * for new signUpEmail call sites missing this.
@@ -75,6 +82,7 @@ export function resolveRegistrationContext(
   }
   if (host.startsWith(MANAGEMENT_HOST_PREFIX)) return "INTERNAL_STAFF";
   if (host.startsWith(CLIENT_HOST_PREFIX)) return "CUSTOMER_PORTAL";
+  if (host.startsWith(CUSTOMER_PORTAL_HOST_PREFIX)) return "CUSTOMER_PORTAL";
   if (host === "localhost" || host === "127.0.0.1") {
     return devDefaultHostGroup === "client" ? "CUSTOMER_PORTAL" : "INTERNAL_STAFF";
   }

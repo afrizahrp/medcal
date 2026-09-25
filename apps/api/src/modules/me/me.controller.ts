@@ -281,4 +281,36 @@ export class MeController {
       capabilities,
     };
   }
+
+  /**
+   * "Which Customer (if any) is this session's user linked to" — the
+   * Customer Portal authorization signal, deliberately separate from getMe()
+   * above. Session-only (no ACTIVE-membership requirement): a customer who
+   * has signed up but not yet been approved must still be able to call this
+   * to learn they're not linked yet, without it throwing ACCOUNT_PENDING.
+   *
+   * Per the Customer Portal architecture: CUSTOMER role alone is never proof
+   * of access to a specific Customer — only a real CustomerUserLink row is
+   * (see Phase 1's staff approval flow, users.service.ts#assignMembership).
+   * This endpoint is that check, not a role inference.
+   */
+  @Get("customer-link")
+  async getCustomerLink(@Req() request: Request): Promise<{ customerId: string | null }> {
+    const companyId = process.env.COMPANY_ID;
+    if (!companyId) {
+      throw new ForbiddenException(FORBIDDEN_MESSAGE);
+    }
+
+    const session = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
+    if (!session) {
+      throw new ForbiddenException(FORBIDDEN_MESSAGE);
+    }
+
+    const link = await prisma.customerUserLink.findFirst({
+      where: { userId: session.user.id, customer: { companyId } },
+      select: { customerId: true },
+    });
+
+    return { customerId: link?.customerId ?? null };
+  }
 }

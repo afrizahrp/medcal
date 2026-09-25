@@ -184,6 +184,7 @@ export class UsersService {
     companyId: string,
     userId: string,
     role: MembershipRole,
+    customerId?: string,
   ): Promise<UserMembership> {
     if (role === "SUPERADMIN") {
       throw new ForbiddenException({
@@ -212,6 +213,26 @@ export class UsersService {
       });
     }
 
+    // Customer Portal authorization foundation: approving a CUSTOMER
+    // membership must also establish User -> CustomerUserLink -> Customer.
+    // The Customer is never inferred from email/company name — staff must
+    // explicitly select it, and it's validated here (server-side, tenant-
+    // scoped) rather than trusted from the client.
+    if (role === "CUSTOMER") {
+      if (!customerId) {
+        throw new BadRequestException({
+          message: "customerId is required when assigning the CUSTOMER role",
+          code: "CUSTOMER_ID_REQUIRED",
+        });
+      }
+      const customer = await prisma.customer.findFirst({
+        where: { id: customerId, companyId },
+      });
+      if (!customer) {
+        throw new NotFoundException({ message: "Customer not found", code: "CUSTOMER_NOT_FOUND" });
+      }
+    }
+
     return prisma.$transaction(async (tx) => {
       const membership = await tx.userMembership.create({
         data: { userId, companyId, role, isDefault: false },
@@ -221,6 +242,17 @@ export class UsersService {
         await tx.user.update({
           where: { id: userId },
           data: { status: "ACTIVE" },
+        });
+      }
+      if (role === "CUSTOMER" && customerId) {
+        // upsert: idempotent if this exact User<->Customer link already
+        // exists (e.g. membership was previously removed and re-approved
+        // against the same Customer) — the unique constraint is on
+        // [userId, customerId], not scoped to this membership's lifecycle.
+        await tx.customerUserLink.upsert({
+          where: { userId_customerId: { userId, customerId } },
+          create: { userId, customerId },
+          update: {},
         });
       }
       return membership;

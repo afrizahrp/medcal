@@ -12,6 +12,11 @@ describe("resolveRegistrationContext", () => {
     expect(resolveRegistrationContext("http://portal.localhost:3003")).toBe("CUSTOMER_PORTAL");
   });
 
+  it("resolves customer.* origins to CUSTOMER_PORTAL (apps/customer-portal)", () => {
+    expect(resolveRegistrationContext("https://customer.kalibrasimedika.co.id")).toBe("CUSTOMER_PORTAL");
+    expect(resolveRegistrationContext("http://customer.localhost:3005")).toBe("CUSTOMER_PORTAL");
+  });
+
   it("returns null for an unrecognized origin", () => {
     expect(resolveRegistrationContext("https://technician.kalibrasimedika.co.id")).toBeNull();
     expect(resolveRegistrationContext("https://evil.com")).toBeNull();

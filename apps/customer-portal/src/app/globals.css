@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* iOS Safari zooms the viewport when focusing any input below 16px — hard rule. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :root {
+    color-scheme: light;
+  }
+}
+
+/* Auth chrome (matches apps/portal and apps/tech-pwa's radial canvas). */
+.auth-canvas {
+  background: radial-gradient(ellipse at top, #99f6e4, #f0fdfa);
+}
