@@ -204,39 +204,6 @@ services:
       retries: 5
       start_period: 10s
 
-  customer-portal:
-    build:
-      context: .
-      dockerfile: apps/customer-portal/Dockerfile
-      args:
-        # NEXT_PUBLIC_API_URL must be a build arg — Next.js inlines it at
-        # `next build` (Better Auth client baseURL via @medcal/auth, apiFetch
-        # base via @medcal/shared). No Firebase/FCM build args here — audit
-        # confirmed apps/customer-portal has no such dependency, unlike portal
-        # and tech-pwa (see docs/Deployment/audits/07-customer-portal-infra-audit.md).
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-    image: medcal-customer-portal:latest
-    container_name: medcal-customer-portal
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:3005:3005"
-    networks:
-      - medcal_net
-    # No env_file: .env.production here — confirmed by inspection that
-    # apps/customer-portal/src has zero runtime (non-NEXT_PUBLIC_) process.env
-    # reads. Every value it needs is already build-time inlined above.
-    #
-    # No container-level dependency on api: customer-portal's session/API
-    # calls (Better Auth, apiFetch, GET /me/customer-link) originate from the
-    # visitor's browser, not from this container — same reasoning as
-    # web/portal/tech-pwa.
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3005/"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
 networks:
   medcal_net:
     name: medcal_net
