@@ -232,6 +232,21 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "FINANCE", resource: "managementDashboard", action: "read" },
   // CUSTOMER
   { role: "CUSTOMER", resource: "customerDashboard", action: "read" },
+  // Certificate Management (2026-09-25): upload/replace/view a scanned
+  // calibration certificate PDF from its CalibrationJob. Locked business
+  // decision: TECHNICIAN_MANAGER (MT), SUPERVISOR, ADMIN, and GENERAL_MANAGER
+  // (via the SUPERADMIN_PERMISSION_CATALOG mirror below) may upload/replace/
+  // view; SUPERADMIN alone may delete (its hasPermission bypass — no
+  // "certificate:delete" row is granted to any role here, deliberately).
+  { role: "TECHNICIAN_MANAGER", resource: "certificate", action: "read" },
+  { role: "TECHNICIAN_MANAGER", resource: "certificate", action: "create" },
+  { role: "TECHNICIAN_MANAGER", resource: "certificate", action: "update" },
+  { role: "SUPERVISOR", resource: "certificate", action: "read" },
+  { role: "SUPERVISOR", resource: "certificate", action: "create" },
+  { role: "SUPERVISOR", resource: "certificate", action: "update" },
+  { role: "ADMIN", resource: "certificate", action: "read" },
+  { role: "ADMIN", resource: "certificate", action: "create" },
+  { role: "ADMIN", resource: "certificate", action: "update" },
 ];
 
 // Business decision (2026-08-20): SUPERVISOR gains User Management (matching
@@ -332,6 +347,10 @@ const SUPERADMIN_PERMISSION_CATALOG: Record<string, readonly string[]> = {
     "resumeAfterRework",
     "reviseWorksheet",
   ],
+  // Deliberately excludes "delete" (unlike the ac catalog, which now also
+  // declares certificate:delete) — Certificate Management's locked business
+  // rule reserves delete for SUPERADMIN's hasPermission bypass only, so
+  // GENERAL_MANAGER must not inherit it through this mirror.
   certificate: ["read", "create", "update", "issue"],
   invoice: ["read", "create", "update", "void"],
   payment: ["read", "create", "update", "reconcile"],

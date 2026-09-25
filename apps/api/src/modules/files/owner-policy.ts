@@ -25,8 +25,16 @@ export interface FileOwnerPolicy {
   permissionResource: string;
   /** Owner action that reading its files maps to (default "read"). */
   readAction?: string;
-  /** Owner action that uploading/deleting its files maps to (default "update"). */
+  /** Owner action that uploading (create/replace) its files maps to (default "update"). */
   writeAction?: string;
+  /**
+   * Owner action that deleting its files maps to (default: same as writeAction).
+   * Separate from writeAction so an owner type can allow a broad set of roles
+   * to upload/replace while restricting delete to a narrower set (e.g.
+   * Certificate: TECHNICIAN_MANAGER/SUPERVISOR/ADMIN/GENERAL_MANAGER can
+   * upload/replace, but only SUPERADMIN can delete).
+   */
+  deleteAction?: string;
   fileTypePolicy: FileTypePolicy;
   resolveOwner(companyId: string, ownerId: string): Promise<ResolvedOwner>;
 }

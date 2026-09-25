@@ -167,7 +167,8 @@ export class FilesService {
     const owner = await policy.resolveOwner(companyId, fileObject.ownerId);
 
     if (owner.exists) {
-      if (!hasPermission(role, policy.permissionResource as never, policy.writeAction ?? "update")) {
+      const deleteAction = policy.deleteAction ?? policy.writeAction ?? "update";
+      if (!hasPermission(role, policy.permissionResource as never, deleteAction)) {
         throw FORBIDDEN;
       }
       if (owner.locked) {
@@ -178,8 +179,21 @@ export class FilesService {
       }
     }
 
+    try {
+      await prisma.fileObject.delete({ where: { id: fileObject.id } });
+    } catch (err) {
+      // P2003: another row's FK still points at this FileObject (e.g. it is a
+      // Certificate's current pdfFileObjectId) — refuse cleanly rather than
+      // letting a raw Prisma error surface. Bytes are left in place.
+      if (err && typeof err === "object" && "code" in err && err.code === "P2003") {
+        throw new ConflictException({
+          code: "FILE_STILL_REFERENCED",
+          message: "This file is still referenced by its owning record and cannot be deleted",
+        });
+      }
+      throw err;
+    }
     await this.storage.delete(fileObject.storageKey).catch(() => undefined);
-    await prisma.fileObject.delete({ where: { id: fileObject.id } });
     return { id: fileObject.id, deleted: true };
   }
 

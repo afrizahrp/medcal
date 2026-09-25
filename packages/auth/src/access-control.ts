@@ -185,7 +185,13 @@ const ac = createAccessControl({
     "resumeAfterRework",
     "reviseWorksheet",
   ],
-  certificate: ["read", "create", "update", "issue"],
+  // Certificate Management (2026-09-25): "delete" is deliberately a distinct
+  // action from "update" (Certificate File Owner Policy's writeAction) so
+  // upload/replace can stay open to a broad set of roles while delete is
+  // narrowed to SUPERADMIN only — no RolePermission row is seeded for
+  // certificate:delete to any concrete role; only SUPERADMIN's unconditional
+  // hasPermission bypass grants it.
+  certificate: ["read", "create", "update", "issue", "delete"],
   invoice: ["read", "create", "update", "void"],
   payment: ["read", "create", "update", "reconcile"],
   // System Settings

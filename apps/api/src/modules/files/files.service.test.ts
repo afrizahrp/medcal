@@ -206,3 +206,37 @@ describe("FilesService retrieval / isolation / lifecycle", () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 });
+
+describe("FilesService: deleteAction is independent of writeAction", () => {
+  // Must be a real FileOwnerType enum value — FileObject.ownerType is a
+  // Prisma enum column, not a free string.
+  const SPLIT_OWNER_TYPE = "CERTIFICATE";
+
+  it("lets a role with write but not delete upload, but refuses its delete", async () => {
+    registry.register({
+      ownerType: SPLIT_OWNER_TYPE,
+      // Reuses the real "certificate" resource, whose RolePermission grants are
+      // deliberately split: ADMIN has update but not delete (SUPERADMIN-only).
+      permissionResource: "certificate",
+      writeAction: "update",
+      deleteAction: "delete",
+      fileTypePolicy: { mimeTypes: ["application/pdf"], extensions: [".pdf"], maxBytes: 5 * 1024 * 1024 },
+      async resolveOwner() {
+        return { exists: true, locked: false };
+      },
+    });
+
+    const fo = await upload({ ownerType: SPLIT_OWNER_TYPE, role: "ADMIN" as MembershipRole });
+    createdIds.push(fo.id);
+
+    await expect(
+      service.delete(COMPANY, fo.id, "ADMIN" as MembershipRole),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    // Still there — the refusal must not have removed row or bytes.
+    expect(await prisma.fileObject.findUnique({ where: { id: fo.id } })).not.toBeNull();
+    expect(await driver.exists(fo.storageKey)).toBe(true);
+
+    await service.delete(COMPANY, fo.id, "SUPERADMIN" as MembershipRole);
+    expect(await prisma.fileObject.findUnique({ where: { id: fo.id } })).toBeNull();
+  });
+});

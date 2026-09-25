@@ -5,6 +5,8 @@ import { FilesModule } from "../files/files.module";
 import { FileOwnerPolicyRegistry } from "../files/owner-policy";
 import { CalibrationJobsController } from "./calibration-jobs.controller";
 import { CalibrationJobsService } from "./calibration-jobs.service";
+import { certificateFileOwnerPolicy } from "./certificate-file-owner-policy";
+import { CertificateService } from "./certificate.service";
 import { identityCorrectionFileOwnerPolicy } from "./identity-correction-file-owner-policy";
 import { MeasurementResultsService } from "./measurement-results.service";
 import { PhysicalCheckResultsService } from "./physical-check-results.service";
@@ -20,6 +22,7 @@ import { LkDownloadService } from "./lk-download.service";
     PhysicalCheckResultsService,
     KontrolAlatService,
     LkDownloadService,
+    CertificateService,
     CompanyRoleGuard,
   ],
   exports: [
@@ -28,6 +31,7 @@ import { LkDownloadService } from "./lk-download.service";
     PhysicalCheckResultsService,
     KontrolAlatService,
     LkDownloadService,
+    CertificateService,
   ],
 })
 export class CalibrationJobsModule implements OnModuleInit {
@@ -38,5 +42,6 @@ export class CalibrationJobsModule implements OnModuleInit {
 
   onModuleInit(): void {
     this.fileOwnerPolicies.register(identityCorrectionFileOwnerPolicy);
+    this.fileOwnerPolicies.register(certificateFileOwnerPolicy);
   }
 }

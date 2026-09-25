@@ -106,6 +106,7 @@ import {
   type PortalMeasurementResult,
 } from "../use-measurement-results-query";
 import { WorksheetRevisionPanel } from "../worksheet-revision-panel";
+import { CertificatePanel } from "../certificate-panel";
 
 const SIGNER_ROLES = ["TECHNICIAN", "CUSTOMER"] as const;
 type SignerRole = (typeof SIGNER_ROLES)[number];
@@ -397,6 +398,9 @@ export default function CalibrationJobDetailPage() {
   const canDecideRefApproval = Boolean(
     capabilities?.calibrationJobDecideReferenceEquipmentApproval,
   );
+  const canReadCertificate = Boolean(capabilities?.certificateRead);
+  const canUploadCertificate = Boolean(capabilities?.certificateUpdate);
+  const canDeleteCertificate = Boolean(capabilities?.certificateDelete);
   const correctionRows = corrections.data ?? [];
   const hasPendingCorrection = correctionRows.some((c) => c.status === "PENDING_REVIEW");
 
@@ -614,6 +618,21 @@ export default function CalibrationJobDetailPage() {
                   onReject={handleRejectQualityReview}
                 />
               </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="certificate" className="border-t border-slate-100">
+            <AccordionTrigger className="px-0 py-3 text-sm font-semibold text-slate-900 hover:no-underline">
+              Sertifikat
+            </AccordionTrigger>
+            <AccordionContent>
+              <CertificatePanel
+                jobId={job.id}
+                qaApproved={isQualityReviewApproved(job)}
+                canRead={canReadCertificate}
+                canUpload={canUploadCertificate}
+                canDelete={canDeleteCertificate}
+              />
             </AccordionContent>
           </AccordionItem>
 

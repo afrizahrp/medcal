@@ -13,8 +13,11 @@ import {
   Query,
   Req,
   StreamableFile,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request } from "express";
 import type { MembershipRole } from "@medcal/db";
 import {
@@ -78,6 +81,9 @@ import {
   KontrolAlatService,
   type KontrolAlatDetail,
 } from "./kontrol-alat.service";
+import { CertificateService, type CertificateDetail } from "./certificate.service";
+import type { UploadedFile as UploadedFileShape } from "../files/files.constants";
+import { MAX_UPLOAD_BYTES } from "../files/files.constants";
 
 @Controller("calibration-jobs")
 @UseGuards(CompanyRoleGuard)
@@ -93,6 +99,8 @@ export class CalibrationJobsController {
     private readonly kontrolAlat: KontrolAlatService,
     @Inject(LkDownloadService)
     private readonly lkDownload: LkDownloadService,
+    @Inject(CertificateService)
+    private readonly certificate: CertificateService,
   ) {}
 
   @Get()
@@ -847,6 +855,92 @@ export class CalibrationJobsController {
     return new StreamableFile(pdf.buffer, {
       type: "application/pdf",
       disposition: `attachment; filename="${pdf.filename}"`,
+    });
+  }
+
+  /**
+   * Certificate Management: a hardcopy calibration certificate scanned and
+   * uploaded as a PDF, 1:1 with this CalibrationJob. Returns null (not 404)
+   * when the job has no certificate yet — that is a normal state,
+   * independent of QA approval.
+   */
+  @Get(":id/certificate")
+  @RequirePermission("certificate", "read")
+  async getCertificate(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<CertificateDetail | null> {
+    return this.certificate.getForJob(companyId, id);
+  }
+
+  /**
+   * Upload or replace the certificate PDF. Creates the Certificate record on
+   * first upload if it does not exist yet. Deliberately carries NO QA-status
+   * check — upload/replace is independent of QualityReview by design.
+   * Replacing never deletes the previous file; it becomes prior history
+   * (see GET :id/certificate's `versions`).
+   */
+  @Post(":id/certificate/versions")
+  @RequirePermission("certificate", "update")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 } }))
+  async uploadCertificateVersion(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @MembershipRoleParam() role: MembershipRole,
+    @Param("id") id: string,
+    @UploadedFile() file: UploadedFileShape | undefined,
+    @Req() request: Request,
+  ): Promise<CertificateDetail> {
+    return this.certificate.uploadVersion(companyId, id, userId, role, file, {
+      ipAddress: request.ip ?? null,
+      userAgent: request.headers["user-agent"] ?? null,
+    });
+  }
+
+  @Get(":id/certificate/versions/:fileId/download")
+  @RequirePermission("certificate", "read")
+  async downloadCertificateVersion(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @MembershipRoleParam() role: MembershipRole,
+    @Param("id") id: string,
+    @Param("fileId") fileId: string,
+    @Req() request: Request,
+  ): Promise<StreamableFile> {
+    const { stream, fileObject } = await this.certificate.downloadVersion(
+      companyId,
+      id,
+      fileId,
+      role,
+      userId,
+      { ipAddress: request.ip ?? null, userAgent: request.headers["user-agent"] ?? null },
+    );
+    const safeName = (fileObject.originalName || fileObject.id).replace(/[\r\n"]/g, "_");
+    return new StreamableFile(stream, {
+      type: fileObject.mimeType ?? "application/pdf",
+      disposition: `attachment; filename="${safeName}"`,
+    });
+  }
+
+  /**
+   * SUPERADMIN-only (no RolePermission row is seeded for "certificate:delete"
+   * to any other role — see certificate-file-owner-policy.ts). Deleting the
+   * certificate's CURRENT version is refused (409 CERTIFICATE_CURRENT_VERSION_LOCKED)
+   * by CertificateService; only prior, superseded versions can be removed this way.
+   */
+  @Delete(":id/certificate/versions/:fileId")
+  @RequirePermission("certificate", "delete")
+  async deleteCertificateVersion(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @MembershipRoleParam() role: MembershipRole,
+    @Param("id") id: string,
+    @Param("fileId") fileId: string,
+    @Req() request: Request,
+  ): Promise<{ id: string; deleted: boolean }> {
+    return this.certificate.deleteVersion(companyId, id, fileId, role, userId, {
+      ipAddress: request.ip ?? null,
+      userAgent: request.headers["user-agent"] ?? null,
     });
   }
 }
