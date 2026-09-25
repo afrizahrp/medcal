@@ -10,6 +10,7 @@ import {
   Clock,
   FileDown,
   FileText,
+  QrCode,
   Save,
   ShieldAlert,
   Upload,
@@ -62,6 +63,7 @@ import {
   formatMeasurementHasilDisplay,
   formatMeasurementNormalValue,
   formatReferenceEquipmentError,
+  groupMeasurementRowsByPoint,
   isAwaitingQualityReview,
   isIdentityGateLocked,
   isQualityReviewApproved,
@@ -74,6 +76,7 @@ import {
   shouldShowRejectionFeedback,
   summarizeCorrectionChanges,
   toQualityReviewRejectInput,
+  toRomanNumeral,
 } from "../calibration-job-utils";
 import {
   useCalibrationJob,
@@ -117,6 +120,10 @@ const SIGNATURE_STATUS_LABEL: Record<SignatureStatus, string> = {
   REFUSED: "Menolak",
 };
 const IMAGE_ACCEPT = "image/png,image/jpeg,application/pdf";
+const MEASUREMENT_DIRECTION_LABEL: Record<"UP" | "DOWN", string> = {
+  UP: "Naik",
+  DOWN: "Turun",
+};
 
 export default function CalibrationJobDetailPage() {
   const params = useParams<{ id: string }>();
@@ -162,6 +169,7 @@ export default function CalibrationJobDetailPage() {
   const refEquipmentSectionRef = useRef<HTMLDivElement>(null);
   const measurementSectionRef = useRef<HTMLDivElement>(null);
   const correctionsSectionRef = useRef<HTMLDivElement>(null);
+  const certificateSectionRef = useRef<HTMLDivElement>(null);
   const kontrolAlatSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -169,7 +177,6 @@ export default function CalibrationJobDetailPage() {
     didInitExpand.current = true;
     const job = query.data;
     const signals = job.actionSignals;
-    const gateLocked = isIdentityGateLocked(job);
     const initial: string[] = [];
     // Only open sections that still have an actionable remediation.
     if (signals.referenceEquipmentNeedsApproval) initial.push("ref-equipment");
@@ -458,6 +465,7 @@ export default function CalibrationJobDetailPage() {
           onFocusRefEquipment={() => focusSection("ref-equipment", refEquipmentSectionRef)}
           onFocusMeasurement={() => focusSection("measurement", measurementSectionRef)}
           onFocusCorrections={() => focusSection("corrections", correctionsSectionRef)}
+          onFocusCertificate={() => focusSection("certificate", certificateSectionRef)}
         />
 
         <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="mt-2">
@@ -621,21 +629,6 @@ export default function CalibrationJobDetailPage() {
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="certificate" className="border-t border-slate-100">
-            <AccordionTrigger className="px-0 py-3 text-sm font-semibold text-slate-900 hover:no-underline">
-              Sertifikat
-            </AccordionTrigger>
-            <AccordionContent>
-              <CertificatePanel
-                jobId={job.id}
-                qaApproved={isQualityReviewApproved(job)}
-                canRead={canReadCertificate}
-                canUpload={canUploadCertificate}
-                canDelete={canDeleteCertificate}
-              />
-            </AccordionContent>
-          </AccordionItem>
-
           <AccordionItem
             ref={correctionsSectionRef}
             value="corrections"
@@ -670,6 +663,26 @@ export default function CalibrationJobDetailPage() {
                   ))}
                 </ul>
               )}
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem
+            ref={certificateSectionRef}
+            value="certificate"
+            className="border-t border-slate-100"
+          >
+            <AccordionTrigger className="px-0 py-3 text-sm font-semibold text-slate-900 hover:no-underline">
+              Sertifikat
+            </AccordionTrigger>
+            <AccordionContent>
+              <CertificatePanel
+                jobId={job.id}
+                qaApproved={isQualityReviewApproved(job)}
+                canRead={canReadCertificate}
+                canUpload={canUploadCertificate}
+                canDelete={canDeleteCertificate}
+              />
+              <GenerateQrButton />
             </AccordionContent>
           </AccordionItem>
 
@@ -727,12 +740,14 @@ function StatusStrip({
   onFocusRefEquipment,
   onFocusMeasurement,
   onFocusCorrections,
+  onFocusCertificate,
 }: {
   job: CalibrationJobRow;
   onFocusIdentity: () => void;
   onFocusRefEquipment: () => void;
   onFocusMeasurement: () => void;
   onFocusCorrections: () => void;
+  onFocusCertificate: () => void;
 }) {
   const identityIncomplete = job.actionSignals.identityIncomplete;
   const refEquipmentNeedsApproval = job.actionSignals.referenceEquipmentNeedsApproval;
@@ -755,6 +770,32 @@ function StatusStrip({
         tone={identityCorrectionPending ? "attention" : "neutral"}
         onClick={onFocusCorrections}
       />
+      <StatusChip label="Sertifikat" tone="neutral" onClick={onFocusCertificate} />
+    </div>
+  );
+}
+
+// ── Generate QR (placeholder) ────────────────────────────────────────────────
+
+/**
+ * No QR-generation implementation exists anywhere in the app yet. Rather than
+ * a dedicated tab/page, this is a single action inside the Sertifikat section
+ * — a self-contained placeholder until the real feature lands, at which point
+ * this button's onClick becomes the entry point.
+ */
+function GenerateQrButton() {
+  const [info, setInfo] = useState(false);
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-3">
+      <Button type="button" variant="outline" size="sm" onClick={() => setInfo(true)}>
+        <QrCode className="h-3.5 w-3.5" />
+        Generate QR
+      </Button>
+      {info ? (
+        <p className="mt-2 text-sm text-slate-500">
+          Fitur Generate QR belum tersedia — belum ada implementasi di alur Calibration Job.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1660,16 +1701,21 @@ function QualityReviewPanel({
     (parametersQuery.data?.capabilityGroups ?? []).map((g, i) => [g.capability.name, i] as const),
   );
   const rows = (resultsQuery.data ?? []).filter((row) => row.attemptNumber === attempt);
-  // Bucket the (already parameter-sorted) result rows by capability, preserving
-  // row order within each bucket. Bucket order follows the catalog's capability
-  // sort order (DeviceTypeCapabilityOrder); unknown capabilities sort last.
+  // One entry per measurement point (parameter + test point + direction);
+  // replicateIndex becomes the column axis instead of a repeated row — see
+  // groupMeasurementRowsByPoint.
+  const pointGroups = groupMeasurementRowsByPoint(rows);
+  // Bucket the (already parameter-sorted) groups by capability, preserving
+  // group order within each bucket. Bucket order follows the catalog's
+  // capability sort order (DeviceTypeCapabilityOrder); unknown capabilities
+  // sort last.
   const groupedRows = (() => {
-    const buckets = new Map<string, PortalMeasurementResult[]>();
-    for (const row of rows) {
-      const cap = capabilityByParamId.get(row.deviceCalibrationParameterId) ?? "Lainnya";
+    const buckets = new Map<string, typeof pointGroups>();
+    for (const group of pointGroups) {
+      const cap = capabilityByParamId.get(group.deviceCalibrationParameterId) ?? "Lainnya";
       const bucket = buckets.get(cap);
-      if (bucket) bucket.push(row);
-      else buckets.set(cap, [row]);
+      if (bucket) bucket.push(group);
+      else buckets.set(cap, [group]);
     }
     return [...buckets.entries()].sort(
       ([a], [b]) =>
@@ -1687,79 +1733,115 @@ function QualityReviewPanel({
       ) : rows.length === 0 ? (
         <p className="text-sm text-slate-500">Belum ada hasil pengukuran untuk job ini.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] text-xs">
-            <thead>
-              <tr className="text-left text-slate-400">
-                <th className="py-1 pr-3 font-medium">Parameter</th>
-                <th className="py-1 pr-3 font-medium">Pengulangan</th>
-                <th className="py-1 pr-3 font-medium">Hasil</th>
-                <th className="py-1 pr-3 font-medium">Nilai Normal</th>
-                <th className="py-1 font-medium">Satuan</th>
-              </tr>
-            </thead>
-            {groupedRows.map(([capabilityName, capRows]) => {
-              const paramCount = new Set(capRows.map((r) => r.deviceCalibrationParameterId)).size;
-              return (
-                <tbody key={capabilityName}>
-                  <tr className="border-t border-slate-200 bg-slate-100/70">
-                    <td colSpan={5} className="py-1.5 pr-3">
-                      <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                        {capabilityName}
-                        <span className="font-normal normal-case text-slate-400">
-                          · {paramCount} parameter
-                        </span>
-                      </span>
-                    </td>
-                  </tr>
-                  {capRows.map((row) => {
-                    const param = paramById.get(row.deviceCalibrationParameterId);
-                    const testPoint = row.calibrationTestPointId
-                      ? pointById.get(row.calibrationTestPointId)
-                      : undefined;
-                    return (
-                      <tr key={row.id} className="border-t border-slate-200">
-                        <td className="py-1 pr-3 text-slate-700">
-                          {nameById.get(row.deviceCalibrationParameterId) ??
-                            row.deviceCalibrationParameterId}
-                          {row.calibrationTestPointId
-                            ? ` · ${pointLabelById.get(row.calibrationTestPointId) ?? row.calibrationTestPointId}`
-                            : ""}
-                        </td>
-                        <td className="py-1 pr-3 font-mono text-slate-500">{row.replicateIndex}</td>
-                        <td className="py-1 pr-3 font-mono text-slate-800">
-                          {formatMeasurementHasilDisplay(row.measuredValue, param?.decimalPlaces) ??
-                            row.measuredText ??
-                            (row.measuredBool == null ? "—" : String(row.measuredBool))}
-                        </td>
-                        <td className="py-1 pr-3 font-mono text-slate-700">
-                          {formatMeasurementNormalValue({
-                            effectiveToleranceMin: row.effectiveToleranceMin,
-                            effectiveToleranceMax: row.effectiveToleranceMax,
-                            testPoint: testPoint
-                              ? {
-                                  toleranceMin: testPoint.toleranceMin ?? null,
-                                  toleranceMax: testPoint.toleranceMax ?? null,
-                                  toleranceNote: testPoint.toleranceNote ?? null,
-                                }
-                              : null,
-                            parameter: param
-                              ? {
-                                  toleranceMin: param.toleranceMin,
-                                  toleranceMax: param.toleranceMax,
-                                  toleranceNote: param.toleranceNote,
-                                }
-                              : null,
-                          })}
-                        </td>
-                        <td className="py-1 text-slate-600">{param?.uom?.symbol ?? "—"}</td>
+        <div className="space-y-4">
+          {groupedRows.map(([capabilityName, capGroups]) => {
+            const paramCount = new Set(capGroups.map((g) => g.deviceCalibrationParameterId)).size;
+            // Dynamic column count — the actual number of replicates recorded
+            // in this capability group, never a hardcoded 5. A group with a
+            // single repetition does not force empty I..V columns.
+            const colCount = Math.max(1, ...capGroups.map((g) => g.maxReplicateIndex));
+            const replicateCols = Array.from({ length: colCount }, (_, i) => i + 1);
+            // A single-repetition group has no neighboring replicate columns to
+            // separate it from — give it extra right padding so "Hasil" doesn't
+            // read as glued to "Toleransi". Multi-repetition tables (I..V) keep
+            // the tight, grid-like spacing unchanged.
+            const isSingleRep = colCount === 1;
+            const replicateHeaderClass = isSingleRep
+              ? "py-1 pr-10 text-center font-medium"
+              : "w-10 py-1 pr-2 text-center font-medium";
+            const replicateCellClass = isSingleRep
+              ? "py-1 pr-10 text-center font-mono text-slate-800"
+              : "py-1 pr-2 text-center font-mono text-slate-800";
+            return (
+              <div key={capabilityName}>
+                <p className="flex items-center gap-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {capabilityName}
+                  <span className="font-normal normal-case text-slate-400">
+                    · {paramCount} parameter
+                  </span>
+                </p>
+                <div className="overflow-x-auto rounded-md border border-slate-200">
+                  <table className="w-full min-w-[420px] text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-400">
+                        <th className="py-1 pl-2 pr-3 font-medium">Setting</th>
+                        {replicateCols.map((n) => (
+                          <th key={n} className={replicateHeaderClass}>
+                            {toRomanNumeral(n)}
+                          </th>
+                        ))}
+                        <th className="py-1 pr-3 font-medium">Toleransi</th>
+                        <th className="py-1 pr-2 font-medium">Satuan</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              );
-            })}
-          </table>
+                    </thead>
+                    <tbody>
+                      {capGroups.map((group) => {
+                        const param = paramById.get(group.deviceCalibrationParameterId);
+                        const testPoint = group.calibrationTestPointId
+                          ? pointById.get(group.calibrationTestPointId)
+                          : undefined;
+                        const minReplicate = Math.min(...group.byReplicate.keys());
+                        const referenceRow = group.byReplicate.get(minReplicate)!;
+                        const label = [
+                          nameById.get(group.deviceCalibrationParameterId) ??
+                            group.deviceCalibrationParameterId,
+                          group.calibrationTestPointId
+                            ? (pointLabelById.get(group.calibrationTestPointId) ?? undefined)
+                            : undefined,
+                          group.direction !== "NONE"
+                            ? MEASUREMENT_DIRECTION_LABEL[group.direction]
+                            : undefined,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ");
+                        return (
+                          <tr key={group.key} className="border-t border-slate-100">
+                            <td className="py-1 pl-2 pr-3 text-slate-700">{label}</td>
+                            {replicateCols.map((n) => {
+                              const cell = group.byReplicate.get(n);
+                              return (
+                                <td key={n} className={replicateCellClass}>
+                                  {cell
+                                    ? (formatMeasurementHasilDisplay(
+                                        cell.measuredValue,
+                                        param?.decimalPlaces,
+                                      ) ??
+                                      cell.measuredText ??
+                                      (cell.measuredBool == null ? "—" : String(cell.measuredBool)))
+                                    : "—"}
+                                </td>
+                              );
+                            })}
+                            <td className="py-1 pr-3 font-mono text-slate-700">
+                              {formatMeasurementNormalValue({
+                                effectiveToleranceMin: referenceRow.effectiveToleranceMin,
+                                effectiveToleranceMax: referenceRow.effectiveToleranceMax,
+                                testPoint: testPoint
+                                  ? {
+                                      toleranceMin: testPoint.toleranceMin ?? null,
+                                      toleranceMax: testPoint.toleranceMax ?? null,
+                                      toleranceNote: testPoint.toleranceNote ?? null,
+                                    }
+                                  : null,
+                                parameter: param
+                                  ? {
+                                      toleranceMin: param.toleranceMin,
+                                      toleranceMax: param.toleranceMax,
+                                      toleranceNote: param.toleranceNote,
+                                    }
+                                  : null,
+                              })}
+                            </td>
+                            <td className="py-1 pr-2 text-slate-600">{param?.uom?.symbol ?? "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -292,6 +292,7 @@ function NewWorkOrderPageInner() {
               totalAmount={purchaseOrder.totalAmount}
               currency={purchaseOrder.currency}
               taxDescription={taxDescriptionForCode(taxesQuery.data?.data, purchaseOrder.taxCode)}
+              showPricing={false}
             />
           </div>
 

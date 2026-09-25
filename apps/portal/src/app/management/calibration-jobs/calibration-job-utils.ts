@@ -466,3 +466,85 @@ export function formatMeasurementNormalValue(input: {
 
   return "—";
 }
+
+// ── Measurement repetition grouping ─────────────────────────────────────────
+
+export type MeasurementDirectionFacet = "NONE" | "UP" | "DOWN";
+
+export interface MeasurementRowLike {
+  deviceCalibrationParameterId: string;
+  calibrationTestPointId: string | null;
+  replicateIndex: number;
+  direction?: MeasurementDirectionFacet;
+}
+
+export interface MeasurementPointGroup<T extends MeasurementRowLike> {
+  key: string;
+  deviceCalibrationParameterId: string;
+  calibrationTestPointId: string | null;
+  direction: MeasurementDirectionFacet;
+  /** Rows for this measurement point, keyed by their 1-based replicateIndex
+   * ("LK columns I, II, III, ..." per the MeasurementResult schema). A
+   * replicate that was never recorded is simply absent from the map. */
+  byReplicate: Map<number, T>;
+  maxReplicateIndex: number;
+}
+
+/**
+ * Group MeasurementResult rows into one row per measurement point — the
+ * natural key minus replicateIndex: (parameter, test point, direction).
+ * replicateIndex becomes the column axis instead of a repeated row, matching
+ * how the LK PDF generator already lays out `replicatesFor` (parameter +
+ * settingLabel → replicateIndex columns).
+ *
+ * Group order follows first-appearance order in `rows` (already
+ * parameter/test-point sorted by the API) — never reorders or special-cases
+ * by parameter code/name, so it works for any device type generically.
+ */
+export function groupMeasurementRowsByPoint<T extends MeasurementRowLike>(
+  rows: readonly T[],
+): MeasurementPointGroup<T>[] {
+  const order: string[] = [];
+  const groups = new Map<string, MeasurementPointGroup<T>>();
+  for (const row of rows) {
+    const direction = row.direction ?? "NONE";
+    const key = `${row.deviceCalibrationParameterId}|${row.calibrationTestPointId ?? ""}|${direction}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        deviceCalibrationParameterId: row.deviceCalibrationParameterId,
+        calibrationTestPointId: row.calibrationTestPointId,
+        direction,
+        byReplicate: new Map(),
+        maxReplicateIndex: 0,
+      };
+      groups.set(key, group);
+      order.push(key);
+    }
+    group.byReplicate.set(row.replicateIndex, row);
+    if (row.replicateIndex > group.maxReplicateIndex) group.maxReplicateIndex = row.replicateIndex;
+  }
+  return order.map((key) => groups.get(key)!);
+}
+
+const ROMAN_NUMERAL_VALUES: readonly (readonly [number, string])[] = [
+  [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
+  [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
+  [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"],
+];
+
+/** Column header for a 1-based replicate index (I, II, III, ...). Falls back
+ * to the plain number outside the roman-numeral range rather than throwing. */
+export function toRomanNumeral(value: number): string {
+  if (!Number.isFinite(value) || value < 1) return String(value);
+  let n = Math.trunc(value);
+  let out = "";
+  for (const [v, symbol] of ROMAN_NUMERAL_VALUES) {
+    while (n >= v) {
+      out += symbol;
+      n -= v;
+    }
+  }
+  return out || String(value);
+}

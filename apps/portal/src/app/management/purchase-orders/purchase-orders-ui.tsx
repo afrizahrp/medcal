@@ -339,6 +339,7 @@ export function PurchaseOrderSnapshot({
   currency,
   taxDescription,
   taxIsExclude,
+  showPricing = true,
 }: {
   quotationNumber: string;
   quotationId: string;
@@ -361,8 +362,14 @@ export function PurchaseOrderSnapshot({
    * fields and the QuotationTotals breakdown line are both suppressed.
    */
   taxIsExclude?: boolean | null;
+  /**
+   * Work Order creation is an operational execution flow, not a commercial
+   * document — pricing columns/totals are hidden there while PO/Quotation
+   * screens (the commercial context) keep showing them. Defaults to true.
+   */
+  showPricing?: boolean;
 }) {
-  const showTaxLine = shouldShowTaxLine({ taxCode, taxAmount, taxIsExclude });
+  const showTaxLine = showPricing && shouldShowTaxLine({ taxCode, taxAmount, taxIsExclude });
   return (
     <section className="space-y-4">
       <h2 className="text-base font-semibold text-slate-900">Quotation Snapshot</h2>
@@ -394,7 +401,9 @@ export function PurchaseOrderSnapshot({
             </Link>
           </DetailField>
         ) : null}
-        <DetailField label="Currency">{currency || "IDR"}</DetailField>
+        {showPricing ? (
+          <DetailField label="Currency">{currency || "IDR"}</DetailField>
+        ) : null}
       </dl>
 
       <div>
@@ -405,9 +414,13 @@ export function PurchaseOrderSnapshot({
               <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                 <th className="px-3 py-2">Item</th>
                 <th className="px-3 py-2 text-right">Qty</th>
-                <th className="px-3 py-2 text-right">Unit Price</th>
-                <th className="px-3 py-2 text-right">Discount</th>
-                <th className="px-3 py-2 text-right">Line Total</th>
+                {showPricing ? (
+                  <>
+                    <th className="px-3 py-2 text-right">Unit Price</th>
+                    <th className="px-3 py-2 text-right">Discount</th>
+                    <th className="px-3 py-2 text-right">Line Total</th>
+                  </>
+                ) : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -428,15 +441,19 @@ export function PurchaseOrderSnapshot({
                   <td className="px-3 py-3 text-right text-sm text-slate-600">
                     {formatQty(item.qty)}
                   </td>
-                  <td className="px-3 py-3 text-right text-sm text-slate-600">
-                    {formatIdr(item.unitPrice)}
-                  </td>
-                  <td className="px-3 py-3 text-right text-sm text-slate-600">
-                    {formatIdr(item.discountAmount)}
-                  </td>
-                  <td className="px-3 py-3 text-right text-sm font-medium text-slate-900">
-                    {formatIdr(item.lineTotal)}
-                  </td>
+                  {showPricing ? (
+                    <>
+                      <td className="px-3 py-3 text-right text-sm text-slate-600">
+                        {formatIdr(item.unitPrice)}
+                      </td>
+                      <td className="px-3 py-3 text-right text-sm text-slate-600">
+                        {formatIdr(item.discountAmount)}
+                      </td>
+                      <td className="px-3 py-3 text-right text-sm font-medium text-slate-900">
+                        {formatIdr(item.lineTotal)}
+                      </td>
+                    </>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -453,15 +470,17 @@ export function PurchaseOrderSnapshot({
         </dl>
       ) : null}
 
-      <QuotationTotals
-        subtotal={subtotal}
-        headerDiscountAmount={headerDiscountAmount}
-        taxCode={taxCode}
-        taxRate={taxRate}
-        taxAmount={taxAmount}
-        taxIsExclude={taxIsExclude}
-        totalAmount={totalAmount}
-      />
+      {showPricing ? (
+        <QuotationTotals
+          subtotal={subtotal}
+          headerDiscountAmount={headerDiscountAmount}
+          taxCode={taxCode}
+          taxRate={taxRate}
+          taxAmount={taxAmount}
+          taxIsExclude={taxIsExclude}
+          totalAmount={totalAmount}
+        />
+      ) : null}
     </section>
   );
 }

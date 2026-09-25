@@ -158,30 +158,37 @@ export function CertificatePanel({
   const versions = certificate?.versions ?? [];
   const isReplace = versions.length > 0;
 
+  const uploadInput = (
+    <input
+      ref={fileRef}
+      type="file"
+      accept="application/pdf"
+      className="hidden"
+      onChange={onPick}
+    />
+  );
+
+  const qaNotice = !qaApproved ? (
+    <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+      QA review belum approved. Certificate tetap dapat di-upload.
+    </p>
+  ) : null;
+
   return (
     <div className="space-y-3">
-      {!qaApproved ? (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          QA review belum approved. Certificate tetap dapat di-upload.
-        </p>
-      ) : null}
-
       {query.isLoading ? (
         <p className="text-sm text-slate-400">Memuat…</p>
       ) : query.isError ? (
         <p className="text-sm text-red-600">Gagal memuat data sertifikat.</p>
-      ) : (
+      ) : certificate ? (
         <>
-          {certificate ? (
-            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-              <span className="font-mono">{certificate.number}</span>
-              <Badge variant="secondary" className="font-mono text-[10px]">
-                {certificate.status}
-              </Badge>
-            </div>
-          ) : (
-            <p className="text-sm text-slate-500">Belum ada sertifikat yang diunggah untuk job ini.</p>
-          )}
+          {qaNotice}
+          <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+            <span className="font-mono">{certificate.number}</span>
+            <Badge variant="secondary" className="font-mono text-[10px]">
+              {certificate.status}
+            </Badge>
+          </div>
 
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
@@ -195,13 +202,7 @@ export function CertificatePanel({
 
           {canUpload ? (
             <>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="application/pdf"
-                className="hidden"
-                onChange={onPick}
-              />
+              {uploadInput}
               <Button
                 type="button"
                 variant="outline"
@@ -210,14 +211,34 @@ export function CertificatePanel({
                 onClick={() => fileRef.current?.click()}
               >
                 <Upload className="h-3.5 w-3.5" />
-                {upload.isPending
-                  ? "Mengunggah…"
-                  : isReplace
-                    ? "Ganti sertifikat (unggah versi baru)"
-                    : "Unggah sertifikat PDF (hasil scan)"}
+                {upload.isPending ? "Mengunggah…" : isReplace ? "Ganti sertifikat (unggah versi baru)" : "Unggah sertifikat PDF (hasil scan)"}
               </Button>
             </>
           ) : null}
+        </>
+      ) : (
+        // No certificate yet — a normal empty state, not an error. Upload
+        // stays gated on RBAC (canUpload) only, never on QA status.
+        <>
+          {canUpload ? (
+            <>
+              {uploadInput}
+              <Button
+                type="button"
+                disabled={upload.isPending}
+                onClick={() => fileRef.current?.click()}
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {upload.isPending ? "Mengunggah…" : "Upload Sertifikat"}
+              </Button>
+            </>
+          ) : null}
+
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+          <p className="text-sm text-slate-500">Belum ada sertifikat yang di-upload.</p>
+
+          {qaNotice}
         </>
       )}
     </div>

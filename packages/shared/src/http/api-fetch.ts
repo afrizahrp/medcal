@@ -34,7 +34,13 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     throw new ApiError(response.status, data?.message ?? response.statusText, data);
   }
 
-  return (await response.json()) as T;
+  // Nest's ExpressAdapter.reply() special-cases a null/undefined controller
+  // return value (isNil) to `response.send()` with no argument — an empty
+  // body, not the JSON literal "null" — e.g. GET .../certificate when none
+  // exists yet, or any 204 No Content. response.json() throws on an empty
+  // body, so read as text first and treat "" as null.
+  const text = await response.text();
+  return (text === "" ? null : JSON.parse(text)) as T;
 }
 
 export async function apiFetchBlob(path: string, init: RequestInit = {}): Promise<Blob> {

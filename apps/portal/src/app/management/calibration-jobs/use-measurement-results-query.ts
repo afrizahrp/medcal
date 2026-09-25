@@ -61,6 +61,8 @@ export interface PortalMeasurementResult {
   calibrationTestPointId: string | null;
   replicateIndex: number;
   attemptNumber: number;
+  /** Ramp facet — NONE for all non-ramp readings (the overwhelming majority). */
+  direction: "NONE" | "UP" | "DOWN";
   measuredValue: string | null;
   measuredBool: boolean | null;
   measuredText: string | null;

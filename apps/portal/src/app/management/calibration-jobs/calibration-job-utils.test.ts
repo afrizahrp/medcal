@@ -16,6 +16,7 @@ import {
   formatEffectiveToleranceBounds,
   formatMeasurementHasilDisplay,
   formatMeasurementNormalValue,
+  groupMeasurementRowsByPoint,
   isAwaitingQualityReview,
   isIdentityGateLocked,
   isQualityReviewApproved,
@@ -23,6 +24,7 @@ import {
   shouldShowRejectionFeedback,
   summarizeCorrectionChanges,
   toQualityReviewRejectInput,
+  toRomanNumeral,
 } from "./calibration-job-utils";
 
 const base = { status: "IN_PROGRESS", akdAklApprovalStatus: "NOT_REQUIRED" };
@@ -476,5 +478,93 @@ describe("canReviseJobWorksheet", () => {
     expect(canReviseJobWorksheet({ status: "PENDING" })).toBe(false);
     expect(canReviseJobWorksheet({ status: "SUBMITTED" })).toBe(false);
     expect(canReviseJobWorksheet({ status: "ACCEPTED_BY_QA" })).toBe(false);
+  });
+});
+
+describe("toRomanNumeral", () => {
+  it("renders the LK column sequence", () => {
+    expect(toRomanNumeral(1)).toBe("I");
+    expect(toRomanNumeral(2)).toBe("II");
+    expect(toRomanNumeral(3)).toBe("III");
+    expect(toRomanNumeral(4)).toBe("IV");
+    expect(toRomanNumeral(5)).toBe("V");
+  });
+
+  it("keeps working past the usual 5-replicate LK layout", () => {
+    expect(toRomanNumeral(9)).toBe("IX");
+    expect(toRomanNumeral(10)).toBe("X");
+  });
+
+  it("falls back to the plain number for non-positive input instead of throwing", () => {
+    expect(toRomanNumeral(0)).toBe("0");
+    expect(toRomanNumeral(-1)).toBe("-1");
+  });
+});
+
+describe("groupMeasurementRowsByPoint", () => {
+  function row(overrides: {
+    id: string;
+    deviceCalibrationParameterId: string;
+    calibrationTestPointId: string | null;
+    replicateIndex: number;
+    direction?: "NONE" | "UP" | "DOWN";
+  }) {
+    return overrides;
+  }
+
+  it("collapses repetition rows into one group per measurement point, keyed by replicateIndex", () => {
+    const rows = [
+      row({ id: "r1", deviceCalibrationParameterId: "hr", calibrationTestPointId: "tp-30", replicateIndex: 1 }),
+      row({ id: "r2", deviceCalibrationParameterId: "hr", calibrationTestPointId: "tp-30", replicateIndex: 2 }),
+      row({ id: "r3", deviceCalibrationParameterId: "hr", calibrationTestPointId: "tp-30", replicateIndex: 3 }),
+      row({ id: "r4", deviceCalibrationParameterId: "hr", calibrationTestPointId: "tp-30", replicateIndex: 4 }),
+      row({ id: "r5", deviceCalibrationParameterId: "hr", calibrationTestPointId: "tp-30", replicateIndex: 5 }),
+    ];
+    const groups = groupMeasurementRowsByPoint(rows);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.maxReplicateIndex).toBe(5);
+    expect(groups[0]!.byReplicate.get(3)?.id).toBe("r3");
+  });
+
+  it("keeps different test points (settings) as separate groups, in first-appearance order", () => {
+    const rows = [
+      row({ id: "a1", deviceCalibrationParameterId: "hr", calibrationTestPointId: "tp-30", replicateIndex: 1 }),
+      row({ id: "b1", deviceCalibrationParameterId: "hr", calibrationTestPointId: "tp-60", replicateIndex: 1 }),
+      row({ id: "a2", deviceCalibrationParameterId: "hr", calibrationTestPointId: "tp-30", replicateIndex: 2 }),
+    ];
+    const groups = groupMeasurementRowsByPoint(rows);
+    expect(groups.map((g) => g.calibrationTestPointId)).toEqual(["tp-30", "tp-60"]);
+    expect(groups[0]!.maxReplicateIndex).toBe(2);
+    expect(groups[1]!.maxReplicateIndex).toBe(1);
+  });
+
+  it("does not force a 5-column layout when only one repetition was recorded", () => {
+    const groups = groupMeasurementRowsByPoint([
+      row({ id: "x1", deviceCalibrationParameterId: "spo2", calibrationTestPointId: "tp-90", replicateIndex: 1 }),
+    ]);
+    expect(groups[0]!.maxReplicateIndex).toBe(1);
+  });
+
+  it("keeps UP/DOWN direction readings separate even at the same replicateIndex", () => {
+    const groups = groupMeasurementRowsByPoint([
+      row({ id: "u1", deviceCalibrationParameterId: "sphyg", calibrationTestPointId: "tp-100", replicateIndex: 1, direction: "UP" }),
+      row({ id: "d1", deviceCalibrationParameterId: "sphyg", calibrationTestPointId: "tp-100", replicateIndex: 1, direction: "DOWN" }),
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]!.byReplicate.get(1)?.id).toBe("u1");
+    expect(groups[1]!.byReplicate.get(1)?.id).toBe("d1");
+  });
+
+  it("works generically across parameters without special-casing any code or name", () => {
+    const rows = [
+      row({ id: "n1", deviceCalibrationParameterId: "nibp-systole", calibrationTestPointId: null, replicateIndex: 1 }),
+      row({ id: "n2", deviceCalibrationParameterId: "nibp-systole", calibrationTestPointId: null, replicateIndex: 2 }),
+      row({ id: "n3", deviceCalibrationParameterId: "nibp-diastole", calibrationTestPointId: null, replicateIndex: 1 }),
+    ];
+    const groups = groupMeasurementRowsByPoint(rows);
+    expect(groups.map((g) => g.deviceCalibrationParameterId)).toEqual([
+      "nibp-systole",
+      "nibp-diastole",
+    ]);
   });
 });
