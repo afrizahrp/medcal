@@ -17,7 +17,7 @@ const legalDocs = [
   "NPWP",
   "SKB",
   "SUKET",
-  "Surat Keterangan Non-PKP",
+  "Surat Keterangan PKP",
 ];
 
 export default function SertifikasiLegalitasPage() {
