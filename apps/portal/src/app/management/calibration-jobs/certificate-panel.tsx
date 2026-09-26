@@ -26,6 +26,8 @@ function apiErr(e: unknown): string {
     if (code === "CERTIFICATE_CURRENT_VERSION_LOCKED" || code === "FILE_STILL_REFERENCED")
       return "Versi ini adalah versi aktif saat ini — unggah versi baru terlebih dahulu sebelum menghapusnya.";
     if (code === "CERTIFICATE_FILE_NOT_FOUND") return "File tidak ditemukan untuk sertifikat ini.";
+    if (code === "CERTIFICATE_DUPLICATE_FILE")
+      return "File ini identik dengan versi sertifikat yang sedang aktif — tidak ada versi baru yang dibuat.";
     if (typeof e.data?.message === "string") return e.data.message;
     return e.message;
   }

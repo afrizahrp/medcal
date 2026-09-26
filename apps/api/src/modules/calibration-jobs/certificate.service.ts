@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { DocumentNumberService, prisma, type CertificateStatus, type MembershipRole } from "@medcal/db";
 import { FilesService } from "../files/files.service";
@@ -194,6 +195,26 @@ export class CertificateService {
   ): Promise<CertificateDetail> {
     const certificate = await this.ensureCertificate(companyId, calibrationJobId, userId);
     const isReplace = certificate.pdfFileObjectId !== null;
+
+    // Identity is the file's own bytes (sha256), never the filename — a
+    // re-upload of the exact same PDF as the current version is a no-op
+    // mistake, not a real replacement, so it's refused rather than silently
+    // creating a redundant version. Only compared against the CURRENT
+    // version: deliberately re-uploading an older, already-superseded
+    // version is a legitimate action, not a duplicate-upload mistake.
+    if (file?.buffer && certificate.pdfFileObjectId) {
+      const incomingChecksum = createHash("sha256").update(file.buffer).digest("hex");
+      const current = await prisma.fileObject.findUnique({
+        where: { id: certificate.pdfFileObjectId },
+        select: { checksum: true },
+      });
+      if (current?.checksum && current.checksum === incomingChecksum) {
+        throw new ConflictException({
+          code: "CERTIFICATE_DUPLICATE_FILE",
+          message: "This file is identical to the current certificate version — no new version was created",
+        });
+      }
+    }
 
     const fileObject = await this.files.upload({
       companyId,

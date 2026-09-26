@@ -365,6 +365,32 @@ describe("CertificateService", () => {
     expect(log).not.toBeNull();
   });
 
+  it("refuses to create a redundant version when the re-uploaded file is byte-identical to the current one", async () => {
+    const { jobId } = await makeJob({ withDevice: true });
+    const mt = await makeMember("TECHNICIAN_MANAGER");
+    const first = await service.uploadVersion(companyId, jobId, mt.id, "TECHNICIAN_MANAGER", pdfFile("v1.pdf"), ctx);
+    expect(first.versions).toHaveLength(1);
+
+    await expect(
+      service.uploadVersion(companyId, jobId, mt.id, "TECHNICIAN_MANAGER", pdfFile("v1-again.pdf"), ctx),
+    ).rejects.toMatchObject({ response: { code: "CERTIFICATE_DUPLICATE_FILE" } });
+
+    const after = await service.getForJob(companyId, jobId);
+    expect(after!.versions).toHaveLength(1);
+  });
+
+  it("allows re-uploading an older, already-superseded version (not treated as a duplicate mistake)", async () => {
+    const { jobId } = await makeJob({ withDevice: true });
+    const mt = await makeMember("TECHNICIAN_MANAGER");
+    await service.uploadVersion(companyId, jobId, mt.id, "TECHNICIAN_MANAGER", pdfFile("v1.pdf"), ctx);
+    await service.uploadVersion(companyId, jobId, mt.id, "TECHNICIAN_MANAGER", pdfFile("v2.pdf", PDF_2), ctx);
+
+    // v1's bytes differ from the CURRENT version (v2), so re-uploading them
+    // is allowed — only identity with the current version is refused.
+    const third = await service.uploadVersion(companyId, jobId, mt.id, "TECHNICIAN_MANAGER", pdfFile("v1.pdf"), ctx);
+    expect(third.versions).toHaveLength(3);
+  });
+
   it("rejects delete from a non-SUPERADMIN role even though it can upload/replace", async () => {
     const { jobId } = await makeJob({ withDevice: true });
     const mt = await makeMember("TECHNICIAN_MANAGER");
