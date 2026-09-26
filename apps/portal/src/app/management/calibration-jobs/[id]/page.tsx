@@ -64,6 +64,7 @@ import {
   formatMeasurementNormalValue,
   formatReferenceEquipmentError,
   groupMeasurementRowsByPoint,
+  type MeasurementPointGroup,
   isAwaitingQualityReview,
   isIdentityGateLocked,
   isQualityReviewApproved,
@@ -106,7 +107,9 @@ import {
 import {
   useMeasurementParameters,
   useMeasurementResults,
+  type PortalMeasurementParameter,
   type PortalMeasurementResult,
+  type PortalMeasurementTestPoint,
 } from "../use-measurement-results-query";
 import { WorksheetRevisionPanel } from "../worksheet-revision-panel";
 import { CertificatePanel } from "../certificate-panel";
@@ -1660,6 +1663,121 @@ function ReferenceEquipmentCard({ unit }: { unit: ReferenceEquipmentUsed }) {
 
 // ── Quality review (MT APPROVE | REJECT) ─────────────────────────────────────
 
+/**
+ * Shared column tracks for every capability section on the review.
+ * Setting consumes leftover width. Each repetition, the tolerance, and the
+ * unit are fixed tracks, repeated up to the widest repetition count on the
+ * page, so column I (and Toleransi / Satuan) line up across sections.
+ * Widths are layout constants — not derived from each section's text.
+ * A section with fewer repetitions leaves the extra tracks blank.
+ */
+const MEASUREMENT_RESULT_TRACK = "minmax(7rem,7rem)";
+const MEASUREMENT_TOLERANCE_TRACK = "minmax(8.75rem,8.75rem)";
+const MEASUREMENT_UNIT_TRACK = "minmax(4.25rem,4.25rem)";
+/** Same inset on every section so column boundaries stay aligned. */
+const MEASUREMENT_GRID_INSET = "px-8";
+
+/** Presentation of the saved `isWithinTolerance` flag. Does not re-evaluate tolerance. */
+function measurementValueStatusClass(isWithinTolerance: boolean | null): string {
+  if (isWithinTolerance === true) return "bg-emerald-100";
+  if (isWithinTolerance === false) return "bg-red-100";
+  return "bg-amber-100";
+}
+
+function MeasurementStatusLegend() {
+  const items = [
+    { label: "Sesuai", className: measurementValueStatusClass(true) },
+    { label: "Perlu telaah", className: measurementValueStatusClass(null) },
+    { label: "Tidak sesuai", className: measurementValueStatusClass(false) },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-slate-600">
+      <span className="font-medium text-slate-500">Keterangan:</span>
+      {items.map((item) => (
+        <span key={item.label} className="inline-flex items-center gap-1.5">
+          <span className={`inline-block h-3.5 w-6 ${item.className}`} />
+          {item.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function measurementGridColumns(replicateTrackCount: number): string {
+  const resultTracks = Array.from({ length: replicateTrackCount }, () => MEASUREMENT_RESULT_TRACK).join(
+    " ",
+  );
+  return `minmax(0,1fr) ${resultTracks} ${MEASUREMENT_TOLERANCE_TRACK} ${MEASUREMENT_UNIT_TRACK}`;
+}
+
+function formatMeasurementCell(
+  cell: PortalMeasurementResult | undefined,
+  decimalPlaces: number | null | undefined,
+): string {
+  if (!cell) return "—";
+  return (
+    formatMeasurementHasilDisplay(cell.measuredValue, decimalPlaces) ??
+    cell.measuredText ??
+    (cell.measuredBool == null ? "—" : String(cell.measuredBool))
+  );
+}
+
+function renderMeasurementPointCells(
+  group: MeasurementPointGroup<PortalMeasurementResult>,
+  ctx: {
+    paramById: Map<string, PortalMeasurementParameter>;
+    nameById: Map<string, string>;
+    pointById: Map<string, PortalMeasurementTestPoint>;
+    pointLabelById: Map<string, string>;
+  },
+) {
+  const param = ctx.paramById.get(group.deviceCalibrationParameterId);
+  const testPoint = group.calibrationTestPointId
+    ? ctx.pointById.get(group.calibrationTestPointId)
+    : undefined;
+  const minReplicate = Math.min(...group.byReplicate.keys());
+  const referenceRow = group.byReplicate.get(minReplicate)!;
+  const label = [
+    ctx.nameById.get(group.deviceCalibrationParameterId) ?? group.deviceCalibrationParameterId,
+    group.calibrationTestPointId
+      ? (ctx.pointLabelById.get(group.calibrationTestPointId) ?? undefined)
+      : undefined,
+    group.direction !== "NONE" ? MEASUREMENT_DIRECTION_LABEL[group.direction] : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const resultsByReplicate = new Map<number, { text: string; isWithinTolerance: boolean | null }>();
+  for (const [index, cell] of group.byReplicate) {
+    resultsByReplicate.set(index, {
+      text: formatMeasurementCell(cell, param?.decimalPlaces),
+      isWithinTolerance: cell.isWithinTolerance,
+    });
+  }
+  return {
+    label,
+    resultsByReplicate,
+    tolerance: formatMeasurementNormalValue({
+      effectiveToleranceMin: referenceRow.effectiveToleranceMin,
+      effectiveToleranceMax: referenceRow.effectiveToleranceMax,
+      testPoint: testPoint
+        ? {
+            toleranceMin: testPoint.toleranceMin ?? null,
+            toleranceMax: testPoint.toleranceMax ?? null,
+            toleranceNote: testPoint.toleranceNote ?? null,
+          }
+        : null,
+      parameter: param
+        ? {
+            toleranceMin: param.toleranceMin,
+            toleranceMax: param.toleranceMax,
+            toleranceNote: param.toleranceNote,
+          }
+        : null,
+    }),
+    unit: param?.uom?.symbol ?? "—",
+  };
+}
+
 function QualityReviewPanel({
   job,
   parametersQuery,
@@ -1723,6 +1841,11 @@ function QualityReviewPanel({
           (capabilityOrder.get(b) ?? Number.MAX_SAFE_INTEGER) || a.localeCompare(b),
     );
   })();
+  // One track per repetition up to the widest section on this review, so a
+  // single-repetition "I" sits on the same boundary as a multi-repetition "I".
+  const replicateTrackCount = Math.max(1, ...pointGroups.map((group) => group.maxReplicateIndex));
+  const gridColumns = measurementGridColumns(replicateTrackCount);
+  const gridMinWidth = replicateTrackCount > 1 ? "60rem" : "36rem";
 
   return (
     <div className="mt-3 space-y-4">
@@ -1736,22 +1859,10 @@ function QualityReviewPanel({
         <div className="space-y-4">
           {groupedRows.map(([capabilityName, capGroups]) => {
             const paramCount = new Set(capGroups.map((g) => g.deviceCalibrationParameterId)).size;
-            // Dynamic column count — the actual number of replicates recorded
-            // in this capability group, never a hardcoded 5. A group with a
-            // single repetition does not force empty I..V columns.
-            const colCount = Math.max(1, ...capGroups.map((g) => g.maxReplicateIndex));
-            const replicateCols = Array.from({ length: colCount }, (_, i) => i + 1);
-            // A single-repetition group has no neighboring replicate columns to
-            // separate it from — give it extra right padding so "Hasil" doesn't
-            // read as glued to "Toleransi". Multi-repetition tables (I..V) keep
-            // the tight, grid-like spacing unchanged.
-            const isSingleRep = colCount === 1;
-            const replicateHeaderClass = isSingleRep
-              ? "py-1 pr-10 text-center font-medium"
-              : "w-10 py-1 pr-2 text-center font-medium";
-            const replicateCellClass = isSingleRep
-              ? "py-1 pr-10 text-center font-mono text-slate-800"
-              : "py-1 pr-2 text-center font-mono text-slate-800";
+            // Headers and "—" only for repetitions this section actually has.
+            // Later tracks stay blank so they still reserve the shared geometry.
+            const sectionReplicateCount = Math.max(1, ...capGroups.map((g) => g.maxReplicateIndex));
+            const replicateCols = Array.from({ length: replicateTrackCount }, (_, i) => i + 1);
             return (
               <div key={capabilityName}>
                 <p className="flex items-center gap-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -1760,88 +1871,82 @@ function QualityReviewPanel({
                     · {paramCount} parameter
                   </span>
                 </p>
-                <div className="overflow-x-auto rounded-md border border-slate-200">
-                  <table className="w-full min-w-[420px] text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-400">
-                        <th className="py-1 pl-2 pr-3 font-medium">Setting</th>
-                        {replicateCols.map((n) => (
-                          <th key={n} className={replicateHeaderClass}>
-                            {toRomanNumeral(n)}
-                          </th>
-                        ))}
-                        <th className="py-1 pr-3 font-medium">Toleransi</th>
-                        <th className="py-1 pr-2 font-medium">Satuan</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {capGroups.map((group) => {
-                        const param = paramById.get(group.deviceCalibrationParameterId);
-                        const testPoint = group.calibrationTestPointId
-                          ? pointById.get(group.calibrationTestPointId)
-                          : undefined;
-                        const minReplicate = Math.min(...group.byReplicate.keys());
-                        const referenceRow = group.byReplicate.get(minReplicate)!;
-                        const label = [
-                          nameById.get(group.deviceCalibrationParameterId) ??
-                            group.deviceCalibrationParameterId,
-                          group.calibrationTestPointId
-                            ? (pointLabelById.get(group.calibrationTestPointId) ?? undefined)
-                            : undefined,
-                          group.direction !== "NONE"
-                            ? MEASUREMENT_DIRECTION_LABEL[group.direction]
-                            : undefined,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ");
-                        return (
-                          <tr key={group.key} className="border-t border-slate-100">
-                            <td className="py-1 pl-2 pr-3 text-slate-700">{label}</td>
-                            {replicateCols.map((n) => {
-                              const cell = group.byReplicate.get(n);
-                              return (
-                                <td key={n} className={replicateCellClass}>
-                                  {cell
-                                    ? (formatMeasurementHasilDisplay(
-                                        cell.measuredValue,
-                                        param?.decimalPlaces,
-                                      ) ??
-                                      cell.measuredText ??
-                                      (cell.measuredBool == null ? "—" : String(cell.measuredBool)))
-                                    : "—"}
-                                </td>
-                              );
-                            })}
-                            <td className="py-1 pr-3 font-mono text-slate-700">
-                              {formatMeasurementNormalValue({
-                                effectiveToleranceMin: referenceRow.effectiveToleranceMin,
-                                effectiveToleranceMax: referenceRow.effectiveToleranceMax,
-                                testPoint: testPoint
-                                  ? {
-                                      toleranceMin: testPoint.toleranceMin ?? null,
-                                      toleranceMax: testPoint.toleranceMax ?? null,
-                                      toleranceNote: testPoint.toleranceNote ?? null,
-                                    }
-                                  : null,
-                                parameter: param
-                                  ? {
-                                      toleranceMin: param.toleranceMin,
-                                      toleranceMax: param.toleranceMax,
-                                      toleranceNote: param.toleranceNote,
-                                    }
-                                  : null,
-                              })}
-                            </td>
-                            <td className="py-1 pr-2 text-slate-600">{param?.uom?.symbol ?? "—"}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className={`overflow-x-auto rounded-md border border-slate-200 ${MEASUREMENT_GRID_INSET}`}>
+                  <div
+                    role="table"
+                    className="grid w-full text-xs"
+                    style={{ gridTemplateColumns: gridColumns, minWidth: gridMinWidth }}
+                  >
+                    <div role="row" className="contents text-left text-slate-400">
+                      <div role="columnheader" className="min-w-0 border-b border-slate-200 bg-slate-50 py-1 pl-2 pr-3 font-medium">
+                        Setting
+                      </div>
+                      {replicateCols.map((n) => (
+                        <div
+                          key={n}
+                          role="columnheader"
+                          className="min-w-0 border-b border-slate-200 bg-slate-50 px-2 py-1 text-center font-medium"
+                        >
+                          {n <= sectionReplicateCount ? toRomanNumeral(n) : null}
+                        </div>
+                      ))}
+                      <div role="columnheader" className="min-w-0 border-b border-slate-200 bg-slate-50 px-2 py-1 font-medium">
+                        Toleransi
+                      </div>
+                      <div role="columnheader" className="min-w-0 border-b border-slate-200 bg-slate-50 px-2 py-1 font-medium">
+                        Satuan
+                      </div>
+                    </div>
+                    {capGroups.map((group) => {
+                      const rendered = renderMeasurementPointCells(group, {
+                        paramById,
+                        nameById,
+                        pointById,
+                        pointLabelById,
+                      });
+                      return (
+                        <div key={group.key} role="row" className="contents">
+                          <div role="cell" className="min-w-0 break-words border-t border-slate-100 py-1 pl-2 pr-3 text-slate-700">
+                            {rendered.label}
+                          </div>
+                          {replicateCols.map((n) => {
+                            const reading =
+                              n <= sectionReplicateCount ? rendered.resultsByReplicate.get(n) : undefined;
+                            return (
+                              <div
+                                key={n}
+                                role="cell"
+                                className="min-w-0 border-t border-slate-100 px-1 py-1 text-center font-mono text-slate-800"
+                              >
+                                {n <= sectionReplicateCount ? (
+                                  reading ? (
+                                    <span
+                                      className={`inline-block px-1.5 py-0.5 text-slate-800 ${measurementValueStatusClass(reading.isWithinTolerance)}`}
+                                    >
+                                      {reading.text}
+                                    </span>
+                                  ) : (
+                                    "—"
+                                  )
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                          <div role="cell" className="min-w-0 break-words border-t border-slate-100 px-2 py-1 font-mono text-slate-700">
+                            {rendered.tolerance}
+                          </div>
+                          <div role="cell" className="min-w-0 break-words border-t border-slate-100 px-2 py-1 text-slate-600">
+                            {rendered.unit}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             );
           })}
+          <MeasurementStatusLegend />
         </div>
       )}
 
