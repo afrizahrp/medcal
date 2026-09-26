@@ -44,7 +44,16 @@ const calibrationRequestInclude = {
   // MOM #1 — Revision Scope Design: a retired (isActive: false) item is no
   // longer part of the requisition's current desired scope; it stays in the
   // database only for downstream traceability, never shown as a current row.
-  items: { where: { isActive: true }, include: { deviceType: { select: deviceTypeSelect } } },
+  items: {
+    where: { isActive: true },
+    include: {
+      deviceType: { select: deviceTypeSelect },
+      // deviceId is a resolved Device.id (real FK), not a display string —
+      // clients re-display/re-edit the Serial No via this relation, never the
+      // raw FK value.
+      device: { select: { serialNumber: true } },
+    },
+  },
   customer: true,
 } as const;
 
@@ -72,6 +81,58 @@ async function assertDeviceTypesExist(
       code: "DEVICE_TYPE_NOT_FOUND",
     });
   }
+}
+
+/**
+ * CalibrationRequestItem.deviceId is a REQUIRED FK to Device.id. The wire-level
+ * `deviceId` input field is a lookup key only (the customer's Serial No, from
+ * manual entry or Excel import) — it is never stored verbatim. This resolves
+ * it, scoped to the request's own customer + company (Device.serialNumber is
+ * not globally unique), and returns the real Device.id to persist. Throws a
+ * clear, specific error rather than silently persisting NULL, the raw
+ * Serial No text, or a fabricated Device.
+ */
+async function resolveRequestItemDeviceId(
+  tx: Prisma.TransactionClient,
+  companyId: string,
+  customerId: string,
+  rawDeviceId: string | undefined,
+): Promise<string> {
+  const serialNumber = (rawDeviceId ?? "").trim();
+  if (!serialNumber) {
+    throw new BadRequestException({
+      message: "Device (Serial No) is required for every requisition item",
+      code: "DEVICE_ID_REQUIRED",
+    });
+  }
+  const matches = await tx.device.findMany({
+    where: { companyId, customerId, serialNumber: { equals: serialNumber, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (matches.length === 0) {
+    throw new BadRequestException({
+      message: `No Device found for this customer with Serial No "${serialNumber}"`,
+      code: "DEVICE_NOT_FOUND",
+    });
+  }
+  if (matches.length > 1) {
+    throw new BadRequestException({
+      message: `Serial No "${serialNumber}" matches more than one Device for this customer`,
+      code: "DEVICE_SERIAL_AMBIGUOUS",
+    });
+  }
+  return matches[0]!.id;
+}
+
+async function resolveRequestItemDeviceIds(
+  tx: Prisma.TransactionClient,
+  companyId: string,
+  customerId: string,
+  items: Array<{ deviceId?: string }>,
+): Promise<string[]> {
+  return Promise.all(
+    items.map((item) => resolveRequestItemDeviceId(tx, companyId, customerId, item.deviceId)),
+  );
 }
 
 /**
@@ -139,6 +200,12 @@ export class CalibrationRequestsService {
         tx,
         input.items.map((item) => item.deviceTypeId),
       );
+      const resolvedDeviceIds = await resolveRequestItemDeviceIds(
+        tx,
+        companyId,
+        input.customerId,
+        input.items,
+      );
 
       const issuedAt = new Date();
       const number = await DocumentNumberService.allocate({
@@ -163,13 +230,13 @@ export class CalibrationRequestsService {
       });
 
       await tx.calibrationRequestItem.createMany({
-        data: input.items.map((item) => ({
+        data: input.items.map((item, index) => ({
           companyId,
           requestId: calibrationRequest.id,
           deviceTypeId: item.deviceTypeId,
           customerDeviceName: item.customerDeviceName || null,
           model: item.model || null,
-          deviceId: item.deviceId || null,
+          deviceId: resolvedDeviceIds[index]!,
           qty: item.qty ?? 1,
           akdAkl: item.akdAkl || null,
           akdAklDeclaration:
@@ -297,19 +364,25 @@ export class CalibrationRequestsService {
           tx,
           input.items.map((item) => item.deviceTypeId),
         );
+        const resolvedDeviceIds = await resolveRequestItemDeviceIds(
+          tx,
+          companyId,
+          input.customerId ?? existing.customerId,
+          input.items,
+        );
 
         await tx.calibrationRequestItem.deleteMany({
           where: { requestId: id },
         });
 
         await tx.calibrationRequestItem.createMany({
-          data: input.items.map((item) => ({
+          data: input.items.map((item, index) => ({
             companyId,
             requestId: id,
             deviceTypeId: item.deviceTypeId,
             customerDeviceName: item.customerDeviceName || null,
             model: item.model || null,
-            deviceId: item.deviceId || null,
+            deviceId: resolvedDeviceIds[index]!,
             qty: item.qty ?? 1,
             akdAkl: item.akdAkl || null,
             akdAklDeclaration:
@@ -548,6 +621,12 @@ export class CalibrationRequestsService {
       for (const item of input.items) {
         if (!item.id) {
           // ADDED — a genuinely new line, fresh lineage, no id carried over.
+          const deviceId = await resolveRequestItemDeviceId(
+            tx,
+            companyId,
+            existing.customerId,
+            item.deviceId,
+          );
           await tx.calibrationRequestItem.create({
             data: {
               companyId,
@@ -555,7 +634,7 @@ export class CalibrationRequestsService {
               deviceTypeId: item.deviceTypeId,
               customerDeviceName: item.customerDeviceName || null,
               model: item.model || null,
-              deviceId: item.deviceId || null,
+              deviceId,
               qty: item.qty ?? 1,
               akdAkl: item.akdAkl || null,
               akdAklDeclaration:
@@ -578,13 +657,19 @@ export class CalibrationRequestsService {
           // Unconsumed — freely updated in place (UNCHANGED and QTY_CHANGED
           // both flow through the same in-place update; applying identical
           // values is a harmless no-op).
+          const deviceId = await resolveRequestItemDeviceId(
+            tx,
+            companyId,
+            existing.customerId,
+            item.deviceId,
+          );
           await tx.calibrationRequestItem.update({
             where: { id: item.id },
             data: {
               deviceTypeId: item.deviceTypeId,
               customerDeviceName: item.customerDeviceName || null,
               model: item.model || null,
-              deviceId: item.deviceId || null,
+              deviceId,
               qty: desiredQty,
               akdAkl: item.akdAkl || null,
               akdAklDeclaration:

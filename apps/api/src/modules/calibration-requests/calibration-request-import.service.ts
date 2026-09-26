@@ -140,12 +140,17 @@ function parseQty(value: ExcelJS.CellValue | undefined): { qty: number | null; e
 }
 
 // ── Serial No parsing (spec §13 / §14 / D2) ─────────────────────────────────
+// Serial No is now a REQUIRED lookup key: CalibrationRequestItem.deviceId is a
+// required FK to an existing Device, resolved server-side (at Confirm) from
+// this value. An empty cell can no longer be silently persisted as NULL — it
+// is flagged here, at preview time, the same way an empty Nama Alat / Qty
+// cell already is.
 function parseDeviceId(value: ExcelJS.CellValue | undefined): {
   deviceId: string | null;
   error?: string;
 } {
   const text = cellToText(value);
-  if (!text) return { deviceId: null };
+  if (!text) return { deviceId: null, error: "Serial No wajib diisi" };
   if (/[,;\n\r]/.test(text)) {
     return { deviceId: null, error: "Satu baris hanya boleh memiliki satu Serial No" };
   }
@@ -622,7 +627,7 @@ export class CalibrationRequestImportService {
       deviceTypeId: row.deviceTypeId,
       customerDeviceName: row.customerDeviceName,
       ...(row.model ? { model: row.model } : {}),
-      ...(row.deviceId ? { deviceId: row.deviceId } : {}),
+      deviceId: row.deviceId,
       qty: row.qty,
       // Empty → create() derives NOT_PROVIDED; non-empty → CUSTOMER_PROVIDED.
       // Independent of qty — this is a customer declaration, not the verified

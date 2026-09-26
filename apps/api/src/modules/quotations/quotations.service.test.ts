@@ -164,10 +164,17 @@ async function createQuoted(
 
 interface RequestItemSpec {
   deviceTypeId?: string;
-  deviceId?: string | null;
+  /** Serial No lookup key — see calibrationRequestItemInputSchema.deviceId. */
+  deviceId?: string;
   qty?: number;
 }
 
+/**
+ * CalibrationRequestItem.deviceId is a required FK to Device.id, resolved
+ * server-side from a Serial No lookup key. Pre-creates a real Device for each
+ * item spec's serial (or default `DEV-${n}`), scoped to the freshly-created
+ * customer, so the resolution succeeds.
+ */
 async function createSubmittedRequest(
   companyId: string,
   opts: { deviceTypeId?: string; items?: RequestItemSpec[] } = {},
@@ -176,14 +183,30 @@ async function createSubmittedRequest(
   const customer = await createTestCustomer(companyId);
   const fallbackTypeId = opts.deviceTypeId ?? (await makeDeviceType()).id;
   const specs = opts.items ?? [{ deviceId: "DEV-1" }];
+  const items = await Promise.all(
+    specs.map(async (spec, index) => {
+      const deviceTypeId = spec.deviceTypeId ?? fallbackTypeId;
+      const serialNumber = spec.deviceId ?? `DEV-${index + 1}`;
+      await prisma.device.create({
+        data: {
+          companyId,
+          customerId: customer.id,
+          deviceTypeId,
+          code: `DVC${rand()}`,
+          serialNumber,
+        },
+      });
+      return {
+        deviceTypeId,
+        deviceId: serialNumber,
+        ...(spec.qty !== undefined ? { qty: spec.qty } : {}),
+      };
+    }),
+  );
   const created = await requestsService.create(companyId, staffUserId, {
     customerId: customer.id,
     serviceMode: "ON_SITE",
-    items: specs.map((spec, index) => ({
-      deviceTypeId: spec.deviceTypeId ?? fallbackTypeId,
-      ...(spec.deviceId === null ? {} : { deviceId: spec.deviceId ?? `DEV-${index + 1}` }),
-      ...(spec.qty !== undefined ? { qty: spec.qty } : {}),
-    })),
+    items,
   });
   createdCalibrationRequestIds.push(created.id);
   const request = await requestsService.submit(companyId, created.id);
@@ -209,6 +232,11 @@ afterAll(async () => {
     await prisma.tax.deleteMany({ where: { id: { in: createdTaxIds } } });
   }
   await cleanupCalibrationRequests(createdCalibrationRequestIds);
+  if (createdCustomerIds.length > 0) {
+    // Devices created for Serial No resolution reference deviceType — clear
+    // them (scoped to this file's own test customers) before deviceType cleanup.
+    await prisma.device.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
+  }
   if (createdDeviceTypeIds.length > 0) {
     await prisma.priceListItem.deleteMany({ where: { deviceTypeId: { in: createdDeviceTypeIds } } });
     await prisma.deviceType.deleteMany({ where: { id: { in: createdDeviceTypeIds } } });
@@ -329,7 +357,7 @@ describe("QuotationsService.preview — read-only Price List preview", () => {
     await seedPrice(realCompanyId, dt.id, 100_000);
     const { request } = await createSubmittedRequest(realCompanyId, {
       deviceTypeId: dt.id,
-      items: [{ deviceId: null, qty: 4 }],
+      items: [{ qty: 4 }],
     });
 
     const preview = await quotationsService.preview(realCompanyId, { requestId: request.id });
@@ -352,7 +380,7 @@ describe("QuotationsService.preview — read-only Price List preview", () => {
     await seedPrice(realCompanyId, dt.id, 137_500);
     const { request } = await createSubmittedRequest(realCompanyId, {
       deviceTypeId: dt.id,
-      items: [{ deviceId: null, qty: 2 }],
+      items: [{ qty: 2 }],
     });
 
     const preview = await quotationsService.preview(realCompanyId, { requestId: request.id });
@@ -433,7 +461,7 @@ describe("QuotationsService.create — Price List generation", () => {
     await seedPrice(realCompanyId, dt.id, 100_000);
     const { request } = await createSubmittedRequest(realCompanyId, {
       deviceTypeId: dt.id,
-      items: [{ deviceId: null, qty: 5 }],
+      items: [{ qty: 5 }],
     });
     expect(request.items[0]?.qty).toBe(5);
 
@@ -446,14 +474,14 @@ describe("QuotationsService.create — Price List generation", () => {
     expect(Number(result.items[0]?.lineTotal)).toBe(500_000);
   });
 
-  it("test 13 — a NULL customer Serial No does not prevent pricing", async () => {
+  it("test 13 — the resolved Device identity does not prevent pricing", async () => {
     const dt = await makeDeviceType();
     await seedPrice(realCompanyId, dt.id, 100_000);
     const { request } = await createSubmittedRequest(realCompanyId, {
       deviceTypeId: dt.id,
-      items: [{ deviceId: null }],
+      items: [{ deviceId: "DEV-13" }],
     });
-    expect(request.items[0]?.deviceId).toBeNull();
+    expect(request.items[0]?.deviceId).not.toBeNull();
 
     const result = await createQuoted(realCompanyId, { requestId: request.id });
     createdQuotationIds.push(result.id);
@@ -468,10 +496,26 @@ describe("QuotationsService.create — Price List generation", () => {
     await seedPrice(realCompanyId, decoy.id, 999_999); // must NOT be selected
 
     const customer = await createTestCustomer(realCompanyId);
+    await prisma.device.create({
+      data: {
+        companyId: realCompanyId,
+        customerId: customer.id,
+        deviceTypeId: canonical.id,
+        code: `DVC${rand()}`,
+        serialNumber: "DEV-14",
+      },
+    });
     const created = await requestsService.create(realCompanyId, staffUserId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
-      items: [{ deviceTypeId: canonical.id, customerDeviceName: "Tensimeter", model: "XYZ" }],
+      items: [
+        {
+          deviceTypeId: canonical.id,
+          deviceId: "DEV-14",
+          customerDeviceName: "Tensimeter",
+          model: "XYZ",
+        },
+      ],
     });
     createdCalibrationRequestIds.push(created.id);
     const request = await requestsService.submit(realCompanyId, created.id);
@@ -614,6 +658,15 @@ describe("QuotationsService.create — Price List generation", () => {
     const dt = await makeDeviceType();
     await seedPrice(realCompanyId, dt.id, 100_000);
     const customer = await createTestCustomer(realCompanyId);
+    await prisma.device.create({
+      data: {
+        companyId: realCompanyId,
+        customerId: customer.id,
+        deviceTypeId: dt.id,
+        code: `DVC${rand()}`,
+        serialNumber: "DEV-1",
+      },
+    });
     const draft = await requestsService.create(realCompanyId, staffUserId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
@@ -643,7 +696,7 @@ describe("QuotationsService.create — calculation engine (reused, unchanged)", 
     await ensureTestTax({ taxCode: "T1", taxRate: 0.11, description: "PPN 11%", isExclude: true });
     const { request } = await createSubmittedRequest(realCompanyId, {
       deviceTypeId: dt.id,
-      items: [{ deviceId: null, qty: 2 }],
+      items: [{ qty: 2 }],
     });
 
     const result = await createQuoted(realCompanyId, {
@@ -713,13 +766,28 @@ describe("QuotationsService.create — realistic 5 / 3 / 2 scenario", () => {
     await seedPrice(realCompanyId, pump.id, 175_000);
 
     const customer = await createTestCustomer(realCompanyId);
+    for (const [deviceTypeId, serial] of [
+      [sphyg.id, "SN-SPHYG-1"],
+      [monitor.id, "SN-MONITOR-1"],
+      [pump.id, "SN-PUMP-1"],
+    ] as const) {
+      await prisma.device.create({
+        data: {
+          companyId: realCompanyId,
+          customerId: customer.id,
+          deviceTypeId,
+          code: `DVC${rand()}`,
+          serialNumber: serial,
+        },
+      });
+    }
     const created = await requestsService.create(realCompanyId, staffUserId, {
       customerId: customer.id,
       serviceMode: "ON_SITE",
       items: [
-        { deviceTypeId: sphyg.id, qty: 5 },
-        { deviceTypeId: monitor.id, qty: 3 },
-        { deviceTypeId: pump.id, qty: 2 },
+        { deviceTypeId: sphyg.id, deviceId: "SN-SPHYG-1", qty: 5 },
+        { deviceTypeId: monitor.id, deviceId: "SN-MONITOR-1", qty: 3 },
+        { deviceTypeId: pump.id, deviceId: "SN-PUMP-1", qty: 2 },
       ],
     });
     createdCalibrationRequestIds.push(created.id);
@@ -1019,17 +1087,28 @@ describe("QuotationsService.revise", () => {
   it("add: a genuinely new line (no id) is added once the Requisition itself has grown", async () => {
     const dt = await makeDeviceType();
     await seedPrice(realCompanyId, dt.id, 100_000);
-    const { request } = await createSubmittedRequest(realCompanyId, { deviceTypeId: dt.id });
+    const { request, customerId } = await createSubmittedRequest(realCompanyId, {
+      deviceTypeId: dt.id,
+    });
     const created = await createQuoted(realCompanyId, { requestId: request.id });
     createdQuotationIds.push(created.id);
     const sent = await quotationsService.send(realCompanyId, created.id);
+    await prisma.device.create({
+      data: {
+        companyId: realCompanyId,
+        customerId,
+        deviceTypeId: dt.id,
+        code: `DVC${rand()}`,
+        serialNumber: "DEV-2",
+      },
+    });
 
     // Grow the Requisition first (unconsumed CalibrationRequestItem -> new
     // active line), then pick it up as a new Quotation line.
     const revisedRequest = await requestsService.revise(realCompanyId, request.id, staffUserId, {
       items: [
-        { id: request.items[0]!.id, deviceTypeId: dt.id },
-        { deviceTypeId: dt.id },
+        { id: request.items[0]!.id, deviceTypeId: dt.id, deviceId: "DEV-1" },
+        { deviceTypeId: dt.id, deviceId: "DEV-2" },
       ],
     });
     const newRequestItemId = revisedRequest.items.find(

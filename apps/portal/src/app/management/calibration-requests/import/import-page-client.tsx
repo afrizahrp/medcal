@@ -155,7 +155,7 @@ export default function ImportCalibrationRequestPageClient() {
         rows: rows.map((row) => ({
           customerDeviceName: row.customerDeviceName,
           ...(row.model ? { model: row.model } : {}),
-          ...(row.deviceId ? { deviceId: row.deviceId } : {}),
+          deviceId: row.deviceId ?? "",
           qty: row.qty ?? 1,
           ...(row.akdAkl ? { akdAkl: row.akdAkl } : {}),
           deviceTypeId: row.resolvedDeviceTypeId,

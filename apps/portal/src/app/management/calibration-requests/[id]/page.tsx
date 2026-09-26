@@ -302,8 +302,8 @@ export default function CalibrationRequestDetailPage() {
                     ) : null}
                     <p className="mt-0.5 font-mono text-xs text-slate-500">
                       Serial No:{" "}
-                      {item.deviceId ? (
-                        item.deviceId
+                      {item.device?.serialNumber ? (
+                        item.device.serialNumber
                       ) : (
                         <span className="text-slate-400">Not provided</span>
                       )}
@@ -581,6 +581,7 @@ function ReviseRequestDialog({
     rows.some((row) => rowStatus(row) !== "unchanged") ||
     rows.some((row) => row.removed);
   const allActiveRowsHaveDeviceType = activeRows.every((row) => row.deviceTypeId);
+  const allActiveRowsHaveDeviceId = activeRows.every((row) => row.deviceId.trim());
 
   async function submit() {
     setError(null);
@@ -592,6 +593,10 @@ function ReviseRequestDialog({
       setError("Pilih device name untuk setiap baris.");
       return;
     }
+    if (!allActiveRowsHaveDeviceId) {
+      setError("Isi Serial No untuk setiap baris.");
+      return;
+    }
     try {
       await reviseMutation.mutateAsync({
         id: request.id,
@@ -601,7 +606,7 @@ function ReviseRequestDialog({
             deviceTypeId: row.deviceTypeId,
             customerDeviceName: row.customerDeviceName || undefined,
             model: row.model || undefined,
-            deviceId: row.deviceId || undefined,
+            deviceId: row.deviceId.trim(),
             akdAkl: row.akdAkl || undefined,
             akdAklDeclaration: row.akdAklDeclaration,
             notes: row.notes || undefined,
@@ -703,7 +708,19 @@ function ReviseRequestDialog({
                       loading={typesQuery.isLoading}
                     />
                     <div className="flex items-center gap-2">
-                      <label className="text-xs font-medium text-slate-600">Qty</label>
+                      <label className="w-20 text-xs font-medium text-slate-600">
+                        Serial No <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        className="flex-1"
+                        value={row.deviceId}
+                        onChange={(e) => updateRow(row.key, { deviceId: e.target.value })}
+                        placeholder="Nomor seri alat yang sudah terdaftar"
+                        maxLength={120}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="w-20 text-xs font-medium text-slate-600">Qty</label>
                       <Input
                         type="number"
                         min={1}

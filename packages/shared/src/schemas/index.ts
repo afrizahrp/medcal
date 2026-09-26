@@ -310,12 +310,15 @@ const calibrationRequestItemInputSchema = z
     /** Customer-provided equipment model, if available. Optional. */
     model: z.string().trim().max(120).optional(),
     /**
-     * Customer-provided device/inventory identifier, displayed as "Serial No"
-     * in the Portal/UI and on Quotation/PO PDFs. Free text, intentionally
-     * optional — a missing customer Serial No is a valid business state and must
-     * be stored as NULL, never a placeholder. NOT the CalibrationJob Device.id.
+     * The customer's Serial No — a LOOKUP KEY, not the stored value. The
+     * server resolves it against an existing Device (scoped to this
+     * request's customer) and persists the resolved Device.id on
+     * CalibrationRequestItem.deviceId, which is a REQUIRED FK. Required here
+     * too: every requisition item must identify a real Device. Throws
+     * DEVICE_NOT_FOUND / DEVICE_SERIAL_AMBIGUOUS if it doesn't resolve to
+     * exactly one Device.
      */
-    deviceId: z.string().trim().max(120).optional(),
+    deviceId: z.string().trim().min(1).max(120),
     /**
      * Aggregate quantity for this line — how many units of the device.
      * Positive integer; defaults to 1 server-side. Manual "+ Requisition" entry
@@ -415,7 +418,8 @@ const calibrationRequestReviseItemInputSchema = z.object({
   deviceTypeId: z.string().min(1),
   customerDeviceName: z.string().trim().max(200).optional(),
   model: z.string().trim().max(120).optional(),
-  deviceId: z.string().trim().max(120).optional(),
+  /** Serial No lookup key — see calibrationRequestItemInputSchema.deviceId. */
+  deviceId: z.string().trim().min(1).max(120),
   qty: z.number().int().positive().optional(),
   akdAkl: z
     .string()
@@ -2592,7 +2596,8 @@ export interface CalibrationRequestImportPreviewResponse {
 export const calibrationRequestImportConfirmRowSchema = z.object({
   customerDeviceName: z.string().trim().min(1).max(200),
   model: z.string().trim().max(120).optional(),
-  deviceId: z.string().trim().max(120).optional(),
+  /** Serial No lookup key — see calibrationRequestItemInputSchema.deviceId. */
+  deviceId: z.string().trim().min(1).max(120),
   qty: z.number().int().positive(),
   /**
    * Customer-declared AKD/AKL/NIE. Optional, independent of qty.

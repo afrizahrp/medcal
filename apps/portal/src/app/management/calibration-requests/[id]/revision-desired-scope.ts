@@ -38,7 +38,9 @@ export function rowFromItem(item: CalibrationRequestItem): DesiredItemRow {
     deviceTypeId: item.deviceTypeId,
     customerDeviceName: item.customerDeviceName ?? "",
     model: item.model ?? "",
-    deviceId: item.deviceId ?? "",
+    // Pre-fill with the resolved Device's own Serial No, never the raw
+    // Device.id FK — resubmitting this value re-resolves it server-side.
+    deviceId: item.device?.serialNumber ?? "",
     qty: item.qty,
     akdAkl: item.akdAkl ?? "",
     akdAklDeclaration: item.akdAklDeclaration,
@@ -106,7 +108,7 @@ export function buildImportedDesiredRows(
         ...rowFromItem(original),
         customerDeviceName: row.customerDeviceName || original.customerDeviceName || "",
         model: row.model || original.model || "",
-        deviceId: row.deviceId || original.deviceId || "",
+        deviceId: row.deviceId || original.device?.serialNumber || "",
         qty: row.qty ?? 1,
         akdAkl: row.akdAkl || original.akdAkl || "",
       });

@@ -167,6 +167,17 @@ async function createSubmittedRequest(
   });
   const customer = await createTestCustomer(companyId);
   const deviceTypeId = await getTestDeviceTypeId();
+  for (let index = 0; index < itemCount; index += 1) {
+    await prisma.device.create({
+      data: {
+        companyId,
+        customerId: customer.id,
+        deviceTypeId,
+        code: `DVC${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`,
+        serialNumber: `DEV-${index + 1}`,
+      },
+    });
+  }
   const created = await requestsService.create(companyId, staffUserId, {
     customerId: customer.id,
     serviceMode: "ON_SITE",
@@ -307,6 +318,11 @@ afterAll(async () => {
   }
   await cleanupQuotations(createdQuotationIds);
   await cleanupCalibrationRequests(createdCalibrationRequestIds);
+  if (createdCustomerIds.length > 0) {
+    // Devices created for Serial No resolution reference deviceType — clear
+    // them (scoped to this file's own test customers) before deviceType cleanup.
+    await prisma.device.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
+  }
   if (createdDeviceTypeIds.length > 0) {
     await prisma.priceListItem.deleteMany({ where: { deviceTypeId: { in: createdDeviceTypeIds } } });
     await prisma.deviceType.deleteMany({ where: { id: { in: createdDeviceTypeIds } } });

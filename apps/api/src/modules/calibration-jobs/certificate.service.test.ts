@@ -78,6 +78,11 @@ async function cleanup() {
   if (createdDeviceIds.length > 0) {
     await prisma.device.deleteMany({ where: { id: { in: createdDeviceIds } } });
   }
+  if (createdCustomerIds.length > 0) {
+    // The requisition-resolution Device (createTestDevice-style, "DEV-CERT-1")
+    // isn't tracked in createdDeviceIds — clear by customer before deviceType cleanup.
+    await prisma.device.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
+  }
   if (createdDeviceTypeIds.length > 0) {
     await prisma.priceListItem.deleteMany({ where: { deviceTypeId: { in: createdDeviceTypeIds } } });
     await prisma.deviceType.deleteMany({ where: { id: { in: createdDeviceTypeIds } } });
@@ -146,11 +151,26 @@ async function makeJob(opts: { withDevice: boolean }) {
     data: { companyId, number: `CUS/CERT/${randomUUID().slice(0, 8)}`, name: `Cert Cust ${randomUUID().slice(0, 6)}` },
   });
   createdCustomerIds.push(customer.id);
+  await prisma.device.create({
+    data: {
+      companyId,
+      code: `DVC-REQ-${randomUUID().slice(0, 8).toUpperCase()}`,
+      customerId: customer.id,
+      deviceTypeId: deviceType.id,
+      serialNumber: "DEV-CERT-1",
+    },
+  });
 
+  // qty: 2 — a qty>1 line always fans out with CalibrationJob.deviceId left
+  // null (ambiguous, one Device per line vs. N physical units), regardless of
+  // this fixture's own resolved CalibrationRequestItem.deviceId. This keeps
+  // `withDevice: false` producing a genuinely unresolved job, unaffected by
+  // the (separate, qty=1-only) automatic PurchaseOrderItem -> CalibrationJob
+  // propagation this fixture would otherwise trigger.
   const request = await calibrationRequestsService.create(companyId, staffUserId, {
     customerId: customer.id,
     serviceMode: "SEND_TO_LAB",
-    items: [{ deviceTypeId: deviceType.id, deviceId: "DEV-CERT-1" }],
+    items: [{ deviceTypeId: deviceType.id, deviceId: "DEV-CERT-1", qty: 2 }],
   });
   createdCalibrationRequestIds.push(request.id);
   await calibrationRequestsService.submit(companyId, request.id);

@@ -170,6 +170,15 @@ async function startedWorkOrderJobs(
   await ensureStaffUser();
   const customer = await createTestCustomer(companyId);
   const deviceTypeId = await createDeviceTypeId();
+  await prisma.device.create({
+    data: {
+      companyId,
+      customerId: customer.id,
+      deviceTypeId,
+      code: `DVC${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`,
+      serialNumber: "DEV-1",
+    },
+  });
   const request = await calibrationRequestsService.create(companyId, staffUserId, {
     customerId: customer.id,
     serviceMode: opts?.serviceMode ?? "SEND_TO_LAB",
@@ -734,7 +743,11 @@ describe("CalibrationJobsService — Identity Correction (device identity)", () 
   });
 
   it("rejects a submit that changes nothing", async () => {
-    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    // qty: 2 keeps deviceId (and thus device.serialNumber) unresolved — with
+    // the default qty: 1, deviceId now auto-resolves from the Requisition,
+    // giving prevSerial a non-null fallback and defeating this "no real
+    // change proposed" scenario.
+    const { jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
 
     await expect(
@@ -2370,7 +2383,8 @@ describe("CalibrationJobsService — list", () => {
   });
 
   it("sets identityIncomplete after start when Serial is missing", async () => {
-    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId);
+    // qty: 2 keeps deviceId unresolved (see rejects-a-submit-that-changes-nothing above).
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
     await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
     await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
 
@@ -2411,7 +2425,7 @@ describe("CalibrationJobsService — list", () => {
   });
 
   it("sets identityIncomplete false when Serial is present even though Device ID is missing (MoM #6: Device ID is a locked/legacy FK, no longer checked)", async () => {
-    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId);
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
     await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
     await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
     await prisma.calibrationJob.update({
@@ -2455,7 +2469,7 @@ describe("CalibrationJobsService — list", () => {
   });
 
   it("does not block Mulai Kalibrasi when identity is incomplete (warning only)", async () => {
-    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const { jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
     await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
     const started = await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
     expect(started.status).toBe("IN_PROGRESS");
@@ -2465,7 +2479,7 @@ describe("CalibrationJobsService — list", () => {
   });
 
   it("clears identityIncomplete action signal once the identity gate is locked", async () => {
-    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId);
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
     await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
     await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
     await prisma.calibrationJob.update({
@@ -3331,7 +3345,10 @@ describe("CalibrationJobsService — Technician Device Lookup (selectDevice)", (
   });
 
   it("selectDevice persists deviceId and returns the updated CalibrationJobDetail with device populated", async () => {
-    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    // qty: 2 keeps deviceId unresolved so selectDevice's first-time-only path applies.
+    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId, {
+      qty: 2,
+    });
     const device = await createDevice(customerId, deviceTypeId, { serialNumber: "9998887" });
 
     const result = await calibrationJobsService.selectDevice(realCompanyId, jobs[0]!.id, device.id);
@@ -3343,7 +3360,9 @@ describe("CalibrationJobsService — Technician Device Lookup (selectDevice)", (
   });
 
   it("selectDevice rejects re-selection once deviceId is already set (409)", async () => {
-    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId);
+    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId, {
+      qty: 2,
+    });
     const device = await createDevice(customerId, deviceTypeId);
     const other = await createDevice(customerId, deviceTypeId);
     await calibrationJobsService.selectDevice(realCompanyId, jobs[0]!.id, device.id);
@@ -3354,7 +3373,7 @@ describe("CalibrationJobsService — Technician Device Lookup (selectDevice)", (
   });
 
   it("selectDevice rejects a deviceId belonging to a different customer (400)", async () => {
-    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const { jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
     const otherCustomer = await createTestCustomer(realCompanyId);
     const foreignDeviceTypeId = await createDeviceTypeId();
     const device = await createDevice(otherCustomer.id, foreignDeviceTypeId);
@@ -3365,7 +3384,7 @@ describe("CalibrationJobsService — Technician Device Lookup (selectDevice)", (
   });
 
   it("selectDevice 404s on an unknown/foreign-company deviceId", async () => {
-    const { jobs } = await startedWorkOrderJobs(realCompanyId);
+    const { jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
 
     await expect(
       calibrationJobsService.selectDevice(realCompanyId, jobs[0]!.id, "not-a-real-device-id"),

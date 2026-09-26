@@ -39,10 +39,13 @@ export interface CalibrationRequestItem {
   /** Customer-provided equipment model. */
   model: string | null;
   /**
-   * Customer-provided device/inventory identifier. Free text, may be null when
-   * the customer did not provide one. NOT the CalibrationJob Device.id.
+   * Resolved Device.id (real FK) — the customer's Serial No is a lookup key
+   * only; it is never stored here. Never display this raw value — use
+   * `device.serialNumber` for display/edit pre-fill.
    */
-  deviceId: string | null;
+  deviceId: string;
+  /** The resolved Device's Serial No, for display and edit-form pre-fill. */
+  device: { serialNumber: string | null } | null;
   /** Aggregate quantity of units for this line (>= 1). */
   qty: number;
   /**

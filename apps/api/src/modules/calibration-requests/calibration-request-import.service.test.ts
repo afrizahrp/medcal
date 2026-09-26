@@ -223,6 +223,24 @@ async function makeCustomer(): Promise<string> {
   return customer.id;
 }
 
+/**
+ * CalibrationRequestItem.deviceId is now a required FK to Device.id, resolved
+ * server-side from the Excel "Serial No" column. Creates a real Device with
+ * the given serialNumber scoped to `customerId` so a confirm row referencing
+ * that serial resolves. Cascade-deletes with its Customer.
+ */
+async function makeDevice(customerId: string, deviceTypeId: string, serialNumber: string) {
+  return prisma.device.create({
+    data: {
+      companyId: realCompanyId,
+      customerId,
+      deviceTypeId,
+      code: `DVC${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`,
+      serialNumber,
+    },
+  });
+}
+
 const HEADER = ["Nama Alat", "Model", "Qty", "Serial No"];
 // AKD/AKL/NIE was dropped from the published template (MoM #4); an already-downloaded
 // older file may still carry the column, and must keep importing exactly as before.
@@ -251,10 +269,10 @@ describe("CalibrationRequestImportService.preview", () => {
 
   it("matches by exact DeviceType name and by alias; one row stays one row, Qty stays aggregate", async () => {
     const buf = await buildXlsx(HEADER, [
-      [`Tensimeter ${SUFFIX}`, "AB-123", 5, ""],
+      [`Tensimeter ${SUFFIX}`, "AB-123", 5, "TEN-100"],
       [BEDSIDE, "BSM-501", 3, "BSM001"],
       [DENTAL, "DU-100", 2, "DU001"],
-      [`Tensimeter Digital ${SUFFIX}`, "AB-123", 2, ""],
+      [`Tensimeter Digital ${SUFFIX}`, "AB-123", 2, "TEN-200"],
       [`Patient Monitor ${SUFFIX}`, "PM-5", 1, "PM-001"],
     ]);
     const preview = await service.preview(asFile(buf));
@@ -275,7 +293,7 @@ describe("CalibrationRequestImportService.preview", () => {
   });
 
   it("flags an unmatched row with no method and (maybe) suggestions", async () => {
-    const buf = await buildXlsx(HEADER, [["Totally Unknown Widget", "", 1, ""]]);
+    const buf = await buildXlsx(HEADER, [["Totally Unknown Widget", "", 1, "UNK-1"]]);
     const preview = await service.preview(asFile(buf));
     expect(preview.rows[0]?.match.method).toBeNull();
     expect(preview.rows[0]?.match.deviceTypeId).toBeNull();
@@ -310,10 +328,11 @@ describe("CalibrationRequestImportService.preview", () => {
     expect(preview.rows[0]?.errors).toEqual([]);
   });
 
-  it("blank Serial No becomes NULL (no placeholder)", async () => {
+  it("blank Serial No is a row error (deviceId is now a required Device lookup key)", async () => {
     const buf = await buildXlsx(HEADER, [[`Tensimeter ${SUFFIX}`, "AB-123", 1, "   "]]);
     const preview = await service.preview(asFile(buf));
     expect(preview.rows[0]?.deviceId).toBeNull();
+    expect(preview.rows[0]?.errors.some((e) => /Serial No wajib diisi/.test(e))).toBe(true);
   });
 
   it("Qty > 1 with a single Serial No is a clean aggregate row (no warning, no error)", async () => {
@@ -327,8 +346,8 @@ describe("CalibrationRequestImportService.preview", () => {
 
   it("AKD/AKL/NIE: empty cell → akdAkl null, no error (any Qty)", async () => {
     const buf = await buildXlsx(HEADER_AKD, [
-      [`Tensimeter ${SUFFIX}`, "AB-123", 1, "", ""],
-      [BEDSIDE, "BSM-501", 4, "", "   "],
+      [`Tensimeter ${SUFFIX}`, "AB-123", 1, "TEN-A1", ""],
+      [BEDSIDE, "BSM-501", 4, "BSM-A1", "   "],
     ]);
     const preview = await service.preview(asFile(buf));
     expect(preview.rows[0]?.akdAkl).toBeNull();
@@ -338,8 +357,8 @@ describe("CalibrationRequestImportService.preview", () => {
 
   it("AKD/AKL/NIE: a value is carried on the row regardless of Qty, no error", async () => {
     const buf = await buildXlsx(HEADER_AKD, [
-      [`Tensimeter ${SUFFIX}`, "AB-123", 1, "", "AKD 20403012345"],
-      [BEDSIDE, "BSM-501", 3, "", "AKL 30301099999"],
+      [`Tensimeter ${SUFFIX}`, "AB-123", 1, "TEN-A2", "AKD 20403012345"],
+      [BEDSIDE, "BSM-501", 3, "BSM-A2", "AKL 30301099999"],
     ]);
     const preview = await service.preview(asFile(buf));
     expect(preview.rows[0]?.akdAkl).toBe("AKD 20403012345");
@@ -358,7 +377,7 @@ describe("CalibrationRequestImportService.preview", () => {
   });
 
   it("AKD/AKL/NIE: works when the column is absent (backward compatible)", async () => {
-    const buf = await buildXlsx(HEADER, [[`Tensimeter ${SUFFIX}`, "AB-123", 2, ""]]);
+    const buf = await buildXlsx(HEADER, [[`Tensimeter ${SUFFIX}`, "AB-123", 2, "TEN-A3"]]);
     const preview = await service.preview(asFile(buf));
     expect(preview.rows[0]?.akdAkl).toBeNull();
     expect(preview.rows[0]?.errors).toEqual([]);
@@ -421,11 +440,16 @@ describe("CalibrationRequestImportService.preview — decompression-bomb guard",
 describe("CalibrationRequestImportService.confirm", () => {
   it("REAL xlsx → preview → confirm creates ONE aggregated item per row with qty preserved", async () => {
     const customerId = await makeCustomer();
+    const deviceTen = await makeDevice(customerId, typeIdByName[SPHYG]!, "TEN-100");
+    const deviceBsm = await makeDevice(customerId, typeIdByName[BEDSIDE]!, "BSM001");
+    const deviceDu = await makeDevice(customerId, typeIdByName[DENTAL]!, "DU001");
+    const deviceDigital = await makeDevice(customerId, typeIdByName[SPHYG]!, "TEN-200");
+    const devicePm = await makeDevice(customerId, typeIdByName[BEDSIDE]!, "PM-001");
     const buf = await buildXlsx(HEADER, [
-      [`Tensimeter ${SUFFIX}`, "AB-123", 5, ""],
+      [`Tensimeter ${SUFFIX}`, "AB-123", 5, "TEN-100"],
       [BEDSIDE, "BSM-501", 3, "BSM001"],
       [DENTAL, "DU-100", 2, "DU001"],
-      [`Tensimeter Digital ${SUFFIX}`, "AB-123", 2, ""],
+      [`Tensimeter Digital ${SUFFIX}`, "AB-123", 2, "TEN-200"],
       [`Patient Monitor ${SUFFIX}`, "PM-5", 1, "PM-001"],
     ]);
 
@@ -438,7 +462,7 @@ describe("CalibrationRequestImportService.confirm", () => {
       rows: preview.rows.map((r) => ({
         customerDeviceName: r.customerDeviceName,
         ...(r.model ? { model: r.model } : {}),
-        ...(r.deviceId ? { deviceId: r.deviceId } : {}),
+        deviceId: r.deviceId!,
         qty: r.qty ?? 1,
         deviceTypeId: r.match.deviceTypeId!,
       })),
@@ -456,49 +480,89 @@ describe("CalibrationRequestImportService.confirm", () => {
     expect(tensimeter.qty).toBe(5);
     expect(tensimeter.deviceTypeId).toBe(typeIdByName[SPHYG]);
     expect(tensimeter.model).toBe("AB-123");
-    expect(tensimeter.deviceId).toBeNull();
+    // Resolved to the real Device.id — never the raw Serial No text.
+    expect(tensimeter.deviceId).toBe(deviceTen.id);
+    expect(tensimeter.deviceId).not.toBe("TEN-100");
 
     const bedside = byName(BEDSIDE)!;
     expect(bedside.qty).toBe(3);
-    expect(bedside.deviceId).toBe("BSM001");
+    expect(bedside.deviceId).toBe(deviceBsm.id);
     expect(bedside.deviceTypeId).toBe(typeIdByName[BEDSIDE]);
 
     const dental = byName(DENTAL)!;
     expect(dental.qty).toBe(2);
-    expect(dental.deviceId).toBe("DU001");
+    expect(dental.deviceId).toBe(deviceDu.id);
 
     // Customer terminology preserved (not overwritten by the DeviceType name).
     const digital = byName(`Tensimeter Digital ${SUFFIX}`)!;
     expect(digital.qty).toBe(2);
     expect(digital.deviceType.name).toBe(SPHYG);
+    expect(digital.deviceId).toBe(deviceDigital.id);
 
     // Patient Monitor → Bed Side Monitor via alias, wording kept.
     const pm = byName(`Patient Monitor ${SUFFIX}`)!;
     expect(pm.qty).toBe(1);
     expect(pm.deviceTypeId).toBe(typeIdByName[BEDSIDE]);
-    expect(pm.deviceId).toBe("PM-001");
+    expect(pm.deviceId).toBe(devicePm.id);
 
     // No item duplication.
     expect(new Set(created.items.map((i) => i.id)).size).toBe(5);
   });
 
+  it("throws DEVICE_NOT_FOUND at confirm when a row's Serial No does not resolve to an existing Device", async () => {
+    const customerId = await makeCustomer();
+    const buf = await buildXlsx(HEADER, [[`Tensimeter ${SUFFIX}`, "AB-123", 1, "NO-SUCH-SERIAL"]]);
+    const preview = await service.preview(asFile(buf));
+    expect(preview.rows[0]?.errors).toEqual([]);
+
+    try {
+      await service.confirm(realCompanyId, testUserId, {
+        customerId,
+        serviceMode: "ON_SITE",
+        rows: preview.rows.map((r) => ({
+          customerDeviceName: r.customerDeviceName,
+          deviceId: r.deviceId!,
+          qty: r.qty ?? 1,
+          deviceTypeId: r.match.deviceTypeId!,
+        })),
+      });
+      expect.fail("expected DEVICE_NOT_FOUND");
+    } catch (err) {
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: "DEVICE_NOT_FOUND" }),
+      );
+    }
+  });
+
   it("defaults qty to 1 for a row that omits it (matches manual + Requisition)", async () => {
     const customerId = await makeCustomer();
+    const device = await makeDevice(customerId, typeIdByName[DENTAL]!, "NOQTY-1");
     const created = await service.confirm(realCompanyId, testUserId, {
       customerId,
       serviceMode: "ON_SITE",
-      rows: [{ customerDeviceName: "NoQtyRow", qty: 1, deviceTypeId: typeIdByName[DENTAL]! }],
+      rows: [
+        {
+          customerDeviceName: "NoQtyRow",
+          deviceId: "NOQTY-1",
+          qty: 1,
+          deviceTypeId: typeIdByName[DENTAL]!,
+        },
+      ],
     });
     createdRequestIds.push(created.id);
     expect(created.items).toHaveLength(1);
     expect(created.items[0]?.qty).toBe(1);
+    expect(created.items[0]?.deviceId).toBe(device.id);
   });
 
   it("persists AKD/AKL/NIE as CUSTOMER_PROVIDED (any Qty); empty row stays NOT_PROVIDED", async () => {
     const customerId = await makeCustomer();
+    await makeDevice(customerId, typeIdByName[SPHYG]!, "AKD-TEN-1");
+    await makeDevice(customerId, typeIdByName[BEDSIDE]!, "AKD-BSM-1");
     const buf = await buildXlsx(HEADER_AKD, [
-      [`Tensimeter ${SUFFIX}`, "AB-123", 5, "", "AKD 20403012345"],
-      [BEDSIDE, "BSM-501", 4, "", ""],
+      [`Tensimeter ${SUFFIX}`, "AB-123", 5, "AKD-TEN-1", "AKD 20403012345"],
+      [BEDSIDE, "BSM-501", 4, "AKD-BSM-1", ""],
     ]);
     const preview = await service.preview(asFile(buf));
     expect(preview.rows.every((r) => r.errors.length === 0 && r.match.deviceTypeId)).toBe(true);
@@ -509,6 +573,7 @@ describe("CalibrationRequestImportService.confirm", () => {
       rows: preview.rows.map((r) => ({
         customerDeviceName: r.customerDeviceName,
         ...(r.model ? { model: r.model } : {}),
+        deviceId: r.deviceId!,
         qty: r.qty ?? 1,
         ...(r.akdAkl ? { akdAkl: r.akdAkl } : {}),
         deviceTypeId: r.match.deviceTypeId!,
@@ -529,12 +594,14 @@ describe("CalibrationRequestImportService.confirm", () => {
 
   it("confirm accepts a Qty > 1 row that carries AKD/AKL/NIE (customer declaration)", async () => {
     const customerId = await makeCustomer();
+    await makeDevice(customerId, typeIdByName[SPHYG]!, "AGG-1");
     const created = await service.confirm(realCompanyId, testUserId, {
       customerId,
       serviceMode: "ON_SITE",
       rows: [
         {
           customerDeviceName: "Aggregate",
+          deviceId: "AGG-1",
           qty: 3,
           akdAkl: "AKD 20403012345",
           deviceTypeId: typeIdByName[SPHYG]!,
@@ -555,8 +622,8 @@ describe("CalibrationRequestImportService.confirm", () => {
         customerId,
         serviceMode: "ON_SITE",
         rows: [
-          { customerDeviceName: "X", qty: 2, deviceTypeId: typeIdByName[SPHYG]! },
-          { customerDeviceName: "Y", qty: 1, deviceTypeId: "bogus-device-type" },
+          { customerDeviceName: "X", deviceId: "X-1", qty: 2, deviceTypeId: typeIdByName[SPHYG]! },
+          { customerDeviceName: "Y", deviceId: "Y-1", qty: 1, deviceTypeId: "bogus-device-type" },
         ],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -567,10 +634,13 @@ describe("CalibrationRequestImportService.confirm", () => {
 
   it("scopes the created requisition to the caller's company (isolation)", async () => {
     const customerId = await makeCustomer();
+    await makeDevice(customerId, typeIdByName[DENTAL]!, "SOLO-1");
     const created = await service.confirm(realCompanyId, testUserId, {
       customerId,
       serviceMode: "ON_SITE",
-      rows: [{ customerDeviceName: "Solo", qty: 1, deviceTypeId: typeIdByName[DENTAL]! }],
+      rows: [
+        { customerDeviceName: "Solo", deviceId: "SOLO-1", qty: 1, deviceTypeId: typeIdByName[DENTAL]! },
+      ],
     });
     createdRequestIds.push(created.id);
     const foreign = await prisma.calibrationRequest.findFirst({

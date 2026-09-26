@@ -1671,7 +1671,8 @@ function ReferenceEquipmentCard({ unit }: { unit: ReferenceEquipmentUsed }) {
  * Widths are layout constants — not derived from each section's text.
  * A section with fewer repetitions leaves the extra tracks blank.
  */
-const MEASUREMENT_RESULT_TRACK = "minmax(7rem,7rem)";
+const MEASUREMENT_RESULT_TRACK_REM = 7;
+const MEASUREMENT_RESULT_TRACK = `minmax(${MEASUREMENT_RESULT_TRACK_REM}rem,${MEASUREMENT_RESULT_TRACK_REM}rem)`;
 const MEASUREMENT_TOLERANCE_TRACK = "minmax(8.75rem,8.75rem)";
 const MEASUREMENT_UNIT_TRACK = "minmax(4.25rem,4.25rem)";
 /** Same inset on every section so column boundaries stay aligned. */
@@ -1863,6 +1864,17 @@ function QualityReviewPanel({
             // Later tracks stay blank so they still reserve the shared geometry.
             const sectionReplicateCount = Math.max(1, ...capGroups.map((g) => g.maxReplicateIndex));
             const replicateCols = Array.from({ length: replicateTrackCount }, (_, i) => i + 1);
+            // A single-repetition section doesn't need the other sections' extra
+            // result tracks reserved between it and Toleransi/Satuan. Collapse
+            // them into one trailing spacer so I keeps its shared position
+            // (the fixed-width budget — result tracks + Toleransi + Satuan —
+            // stays identical) while Toleransi/Satuan sit right after I.
+            const isCompactSingleRep = sectionReplicateCount === 1 && replicateTrackCount > 1;
+            const sectionReplicateCols = isCompactSingleRep ? [1] : replicateCols;
+            const sectionSpacerRem = (replicateTrackCount - 1) * MEASUREMENT_RESULT_TRACK_REM;
+            const sectionGridColumns = isCompactSingleRep
+              ? `minmax(0,1fr) ${MEASUREMENT_RESULT_TRACK} ${MEASUREMENT_TOLERANCE_TRACK} ${MEASUREMENT_UNIT_TRACK} minmax(${sectionSpacerRem}rem,${sectionSpacerRem}rem)`
+              : gridColumns;
             return (
               <div key={capabilityName}>
                 <p className="flex items-center gap-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -1875,13 +1887,13 @@ function QualityReviewPanel({
                   <div
                     role="table"
                     className="grid w-full text-xs"
-                    style={{ gridTemplateColumns: gridColumns, minWidth: gridMinWidth }}
+                    style={{ gridTemplateColumns: sectionGridColumns, minWidth: gridMinWidth }}
                   >
                     <div role="row" className="contents text-left text-slate-400">
                       <div role="columnheader" className="min-w-0 border-b border-slate-200 bg-slate-50 py-1 pl-2 pr-3 font-medium">
                         Setting
                       </div>
-                      {replicateCols.map((n) => (
+                      {sectionReplicateCols.map((n) => (
                         <div
                           key={n}
                           role="columnheader"
@@ -1896,6 +1908,9 @@ function QualityReviewPanel({
                       <div role="columnheader" className="min-w-0 border-b border-slate-200 bg-slate-50 px-2 py-1 font-medium">
                         Satuan
                       </div>
+                      {isCompactSingleRep ? (
+                        <div role="columnheader" aria-hidden className="border-b border-slate-200 bg-slate-50" />
+                      ) : null}
                     </div>
                     {capGroups.map((group) => {
                       const rendered = renderMeasurementPointCells(group, {
@@ -1909,7 +1924,7 @@ function QualityReviewPanel({
                           <div role="cell" className="min-w-0 break-words border-t border-slate-100 py-1 pl-2 pr-3 text-slate-700">
                             {rendered.label}
                           </div>
-                          {replicateCols.map((n) => {
+                          {sectionReplicateCols.map((n) => {
                             const reading =
                               n <= sectionReplicateCount ? rendered.resultsByReplicate.get(n) : undefined;
                             return (
@@ -1938,6 +1953,9 @@ function QualityReviewPanel({
                           <div role="cell" className="min-w-0 break-words border-t border-slate-100 px-2 py-1 text-slate-600">
                             {rendered.unit}
                           </div>
+                          {isCompactSingleRep ? (
+                            <div role="cell" aria-hidden className="border-t border-slate-100" />
+                          ) : null}
                         </div>
                       );
                     })}

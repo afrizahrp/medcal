@@ -95,6 +95,15 @@ async function startedJob() {
     data: { companyId, number: `CUS/PC/${randomUUID().slice(0, 8)}`, name: `PC Cust ${randomUUID().slice(0, 6)}` },
   });
   createdCustomerIds.push(customer.id);
+  await prisma.device.create({
+    data: {
+      companyId,
+      customerId: customer.id,
+      deviceTypeId: deviceType.id,
+      code: `DVC${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`,
+      serialNumber: "DEV-1",
+    },
+  });
 
   const request = await calibrationRequestsService.create(companyId, staffUserId, {
     customerId: customer.id,

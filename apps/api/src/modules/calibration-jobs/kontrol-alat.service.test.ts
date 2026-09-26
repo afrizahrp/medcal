@@ -64,6 +64,11 @@ async function cleanup() {
       where: { id: { in: createdCalibrationRequestIds } },
     });
   }
+  if (createdCustomerIds.length > 0) {
+    // Devices created for Serial No resolution reference deviceType — clear
+    // them (scoped to this file's own test customers) before deviceType cleanup.
+    await prisma.device.deleteMany({ where: { customerId: { in: createdCustomerIds } } });
+  }
   if (createdDeviceTypeIds.length > 0) {
     await prisma.priceListItem.deleteMany({ where: { deviceTypeId: { in: createdDeviceTypeIds } } });
     await prisma.deviceType.deleteMany({ where: { id: { in: createdDeviceTypeIds } } });
@@ -152,6 +157,15 @@ async function startedJob(serviceMode: "SEND_TO_LAB" | "ON_SITE" = "SEND_TO_LAB"
     },
   });
   createdCustomerIds.push(customer.id);
+  await prisma.device.create({
+    data: {
+      companyId,
+      customerId: customer.id,
+      deviceTypeId: deviceType.id,
+      code: `DVC${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`,
+      serialNumber: "DEV-1",
+    },
+  });
 
   const request = await calibrationRequestsService.create(companyId, staffUserId, {
     customerId: customer.id,

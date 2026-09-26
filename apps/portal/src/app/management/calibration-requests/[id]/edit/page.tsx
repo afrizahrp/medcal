@@ -66,7 +66,9 @@ function itemsFromRequest(request: CalibrationRequestRow): ItemInput[] {
     deviceTypeId: item.deviceTypeId,
     customerDeviceName: item.customerDeviceName ?? "",
     model: item.model ?? "",
-    deviceId: item.deviceId ?? "",
+    // Pre-fill with the resolved Device's own Serial No, never the raw
+    // Device.id FK — resubmitting this value re-resolves it server-side.
+    deviceId: item.device?.serialNumber ?? "",
     qty: item.qty ?? 1,
     akdAkl: item.akdAkl ?? "",
     akdAklDeclaration: item.akdAklDeclaration ?? "NOT_PROVIDED",
@@ -223,13 +225,15 @@ export default function EditCalibrationRequestPage() {
         item.deviceId.trim() ||
         item.notes.trim(),
     );
-    const validItems = filledItems.filter((item) => item.deviceTypeId.trim());
+    const validItems = filledItems.filter(
+      (item) => item.deviceTypeId.trim() && item.deviceId.trim(),
+    );
     if (validItems.length === 0) {
       setError("Minimal 1 device harus ditambahkan.");
       return;
     }
     if (validItems.length !== filledItems.length) {
-      setError("Setiap device wajib memiliki Device Name.");
+      setError("Setiap device wajib memiliki Device Name dan Serial No.");
       return;
     }
 
@@ -245,7 +249,7 @@ export default function EditCalibrationRequestPage() {
             deviceTypeId: item.deviceTypeId.trim(),
             customerDeviceName: item.customerDeviceName.trim() || undefined,
             model: item.model.trim() || undefined,
-            deviceId: item.deviceId.trim() || undefined,
+            deviceId: item.deviceId.trim(),
             qty: item.qty > 0 ? item.qty : 1,
             akdAkl: item.akdAkl.trim() || undefined,
             akdAklDeclaration: item.akdAklDeclaration,
@@ -400,7 +404,7 @@ export default function EditCalibrationRequestPage() {
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">Devices</h2>
                   <p className="mt-0.5 text-sm text-slate-500">
-                    Pilih device name. Nama alat customer, model, dan Serial No bersifat opsional.
+                    Pilih device name dan Serial No. Nama alat customer dan model bersifat opsional.
                   </p>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={addItem}>
@@ -455,13 +459,12 @@ export default function EditCalibrationRequestPage() {
                           </div>
                           <div>
                             <label className="mb-1 block text-xs font-medium text-slate-600">
-                              Serial No{" "}
-                              <span className="font-normal text-slate-400">(opsional)</span>
+                              Serial No <span className="text-red-500">*</span>
                             </label>
                             <Input
                               value={item.deviceId}
                               onChange={(e) => updateItem(index, "deviceId", e.target.value)}
-                              placeholder="Kosongkan jika customer tidak memberikan"
+                              placeholder="Nomor seri alat yang sudah terdaftar"
                               maxLength={120}
                             />
                           </div>

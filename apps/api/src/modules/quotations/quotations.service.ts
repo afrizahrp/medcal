@@ -413,7 +413,10 @@ async function buildGeneratedRows(
       companyId,
       quotationId,
       requestItemId: requestItem.id,
-      deviceId: null,
+      // CalibrationRequestItem.deviceId is a required, real Device.id FK
+      // (resolved server-side from the customer's Serial No at Requisition
+      // stage) — copy it forward verbatim, never re-resolve, never null it.
+      deviceId: requestItem.deviceId,
       tariffId: null,
       description: override?.description ?? requestItem.deviceType.name,
       qty,
