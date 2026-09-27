@@ -1,4 +1,4 @@
-import { LazyVideo } from "@/components/lazy-video";
+import { HeroVideo } from "@/components/hero-video";
 import { TrustBadges } from "@/components/trust-badges";
 import { SectionCta } from "@/components/section-cta";
 import type { HeroContent } from "@/components/hero";
@@ -6,8 +6,10 @@ import type { HeroContent } from "@/components/hero";
 export function HeroDesktop({ content }: { content: HeroContent }) {
   return (
     <section className="relative isolate hidden overflow-hidden border-b border-ink-100 bg-brand-950 lg:flex lg:min-h-[680px] lg:items-center">
-      <LazyVideo
+      <HeroVideo
         src="/technician-team.webm"
+        poster="/images/hero/technician-team-poster.webp"
+        query="(min-width: 1024px)"
         className="absolute inset-0 -z-20 h-full w-full object-cover object-center motion-reduce:hidden"
       />
 

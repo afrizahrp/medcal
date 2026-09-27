@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LazyVideo } from "@/components/lazy-video";
+import { HeroVideo } from "@/components/hero-video";
 import { TrustBadges } from "@/components/trust-badges";
 import type { HeroContent } from "@/components/hero";
 
@@ -7,8 +7,10 @@ export function HeroCompact({ content }: { content: HeroContent }) {
   return (
     <section className="border-b border-ink-100 bg-brand-950 lg:hidden">
       <div className="relative h-[200px] w-full overflow-hidden bg-brand-900 sm:h-[260px] md:h-[320px]">
-        <LazyVideo
+        <HeroVideo
           src="/technician-team.webm"
+          poster="/images/hero/technician-team-poster.webp"
+          query="(max-width: 1023px)"
           className="absolute inset-0 h-full w-full object-cover object-[45%_32%] motion-reduce:hidden sm:object-[55%_32%] md:object-[60%_35%]"
         />
         <div
