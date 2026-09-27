@@ -8,7 +8,7 @@ import { serviceCategories } from "@/data/site";
 export const metadata: Metadata = {
   title: "Layanan Kalibrasi Alat Kesehatan & Laboratorium",
   description:
-    "8 kategori layanan kalibrasi alat kesehatan & laboratorium — terakreditasi KAN (LK-521-IDN) untuk item dalam scope, mengikuti standar SNI ISO/IEC 17025:2017.",
+    "8 kategori layanan kalibrasi alat kesehatan & laboratorium untuk RS & klinik — terakreditasi KAN (LK-521-IDN) untuk item dalam scope, sesuai SNI ISO/IEC 17025:2017.",
   alternates: { canonical: "/layanan" },
   openGraph: { url: "/layanan" },
 };

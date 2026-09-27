@@ -4,7 +4,7 @@
     "name": "Monitoring Pasien",
     "h1": "Jasa Kalibrasi Alat Monitoring Pasien Rumah Sakit",
     "intro": "Layanan pengujian dan kalibrasi alat monitoring pasien untuk membantu memastikan akurasi pengukuran dan melengkapi dokumentasi akreditasi fasilitas kesehatan. Sphygmomanometer (tensimeter) dan Bed Side Monitor dikalibrasi dalam ruang lingkup akreditasi KAN LK-521-IDN",
-    "metaDescription": "Jasa kalibrasi alat monitoring pasien untuk rumah sakit. Sphygmomanometer dan Bed Side Monitor dalam scope akreditasi KAN LK-521-IDN.",
+    "metaDescription": "Jasa kalibrasi alat monitoring pasien rumah sakit: tensimeter (sphygmomanometer) dan bed side monitor dalam scope akreditasi KAN LK-521-IDN.",
     "keywords": {
       "primary": "kalibrasi alat monitoring pasien",
       "secondary": [
@@ -12,7 +12,9 @@
         "kalibrasi bed side monitor scope KAN LK-521-IDN",
         "jasa kalibrasi patient monitor rumah sakit",
         "kalibrasi tensimeter digital aneroid",
-        "kalibrasi ecg electrocardiograph"
+        "kalibrasi ecg electrocardiograph",
+        "kalibrasi tensi",
+        "kalibrasi tensimeter terdekat"
       ]
     },
     "sections": [
@@ -90,7 +92,7 @@
     "name": "Neonatal & Termal",
     "h1": "Jasa Kalibrasi Alat Neonatal & Termal Ruang NICU",
     "intro": "Pengujian dan kalibrasi peralatan NICU untuk membantu menjaga akurasi instrumen dan melengkapi kriteria dokumentasi audit akreditasi faskes.",
-    "metaDescription": "Jasa kalibrasi alat neonatal dan termal ruang NICU, termasuk inkubator bayi, radiant warmer, dan timbangan bayi medis.",
+    "metaDescription": "Jasa kalibrasi alat neonatal dan termal ruang NICU, termasuk inkubator bayi, radiant warmer, dan timbangan bayi medis, sesuai SNI ISO/IEC 17025:2017.",
     "keywords": {
       "primary": "kalibrasi alat neonatal nicu",
       "secondary": [
@@ -129,7 +131,7 @@
     "name": "Infus & Pompa Cairan",
     "h1": "Jasa Kalibrasi Pompa Infus & Alat Cairan Medis",
     "intro": "Kalibrasi laju alir (flow rate) pada pompa infus dan syringe pump untuk mendukung ketepatan dosis cairan medis.",
-    "metaDescription": "Jasa kalibrasi pompa infus dan alat cairan medis, termasuk infuse pump, syringe pump, dan blood/solution warmer.",
+    "metaDescription": "Jasa kalibrasi pompa infus dan alat cairan medis, termasuk infuse pump, syringe pump, dan blood/solution warmer, sesuai SNI ISO/IEC 17025:2017.",
     "keywords": {
       "primary": "kalibrasi infuse pump syringe pump",
       "secondary": [
@@ -204,7 +206,7 @@
     "name": "Sterilisasi",
     "h1": "Jasa Kalibrasi Autoclave & Sterilizer Medis",
     "intro": "Kalibrasi parameter suhu dan tekanan autoclave untuk mendukung kepatuhan proses sterilisasi unit CSSD Rumah Sakit dan Klinik.",
-    "metaDescription": "Jasa kalibrasi autoclave dan sterilizer medis untuk unit CSSD rumah sakit dan laboratorium klinik.",
+    "metaDescription": "Jasa kalibrasi autoclave dan sterilizer medis untuk unit CSSD rumah sakit dan laboratorium klinik, sesuai SNI ISO/IEC 17025:2017.",
     "keywords": {
       "primary": "kalibrasi autoclave sterilizer",
       "secondary": [
@@ -235,7 +237,7 @@
     "name": "Laboratorium & Diagnostik",
     "h1": "Jasa Kalibrasi Alat Laboratorium Klinik & Diagnostik",
     "intro": "Pengujian dan kalibrasi instrumen laboratorium untuk membantu menjaga ketelitian instrumen diagnostik kesehatan.",
-    "metaDescription": "Jasa kalibrasi alat laboratorium klinik dan diagnostik, termasuk centrifuge, mikroskop, dan USG.",
+    "metaDescription": "Jasa kalibrasi alat laboratorium klinik & diagnostik untuk rumah sakit dan laboratorium: centrifuge, mikroskop, dan USG, sesuai SNI ISO/IEC 17025:2017.",
     "keywords": {
       "primary": "kalibrasi alat laboratorium klinik",
       "secondary": [
@@ -268,7 +270,7 @@
     "name": "Fasilitas Umum RS",
     "h1": "Jasa Kalibrasi Alat Penunjang & Fasilitas Rumah Sakit",
     "intro": "Layanan kalibrasi peralatan penunjang medis seperti timbangan dan tempat tidur elektrik untuk melengkapi kelengkapan dokumentasi akreditasi.",
-    "metaDescription": "Jasa kalibrasi alat penunjang dan fasilitas rumah sakit, termasuk timbangan dewasa medis dan tempat tidur elektrik.",
+    "metaDescription": "Jasa kalibrasi alat penunjang dan fasilitas rumah sakit, termasuk timbangan dewasa medis dan tempat tidur elektrik, sesuai SNI ISO/IEC 17025:2017.",
     "keywords": {
       "primary": "kalibrasi fasilitas umum rumah sakit",
       "secondary": [

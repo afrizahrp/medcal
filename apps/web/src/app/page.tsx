@@ -11,11 +11,10 @@ import { websiteJsonLd } from "@/data/structured-data";
 
 export const metadata: Metadata = {
   title: {
-    absolute:
-      "Presisi Kalibrasi Medika | Kalibrasi Alat Kesehatan Terakreditasi KAN",
+    absolute: "Jasa Kalibrasi Alat Kesehatan — Presisi Kalibrasi Medika",
   },
   description:
-    "Jasa kalibrasi alat kesehatan dan laboratorium. Terakreditasi KAN (LK-521-IDN) untuk item dalam scope, mengikuti SNI ISO/IEC 17025:2017.",
+    "Jasa kalibrasi alat kesehatan & laboratorium untuk rumah sakit dan klinik. Terakreditasi KAN (LK-521-IDN) untuk item dalam scope, sesuai SNI ISO/IEC 17025:2017.",
   alternates: { canonical: "/" },
   openGraph: { url: "/" },
 };
@@ -23,6 +22,13 @@ export const metadata: Metadata = {
 export default function HomePage() {
   return (
     <>
+      <link
+        rel="preload"
+        as="video"
+        href="/technician-team.webm"
+        type="video/webm"
+        fetchPriority="high"
+      />
       <JsonLd data={websiteJsonLd()} />
       <Hero />
       <PainPointSection />

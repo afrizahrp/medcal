@@ -3,9 +3,9 @@ import { Breadcrumb } from "@/components/breadcrumb";
 import { KontakForm } from "./kontak-form";
 
 export const metadata: Metadata = {
-  title: "Kontak",
+  title: "Kontak Kalibrasi Alat Kesehatan",
   description:
-    "Hubungi Presisi Kalibrasi Medika untuk konsultasi kebutuhan kalibrasi alat kesehatan dan laboratorium.",
+    "Hubungi tim Presisi Kalibrasi Medika di Jakarta Timur untuk konsultasi jadwal, biaya, dan penawaran kalibrasi alat kesehatan & laboratorium rumah sakit.",
   alternates: { canonical: "/kontak" },
   openGraph: { url: "/kontak" },
 };
