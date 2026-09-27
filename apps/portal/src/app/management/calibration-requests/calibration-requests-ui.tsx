@@ -39,11 +39,12 @@ export interface CalibrationRequestItem {
   /** Customer-provided equipment model. */
   model: string | null;
   /**
-   * Resolved Device.id (real FK) — the customer's Serial No is a lookup key
-   * only; it is never stored here. Never display this raw value — use
-   * `device.serialNumber` for display/edit pre-fill.
+   * Resolved Device.id (real FK), or null when Device identity is not yet
+   * known. The customer's Serial No is a lookup key only; it is never stored
+   * here. Never display this raw value — use `device.serialNumber` for
+   * display/edit pre-fill.
    */
-  deviceId: string;
+  deviceId: string | null;
   /** The resolved Device's Serial No, for display and edit-form pre-fill. */
   device: { serialNumber: string | null } | null;
   /** Aggregate quantity of units for this line (>= 1). */

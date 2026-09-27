@@ -328,11 +328,11 @@ describe("CalibrationRequestImportService.preview", () => {
     expect(preview.rows[0]?.errors).toEqual([]);
   });
 
-  it("blank Serial No is a row error (deviceId is now a required Device lookup key)", async () => {
+  it("blank Serial No becomes NULL (no placeholder, no error — Device identity not necessarily known yet)", async () => {
     const buf = await buildXlsx(HEADER, [[`Tensimeter ${SUFFIX}`, "AB-123", 1, "   "]]);
     const preview = await service.preview(asFile(buf));
     expect(preview.rows[0]?.deviceId).toBeNull();
-    expect(preview.rows[0]?.errors.some((e) => /Serial No wajib diisi/.test(e))).toBe(true);
+    expect(preview.rows[0]?.errors).toEqual([]);
   });
 
   it("Qty > 1 with a single Serial No is a clean aggregate row (no warning, no error)", async () => {
@@ -509,30 +509,25 @@ describe("CalibrationRequestImportService.confirm", () => {
     expect(new Set(created.items.map((i) => i.id)).size).toBe(5);
   });
 
-  it("throws DEVICE_NOT_FOUND at confirm when a row's Serial No does not resolve to an existing Device", async () => {
+  it("leaves deviceId null at confirm when a row's Serial No does not resolve to an existing Device (preserves the item, not an error)", async () => {
     const customerId = await makeCustomer();
     const buf = await buildXlsx(HEADER, [[`Tensimeter ${SUFFIX}`, "AB-123", 1, "NO-SUCH-SERIAL"]]);
     const preview = await service.preview(asFile(buf));
     expect(preview.rows[0]?.errors).toEqual([]);
 
-    try {
-      await service.confirm(realCompanyId, testUserId, {
-        customerId,
-        serviceMode: "ON_SITE",
-        rows: preview.rows.map((r) => ({
-          customerDeviceName: r.customerDeviceName,
-          deviceId: r.deviceId!,
-          qty: r.qty ?? 1,
-          deviceTypeId: r.match.deviceTypeId!,
-        })),
-      });
-      expect.fail("expected DEVICE_NOT_FOUND");
-    } catch (err) {
-      expect(err).toBeInstanceOf(BadRequestException);
-      expect((err as BadRequestException).getResponse()).toEqual(
-        expect.objectContaining({ code: "DEVICE_NOT_FOUND" }),
-      );
-    }
+    const created = await service.confirm(realCompanyId, testUserId, {
+      customerId,
+      serviceMode: "ON_SITE",
+      rows: preview.rows.map((r) => ({
+        customerDeviceName: r.customerDeviceName,
+        ...(r.deviceId ? { deviceId: r.deviceId } : {}),
+        qty: r.qty ?? 1,
+        deviceTypeId: r.match.deviceTypeId!,
+      })),
+    });
+    createdRequestIds.push(created.id);
+
+    expect(created.items[0]?.deviceId).toBeNull();
   });
 
   it("defaults qty to 1 for a row that omits it (matches manual + Requisition)", async () => {

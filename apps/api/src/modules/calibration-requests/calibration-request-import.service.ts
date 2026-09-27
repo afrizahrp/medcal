@@ -140,17 +140,17 @@ function parseQty(value: ExcelJS.CellValue | undefined): { qty: number | null; e
 }
 
 // ── Serial No parsing (spec §13 / §14 / D2) ─────────────────────────────────
-// Serial No is now a REQUIRED lookup key: CalibrationRequestItem.deviceId is a
-// required FK to an existing Device, resolved server-side (at Confirm) from
-// this value. An empty cell can no longer be silently persisted as NULL — it
-// is flagged here, at preview time, the same way an empty Nama Alat / Qty
-// cell already is.
+// Serial No is an OPTIONAL lookup key: CalibrationRequestItem.deviceId is a
+// nullable FK to an existing Device, resolved server-side (at Confirm) from
+// this value when present. A blank cell is a valid, common business state —
+// Device identity is not necessarily known yet at Requisition stage — and is
+// never flagged as an error.
 function parseDeviceId(value: ExcelJS.CellValue | undefined): {
   deviceId: string | null;
   error?: string;
 } {
   const text = cellToText(value);
-  if (!text) return { deviceId: null, error: "Serial No wajib diisi" };
+  if (!text) return { deviceId: null };
   if (/[,;\n\r]/.test(text)) {
     return { deviceId: null, error: "Satu baris hanya boleh memiliki satu Serial No" };
   }

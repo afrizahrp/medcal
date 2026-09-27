@@ -9,9 +9,10 @@ import {
 } from "@nestjs/common";
 import { hasPermission } from "@medcal/auth";
 import { DocumentNumberService, Prisma, prisma } from "@medcal/db";
-import type { AkdAklApprovalStatus, MembershipRole } from "@medcal/db";
+import type { AkdAklApprovalStatus, CalibrationJobStatus, MembershipRole } from "@medcal/db";
 import {
   CALIBRATION_JOB_SORTABLE_FIELDS,
+  CALIBRATION_JOB_STATUS_VALUES,
   buildCalibrationJobActionSignals,
   jobNeedsAction,
   type CalibrationJobActionSignals,
@@ -670,6 +671,8 @@ export interface CalibrationJobWorkOrderGroup {
   jobCount: number;
   /** Child jobs with ≥1 active action signal — computed server-side (jobNeedsAction). */
   actionNeededCount: number;
+  /** Breakdown of `jobCount` by status — aggregate progress at a glance. */
+  statusCounts: Record<CalibrationJobStatus, number>;
   jobs: CalibrationJobListRow[];
 }
 
@@ -681,6 +684,35 @@ export interface CalibrationJobGroupedResult {
   total: number;
   totalPages: number;
   totalJobs: number;
+}
+
+/** Per-PO-line-item rollup for one Work Order — Work Order Items table's data source. */
+export interface CalibrationJobWorkOrderItemSummary {
+  purchaseOrderItemId: string;
+  unitCount: number;
+  statusCounts: Record<CalibrationJobStatus, number>;
+  latestIdentityCorrection: {
+    id: string;
+    number: string;
+    status: "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+    createdAt: Date;
+  } | null;
+  unitsWithIdentityCorrection: number;
+  needsReferenceEquipmentReview: boolean;
+}
+
+export interface CalibrationJobWorkOrderSummaryResult {
+  workOrderId: string;
+  totalUnits: number;
+  statusCounts: Record<CalibrationJobStatus, number>;
+  actionNeededCount: number;
+  items: CalibrationJobWorkOrderItemSummary[];
+}
+
+/** Adjacent-unit ids for Previous/Next navigation — see getSiblings. */
+export interface CalibrationJobSiblings {
+  previousId: string | null;
+  nextId: string | null;
 }
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -711,6 +743,7 @@ export class CalibrationJobsService {
     return {
       companyId,
       ...(query.workOrderId ? { workOrderId: query.workOrderId } : {}),
+      ...(query.purchaseOrderItemId ? { purchaseOrderItemId: query.purchaseOrderItemId } : {}),
       ...(query.akdAklApprovalStatus ? { akdAklApprovalStatus: query.akdAklApprovalStatus } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.assignedToMe
@@ -786,10 +819,16 @@ export class CalibrationJobsService {
   /**
    * Calibration Jobs list restructured as SPK (WorkOrder) groups — one parent
    * row per WorkOrder, its per-unit jobs as children. Pagination is at the
-   * WorkOrder level: every matching job is fetched, grouped, then the groups are
-   * sliced. Groups are ordered by their WorkOrder number (desc — newest SPK
-   * first); jobs within a group by unitOrdinal. `actionNeededCount` per group is
-   * the count of child jobs with ≥1 active action signal (jobNeedsAction).
+   * WorkOrder level, resolved in two phases so a page of N WorkOrders never
+   * requires loading every matching job company-wide:
+   *   1. Which WorkOrders match `where` at all — a lightweight, single-column
+   *      distinct query (no relation include), then sorted/paged against
+   *      WorkOrder's own `number` column directly (no join needed for that).
+   *   2. The full `calibrationJobInclude` fetch, scoped to just that page's
+   *      WorkOrder ids.
+   * Jobs within a group are ordered by unitOrdinal. `actionNeededCount` /
+   * `statusCounts` per group are computed from the child jobs actually fetched
+   * in phase 2 (jobNeedsAction / job.status).
    */
   async findAllGroupedByWorkOrder(
     companyId: string,
@@ -800,53 +839,64 @@ export class CalibrationJobsService {
     const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
     const where = this.buildListWhere(companyId, query, userId);
 
-    const rows = await prisma.calibrationJob.findMany({
+    // Phase 1a: which WorkOrders match at all (single column, no include).
+    const matchingWorkOrderIdRows = await prisma.calibrationJob.findMany({
       where,
-      orderBy: [
-        { workOrder: { number: "desc" } },
-        { workOrderId: "desc" },
-        { unitOrdinal: "asc" },
-        { id: "asc" },
-      ],
-      include: calibrationJobInclude,
+      select: { workOrderId: true },
+      distinct: ["workOrderId"],
     });
+    const matchingWorkOrderIds = matchingWorkOrderIdRows.map((row) => row.workOrderId);
 
-    // Group in encounter order (already WO-number desc, unitOrdinal asc).
-    const groupOrder: string[] = [];
+    // Phase 1b: sort/paginate on WorkOrder's own `number` column (no join).
+    const total = matchingWorkOrderIds.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const pagedWorkOrders = await prisma.workOrder.findMany({
+      where: { id: { in: matchingWorkOrderIds } },
+      select: { id: true },
+      orderBy: [{ number: "desc" }, { id: "desc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
+    const pagedWorkOrderIds = pagedWorkOrders.map((wo) => wo.id);
+
+    const [totalJobs, rows] = await Promise.all([
+      prisma.calibrationJob.count({ where }),
+      // Phase 2: full include, scoped to just this page's WorkOrders.
+      prisma.calibrationJob.findMany({
+        where: { ...where, workOrderId: { in: pagedWorkOrderIds } },
+        orderBy: [
+          { workOrder: { number: "desc" } },
+          { workOrderId: "desc" },
+          { unitOrdinal: "asc" },
+          { id: "asc" },
+        ],
+        include: calibrationJobInclude,
+      }),
+    ]);
+
     const byWorkOrder = new Map<string, CalibrationJobDetail[]>();
     for (const row of rows) {
-      let bucket = byWorkOrder.get(row.workOrderId);
-      if (!bucket) {
-        bucket = [];
-        byWorkOrder.set(row.workOrderId, bucket);
-        groupOrder.push(row.workOrderId);
-      }
-      bucket.push(row);
+      const bucket = byWorkOrder.get(row.workOrderId);
+      if (bucket) bucket.push(row);
+      else byWorkOrder.set(row.workOrderId, [row]);
     }
 
-    const total = groupOrder.length;
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    const pagedWorkOrderIds = groupOrder.slice(
-      (page - 1) * pageSize,
-      (page - 1) * pageSize + pageSize,
-    );
-
-    const pagedJobIds = pagedWorkOrderIds.flatMap((woId) =>
-      (byWorkOrder.get(woId) ?? []).map((job) => job.id),
-    );
-    const reviewFlags = await this.referenceEquipmentReviewFlags(pagedJobIds);
+    const reviewFlags = await this.referenceEquipmentReviewFlags(rows.map((row) => row.id));
 
     const data: CalibrationJobWorkOrderGroup[] = pagedWorkOrderIds.map((woId) => {
       const jobs = (byWorkOrder.get(woId) ?? []).map((job) => this.toListRow(job, reviewFlags));
+      const statusCounts = this.emptyStatusCounts();
+      for (const job of jobs) statusCounts[job.status] += 1;
       return {
         workOrder: jobs[0]!.workOrder,
         jobCount: jobs.length,
         actionNeededCount: jobs.filter((job) => jobNeedsAction(job.actionSignals)).length,
+        statusCounts,
         jobs,
       };
     });
 
-    return { data, page, pageSize, total, totalPages, totalJobs: rows.length };
+    return { data, page, pageSize, total, totalPages, totalJobs };
   }
 
   /**
@@ -902,6 +952,146 @@ export class CalibrationJobsService {
     const job = await this.findOne(companyId, id);
     const reviewFlags = await this.referenceEquipmentReviewFlags([id]);
     return this.toListRow(job, reviewFlags);
+  }
+
+  /**
+   * Adjacent-unit ids by `unitOrdinal`, for Previous/Next navigation. Scoped to
+   * the same `purchaseOrderItemId` when the job has one (steps through just
+   * that line item's units); falls back to the whole `workOrderId` when it
+   * doesn't (NULL purchaseOrderItemId values are never equal to each other for
+   * uniqueness purposes, so filtering on NULL would incorrectly mix unrelated
+   * unitOrdinal sequences — omitting the filter instead orders the whole WO).
+   */
+  async getSiblings(companyId: string, id: string): Promise<CalibrationJobSiblings> {
+    const current = await prisma.calibrationJob.findFirst({
+      where: { id, companyId },
+      select: { workOrderId: true, purchaseOrderItemId: true, unitOrdinal: true },
+    });
+    if (!current) {
+      throw new NotFoundException({
+        message: "Calibration job not found",
+        code: "CALIBRATION_JOB_NOT_FOUND",
+      });
+    }
+
+    const scopeWhere: Prisma.CalibrationJobWhereInput = {
+      companyId,
+      workOrderId: current.workOrderId,
+      ...(current.purchaseOrderItemId ? { purchaseOrderItemId: current.purchaseOrderItemId } : {}),
+    };
+
+    const [previous, next] = await Promise.all([
+      prisma.calibrationJob.findFirst({
+        where: { ...scopeWhere, unitOrdinal: { lt: current.unitOrdinal } },
+        orderBy: { unitOrdinal: "desc" },
+        select: { id: true },
+      }),
+      prisma.calibrationJob.findFirst({
+        where: { ...scopeWhere, unitOrdinal: { gt: current.unitOrdinal } },
+        orderBy: { unitOrdinal: "asc" },
+        select: { id: true },
+      }),
+    ]);
+
+    return { previousId: previous?.id ?? null, nextId: next?.id ?? null };
+  }
+
+  private emptyStatusCounts(): Record<CalibrationJobStatus, number> {
+    return Object.fromEntries(
+      CALIBRATION_JOB_STATUS_VALUES.map((status) => [status, 0]),
+    ) as Record<CalibrationJobStatus, number>;
+  }
+
+  /**
+   * Per-PO-line-item calibration rollup for one Work Order, computed over
+   * *every* fanned-out job on that Work Order — never capped, unlike the flat
+   * `GET /calibration-jobs?workOrderId=...&pageSize=100` the Work Order Items
+   * table previously relied on. Bounded by one Work Order's own job count
+   * (never company-wide), so this stays cheap even at hundreds of units.
+   */
+  async getWorkOrderItemSummaries(
+    companyId: string,
+    workOrderId: string,
+  ): Promise<CalibrationJobWorkOrderSummaryResult> {
+    const workOrder = await prisma.workOrder.findFirst({
+      where: { id: workOrderId, companyId },
+      select: { id: true },
+    });
+    if (!workOrder) {
+      throw new NotFoundException({
+        message: "Work order not found",
+        code: "WORK_ORDER_NOT_FOUND",
+      });
+    }
+
+    const jobs = await prisma.calibrationJob.findMany({
+      where: { companyId, workOrderId },
+      select: {
+        id: true,
+        purchaseOrderItemId: true,
+        status: true,
+        startedAt: true,
+        technicianObservedSerial: true,
+        identityCorrections: {
+          select: { id: true, number: true, status: true, createdAt: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+    });
+
+    const reviewFlags = await this.referenceEquipmentReviewFlags(jobs.map((job) => job.id));
+
+    const byItem = new Map<string, typeof jobs>();
+    for (const job of jobs) {
+      if (!job.purchaseOrderItemId) continue;
+      const bucket = byItem.get(job.purchaseOrderItemId);
+      if (bucket) bucket.push(job);
+      else byItem.set(job.purchaseOrderItemId, [job]);
+    }
+
+    const items: CalibrationJobWorkOrderItemSummary[] = [...byItem.entries()].map(
+      ([purchaseOrderItemId, itemJobs]) => {
+        const statusCounts = this.emptyStatusCounts();
+        for (const job of itemJobs) statusCounts[job.status] += 1;
+
+        const corrections = itemJobs
+          .map((job) => job.identityCorrections[0])
+          .filter((c): c is NonNullable<typeof c> => Boolean(c))
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+        return {
+          purchaseOrderItemId,
+          unitCount: itemJobs.length,
+          statusCounts,
+          latestIdentityCorrection: corrections[0] ?? null,
+          unitsWithIdentityCorrection: corrections.length,
+          needsReferenceEquipmentReview: itemJobs.some((job) => reviewFlags.get(job.id) ?? false),
+        };
+      },
+    );
+
+    const totalStatusCounts = this.emptyStatusCounts();
+    for (const job of jobs) totalStatusCounts[job.status] += 1;
+    const actionNeededCount = jobs.filter((job) =>
+      jobNeedsAction(
+        buildCalibrationJobActionSignals({
+          status: job.status,
+          startedAt: job.startedAt,
+          technicianObservedSerial: job.technicianObservedSerial,
+          hasPendingIdentityCorrection: job.identityCorrections[0]?.status === "PENDING_REVIEW",
+          needsReferenceEquipmentApproval: reviewFlags.get(job.id) ?? false,
+        }),
+      ),
+    ).length;
+
+    return {
+      workOrderId,
+      totalUnits: jobs.length,
+      statusCounts: totalStatusCounts,
+      actionNeededCount,
+      items,
+    };
   }
 
   /**

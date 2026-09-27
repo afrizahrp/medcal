@@ -84,44 +84,29 @@ async function assertDeviceTypesExist(
 }
 
 /**
- * CalibrationRequestItem.deviceId is a REQUIRED FK to Device.id. The wire-level
+ * CalibrationRequestItem.deviceId is a nullable FK to Device.id — Device
+ * identity is not necessarily known yet at Requisition stage. The wire-level
  * `deviceId` input field is a lookup key only (the customer's Serial No, from
- * manual entry or Excel import) — it is never stored verbatim. This resolves
- * it, scoped to the request's own customer + company (Device.serialNumber is
- * not globally unique), and returns the real Device.id to persist. Throws a
- * clear, specific error rather than silently persisting NULL, the raw
- * Serial No text, or a fabricated Device.
+ * manual entry or Excel import) — it is never stored verbatim. When blank, or
+ * when it doesn't resolve to exactly one Device (scoped to the request's own
+ * customer + company, since Device.serialNumber is not globally unique),
+ * this returns null rather than throwing: an unresolved identity is a valid,
+ * common business state at this stage, never an error, and is never
+ * fabricated or guessed.
  */
 async function resolveRequestItemDeviceId(
   tx: Prisma.TransactionClient,
   companyId: string,
   customerId: string,
   rawDeviceId: string | undefined,
-): Promise<string> {
+): Promise<string | null> {
   const serialNumber = (rawDeviceId ?? "").trim();
-  if (!serialNumber) {
-    throw new BadRequestException({
-      message: "Device (Serial No) is required for every requisition item",
-      code: "DEVICE_ID_REQUIRED",
-    });
-  }
+  if (!serialNumber) return null;
   const matches = await tx.device.findMany({
     where: { companyId, customerId, serialNumber: { equals: serialNumber, mode: "insensitive" } },
     select: { id: true },
   });
-  if (matches.length === 0) {
-    throw new BadRequestException({
-      message: `No Device found for this customer with Serial No "${serialNumber}"`,
-      code: "DEVICE_NOT_FOUND",
-    });
-  }
-  if (matches.length > 1) {
-    throw new BadRequestException({
-      message: `Serial No "${serialNumber}" matches more than one Device for this customer`,
-      code: "DEVICE_SERIAL_AMBIGUOUS",
-    });
-  }
-  return matches[0]!.id;
+  return matches.length === 1 ? matches[0]!.id : null;
 }
 
 async function resolveRequestItemDeviceIds(
@@ -129,7 +114,7 @@ async function resolveRequestItemDeviceIds(
   companyId: string,
   customerId: string,
   items: Array<{ deviceId?: string }>,
-): Promise<string[]> {
+): Promise<(string | null)[]> {
   return Promise.all(
     items.map((item) => resolveRequestItemDeviceId(tx, companyId, customerId, item.deviceId)),
   );

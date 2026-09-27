@@ -40,7 +40,8 @@ import {
   workOrderActions,
   type AssignmentRole,
 } from "../work-order-form-utils";
-import { useWorkOrderCalibrationJobs } from "../../calibration-jobs/use-calibration-jobs-query";
+import { formatStatusCounts } from "../../calibration-jobs/calibration-job-utils";
+import { useWorkOrderCalibrationSummary } from "../../calibration-jobs/use-calibration-jobs-query";
 import { WorkOrderEquipmentSection } from "../work-order-equipment-section";
 import { WorkOrderDeliveryNoteSection } from "../work-order-delivery-note-section";
 import {
@@ -68,7 +69,7 @@ export default function WorkOrderDetailPage() {
   const { capabilities } = useAuthz();
 
   const query = useWorkOrder(params.id);
-  const calibrationJobs = useWorkOrderCalibrationJobs(params.id);
+  const calibrationSummary = useWorkOrderCalibrationSummary(params.id);
   const assignMutation = useAssignWorkOrder();
   const startMutation = useStartWorkOrder();
   const doneMutation = useDoneWorkOrder();
@@ -151,9 +152,9 @@ export default function WorkOrderDetailPage() {
     : `${pendingAddCount} item akan ditambahkan, ${pendingRemoveCount} item akan dihapus.`;
 
   const referenceEquipmentReviewPoiIds = new Set(
-    (calibrationJobs.data?.data ?? [])
-      .filter((job) => job.needsReferenceEquipmentReview && job.purchaseOrderItemId)
-      .map((job) => job.purchaseOrderItemId as string),
+    (calibrationSummary.data?.items ?? [])
+      .filter((item) => item.needsReferenceEquipmentReview)
+      .map((item) => item.purchaseOrderItemId),
   );
 
   async function runAction(action: "start" | "done" | "cancel" | "revise") {
@@ -247,7 +248,17 @@ export default function WorkOrderDetailPage() {
 
       <Surface className={formSurfaceClass}>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <p className="font-mono text-sm text-slate-600">{workOrder.number}</p>
+          <div>
+            <p className="font-mono text-sm text-slate-600">{workOrder.number}</p>
+            {calibrationSummary.data ? (
+              <p className="mt-1 text-xs text-slate-400">
+                {calibrationSummary.data.totalUnits} unit
+                {formatStatusCounts(calibrationSummary.data.statusCounts)
+                  ? ` · ${formatStatusCounts(calibrationSummary.data.statusCounts)}`
+                  : ""}
+              </p>
+            ) : null}
+          </div>
           <div className="flex flex-col items-end gap-2">
             <StatusBadge status={workOrder.status} />
             <Button type="button" variant="outline" size="sm" asChild>
@@ -368,10 +379,11 @@ export default function WorkOrderDetailPage() {
 
         <div className="mt-5 border-t border-slate-100 pt-5">
           <WorkOrderItemsTable
+            workOrderId={workOrder.id}
             items={workOrder.items}
             jobs={workOrder.jobs}
             referenceEquipmentReviewPoiIds={
-              calibrationJobs.data ? referenceEquipmentReviewPoiIds : undefined
+              calibrationSummary.data ? referenceEquipmentReviewPoiIds : undefined
             }
           />
         </div>

@@ -16,6 +16,7 @@ import {
   formatEffectiveToleranceBounds,
   formatMeasurementHasilDisplay,
   formatMeasurementNormalValue,
+  formatStatusCounts,
   groupMeasurementRowsByPoint,
   isAwaitingQualityReview,
   isIdentityGateLocked,
@@ -566,5 +567,30 @@ describe("groupMeasurementRowsByPoint", () => {
       "nibp-systole",
       "nibp-diastole",
     ]);
+  });
+});
+
+describe("formatStatusCounts", () => {
+  it("omits zero-count statuses and keeps canonical status order", () => {
+    const text = formatStatusCounts({
+      PENDING: 7,
+      IN_PROGRESS: 0,
+      SUBMITTED: 0,
+      REWORK: 20,
+      ACCEPTED_BY_QA: 382,
+    });
+    expect(text).toBe("7 Pending · 20 Rework · 382 Accepted by QA");
+  });
+
+  it("returns an empty string when every status is zero", () => {
+    expect(
+      formatStatusCounts({
+        PENDING: 0,
+        IN_PROGRESS: 0,
+        SUBMITTED: 0,
+        REWORK: 0,
+        ACCEPTED_BY_QA: 0,
+      }),
+    ).toBe("");
   });
 });

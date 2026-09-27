@@ -12,6 +12,8 @@ import type {
   CalibrationJobGroupedResponse,
   CalibrationJobListResponse,
   CalibrationJobRow,
+  CalibrationJobSiblings,
+  CalibrationJobWorkOrderSummaryResponse,
 } from "./calibration-jobs-ui";
 
 export const CALIBRATION_JOBS_QUERY_KEY = "calibration-jobs" as const;
@@ -19,6 +21,7 @@ export const CALIBRATION_JOBS_QUERY_KEY = "calibration-jobs" as const;
 export interface CalibrationJobsQueryParams {
   search: string;
   workOrderId?: string;
+  purchaseOrderItemId?: string;
   akdAklApprovalStatus: string;
   status: string;
   sortBy: string;
@@ -31,6 +34,7 @@ function buildSearchParams(params: CalibrationJobsQueryParams): URLSearchParams 
   const qs = new URLSearchParams();
   if (params.search.trim()) qs.set("search", params.search.trim());
   if (params.workOrderId) qs.set("workOrderId", params.workOrderId);
+  if (params.purchaseOrderItemId) qs.set("purchaseOrderItemId", params.purchaseOrderItemId);
   if (params.akdAklApprovalStatus) qs.set("akdAklApprovalStatus", params.akdAklApprovalStatus);
   if (params.status) qs.set("status", params.status);
   qs.set("sortBy", params.sortBy);
@@ -58,6 +62,7 @@ export function useCalibrationJobs(params: CalibrationJobsQueryParams, enabled =
       CALIBRATION_JOBS_QUERY_KEY,
       params.search,
       params.workOrderId,
+      params.purchaseOrderItemId,
       params.akdAklApprovalStatus,
       params.status,
       params.sortBy,
@@ -90,6 +95,7 @@ export function useCalibrationJobGroups(params: CalibrationJobsQueryParams, enab
       "grouped",
       params.search,
       params.workOrderId,
+      params.purchaseOrderItemId,
       params.akdAklApprovalStatus,
       params.status,
       params.page,
@@ -119,19 +125,33 @@ export function useCalibrationJob(id: string | undefined) {
 }
 
 /**
- * All calibration jobs for one Work Order, for the Work Order detail page's
- * per-item indicators (currently the "Perlu Persetujuan Alat" reference-equipment
- * badge — a computed state the WO payload itself does not carry). Polled on the
- * same 6s cadence as the Calibration Jobs list so the badge clears without a
- * manual refresh after a manager overrides. pageSize 100 is the schema max — a
- * single WO with >100 fanned-out units is not a real case.
+ * Adjacent-unit ids for the job detail page's Previous/Next navigation —
+ * scoped server-side to the same PO line item when the job has one, else the
+ * whole Work Order.
  */
-export function useWorkOrderCalibrationJobs(workOrderId: string | undefined) {
+export function useCalibrationJobSiblings(id: string | undefined) {
   return useQuery({
-    queryKey: [CALIBRATION_JOBS_QUERY_KEY, "by-work-order", workOrderId ?? ""],
+    queryKey: [CALIBRATION_JOBS_QUERY_KEY, id, "siblings"],
+    queryFn: () => apiFetch<CalibrationJobSiblings>(`/calibration-jobs/${id}/siblings`),
+    enabled: Boolean(id),
+  });
+}
+
+/**
+ * Per-PO-line-item calibration rollup for one Work Order, for the Work Order
+ * detail page's "Perlu Persetujuan Alat" reference-equipment badge (a computed
+ * state the WO payload itself does not carry) and its aggregate progress
+ * display. Computed server-side over *every* fanned-out job on the Work Order —
+ * never capped, unlike the flat `/calibration-jobs?workOrderId=&pageSize=100`
+ * this replaces. Polled on the same 6s cadence as the Calibration Jobs list so
+ * badges clear without a manual refresh after a manager overrides.
+ */
+export function useWorkOrderCalibrationSummary(workOrderId: string | undefined) {
+  return useQuery({
+    queryKey: [CALIBRATION_JOBS_QUERY_KEY, "work-order-summary", workOrderId ?? ""],
     queryFn: () =>
-      apiFetch<CalibrationJobListResponse>(
-        `/calibration-jobs?workOrderId=${encodeURIComponent(workOrderId ?? "")}&pageSize=100`,
+      apiFetch<CalibrationJobWorkOrderSummaryResponse>(
+        `/calibration-jobs/work-order-summary?workOrderId=${encodeURIComponent(workOrderId ?? "")}`,
       ),
     enabled: Boolean(workOrderId),
     refetchInterval: 6000,

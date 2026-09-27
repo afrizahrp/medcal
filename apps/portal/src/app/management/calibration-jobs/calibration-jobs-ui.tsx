@@ -21,6 +21,7 @@ import {
   CALIBRATION_JOB_STATUS_VALUES,
   calibrationJobActionFocusHref,
   firstActionableJobId,
+  formatStatusCounts,
   isAwaitingQualityReview,
   type AkdAklApprovalStatus,
   type CalibrationJobStatus,
@@ -163,6 +164,8 @@ export interface CalibrationJobWorkOrderGroup {
   jobCount: number;
   /** Child jobs with ≥1 active action signal — computed server-side. */
   actionNeededCount: number;
+  /** Breakdown of `jobCount` by status — aggregate progress at a glance. */
+  statusCounts: Record<CalibrationJobStatus, number>;
   jobs: CalibrationJobRow[];
 }
 
@@ -173,6 +176,36 @@ export interface CalibrationJobGroupedResponse {
   total: number;
   totalPages: number;
   totalJobs: number;
+}
+
+/** One PO line item's rollup within a Work Order — mirror of CalibrationJobWorkOrderItemSummary. */
+export interface CalibrationJobWorkOrderItemSummary {
+  purchaseOrderItemId: string;
+  unitCount: number;
+  statusCounts: Record<CalibrationJobStatus, number>;
+  latestIdentityCorrection: {
+    id: string;
+    number: string;
+    status: IdentityCorrectionStatus;
+    createdAt: string;
+  } | null;
+  unitsWithIdentityCorrection: number;
+  needsReferenceEquipmentReview: boolean;
+}
+
+/** GET /calibration-jobs/work-order-summary response — mirror of CalibrationJobWorkOrderSummaryResult. */
+export interface CalibrationJobWorkOrderSummaryResponse {
+  workOrderId: string;
+  totalUnits: number;
+  statusCounts: Record<CalibrationJobStatus, number>;
+  actionNeededCount: number;
+  items: CalibrationJobWorkOrderItemSummary[];
+}
+
+/** GET /calibration-jobs/:id/siblings response — mirror of CalibrationJobSiblings. */
+export interface CalibrationJobSiblings {
+  previousId: string | null;
+  nextId: string | null;
 }
 
 
@@ -292,6 +325,8 @@ export function CalibrationJobFilters({
   onJobStatusChange,
   workOrderId,
   onClearWorkOrder,
+  purchaseOrderItemId,
+  onClearPurchaseOrderItem,
 }: {
   searchInput: string;
   onSearchChange: (value: string) => void;
@@ -299,6 +334,8 @@ export function CalibrationJobFilters({
   onJobStatusChange: (value: string) => void;
   workOrderId?: string;
   onClearWorkOrder: () => void;
+  purchaseOrderItemId?: string;
+  onClearPurchaseOrderItem: () => void;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -335,6 +372,17 @@ export function CalibrationJobFilters({
           </span>
           <Button type="button" variant="outline" size="sm" onClick={onClearWorkOrder}>
             Hapus filter WO
+          </Button>
+        </div>
+      ) : null}
+      {purchaseOrderItemId ? (
+        <div className="flex items-center gap-2 text-sm text-slate-500">
+          <span>
+            Difilter untuk Item{" "}
+            <span className="font-mono text-slate-700">{purchaseOrderItemId}</span>
+          </span>
+          <Button type="button" variant="outline" size="sm" onClick={onClearPurchaseOrderItem}>
+            Hapus filter item
           </Button>
         </div>
       ) : null}
@@ -457,6 +505,37 @@ function JobChildRow({ row }: { row: CalibrationJobRow }) {
 }
 
 /**
+ * Flat, job-level-paginated table — used instead of `CalibrationJobGroupTable`
+ * once the list is scoped to one Work Order or one PO line item (via the
+ * `workOrderId`/`purchaseOrderItemId` filters), so browsing hundreds of units
+ * reuses the flat endpoint's existing `skip`/`take` pagination instead of
+ * rendering every unit unpaginated inside one expanded SPK row. Reuses
+ * `JobChildRow` unchanged — same row content, just paginated.
+ */
+export function CalibrationJobFlatTable({ rows }: { rows: CalibrationJobRow[] }) {
+  return (
+    <div className="overflow-x-auto rounded-md border border-slate-200">
+      <table className="w-full min-w-[1080px] border-collapse">
+        <thead>
+          <tr className="border-b border-slate-200 bg-slate-100 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
+            {JOB_CHILD_HEADER.map((label, i) => (
+              <th key={label || i} className={cn("px-4 py-2.5", i === 0 && "pl-10")}>
+                {label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <JobChildRow key={row.id} row={row} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
  * Bucket the page's SPK groups by customer, preserving each customer's
  * first-appearance order and the server's SPK order within it. A customer whose
  * SPKs straddle a page boundary gets its header repeated on each page — an
@@ -510,6 +589,11 @@ function SpkGroupBody({
               {group.workOrder.number}
             </span>
             <span className="text-xs text-slate-400">{group.jobCount} perangkat</span>
+            {formatStatusCounts(group.statusCounts) ? (
+              <span className="text-xs text-slate-400">
+                {formatStatusCounts(group.statusCounts)}
+              </span>
+            ) : null}
             <ActionNeededBadge
               count={group.actionNeededCount}
               href={(() => {

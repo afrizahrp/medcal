@@ -438,10 +438,13 @@ export function latestIdentityCorrectionForItem(
 }
 
 export function WorkOrderItemsTable({
+  workOrderId,
   items,
   jobs,
   referenceEquipmentReviewPoiIds,
 }: {
+  /** Scopes the "View units" drill-down link into the Calibration Jobs list. */
+  workOrderId: string;
   items: WorkOrderItem[];
   jobs: WorkOrderCalibrationJob[];
   /**
@@ -464,6 +467,7 @@ export function WorkOrderItemsTable({
               <th className="px-3 py-2">Identity Correction</th>
               <th className="px-3 py-2">Alat Referensi</th>
               <th className="px-3 py-2 text-right">Qty</th>
+              <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -512,6 +516,15 @@ export function WorkOrderItemsTable({
                   </td>
                   <td className="px-3 py-3 text-right text-sm text-slate-600">
                     {formatQty(item.qty)}
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    <Link
+                      href={`/calibration-jobs?workOrderId=${encodeURIComponent(workOrderId)}&purchaseOrderItemId=${encodeURIComponent(item.purchaseOrderItemId)}`}
+                    >
+                      <Button type="button" variant="ghost" size="sm">
+                        Lihat unit
+                      </Button>
+                    </Link>
                   </td>
                 </tr>
               );

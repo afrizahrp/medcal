@@ -26,6 +26,7 @@ import {
   calibrationJobIdentityDecisionSchema,
   calibrationJobListQuerySchema,
   calibrationJobSelectDeviceSchema,
+  calibrationJobWorkOrderSummaryQuerySchema,
   identityCorrectionDecisionSchema,
   identityCorrectionSubmitSchema,
   jobReferenceEquipmentApprovalDecisionSchema,
@@ -57,6 +58,8 @@ import {
   type CalibrationJobGroupedResult,
   type CalibrationJobListResult,
   type CalibrationJobListRow,
+  type CalibrationJobSiblings,
+  type CalibrationJobWorkOrderSummaryResult,
   type IdentityCorrectionDetail,
   type IdentityCorrectionSubmitResult,
   type JobMeasurementParametersResult,
@@ -144,6 +147,29 @@ export class CalibrationJobsController {
     return this.service.findAllGroupedByWorkOrder(companyId, parsed.data, userId);
   }
 
+  /**
+   * Per-PO-line-item rollup for one Work Order — replaces the Portal's former
+   * reliance on the flat, pageSize-capped `GET /calibration-jobs?workOrderId=`
+   * for the Work Order Items table. Declared before `:id` so "work-order-summary"
+   * is not captured as an id.
+   */
+  @Get("work-order-summary")
+  @RequirePermission("calibrationJob", "read")
+  async workOrderSummary(
+    @CompanyId() companyId: string,
+    @Query() rawQuery: unknown,
+  ): Promise<CalibrationJobWorkOrderSummaryResult> {
+    const parsed = calibrationJobWorkOrderSummaryQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid calibration job work order summary query",
+        code: "INVALID_CALIBRATION_JOB_WORK_ORDER_SUMMARY_QUERY",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.service.getWorkOrderItemSummaries(companyId, parsed.data.workOrderId);
+  }
+
   @Get(":id")
   @RequirePermission("calibrationJob", "read")
   async findOne(
@@ -151,6 +177,20 @@ export class CalibrationJobsController {
     @Param("id") id: string,
   ): Promise<CalibrationJobListRow> {
     return this.service.findOneRow(companyId, id);
+  }
+
+  /**
+   * Adjacent-unit ids for Previous/Next navigation on the job detail page —
+   * scoped to the same PO line item when the job has one, else the whole
+   * Work Order (see CalibrationJobsService.getSiblings).
+   */
+  @Get(":id/siblings")
+  @RequirePermission("calibrationJob", "read")
+  async siblings(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<CalibrationJobSiblings> {
+    return this.service.getSiblings(companyId, id);
   }
 
   @Post(":id/start")

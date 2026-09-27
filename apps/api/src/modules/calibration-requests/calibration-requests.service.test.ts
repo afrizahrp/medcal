@@ -198,16 +198,19 @@ describe("calibrationRequestCreateSchema items", () => {
     }
   });
 
-  it("rejects an item with no deviceId (every requisition item must identify a Device)", () => {
+  it("accepts an item with no deviceId (Device identity not necessarily known yet)", () => {
     const parsed = calibrationRequestCreateSchema.safeParse({
       customerId: "cust-1",
       serviceMode: "ON_SITE",
       items: [{ deviceTypeId: "type-1", customerDeviceName: "Tensimeter Digital" }],
     });
-    expect(parsed.success).toBe(false);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.items[0]?.deviceId).toBeUndefined();
+    }
   });
 
-  it("rejects an empty-string deviceId", () => {
+  it("accepts an empty-string deviceId", () => {
     const parsed = calibrationRequestCreateSchema.safeParse({
       customerId: "cust-1",
       serviceMode: "ON_SITE",
@@ -220,7 +223,7 @@ describe("calibrationRequestCreateSchema items", () => {
         },
       ],
     });
-    expect(parsed.success).toBe(false);
+    expect(parsed.success).toBe(true);
   });
 
   it("accepts an optional positive-integer qty and rejects non-positive / non-integer", () => {
@@ -345,28 +348,34 @@ describe("CalibrationRequestsService.create", () => {
     }
   });
 
-  it("rejects a whitespace-only deviceId with DEVICE_ID_REQUIRED", async () => {
+  it("persists a null deviceId for a whitespace-only Serial No (identity not yet known)", async () => {
     const customer = await createTestCustomer(realCompanyId);
     const deviceTypeId = await getTestDeviceTypeId();
 
-    try {
-      await service.create(realCompanyId, testUserId, {
-        customerId: customer.id,
-        serviceMode: "ON_SITE",
-        items: [{ deviceTypeId, deviceId: "   ", customerDeviceName: "Tensimeter Digital" }],
-      });
-      expect.fail("expected DEVICE_ID_REQUIRED");
-    } catch (err) {
-      expect(err).toBeInstanceOf(BadRequestException);
-      expect((err as BadRequestException).getResponse()).toEqual(
-        expect.objectContaining({ code: "DEVICE_ID_REQUIRED" }),
-      );
-    }
-
-    const countForCustomer = await prisma.calibrationRequest.count({
-      where: { companyId: realCompanyId, customerId: customer.id },
+    const result = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, deviceId: "   ", customerDeviceName: "Tensimeter Digital" }],
     });
-    expect(countForCustomer).toBe(0);
+    createdCalibrationRequestIds.push(result.id);
+
+    expect(result.items[0]?.deviceId).toBeNull();
+  });
+
+  it("persists a null deviceId plus customerDeviceName and model when no Serial No is given", async () => {
+    const customer = await createTestCustomer(realCompanyId);
+    const deviceTypeId = await getTestDeviceTypeId();
+
+    const result = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, customerDeviceName: "Tensimeter Digital", model: "AB-123" }],
+    });
+    createdCalibrationRequestIds.push(result.id);
+
+    expect(result.items[0]?.deviceId).toBeNull();
+    expect(result.items[0]?.customerDeviceName).toBe("Tensimeter Digital");
+    expect(result.items[0]?.model).toBe("AB-123");
   });
 
   it("resolves each item's Serial No to its own Device independently", async () => {
@@ -406,44 +415,34 @@ describe("CalibrationRequestsService.create", () => {
     expect(result.items[0]?.deviceId).not.toBe("BSM-001");
   });
 
-  it("throws DEVICE_NOT_FOUND when the Serial No does not match any existing Device for this customer", async () => {
+  it("leaves deviceId null when the Serial No does not match any existing Device for this customer (preserves the item, not an error)", async () => {
     const customer = await createTestCustomer(realCompanyId);
     const deviceTypeId = await getTestDeviceTypeId();
 
-    try {
-      await service.create(realCompanyId, testUserId, {
-        customerId: customer.id,
-        serviceMode: "ON_SITE",
-        items: [{ deviceTypeId, deviceId: "non-existent-device" }],
-      });
-      expect.fail("expected DEVICE_NOT_FOUND");
-    } catch (err) {
-      expect(err).toBeInstanceOf(BadRequestException);
-      expect((err as BadRequestException).getResponse()).toEqual(
-        expect.objectContaining({ code: "DEVICE_NOT_FOUND" }),
-      );
-    }
+    const result = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, deviceId: "non-existent-device" }],
+    });
+    createdCalibrationRequestIds.push(result.id);
+
+    expect(result.items[0]?.deviceId).toBeNull();
   });
 
-  it("throws DEVICE_SERIAL_AMBIGUOUS when more than one Device shares the same Serial No for this customer", async () => {
+  it("leaves deviceId null when more than one Device shares the same Serial No for this customer (ambiguous, not an error)", async () => {
     const customer = await createTestCustomer(realCompanyId);
     const deviceTypeId = await getTestDeviceTypeId();
     await createTestDevice(realCompanyId, customer.id, deviceTypeId, "DUP-1");
     await createTestDevice(realCompanyId, customer.id, deviceTypeId, "DUP-1");
 
-    try {
-      await service.create(realCompanyId, testUserId, {
-        customerId: customer.id,
-        serviceMode: "ON_SITE",
-        items: [{ deviceTypeId, deviceId: "DUP-1" }],
-      });
-      expect.fail("expected DEVICE_SERIAL_AMBIGUOUS");
-    } catch (err) {
-      expect(err).toBeInstanceOf(BadRequestException);
-      expect((err as BadRequestException).getResponse()).toEqual(
-        expect.objectContaining({ code: "DEVICE_SERIAL_AMBIGUOUS" }),
-      );
-    }
+    const result = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, deviceId: "DUP-1" }],
+    });
+    createdCalibrationRequestIds.push(result.id);
+
+    expect(result.items[0]?.deviceId).toBeNull();
   });
 
   it("does not resolve a Serial No belonging to a different customer's Device (customer-scoped lookup)", async () => {
@@ -452,19 +451,14 @@ describe("CalibrationRequestsService.create", () => {
     const deviceTypeId = await getTestDeviceTypeId();
     await createTestDevice(realCompanyId, otherCustomer.id, deviceTypeId, "OTHER-CUST-1");
 
-    try {
-      await service.create(realCompanyId, testUserId, {
-        customerId: customer.id,
-        serviceMode: "ON_SITE",
-        items: [{ deviceTypeId, deviceId: "OTHER-CUST-1" }],
-      });
-      expect.fail("expected DEVICE_NOT_FOUND");
-    } catch (err) {
-      expect(err).toBeInstanceOf(BadRequestException);
-      expect((err as BadRequestException).getResponse()).toEqual(
-        expect.objectContaining({ code: "DEVICE_NOT_FOUND" }),
-      );
-    }
+    const result = await service.create(realCompanyId, testUserId, {
+      customerId: customer.id,
+      serviceMode: "ON_SITE",
+      items: [{ deviceTypeId, deviceId: "OTHER-CUST-1" }],
+    });
+    createdCalibrationRequestIds.push(result.id);
+
+    expect(result.items[0]?.deviceId).toBeNull();
   });
 });
 

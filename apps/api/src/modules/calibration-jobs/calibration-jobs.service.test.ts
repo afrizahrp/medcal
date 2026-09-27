@@ -2329,6 +2329,33 @@ describe("CalibrationJobsService — list", () => {
     expect(pending.data[0]!.id).toBe(jobs[0]!.id);
   });
 
+  it("filters by purchaseOrderItemId, combinable with workOrderId", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 3 });
+    const purchaseOrderItemId = jobs[0]!.purchaseOrderItemId!;
+
+    const byItem = await calibrationJobsService.findAll(
+      realCompanyId,
+      { purchaseOrderItemId },
+      staffUserId,
+    );
+    expect(byItem.total).toBe(3);
+    expect(byItem.data.every((j) => j.purchaseOrderItemId === purchaseOrderItemId)).toBe(true);
+
+    const combined = await calibrationJobsService.findAll(
+      realCompanyId,
+      { workOrderId: workOrder.id, purchaseOrderItemId },
+      staffUserId,
+    );
+    expect(combined.total).toBe(3);
+
+    const otherItem = await calibrationJobsService.findAll(
+      realCompanyId,
+      { purchaseOrderItemId: "nonexistent-item-id" },
+      staffUserId,
+    );
+    expect(otherItem.total).toBe(0);
+  });
+
   it("surfaces the most-recent Identity Correction on each row", async () => {
     const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
     const tech = await makeMember(realCompanyId, "TECHNICIAN");
@@ -2532,6 +2559,40 @@ describe("CalibrationJobsService — findAllGroupedByWorkOrder (SPK grouping)", 
     expect(firstPage.pageSize).toBe(1);
     expect(firstPage.total).toBe(all.total); // total = WorkOrder count, not job count
     expect(firstPage.totalPages).toBe(all.total);
+    expect(all.totalJobs).toBeGreaterThanOrEqual(5); // a's 3 + b's 2, plus any other fixture jobs
+  });
+
+  it("computes statusCounts per group, summing to jobCount", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 3 });
+    await completeKontrolAlatForStart(realCompanyId, jobs[0]!.id);
+    await calibrationJobsService.start(realCompanyId, jobs[0]!.id);
+
+    const res = await calibrationJobsService.findAllGroupedByWorkOrder(
+      realCompanyId,
+      { workOrderId: workOrder.id },
+      staffUserId,
+    );
+    const group = res.data[0]!;
+    expect(group.statusCounts.PENDING).toBe(2);
+    expect(group.statusCounts.IN_PROGRESS).toBe(1);
+    const sum = Object.values(group.statusCounts).reduce((total, n) => total + n, 0);
+    expect(sum).toBe(group.jobCount);
+  });
+
+  it("only fetches the current page's WorkOrders in full when other WorkOrders exist", async () => {
+    const a = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
+    await startedWorkOrderJobs(realCompanyId, { qty: 2 });
+
+    const page = await calibrationJobsService.findAllGroupedByWorkOrder(
+      realCompanyId,
+      { workOrderId: a.workOrder.id, pageSize: 1 },
+      staffUserId,
+    );
+    // workOrderId filter scopes phase 1 + phase 2 identically — the two-phase
+    // split must not change filtered results.
+    expect(page.data).toHaveLength(1);
+    expect(page.data[0]!.workOrder.id).toBe(a.workOrder.id);
+    expect(page.data[0]!.jobs).toHaveLength(2);
   });
 
   it("aggregates actionNeededCount from child jobs' action signals", async () => {
@@ -2615,6 +2676,124 @@ describe("CalibrationJobsService — findAllGroupedByWorkOrder (SPK grouping)", 
     );
     expect(res.total).toBe(0);
     expect(res.data).toEqual([]);
+  });
+});
+
+describe("CalibrationJobsService — getWorkOrderItemSummaries", () => {
+  it("throws 404 for a workOrderId outside the caller's company", async () => {
+    const otherCompanyId = `S${randomUUID().slice(0, 2).toUpperCase()}`;
+    // upsert, not create: this file's 3-char company-id space (256 values) is
+    // shared by many "Foreign ... Co" fixtures, so a random collision is a real
+    // (observed) risk — reusing an existing row is harmless for this test.
+    await prisma.company.upsert({
+      where: { id: otherCompanyId },
+      create: { id: otherCompanyId, name: "Foreign Summary Co", status: "ACTIVE" },
+      update: {},
+    });
+    createdCompanyIds.push(otherCompanyId);
+    const { workOrder } = await startedWorkOrderJobs(otherCompanyId);
+
+    await expect(
+      calibrationJobsService.getWorkOrderItemSummaries(realCompanyId, workOrder.id),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it("aggregates status counts and identity-correction state per PO line item", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 3 });
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    await calibrationJobsService.submitIdentityCorrection(realCompanyId, jobs[0]!.id, tech.id, {
+      reason: "wrong serial on the sheet",
+      newSerial: "SN-SUMMARY-1",
+      signatures: UNAVAILABLE_SIGNATURES,
+    });
+
+    const summary = await calibrationJobsService.getWorkOrderItemSummaries(
+      realCompanyId,
+      workOrder.id,
+    );
+    expect(summary.totalUnits).toBe(3);
+    expect(summary.items).toHaveLength(1);
+    const item = summary.items[0]!;
+    expect(item.purchaseOrderItemId).toBe(jobs[0]!.purchaseOrderItemId);
+    expect(item.unitCount).toBe(3);
+    expect(item.unitsWithIdentityCorrection).toBe(1);
+    expect(item.latestIdentityCorrection?.status).toBe("PENDING_REVIEW");
+    expect(
+      Object.values(item.statusCounts).reduce((sum, n) => sum + n, 0),
+    ).toBe(3);
+    expect(
+      Object.values(summary.statusCounts).reduce((sum, n) => sum + n, 0),
+    ).toBe(3);
+  });
+
+  it("does not truncate at 100 jobs — the exact defect this endpoint replaces", async () => {
+    const { workOrder, jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 101 });
+    expect(jobs).toHaveLength(101);
+
+    // Correction on the last unit — past the old pageSize=100 cutoff — must
+    // still surface in the rollup.
+    const tech = await makeMember(realCompanyId, "TECHNICIAN");
+    const lastJob = jobs[jobs.length - 1]!;
+    await calibrationJobsService.submitIdentityCorrection(realCompanyId, lastJob.id, tech.id, {
+      reason: "wrong serial on the sheet",
+      newSerial: "SN-SUMMARY-101",
+      signatures: UNAVAILABLE_SIGNATURES,
+    });
+
+    const summary = await calibrationJobsService.getWorkOrderItemSummaries(
+      realCompanyId,
+      workOrder.id,
+    );
+    expect(summary.totalUnits).toBe(101);
+    const item = summary.items[0]!;
+    expect(item.unitCount).toBe(101);
+    expect(item.unitsWithIdentityCorrection).toBe(1);
+  });
+});
+
+describe("CalibrationJobsService — getSiblings", () => {
+  it("resolves previous/next for a middle unit, ordered by unitOrdinal", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 3 });
+
+    const middle = await calibrationJobsService.getSiblings(realCompanyId, jobs[1]!.id);
+    expect(middle.previousId).toBe(jobs[0]!.id);
+    expect(middle.nextId).toBe(jobs[2]!.id);
+  });
+
+  it("returns null previousId for the first unit and null nextId for the last", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 3 });
+
+    const first = await calibrationJobsService.getSiblings(realCompanyId, jobs[0]!.id);
+    expect(first.previousId).toBeNull();
+    expect(first.nextId).toBe(jobs[1]!.id);
+
+    const last = await calibrationJobsService.getSiblings(realCompanyId, jobs[2]!.id);
+    expect(last.previousId).toBe(jobs[1]!.id);
+    expect(last.nextId).toBeNull();
+  });
+
+  it("returns both null for a single-unit line item", async () => {
+    const { jobs } = await startedWorkOrderJobs(realCompanyId, { qty: 1 });
+
+    const only = await calibrationJobsService.getSiblings(realCompanyId, jobs[0]!.id);
+    expect(only.previousId).toBeNull();
+    expect(only.nextId).toBeNull();
+  });
+
+  it("throws 404 for a job outside the caller's company", async () => {
+    const otherCompanyId = `S${randomUUID().slice(0, 2).toUpperCase()}`;
+    // upsert, not create — see the identical note in getWorkOrderItemSummaries above.
+    await prisma.company.upsert({
+      where: { id: otherCompanyId },
+      create: { id: otherCompanyId, name: "Foreign Siblings Co", status: "ACTIVE" },
+      update: {},
+    });
+    createdCompanyIds.push(otherCompanyId);
+    const { jobs } = await startedWorkOrderJobs(otherCompanyId);
+
+    await expect(
+      calibrationJobsService.getSiblings(realCompanyId, jobs[0]!.id),
+    ).rejects.toThrow(NotFoundException);
   });
 });
 

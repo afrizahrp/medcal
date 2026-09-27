@@ -44,6 +44,17 @@ export const CALIBRATION_JOB_STATUS_LABELS: Record<CalibrationJobStatus, string>
 
 export { isIdentityIncomplete };
 
+/**
+ * Compact "382 Accepted by QA · 20 In Progress · 7 Pending" summary for an
+ * aggregate-progress display — omits statuses with a zero count, in the
+ * canonical status order.
+ */
+export function formatStatusCounts(counts: Record<CalibrationJobStatus, number>): string {
+  return CALIBRATION_JOB_STATUS_VALUES.filter((status) => counts[status] > 0)
+    .map((status) => `${counts[status]} ${CALIBRATION_JOB_STATUS_LABELS[status]}`)
+    .join(" · ");
+}
+
 type IdentityGateJob = {
   status: string;
   akdAklApprovalStatus: string;

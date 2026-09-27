@@ -310,15 +310,15 @@ const calibrationRequestItemInputSchema = z
     /** Customer-provided equipment model, if available. Optional. */
     model: z.string().trim().max(120).optional(),
     /**
-     * The customer's Serial No — a LOOKUP KEY, not the stored value. The
-     * server resolves it against an existing Device (scoped to this
-     * request's customer) and persists the resolved Device.id on
-     * CalibrationRequestItem.deviceId, which is a REQUIRED FK. Required here
-     * too: every requisition item must identify a real Device. Throws
-     * DEVICE_NOT_FOUND / DEVICE_SERIAL_AMBIGUOUS if it doesn't resolve to
-     * exactly one Device.
+     * The customer's Serial No — a LOOKUP KEY, not the stored value. Optional:
+     * Device identity is not necessarily known yet at Requisition stage. When
+     * supplied, the server resolves it against an existing Device (scoped to
+     * this request's customer) and persists the resolved Device.id on
+     * CalibrationRequestItem.deviceId; when blank, or when it doesn't resolve
+     * to exactly one Device, deviceId stays NULL — a valid "not yet known"
+     * state, never an error.
      */
-    deviceId: z.string().trim().min(1).max(120),
+    deviceId: z.string().trim().max(120).optional(),
     /**
      * Aggregate quantity for this line — how many units of the device.
      * Positive integer; defaults to 1 server-side. Manual "+ Requisition" entry
@@ -419,7 +419,7 @@ const calibrationRequestReviseItemInputSchema = z.object({
   customerDeviceName: z.string().trim().max(200).optional(),
   model: z.string().trim().max(120).optional(),
   /** Serial No lookup key — see calibrationRequestItemInputSchema.deviceId. */
-  deviceId: z.string().trim().min(1).max(120),
+  deviceId: z.string().trim().max(120).optional(),
   qty: z.number().int().positive().optional(),
   akdAkl: z
     .string()
@@ -1282,6 +1282,8 @@ export const AKD_AKL_APPROVAL_STATUS_VALUES = [
 /** GET /calibration-jobs query params */
 export const calibrationJobListQuerySchema = baseListQuerySchema.extend({
   workOrderId: z.string().optional(),
+  /** Scope to one PO line item's fanned-out units — drill-down from Work Order Items. */
+  purchaseOrderItemId: z.string().optional(),
   akdAklApprovalStatus: z.enum(AKD_AKL_APPROVAL_STATUS_VALUES).optional(),
   status: z.enum(CALIBRATION_JOB_STATUS_VALUES).optional(),
   /**
@@ -1297,6 +1299,15 @@ export const calibrationJobListQuerySchema = baseListQuerySchema.extend({
 });
 
 export type CalibrationJobListQuery = z.infer<typeof calibrationJobListQuerySchema>;
+
+/** GET /calibration-jobs/work-order-summary query params. */
+export const calibrationJobWorkOrderSummaryQuerySchema = z.object({
+  workOrderId: z.string().min(1),
+});
+
+export type CalibrationJobWorkOrderSummaryQuery = z.infer<
+  typeof calibrationJobWorkOrderSummaryQuerySchema
+>;
 
 /** Whitelisted `sortBy` values for GET /calibration-jobs — see resolveSortOrder. */
 export const CALIBRATION_JOB_SORTABLE_FIELDS = [
@@ -2597,7 +2608,7 @@ export const calibrationRequestImportConfirmRowSchema = z.object({
   customerDeviceName: z.string().trim().min(1).max(200),
   model: z.string().trim().max(120).optional(),
   /** Serial No lookup key — see calibrationRequestItemInputSchema.deviceId. */
-  deviceId: z.string().trim().min(1).max(120),
+  deviceId: z.string().trim().max(120).optional(),
   qty: z.number().int().positive(),
   /**
    * Customer-declared AKD/AKL/NIE. Optional, independent of qty.

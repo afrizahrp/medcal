@@ -1632,17 +1632,20 @@ model CalibrationRequestItem {
   /// Customer-provided equipment model designation, if available (free-text).
   /// Not a relation to any Model master.
   model              String?
-  /// REQUIRED FK to the Device master record (Device.id). The customer's
-  /// "Serial No" (manual entry or Excel import column) is a LOOKUP KEY only —
-  /// it is resolved server-side against an existing Device (scoped to this
-  /// request's customer) and the resolved Device.id is what is stored here.
-  /// Never the raw Serial No text, never a fabricated/auto-created Device.
-  /// This is the real system identity and is preserved verbatim through
-  /// QuotationItem.deviceId / PurchaseOrderItem.deviceId / (qty=1)
-  /// CalibrationJob.deviceId. It is distinct from the technician's later
-  /// on-site physical observation (CalibrationJob.technicianObserved*),
-  /// which remains a separate, independent snapshot.
-  deviceId           String
+  /// FK to the Device master record (Device.id). NULLABLE — Device identity
+  /// is not necessarily known yet at Requisition stage. The customer's
+  /// "Serial No" (manual entry or Excel import column) is a LOOKUP KEY only,
+  /// never stored verbatim: when supplied and it resolves to exactly one
+  /// existing Device (scoped to this request's customer), the resolved
+  /// Device.id is stored here; when blank, or when it doesn't resolve, this
+  /// stays NULL — identity not yet known is a valid, common business state,
+  /// not an error. Never a fabricated/auto-created Device. When non-null this
+  /// is preserved verbatim through QuotationItem.deviceId /
+  /// PurchaseOrderItem.deviceId / (qty=1) CalibrationJob.deviceId. It is
+  /// distinct from the technician's later on-site physical observation
+  /// (CalibrationJob.technicianObserved*), which remains a separate,
+  /// independent snapshot.
+  deviceId           String?
   /// Aggregate quantity for this line — how many physical units of this
   /// device the customer is requesting. Excel import keeps one row per
   /// spreadsheet line and stores its Qty here (it is NOT split into N rows).
@@ -1670,7 +1673,7 @@ model CalibrationRequestItem {
 
   request         CalibrationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   deviceType      DeviceType         @relation(fields: [deviceTypeId], references: [id])
-  device          Device             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  device          Device?            @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   quotationItems  QuotationItem[]
   calibrationJobs CalibrationJob[]
 

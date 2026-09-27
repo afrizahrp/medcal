@@ -13,16 +13,18 @@ import { AccessDenied } from "../../../components/access-denied";
 import {
   CalibrationJobEmptyState,
   CalibrationJobFilters,
+  CalibrationJobFlatTable,
   CalibrationJobGroupTable,
   PageHeader,
   PaginationBar,
   Surface,
 } from "./calibration-jobs-ui";
-import { useCalibrationJobGroups } from "./use-calibration-jobs-query";
+import { useCalibrationJobGroups, useCalibrationJobs } from "./use-calibration-jobs-query";
 
 const URL_KEYS = [
   "search",
   "workOrderId",
+  "purchaseOrderItemId",
   "akdAklApprovalStatus",
   "status",
   "page",
@@ -56,6 +58,7 @@ export default function CalibrationJobsPageClient() {
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
   const workOrderId = params.workOrderId || undefined;
+  const purchaseOrderItemId = params.purchaseOrderItemId || undefined;
   const approvalStatus = params.akdAklApprovalStatus ?? "";
   const jobStatus = params.status ?? "";
   const page = Number(params.page) || 1;
@@ -72,23 +75,37 @@ export default function CalibrationJobsPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
 
-  const query = useCalibrationJobGroups({
+  // Once the list is scoped to one Work Order or one PO line item, switch from
+  // the SPK-grouped view (all of a group's units rendered unpaginated) to the
+  // flat, job-level-paginated view — the same trade that already works well
+  // for browsing hundreds of units, reusing the flat endpoint's own
+  // `skip`/`take` pagination rather than a new mechanism.
+  const scoped = Boolean(workOrderId || purchaseOrderItemId);
+
+  const sharedQueryParams = {
     search: committedSearch,
     workOrderId,
+    purchaseOrderItemId,
     akdAklApprovalStatus: approvalStatus,
     status: jobStatus,
     sortBy: "",
-    sortDir: "desc",
+    sortDir: "desc" as const,
     page,
     pageSize,
-  });
+  };
 
-  const result = query.data;
-  const groups = useMemo(() => result?.data ?? [], [result]);
+  const groupedQuery = useCalibrationJobGroups(sharedQueryParams, !scoped);
+  const flatQuery = useCalibrationJobs(sharedQueryParams, scoped);
+
+  const groupedResult = groupedQuery.data;
+  const flatResult = flatQuery.data;
+  const groups = useMemo(() => groupedResult?.data ?? [], [groupedResult]);
+  const flatRows = useMemo(() => flatResult?.data ?? [], [flatResult]);
   const isSearching = committedSearch.trim().length > 0;
 
   // Expand/collapse is view-only state kept in React (not the URL) — see
   // `syncExpandedToUrl`. Seeded once from the URL so links / reloads restore it.
+  // Only meaningful in grouped mode.
   const initialExpandedParam = useSearchParams().get("expanded");
   const [manuallyExpanded, setManuallyExpanded] = useState<Set<string>>(
     () => new Set(initialExpandedParam?.split(",").filter(Boolean) ?? []),
@@ -110,18 +127,24 @@ export default function CalibrationJobsPageClient() {
     syncExpandedToUrl(next);
   }
 
+  const query = scoped ? flatQuery : groupedQuery;
   const loading = query.isLoading;
   // Dim only during a filter/page transition (stale placeholder shown), not on
   // the background poll — otherwise the table pulses every refetch interval.
   const fetching = query.isFetching && query.isPlaceholderData;
   const forbidden = isForbidden(query.error);
   const error = query.isError && !forbidden ? "Gagal memuat daftar calibration job." : null;
-  const totalPages = result ? Math.max(1, result.totalPages) : 1;
-  const hasFilters = Boolean(committedSearch || workOrderId || approvalStatus || jobStatus);
+  const totalPages = scoped
+    ? Math.max(1, flatResult?.totalPages ?? 1)
+    : Math.max(1, groupedResult?.totalPages ?? 1);
+  const hasFilters = Boolean(
+    committedSearch || workOrderId || purchaseOrderItemId || approvalStatus || jobStatus,
+  );
+  const isEmpty = scoped ? flatRows.length === 0 : groups.length === 0;
 
   const { didClamp, dismiss } = usePaginationSync({
     page,
-    totalPages: result?.totalPages,
+    totalPages: scoped ? flatResult?.totalPages : groupedResult?.totalPages,
     onClamp: (lastPage) => setParams({ page: lastPage <= 1 ? undefined : String(lastPage) }),
   });
 
@@ -146,21 +169,29 @@ export default function CalibrationJobsPageClient() {
           onJobStatusChange={(next) => setParams({ status: next || undefined, page: undefined })}
           workOrderId={workOrderId}
           onClearWorkOrder={() => setParams({ workOrderId: undefined, page: undefined })}
+          purchaseOrderItemId={purchaseOrderItemId}
+          onClearPurchaseOrderItem={() =>
+            setParams({ purchaseOrderItemId: undefined, page: undefined })
+          }
         />
 
-        {result ? (
-          <p className="mt-3 text-xs text-slate-500">
-            {result.total} work order · {result.totalJobs} calibration job
-          </p>
-        ) : null}
+        {scoped
+          ? flatResult && (
+              <p className="mt-3 text-xs text-slate-500">{flatResult.total} calibration job</p>
+            )
+          : groupedResult && (
+              <p className="mt-3 text-xs text-slate-500">
+                {groupedResult.total} work order · {groupedResult.totalJobs} calibration job
+              </p>
+            )}
 
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
         {loading ? (
           <p className="mt-6 text-sm text-slate-400">Memuat…</p>
-        ) : didClamp && groups.length === 0 ? (
+        ) : didClamp && isEmpty ? (
           <p className="mt-6 text-sm text-slate-400">Menyesuaikan halaman…</p>
-        ) : groups.length === 0 ? (
+        ) : isEmpty ? (
           <CalibrationJobEmptyState
             onClearFilters={
               hasFilters
@@ -169,6 +200,7 @@ export default function CalibrationJobsPageClient() {
                     setParams({
                       search: undefined,
                       workOrderId: undefined,
+                      purchaseOrderItemId: undefined,
                       akdAklApprovalStatus: undefined,
                       status: undefined,
                       page: undefined,
@@ -180,19 +212,23 @@ export default function CalibrationJobsPageClient() {
         ) : (
           <>
             <div className="mt-4">
-              <CalibrationJobGroupTable
-                groups={groups}
-                expandedIds={expandedIds}
-                onToggle={toggle}
-              />
+              {scoped ? (
+                <CalibrationJobFlatTable rows={flatRows} />
+              ) : (
+                <CalibrationJobGroupTable
+                  groups={groups}
+                  expandedIds={expandedIds}
+                  onToggle={toggle}
+                />
+              )}
             </div>
             <PaginationBar
               className="mt-4"
               page={page}
               totalPages={totalPages}
-              total={result?.total ?? 0}
+              total={scoped ? (flatResult?.total ?? 0) : (groupedResult?.total ?? 0)}
               pageSize={pageSize}
-              itemLabel="work order"
+              itemLabel={scoped ? "calibration job" : "work order"}
               onPageChange={(next) => setParams({ page: next <= 1 ? undefined : String(next) })}
               onPageSizeChange={(next) =>
                 setParams({ pageSize: next === 10 ? undefined : String(next), page: undefined })

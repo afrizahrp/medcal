@@ -7,6 +7,8 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   FileDown,
   FileText,
@@ -81,6 +83,7 @@ import {
 } from "../calibration-job-utils";
 import {
   useCalibrationJob,
+  useCalibrationJobSiblings,
   useDecideQualityReview,
 } from "../use-calibration-jobs-query";
 import {
@@ -133,6 +136,7 @@ export default function CalibrationJobDetailPage() {
   const { capabilities } = useAuthz();
 
   const query = useCalibrationJob(params.id);
+  const siblings = useCalibrationJobSiblings(params.id);
   const corrections = useIdentityCorrections(params.id);
   const measurementParameters = useMeasurementParameters(params.id);
   const measurementResults = useMeasurementResults(params.id);
@@ -445,6 +449,44 @@ export default function CalibrationJobDetailPage() {
             <JobStatusBadge status={job.status} />
             <div className="flex items-center gap-2">
               {job.status === "ACCEPTED_BY_QA" ? <LkDownloadButton jobId={job.id} /> : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!siblings.data?.previousId}
+                asChild={Boolean(siblings.data?.previousId)}
+              >
+                {siblings.data?.previousId ? (
+                  <Link href={`/calibration-jobs/${siblings.data.previousId}`}>
+                    <ChevronLeft className="h-4 w-4" />
+                    Unit Sebelumnya
+                  </Link>
+                ) : (
+                  <>
+                    <ChevronLeft className="h-4 w-4" />
+                    Unit Sebelumnya
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!siblings.data?.nextId}
+                asChild={Boolean(siblings.data?.nextId)}
+              >
+                {siblings.data?.nextId ? (
+                  <Link href={`/calibration-jobs/${siblings.data.nextId}`}>
+                    Unit Berikutnya
+                    <ChevronRight className="h-4 w-4" />
+                  </Link>
+                ) : (
+                  <>
+                    Unit Berikutnya
+                    <ChevronRight className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
               <Button type="button" variant="outline" size="sm" asChild>
                 <Link href="/calibration-jobs">
                   <ArrowLeft className="h-4 w-4" />
