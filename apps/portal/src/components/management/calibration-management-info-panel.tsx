@@ -28,6 +28,10 @@ const INTRO =
 
 const ITEMS: { term: string; desc: string }[] = [
   {
+    term: "Management Dashboard",
+    desc: "Ringkasan operasional saat ini dan angka periode: Work Order, Customer PO, Volume, dan unit terkalibrasi.",
+  },
+  {
     term: "Tariff",
     desc: "Harga per Device Name yang menjadi acuan saat membuat Quotation.",
   },

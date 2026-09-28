@@ -1312,6 +1312,16 @@ export const calibrationJobListQuerySchema = baseListQuerySchema.extend({
     .string()
     .transform((v) => v === "true")
     .optional(),
+  /**
+   * "Perlu Tindakan" filter — restricts results to jobs with ≥1 active
+   * `CalibrationJobActionSignals` entry (identity correction pending,
+   * reference-equipment needs approval, identity incomplete), reusing the
+   * existing signal computation. Omitted / "false" → current behavior.
+   */
+  needsAction: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
 });
 
 export type CalibrationJobListQuery = z.infer<typeof calibrationJobListQuerySchema>;
@@ -2662,3 +2672,74 @@ export type CalibrationRequestImportConfirmInput = z.infer<
 export type CalibrationRequestImportConfirmBody = z.input<
   typeof calibrationRequestImportConfirmSchema
 >;
+
+// =============================================================================
+// Management Dashboard V1
+// =============================================================================
+
+export const dashboardPeriodValues = [
+  "today",
+  "week",
+  "month",
+  "quarter",
+  "year",
+  "custom",
+] as const;
+
+export type DashboardPeriodPreset = (typeof dashboardPeriodValues)[number];
+
+const optionalDashboardQueryString = z.preprocess(
+  (value) => (value === "" || value === null || value === undefined ? undefined : value),
+  z.string().trim().min(1).optional(),
+);
+
+/** GET /dashboard/management-summary query params. */
+export const dashboardQuerySchema = z.object({
+  period: z.enum(dashboardPeriodValues).optional(),
+  from: optionalDashboardQueryString,
+  to: optionalDashboardQueryString,
+  customerId: optionalDashboardQueryString,
+});
+
+export type DashboardQuery = z.infer<typeof dashboardQuerySchema>;
+
+export const dashboardTrendPointSchema = z.object({
+  bucketStart: z.string(),
+  label: z.string(),
+  count: z.number().int().nonnegative(),
+});
+
+export const dashboardMetricSeriesSchema = z.object({
+  total: z.number().int().nonnegative(),
+  trend: z.array(dashboardTrendPointSchema),
+});
+
+/**
+ * Financial numbers stay `number` (not a literal 0) so a later billing
+ * implementation can fill the same contract. V1 always returns 0.
+ */
+export const dashboardSummaryResponseSchema = z.object({
+  currentState: z.object({
+    activeWorkOrders: z.number().int().nonnegative(),
+    jobsAwaitingAction: z.number().int().nonnegative(),
+    quotationsPendingApproval: z.number().int().nonnegative(),
+  }),
+  period: z.object({
+    range: z.object({
+      preset: z.enum(dashboardPeriodValues),
+      from: z.string(),
+      to: z.string(),
+      timezone: z.literal("Asia/Jakarta"),
+    }),
+    customerPO: dashboardMetricSeriesSchema,
+    volume: dashboardMetricSeriesSchema,
+    calibrated: dashboardMetricSeriesSchema,
+  }),
+  financial: z.object({
+    revenue: z.number(),
+    outstandingInvoiceValue: z.number(),
+    unavailableReason: z.string(),
+  }),
+});
+
+export type DashboardSummaryResponse = z.infer<typeof dashboardSummaryResponseSchema>;

@@ -1,8 +1,18 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth, useAuthz } from "@medcal/auth/client";
+import type { MembershipRole } from "@medcal/shared";
 import { ChatIcon, EmailIcon, MessagesIcon } from "../../components/management/icons";
+
+/** Roles whose home after sign-in is the calibration management dashboard. */
+const DASHBOARD_HOME_ROLES: readonly MembershipRole[] = [
+  "SUPERVISOR",
+  "GENERAL_MANAGER",
+  "SUPERADMIN",
+];
 
 /**
  * Channel selector — Messages -> Lead Inbox, Chat -> Chat Inbox. Each
@@ -14,9 +24,18 @@ import { ChatIcon, EmailIcon, MessagesIcon } from "../../components/management/i
  * Messages / Web Chat) — Menu Registry still owns sidebar navigation.
  */
 export default function ManagementHome() {
+  const router = useRouter();
   const { user } = useAuth();
-  const { capabilities } = useAuthz();
+  const { capabilities, membership } = useAuthz();
+  const landOnDashboard =
+    membership != null && DASHBOARD_HOME_ROLES.includes(membership.role);
   const firstName = user?.name?.trim().split(/\s+/)[0];
+
+  useEffect(() => {
+    if (landOnDashboard) router.replace("/calibration-dashboard");
+  }, [landOnDashboard, router]);
+
+  if (landOnDashboard) return null;
 
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-6 md:px-8 md:py-8">

@@ -8,6 +8,7 @@ export type MeCapabilities = {
   emailSend: boolean;
   emailDelete: boolean;
   emailManage: boolean;
+  managementDashboardRead: boolean;
   customerRead: boolean;
   customerCreate: boolean;
   customerUpdate: boolean;

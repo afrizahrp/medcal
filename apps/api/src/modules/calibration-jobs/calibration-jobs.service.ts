@@ -11,6 +11,7 @@ import { hasPermission } from "@medcal/auth";
 import { DocumentNumberService, Prisma, prisma } from "@medcal/db";
 import type { AkdAklApprovalStatus, CalibrationJobStatus, MembershipRole } from "@medcal/db";
 import {
+  CALIBRATION_JOB_BENCH_LOCKED_STATUSES,
   CALIBRATION_JOB_SORTABLE_FIELDS,
   CALIBRATION_JOB_STATUS_VALUES,
   buildCalibrationJobActionSignals,
@@ -790,7 +791,10 @@ export class CalibrationJobsService {
   ): Promise<CalibrationJobListResult> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
-    const where = this.buildListWhere(companyId, query, userId);
+    const where = await this.applyNeedsActionFilter(
+      this.buildListWhere(companyId, query, userId),
+      query,
+    );
 
     const { field: sortField, dir: sortDir } = resolveSortOrder(
       CALIBRATION_JOB_SORTABLE_FIELDS,
@@ -837,7 +841,10 @@ export class CalibrationJobsService {
   ): Promise<CalibrationJobGroupedResult> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
-    const where = this.buildListWhere(companyId, query, userId);
+    const where = await this.applyNeedsActionFilter(
+      this.buildListWhere(companyId, query, userId),
+      query,
+    );
 
     // Phase 1a: which WorkOrders match at all (single column, no include).
     const matchingWorkOrderIdRows = await prisma.calibrationJob.findMany({
@@ -897,6 +904,70 @@ export class CalibrationJobsService {
     });
 
     return { data, page, pageSize, total, totalPages, totalJobs };
+  }
+
+  /**
+   * "Perlu Tindakan" filter: when `query.needsAction` is set, narrows `where`
+   * to just the jobs that currently carry ≥1 active `CalibrationJobActionSignals`
+   * entry — reusing the exact same signal computation as the list/detail rows
+   * (`buildCalibrationJobActionSignals` / `jobNeedsAction`), just applied across
+   * every matching job up front instead of only the page/group already fetched.
+   * No new business-state model: this is the existing "perlu tindakan" concept,
+   * exposed as a queryable filter instead of only a display badge.
+   */
+  private async applyNeedsActionFilter(
+    where: Prisma.CalibrationJobWhereInput,
+    query: CalibrationJobListQuery,
+  ): Promise<Prisma.CalibrationJobWhereInput> {
+    if (!query.needsAction) return where;
+    const ids = await this.needsActionJobIds(where);
+    return { ...where, id: { in: ids } };
+  }
+
+  /**
+   * All action signals are suppressed once a job passes SUBMITTED/ACCEPTED_BY_QA
+   * (see `isCalibrationJobBenchLocked`), so only unlocked-status jobs are ever
+   * candidates — narrowing the candidate set before the reference-equipment
+   * lookup, which is the only signal that isn't a direct field/relation filter.
+   */
+  private async needsActionJobIds(where: Prisma.CalibrationJobWhereInput): Promise<string[]> {
+    const candidates = await prisma.calibrationJob.findMany({
+      where: {
+        ...where,
+        status: { notIn: [...CALIBRATION_JOB_BENCH_LOCKED_STATUSES] },
+      },
+      select: {
+        id: true,
+        status: true,
+        startedAt: true,
+        technicianObservedSerial: true,
+        identityCorrections: {
+          take: 1,
+          orderBy: { createdAt: "desc" },
+          select: { status: true },
+        },
+      },
+    });
+    if (candidates.length === 0) return [];
+
+    const reviewFlags = await this.referenceEquipmentReviewFlags(
+      candidates.map((candidate) => candidate.id),
+    );
+
+    return candidates
+      .filter((candidate) =>
+        jobNeedsAction(
+          buildCalibrationJobActionSignals({
+            status: candidate.status,
+            startedAt: candidate.startedAt,
+            technicianObservedSerial: candidate.technicianObservedSerial,
+            hasPendingIdentityCorrection:
+              candidate.identityCorrections[0]?.status === "PENDING_REVIEW",
+            needsReferenceEquipmentApproval: reviewFlags.get(candidate.id) ?? false,
+          }),
+        ),
+      )
+      .map((candidate) => candidate.id);
   }
 
   /**

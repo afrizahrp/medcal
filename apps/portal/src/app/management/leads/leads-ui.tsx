@@ -976,6 +976,7 @@ export function PaginationBar({
   onPageSizeChange,
   className,
   itemLabel = "pesan",
+  pageSizeLabel = "Baris per halaman",
 }: {
   page: number;
   totalPages: number;
@@ -986,6 +987,14 @@ export function PaginationBar({
   className?: string;
   /** Noun for the total count, e.g. "pesan", "satuan", "customer". */
   itemLabel?: string;
+  /**
+   * Label for the page-size control. Default assumes `pageSize` caps the rows
+   * actually shown — override it when a page paginates a coarser unit than the
+   * rows visible on screen (e.g. Calibration Jobs' grouped view paginates
+   * Work Orders while an expanded Work Order can still render hundreds of its
+   * own child job rows unpaginated).
+   */
+  pageSizeLabel?: string;
 }) {
   return (
     <div
@@ -995,12 +1004,12 @@ export function PaginationBar({
       )}
     >
       <div className="flex items-center gap-2 text-sm text-slate-500">
-        <span className="shrink-0 text-slate-400">Baris per halaman</span>
+        <span className="shrink-0 text-slate-400">{pageSizeLabel}</span>
         <select
           value={pageSize}
           onChange={(e) => onPageSizeChange(Number(e.target.value))}
           className={cn(selectClassName, "h-8 w-[76px]")}
-          aria-label="Baris per halaman"
+          aria-label={pageSizeLabel}
         >
           {PAGE_SIZE_OPTIONS.map((size) => (
             <option key={size} value={size}>

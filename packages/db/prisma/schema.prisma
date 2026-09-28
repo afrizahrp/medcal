@@ -1850,6 +1850,8 @@ model PurchaseOrder {
   @@unique([companyId, number])
   @@unique([companyId, customerId, customerPoNumber])
   @@index([companyId, status])
+  @@index([customerId])
+  @@index([companyId, status, confirmedAt])
   @@index([companyId, taxCode])
   @@index([quotationId])
 }
@@ -2500,6 +2502,7 @@ model CalibrationJob {
   @@unique([workOrderId, deviceId])
   @@unique([workOrderId, purchaseOrderItemId, unitOrdinal])
   @@index([companyId, status])
+  @@index([companyId, createdAt])
   @@index([purchaseOrderItemId])
   @@index([calibrationRequestItemId])
   @@index([companyId, akdAklApprovalStatus])

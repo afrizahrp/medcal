@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { ArrowUp } from "lucide-react";
 import { isForbidden } from "@medcal/shared";
 import { useAuthz } from "@medcal/auth/client";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -25,8 +26,8 @@ const URL_KEYS = [
   "search",
   "workOrderId",
   "purchaseOrderItemId",
-  "akdAklApprovalStatus",
   "status",
+  "needsAction",
   "page",
   "pageSize",
 ] as const;
@@ -53,20 +54,59 @@ function syncExpandedToUrl(ids: Set<string>): void {
   );
 }
 
+/**
+ * Floating "back to top" control — an expanded Work Order's child list can
+ * still run to hundreds of rows (search/filter is the intended way to *find*
+ * a specific job; this just shortens the return trip once you're deep in an
+ * unfiltered browse). Page-local: only this list currently has long enough
+ * unfiltered child tables to need it.
+ */
+function ScrollToTopButton() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    function onScroll() {
+      const shouldShow = window.scrollY > 400;
+      setVisible((prev) => (prev === shouldShow ? prev : shouldShow));
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      // The global symbol-picker FAB (apps/portal/src/app/providers.tsx →
+      // PortalSymbolPicker → GlobalSymbolPicker) already occupies the default
+      // bottom-6/right-6 (sm:bottom-8/right-8) slot on every page, z-40. Reuse
+      // the same "next slot up" convention PortalSymbolPicker itself already
+      // uses to avoid EmailComposeFab, rather than an arbitrary offset.
+      className="fixed bottom-24 right-6 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-lg transition hover:bg-slate-50 sm:bottom-28 sm:right-8"
+      aria-label="Kembali ke atas"
+      title="Kembali ke atas"
+    >
+      <ArrowUp className="h-5 w-5" />
+    </button>
+  );
+}
+
 export default function CalibrationJobsPageClient() {
   const { capabilities } = useAuthz();
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
   const workOrderId = params.workOrderId || undefined;
   const purchaseOrderItemId = params.purchaseOrderItemId || undefined;
-  const approvalStatus = params.akdAklApprovalStatus ?? "";
   const jobStatus = params.status ?? "";
+  const needsAction = params.needsAction === "true";
   const page = Number(params.page) || 1;
   const pageSize = Number(params.pageSize) || 10;
   const committedSearch = params.search ?? "";
 
   const [searchInput, setSearchInput] = useState(committedSearch);
-  const debouncedSearch = useDebouncedValue(searchInput, 500);
+  const debouncedSearch = useDebouncedValue(searchInput, 350);
 
   useEffect(() => {
     if (debouncedSearch !== committedSearch) {
@@ -86,8 +126,8 @@ export default function CalibrationJobsPageClient() {
     search: committedSearch,
     workOrderId,
     purchaseOrderItemId,
-    akdAklApprovalStatus: approvalStatus,
     status: jobStatus,
+    needsAction,
     sortBy: "",
     sortDir: "desc" as const,
     page,
@@ -102,6 +142,10 @@ export default function CalibrationJobsPageClient() {
   const groups = useMemo(() => groupedResult?.data ?? [], [groupedResult]);
   const flatRows = useMemo(() => flatResult?.data ?? [], [flatResult]);
   const isSearching = committedSearch.trim().length > 0;
+  // Narrowing filters — like a text search, these already shrink each SPK's
+  // child rows server-side, so the same "just show me the matches" auto-expand
+  // applies without a manual click per group.
+  const isFiltering = isSearching || needsAction;
 
   // Expand/collapse is view-only state kept in React (not the URL) — see
   // `syncExpandedToUrl`. Seeded once from the URL so links / reloads restore it.
@@ -111,13 +155,13 @@ export default function CalibrationJobsPageClient() {
     () => new Set(initialExpandedParam?.split(",").filter(Boolean) ?? []),
   );
 
-  // When searching, auto-expand every SPK on the (already filtered) page so the
-  // matching child job is visible without a manual click — mirrors Calibration
-  // Parameter's search behavior over its Device-Name groups.
+  // When searching/filtering, auto-expand every SPK on the (already filtered)
+  // page so the matching child job is visible without a manual click — mirrors
+  // Calibration Parameter's search behavior over its Device-Name groups.
   const expandedIds = useMemo(() => {
-    if (isSearching) return new Set(groups.map((g) => g.workOrder.id));
+    if (isFiltering) return new Set(groups.map((g) => g.workOrder.id));
     return manuallyExpanded;
-  }, [isSearching, groups, manuallyExpanded]);
+  }, [isFiltering, groups, manuallyExpanded]);
 
   function toggle(workOrderId: string) {
     const next = new Set(manuallyExpanded);
@@ -138,7 +182,7 @@ export default function CalibrationJobsPageClient() {
     ? Math.max(1, flatResult?.totalPages ?? 1)
     : Math.max(1, groupedResult?.totalPages ?? 1);
   const hasFilters = Boolean(
-    committedSearch || workOrderId || purchaseOrderItemId || approvalStatus || jobStatus,
+    committedSearch || workOrderId || purchaseOrderItemId || jobStatus || needsAction,
   );
   const isEmpty = scoped ? flatRows.length === 0 : groups.length === 0;
 
@@ -167,6 +211,10 @@ export default function CalibrationJobsPageClient() {
           onSearchChange={setSearchInput}
           jobStatus={jobStatus}
           onJobStatusChange={(next) => setParams({ status: next || undefined, page: undefined })}
+          needsAction={needsAction}
+          onNeedsActionChange={(next) =>
+            setParams({ needsAction: next ? "true" : undefined, page: undefined })
+          }
           workOrderId={workOrderId}
           onClearWorkOrder={() => setParams({ workOrderId: undefined, page: undefined })}
           purchaseOrderItemId={purchaseOrderItemId}
@@ -201,8 +249,8 @@ export default function CalibrationJobsPageClient() {
                       search: undefined,
                       workOrderId: undefined,
                       purchaseOrderItemId: undefined,
-                      akdAklApprovalStatus: undefined,
                       status: undefined,
+                      needsAction: undefined,
                       page: undefined,
                     });
                   }
@@ -229,6 +277,12 @@ export default function CalibrationJobsPageClient() {
               total={scoped ? (flatResult?.total ?? 0) : (groupedResult?.total ?? 0)}
               pageSize={pageSize}
               itemLabel={scoped ? "calibration job" : "work order"}
+              // The grouped view paginates Work Orders, not the child job rows
+              // an expanded Work Order can still render (up to hundreds) — the
+              // default "Baris per halaman" wording would misleadingly read as
+              // "at most N job rows". Only override it here; the scoped/flat
+              // view's pageSize genuinely does cap visible job rows.
+              pageSizeLabel={scoped ? undefined : "Work order per halaman"}
               onPageChange={(next) => setParams({ page: next <= 1 ? undefined : String(next) })}
               onPageSizeChange={(next) =>
                 setParams({ pageSize: next === 10 ? undefined : String(next), page: undefined })
@@ -237,6 +291,7 @@ export default function CalibrationJobsPageClient() {
           </>
         )}
       </Surface>
+      <ScrollToTopButton />
     </div>
   );
 }

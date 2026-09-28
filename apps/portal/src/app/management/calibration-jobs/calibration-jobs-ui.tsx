@@ -323,6 +323,8 @@ export function CalibrationJobFilters({
   onSearchChange,
   jobStatus,
   onJobStatusChange,
+  needsAction,
+  onNeedsActionChange,
   workOrderId,
   onClearWorkOrder,
   purchaseOrderItemId,
@@ -332,6 +334,8 @@ export function CalibrationJobFilters({
   onSearchChange: (value: string) => void;
   jobStatus: string;
   onJobStatusChange: (value: string) => void;
+  needsAction: boolean;
+  onNeedsActionChange: (value: boolean) => void;
   workOrderId?: string;
   onClearWorkOrder: () => void;
   purchaseOrderItemId?: string;
@@ -363,6 +367,15 @@ export function CalibrationJobFilters({
             </option>
           ))}
         </select>
+        <label className="flex select-none items-center gap-2 whitespace-nowrap text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={needsAction}
+            onChange={(e) => onNeedsActionChange(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+          Hanya perlu tindakan
+        </label>
       </div>
       {workOrderId ? (
         <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -425,7 +438,6 @@ const JOB_CHILD_HEADER = [
   "Unit",
   "Declared Device",
   "Serial (observed)",
-  "Declared AKD/AKL",
   "Identity Correction",
   "Alat Referensi",
   "Job Status",
@@ -462,7 +474,6 @@ function JobChildRow({ row }: { row: CalibrationJobRow }) {
       <td className="px-4 py-2.5 font-mono text-xs text-slate-600">
         {row.technicianObservedSerial ?? row.device?.serialNumber ?? "—"}
       </td>
-      <td className="px-4 py-2.5 text-slate-600">{declaredAkdAkl(row)}</td>
       <td className="px-4 py-2.5">
         {row.actionSignals.identityCorrectionPending ? (
           <ChildActionHint label="Menunggu review" />
@@ -578,7 +589,7 @@ function SpkGroupBody({
         className="cursor-pointer bg-white hover:bg-slate-50"
         onClick={() => onToggle(group.workOrder.id)}
       >
-        <td className="py-3 pl-6 pr-4" colSpan={9}>
+        <td className="py-3 pl-6 pr-4" colSpan={JOB_CHILD_HEADER.length}>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {expanded ? (
               <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
@@ -643,7 +654,7 @@ export function CalibrationJobGroupTable({
       <table className="w-full min-w-[1080px] border-collapse">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-100 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <th className="px-4 py-2.5" colSpan={9}>
+            <th className="px-4 py-2.5" colSpan={JOB_CHILD_HEADER.length}>
               Pelanggan / Work Order (SPK)
             </th>
           </tr>
@@ -677,7 +688,7 @@ function CustomerSection({
     <>
       <tbody>
         <tr className="border-b border-slate-200 bg-slate-200/60">
-          <td className="px-4 py-2" colSpan={9}>
+          <td className="px-4 py-2" colSpan={JOB_CHILD_HEADER.length}>
             <span className="text-sm font-semibold text-slate-800">{customer.name}</span>
             <span className="ml-2 text-xs font-normal text-slate-400">{spkGroups.length} SPK</span>
           </td>

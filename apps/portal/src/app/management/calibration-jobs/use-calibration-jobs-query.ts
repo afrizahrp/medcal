@@ -22,8 +22,9 @@ export interface CalibrationJobsQueryParams {
   search: string;
   workOrderId?: string;
   purchaseOrderItemId?: string;
-  akdAklApprovalStatus: string;
   status: string;
+  /** "Perlu Tindakan" filter — see CalibrationJobsService.needsActionJobIds. */
+  needsAction: boolean;
   sortBy: string;
   sortDir: "asc" | "desc";
   page: number;
@@ -35,8 +36,8 @@ function buildSearchParams(params: CalibrationJobsQueryParams): URLSearchParams 
   if (params.search.trim()) qs.set("search", params.search.trim());
   if (params.workOrderId) qs.set("workOrderId", params.workOrderId);
   if (params.purchaseOrderItemId) qs.set("purchaseOrderItemId", params.purchaseOrderItemId);
-  if (params.akdAklApprovalStatus) qs.set("akdAklApprovalStatus", params.akdAklApprovalStatus);
   if (params.status) qs.set("status", params.status);
+  if (params.needsAction) qs.set("needsAction", "true");
   qs.set("sortBy", params.sortBy);
   qs.set("sortDir", params.sortDir);
   qs.set("page", String(params.page));
@@ -63,8 +64,8 @@ export function useCalibrationJobs(params: CalibrationJobsQueryParams, enabled =
       params.search,
       params.workOrderId,
       params.purchaseOrderItemId,
-      params.akdAklApprovalStatus,
       params.status,
+      params.needsAction,
       params.sortBy,
       params.sortDir,
       params.page,
@@ -96,8 +97,8 @@ export function useCalibrationJobGroups(params: CalibrationJobsQueryParams, enab
       params.search,
       params.workOrderId,
       params.purchaseOrderItemId,
-      params.akdAklApprovalStatus,
       params.status,
+      params.needsAction,
       params.page,
       params.pageSize,
     ],

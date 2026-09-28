@@ -33,6 +33,7 @@ import { EquipmentCalibrationRecordsModule } from "./modules/equipment-calibrati
 import { FilesModule } from "./modules/files/files.module";
 import { TaxesModule } from "./modules/taxes/taxes.module";
 import { PriceListItemsModule } from "./modules/price-list-items/price-list-items.module";
+import { DashboardModule } from "./modules/dashboard/dashboard.module";
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { PriceListItemsModule } from "./modules/price-list-items/price-list-item
     EquipmentCalibrationRecordsModule,
     TaxesModule,
     PriceListItemsModule,
+    DashboardModule,
     WhitelistModule,
     MeModule,
     ChatModule,

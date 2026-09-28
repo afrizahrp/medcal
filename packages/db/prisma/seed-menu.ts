@@ -275,6 +275,17 @@ const ROWS: MenuSeedRow[] = [
   },
   {
     application: "MANAGEMENT",
+    code: "calibration-management.dashboard",
+    parentCode: "calibration-management",
+    label: "Management Dashboard",
+    href: "/calibration-dashboard",
+    icon: "dashboard",
+    order: -1,
+    viewResource: "managementDashboard",
+    viewAction: "read",
+  },
+  {
+    application: "MANAGEMENT",
     code: "calibration-management.customers",
     parentCode: "calibration-management",
     label: "Customer",
