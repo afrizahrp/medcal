@@ -45,7 +45,7 @@ function SignInForm() {
 
   return (
     <AuthCard
-      title="Customer Portal"
+      title="Customer"
       subtitle="PT. Presisi Kalibrasi Medika"
       footerLabel="Don't have an account?"
       footerHref={registerHref}
