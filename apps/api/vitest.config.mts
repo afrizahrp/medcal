@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
     setupFiles: ["./vitest.setup.ts"],
     globalSetup: ["./vitest.globalSetup.ts"],
     // Interim: the API service tests share one test database with no per-test

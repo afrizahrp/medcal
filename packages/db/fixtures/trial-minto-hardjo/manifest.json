@@ -1,0 +1,3664 @@
+{
+  "createdAt": "2026-09-27T10:09:29.916Z",
+  "companyId": "PKM",
+  "customerId": "cmujnou86002lcz28unonblam",
+  "calibrationRequestId": "cmujnouyr002ncz28x8d4hpr2",
+  "quotationId": "cmujnov9x0049cz28eg0h7xfx",
+  "purchaseOrderId": "cmujnovfd005vcz28r37vkkde",
+  "workOrderId": "cmujnovkm007hcz2855uxnwxa",
+  "staffUserId": "trial-mh-staff-user",
+  "technicianUserIds": [
+    "trial-mh-tech-1",
+    "trial-mh-tech-2",
+    "trial-mh-tech-3",
+    "trial-mh-tech-4"
+  ],
+  "managerUserIds": [
+    "trial-mh-manager-1",
+    "trial-mh-manager-2"
+  ],
+  "taxCode": "T0",
+  "priceListItemIds": [],
+  "syntheticDeviceCategoryIds": [
+    "cmujmr9wf0000czao57hrxpd0",
+    "cmujmr9x30001czaohtt3pdo8",
+    "cmujmr9xb0002czao3fp30anr",
+    "cmujmr9xj0003czaoyz6rvhyd"
+  ],
+  "syntheticDeviceTypeIds": [
+    "cmujmr9z70005czaog9ljfvdm",
+    "cmujmra0z000bczaogv5vbvnk",
+    "cmujmra1m000hczaomjrhlkyr",
+    "cmujmra2c000nczao1ep1rx50",
+    "cmujmra2z000tczaox27khw3n",
+    "cmujmra3n000zczaozdlsann1",
+    "cmujmra460015czaowf0gbhj3",
+    "cmujmra4p001bczaoen7edyey",
+    "cmujmra57001hczao1clrll59",
+    "cmujmra5r001nczao6pqf6rzk",
+    "cmujmra6b001tczaotq0vq2yo",
+    "cmujmra6u001zczaoslaba48f",
+    "cmujmra7e0025czaotwn357qd",
+    "cmujmra7z002bczaom53o24qf",
+    "cmujmra8j002hczaou0500gig",
+    "cmujmra91002nczaotbf53nbu",
+    "cmujmra9k002tczao3b5w2scq",
+    "cmujmraa3002zczaoi8rxv23r",
+    "cmujmraal0035czaotllxw5i8",
+    "cmujmrab6003bczaou0lpci36",
+    "cmujmrabs003hczaoifj9zevy",
+    "cmujmrac7003nczaohblmhik4",
+    "cmujmracr003tczaokv72hbht",
+    "cmujmrada003zczaooqod4frz",
+    "cmujmradt0045czaomht8bhyb",
+    "cmujmraeb004bczaotqbqv3xu",
+    "cmujmraez004hczaofu4yjr19",
+    "cmujmrafk004nczaonarbb7b1",
+    "cmujmrag3004tczao0xhv0r69",
+    "cmujmragl004zczao11wmgzqu",
+    "cmujmrah50055czaoijcebpnd",
+    "cmujmraho005bczao2mmkjupl",
+    "cmujmraib005hczaob706qr2h",
+    "cmujmraix005nczao5izm3i8e",
+    "cmujmrajg005tczaovxgwhzvb",
+    "cmujmrajz005zczaojv0ku5op",
+    "cmujmrakk0065czaoyoyppyes"
+  ],
+  "syntheticParameterIds": [
+    "cmujmra070007czaouoe0rthw",
+    "cmujmra0s0009czaob7njb3a8",
+    "cmujmra15000dczaoo1khwz4h",
+    "cmujmra1f000fczao7ru4g9dn",
+    "cmujmra1u000jczaovlxebq31",
+    "cmujmra24000lczaoudnjtjzo",
+    "cmujmra2j000pczaojd9il3t5",
+    "cmujmra2s000rczaov8urj3ii",
+    "cmujmra38000vczaohnpe2d7x",
+    "cmujmra3h000xczaozgjipg69",
+    "cmujmra3t0011czaokkf7ktse",
+    "cmujmra400013czao6ucgzmun",
+    "cmujmra4c0017czaob0ot1l9w",
+    "cmujmra4j0019czaoupdn7yuw",
+    "cmujmra4v001dczaowsviicqa",
+    "cmujmra52001fczao1jurnit2",
+    "cmujmra5e001jczao2yq1nvux",
+    "cmujmra5l001lczaod0d5fkz4",
+    "cmujmra5z001pczao1q7l5wfx",
+    "cmujmra65001rczaoczgz9m17",
+    "cmujmra6g001vczao16ch76l6",
+    "cmujmra6n001xczaot69e6jjl",
+    "cmujmra720021czaoaet6ah6v",
+    "cmujmra790023czao46gg2976",
+    "cmujmra7l0027czaok8rf0ft2",
+    "cmujmra7t0029czaolz6wq9lq",
+    "cmujmra87002dczao2rdkzs3s",
+    "cmujmra8d002fczaoal6z8fax",
+    "cmujmra8p002jczao35m1lv50",
+    "cmujmra8w002lczaoxtkwu9tg",
+    "cmujmra97002pczaop9rcwr8v",
+    "cmujmra9e002rczao0va7alrd",
+    "cmujmra9q002vczaovt4nyy5t",
+    "cmujmra9x002xczaoacvp716u",
+    "cmujmraa90031czaonem1rfen",
+    "cmujmraaf0033czaoegfg49xm",
+    "cmujmraar0037czao6veynfd7",
+    "cmujmraax0039czao5onld1dl",
+    "cmujmrabh003dczaoleg6n2ii",
+    "cmujmrabo003fczaogkj667v0",
+    "cmujmrabx003jczaoams8nkwe",
+    "cmujmrac3003lczaoohanfd80",
+    "cmujmrace003pczaollpb85mx",
+    "cmujmracl003rczaoq5zg80ui",
+    "cmujmracy003vczaocb4e40ir",
+    "cmujmrad4003xczaoc2ne2ul3",
+    "cmujmradg0041czaolruzq23d",
+    "cmujmradn0043czaomz1lx039",
+    "cmujmradz0047czaon60rs265",
+    "cmujmrae50049czaoi86j6i0a",
+    "cmujmraej004dczao13zp3hf8",
+    "cmujmraer004fczaoo5r7as42",
+    "cmujmraf7004jczaohnczo80b",
+    "cmujmraff004lczaog9d9qv74",
+    "cmujmrafq004pczaocnnfx5up",
+    "cmujmrafx004rczao7jl9dqfm",
+    "cmujmrag9004vczaozssjlvbw",
+    "cmujmragg004xczaojvvzhl42",
+    "cmujmrags0051czaotmic0514",
+    "cmujmragy0053czaol2f4slm2",
+    "cmujmrahc0057czaofz8nwico",
+    "cmujmrahi0059czao1agxxzw6",
+    "cmujmrahv005dczaohwfhrlhi",
+    "cmujmrai4005fczaogwolfd42",
+    "cmujmraii005jczao3oho6uup",
+    "cmujmraiq005lczaogkuo9557",
+    "cmujmraj3005pczao0mylbrnx",
+    "cmujmraja005rczaon16ittnj",
+    "cmujmrajm005vczaob6tc0j1s",
+    "cmujmraju005xczaozoo8db1r",
+    "cmujmrak50061czaos94mtb5r",
+    "cmujmrakd0063czaoepxqua5y",
+    "cmujmrakq0067czaoauxflwc7",
+    "cmujmrakx0069czao3ovirva2"
+  ],
+  "referenceEquipment": null,
+  "jobs": [
+    {
+      "id": "cmujnovs70096cz28zpyglj9r",
+      "unitOrdinal": 1,
+      "unitTotal": 7,
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovs70097cz289co7moof",
+      "unitOrdinal": 2,
+      "unitTotal": 7,
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovs70098cz28mjquvzr4",
+      "unitOrdinal": 3,
+      "unitTotal": 7,
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovs70099cz28566rlz0y",
+      "unitOrdinal": 4,
+      "unitTotal": 7,
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovs8009acz282a5xtv43",
+      "unitOrdinal": 5,
+      "unitTotal": 7,
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs8009bcz289dmx4t90",
+      "unitOrdinal": 6,
+      "unitTotal": 7,
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs8009ccz28z32i00a8",
+      "unitOrdinal": 7,
+      "unitTotal": 7,
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovs8009dcz28i64vxmjg",
+      "unitOrdinal": 1,
+      "unitTotal": 2,
+      "deviceTypeCode": "AUDIOMETER",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs8009ecz28shcrt8v5",
+      "unitOrdinal": 2,
+      "unitTotal": 2,
+      "deviceTypeCode": "AUDIOMETER",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs8009fcz28yapl1kxq",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_AUTO_KERATOMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs8009gcz281hlqzyzr",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_AUTO_REFRACTOMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovs8009hcz28g37jfqdm",
+      "unitOrdinal": 1,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_AED",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs8009icz28dznigoj4",
+      "unitOrdinal": 2,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_AED",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovs8009jcz28klye6e1i",
+      "unitOrdinal": 3,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_AED",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovs8009kcz28v55r8u0d",
+      "unitOrdinal": 1,
+      "unitTotal": 2,
+      "deviceTypeCode": "BIO_SAFETY_CABINET",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs8009lcz28vstijjfq",
+      "unitOrdinal": 2,
+      "unitTotal": 2,
+      "deviceTypeCode": "BIO_SAFETY_CABINET",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs9009mcz281o334iu7",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_BIOMETRY",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs9009ncz28ytwrt7z2",
+      "unitOrdinal": 1,
+      "unitTotal": 2,
+      "deviceTypeCode": "CENTRIFUGE",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs9009ocz28d1f4a896",
+      "unitOrdinal": 2,
+      "unitTotal": 2,
+      "deviceTypeCode": "CENTRIFUGE",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovs9009pcz28ht27vxk8",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "CPAP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovs9009qcz28mu680rln",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_CRYOTHERAPY",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs9009rcz28ue519zzf",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_CUSA",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs9009scz28z4bhfcwj",
+      "unitOrdinal": 1,
+      "unitTotal": 11,
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovs9009tcz28239hd9qe",
+      "unitOrdinal": 2,
+      "unitTotal": 11,
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs9009ucz28qk398hkj",
+      "unitOrdinal": 3,
+      "unitTotal": 11,
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovs9009vcz28nvpdq5xp",
+      "unitOrdinal": 4,
+      "unitTotal": 11,
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovs9009wcz2875t9qf5v",
+      "unitOrdinal": 5,
+      "unitTotal": 11,
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovs9009xcz2868x4fcsg",
+      "unitOrdinal": 6,
+      "unitTotal": 11,
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsa009ycz28he8osvfl",
+      "unitOrdinal": 7,
+      "unitTotal": 11,
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsa009zcz289w5owy3x",
+      "unitOrdinal": 8,
+      "unitTotal": 11,
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsa00a0cz280qjqboa8",
+      "unitOrdinal": 9,
+      "unitTotal": 11,
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsa00a1cz28300ct4b2",
+      "unitOrdinal": 10,
+      "unitTotal": 11,
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsa00a2cz285qgot07k",
+      "unitOrdinal": 11,
+      "unitTotal": 11,
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsa00a3cz28r51ukwo7",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_DIGITAL_XRAY_DR_READER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsa00a4cz28bcm4f55u",
+      "unitOrdinal": 1,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsa00a5cz28ndsttk7k",
+      "unitOrdinal": 2,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsa00a6cz28jx6gs4o1",
+      "unitOrdinal": 3,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsa00a7cz2849srp4u3",
+      "unitOrdinal": 4,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsa00a8cz28o5kxc2n7",
+      "unitOrdinal": 5,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsa00a9cz28x05aupll",
+      "unitOrdinal": 6,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsa00aacz28eztux3ze",
+      "unitOrdinal": 7,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsb00abcz28n0bzutw6",
+      "unitOrdinal": 8,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsb00accz28cxt22nzt",
+      "unitOrdinal": 9,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsb00adcz28i61z5opl",
+      "unitOrdinal": 10,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsb00aecz28umlvme9c",
+      "unitOrdinal": 11,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsb00afcz28ha4gz080",
+      "unitOrdinal": 12,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsb00agcz28owweycoo",
+      "unitOrdinal": 13,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsb00ahcz28y1kp2uj5",
+      "unitOrdinal": 14,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsb00aicz28byfbxz3s",
+      "unitOrdinal": 15,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsb00ajcz28silrox5g",
+      "unitOrdinal": 16,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsb00akcz28bply4tmr",
+      "unitOrdinal": 17,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovsb00alcz28tw3slrra",
+      "unitOrdinal": 18,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsb00amcz2830fnwmu5",
+      "unitOrdinal": 19,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsb00ancz2817zih6zn",
+      "unitOrdinal": 20,
+      "unitTotal": 20,
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsc00aocz288n5ggw0z",
+      "unitOrdinal": 1,
+      "unitTotal": 6,
+      "deviceTypeCode": "TRIAL_MH_ELECTROSTIMULATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsc00apcz28kvp2kxek",
+      "unitOrdinal": 2,
+      "unitTotal": 6,
+      "deviceTypeCode": "TRIAL_MH_ELECTROSTIMULATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsc00aqcz28woefv9p5",
+      "unitOrdinal": 3,
+      "unitTotal": 6,
+      "deviceTypeCode": "TRIAL_MH_ELECTROSTIMULATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsc00arcz28tnutzjg7",
+      "unitOrdinal": 4,
+      "unitTotal": 6,
+      "deviceTypeCode": "TRIAL_MH_ELECTROSTIMULATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsc00ascz284dc2b2fc",
+      "unitOrdinal": 5,
+      "unitTotal": 6,
+      "deviceTypeCode": "TRIAL_MH_ELECTROSTIMULATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsc00atcz28o0aeahnx",
+      "unitOrdinal": 6,
+      "unitTotal": 6,
+      "deviceTypeCode": "TRIAL_MH_ELECTROSTIMULATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsc00aucz28sennxflf",
+      "unitOrdinal": 1,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsc00avcz28hzmf8mea",
+      "unitOrdinal": 2,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsc00awcz28152v93hc",
+      "unitOrdinal": 3,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsc00axcz28kprj0yec",
+      "unitOrdinal": 4,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsc00aycz28u799vaky",
+      "unitOrdinal": 5,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsc00azcz28q9woedzs",
+      "unitOrdinal": 6,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsd00b0cz28tt40rx6y",
+      "unitOrdinal": 7,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsd00b1cz28qrgka3ch",
+      "unitOrdinal": 8,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsd00b2cz284lch3hym",
+      "unitOrdinal": 9,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsd00b3cz28xx3rh1hk",
+      "unitOrdinal": 10,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsd00b4cz28h0to68nv",
+      "unitOrdinal": 11,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsd00b5cz28mkkzf5av",
+      "unitOrdinal": 12,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsd00b6cz282aftjarl",
+      "unitOrdinal": 13,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsd00b7cz28d9acxv10",
+      "unitOrdinal": 14,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsd00b8cz289rkoj7go",
+      "unitOrdinal": 15,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovsd00b9cz28r30ae3f2",
+      "unitOrdinal": 16,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsd00bacz28qa3r0uku",
+      "unitOrdinal": 17,
+      "unitTotal": 17,
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsd00bbcz287fqkij38",
+      "unitOrdinal": 1,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_ENT_UNIT",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsd00bccz28q8n9iqrc",
+      "unitOrdinal": 2,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_ENT_UNIT",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovse00bdcz28zjatok9c",
+      "unitOrdinal": 3,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_ENT_UNIT",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovse00becz28b9qmk57r",
+      "unitOrdinal": 1,
+      "unitTotal": 2,
+      "deviceTypeCode": "RESUSCITATORS_PULMONARY",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovse00bfcz288sog48sz",
+      "unitOrdinal": 2,
+      "unitTotal": 2,
+      "deviceTypeCode": "RESUSCITATORS_PULMONARY",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovse00bgcz28yq4vk1zk",
+      "unitOrdinal": 1,
+      "unitTotal": 2,
+      "deviceTypeCode": "TRIAL_MH_HFNC",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovse00bhcz284aozm7pt",
+      "unitOrdinal": 2,
+      "unitTotal": 2,
+      "deviceTypeCode": "TRIAL_MH_HFNC",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovse00bicz28mupkg2df",
+      "unitOrdinal": 1,
+      "unitTotal": 10,
+      "deviceTypeCode": "AMBULATORY_ECG",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovse00bjcz28pmyv5dql",
+      "unitOrdinal": 2,
+      "unitTotal": 10,
+      "deviceTypeCode": "AMBULATORY_ECG",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovse00bkcz28060qfr8i",
+      "unitOrdinal": 3,
+      "unitTotal": 10,
+      "deviceTypeCode": "AMBULATORY_ECG",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovse00blcz28it6g4q9x",
+      "unitOrdinal": 4,
+      "unitTotal": 10,
+      "deviceTypeCode": "AMBULATORY_ECG",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovse00bmcz28fhlbjwq7",
+      "unitOrdinal": 5,
+      "unitTotal": 10,
+      "deviceTypeCode": "AMBULATORY_ECG",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovse00bncz285dbly7ab",
+      "unitOrdinal": 6,
+      "unitTotal": 10,
+      "deviceTypeCode": "AMBULATORY_ECG",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovse00bocz289gnar6qf",
+      "unitOrdinal": 7,
+      "unitTotal": 10,
+      "deviceTypeCode": "AMBULATORY_ECG",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovse00bpcz2848qjzu8v",
+      "unitOrdinal": 8,
+      "unitTotal": 10,
+      "deviceTypeCode": "AMBULATORY_ECG",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsf00bqcz28ftv0b5hs",
+      "unitOrdinal": 9,
+      "unitTotal": 10,
+      "deviceTypeCode": "AMBULATORY_ECG",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsf00brcz28bo8yketf",
+      "unitOrdinal": 10,
+      "unitTotal": 10,
+      "deviceTypeCode": "AMBULATORY_ECG",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsf00bscz28ai4cpeuc",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_INFRARED_THERAPY",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsf00btcz28m900lbyn",
+      "unitOrdinal": 1,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsf00bucz28wccsdi9a",
+      "unitOrdinal": 2,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsf00bvcz28ojfolgl8",
+      "unitOrdinal": 3,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsf00bwcz289vta639p",
+      "unitOrdinal": 4,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsf00bxcz28cq1i18qj",
+      "unitOrdinal": 5,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsf00bycz28i49vgvc1",
+      "unitOrdinal": 6,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsf00bzcz28zccmypmd",
+      "unitOrdinal": 7,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsf00c0cz28m3t8erkl",
+      "unitOrdinal": 8,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsf00c1cz28syrt7753",
+      "unitOrdinal": 9,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsf00c2cz28h5gc5f47",
+      "unitOrdinal": 10,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsg00c3cz28l6c70a85",
+      "unitOrdinal": 11,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsg00c4cz28vk7qaque",
+      "unitOrdinal": 12,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsg00c5cz280zo3uao2",
+      "unitOrdinal": 13,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsg00c6cz280wb7bns7",
+      "unitOrdinal": 14,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovsg00c7cz28dt3so8xb",
+      "unitOrdinal": 15,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsg00c8cz284p7blic8",
+      "unitOrdinal": 16,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsg00c9cz28n0fap8wk",
+      "unitOrdinal": 17,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsg00cacz28wsf0u9lc",
+      "unitOrdinal": 18,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsg00cbcz28qxui694s",
+      "unitOrdinal": 19,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsg00cccz28bjhp05no",
+      "unitOrdinal": 20,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsg00cdcz28j4xzqbat",
+      "unitOrdinal": 21,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsg00cecz28ytxgoydh",
+      "unitOrdinal": 22,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsh00cfcz285w5qlj67",
+      "unitOrdinal": 23,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsh00cgcz28e3wart16",
+      "unitOrdinal": 24,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsh00chcz28hqcxbojj",
+      "unitOrdinal": 25,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsh00cicz28fsbow4m7",
+      "unitOrdinal": 26,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsh00cjcz2875ehbm1g",
+      "unitOrdinal": 27,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsh00ckcz28k3wz3xrw",
+      "unitOrdinal": 28,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsh00clcz2817hfeicd",
+      "unitOrdinal": 29,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsh00cmcz28x38pf1xb",
+      "unitOrdinal": 30,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsh00cncz28c49t5d6x",
+      "unitOrdinal": 31,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsh00cocz28e9hvutmg",
+      "unitOrdinal": 32,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsh00cpcz28tdo0f04j",
+      "unitOrdinal": 33,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsh00cqcz283x5pne1h",
+      "unitOrdinal": 34,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsh00crcz28olmku35c",
+      "unitOrdinal": 35,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsi00cscz28e4t4c3sq",
+      "unitOrdinal": 36,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsi00ctcz28itjfpaq7",
+      "unitOrdinal": 37,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsi00cucz2804ck4s7f",
+      "unitOrdinal": 38,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovsi00cvcz280lw4nh9m",
+      "unitOrdinal": 39,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsi00cwcz28dnhstc62",
+      "unitOrdinal": 40,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsi00cxcz28ibapykev",
+      "unitOrdinal": 41,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsi00cycz28hff3cbxj",
+      "unitOrdinal": 42,
+      "unitTotal": 42,
+      "deviceTypeCode": "INFUSION_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsi00czcz287ycr2nnu",
+      "unitOrdinal": 1,
+      "unitTotal": 4,
+      "deviceTypeCode": "TRIAL_MH_INJECTOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsi00d0cz28uknm5wlh",
+      "unitOrdinal": 2,
+      "unitTotal": 4,
+      "deviceTypeCode": "TRIAL_MH_INJECTOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsi00d1cz28stxw2o9e",
+      "unitOrdinal": 3,
+      "unitTotal": 4,
+      "deviceTypeCode": "TRIAL_MH_INJECTOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsi00d2cz28w8bb2hdw",
+      "unitOrdinal": 4,
+      "unitTotal": 4,
+      "deviceTypeCode": "TRIAL_MH_INJECTOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsj00d3cz28wn851m0a",
+      "unitOrdinal": 1,
+      "unitTotal": 2,
+      "deviceTypeCode": "TRIAL_MH_LAPAROSCOPY",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsj00d4cz28q786vhtc",
+      "unitOrdinal": 2,
+      "unitTotal": 2,
+      "deviceTypeCode": "TRIAL_MH_LAPAROSCOPY",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsj00d5cz28h8luw40j",
+      "unitOrdinal": 1,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_LENSOMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsj00d6cz28tee0vr9o",
+      "unitOrdinal": 2,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_LENSOMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsj00d7cz28hg9847fj",
+      "unitOrdinal": 3,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_LENSOMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsj00d8cz28lfqb3fy5",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "MEDICAL_FREEZER",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsj00d9cz28ofztx6jr",
+      "unitOrdinal": 1,
+      "unitTotal": 2,
+      "deviceTypeCode": "TRIAL_MH_MICROSCOPE",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsj00dacz28fv9tltka",
+      "unitOrdinal": 2,
+      "unitTotal": 2,
+      "deviceTypeCode": "TRIAL_MH_MICROSCOPE",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsj00dbcz28qykjphgy",
+      "unitOrdinal": 1,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsj00dccz284zlt8szz",
+      "unitOrdinal": 2,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsj00ddcz289wdor3u6",
+      "unitOrdinal": 3,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsj00decz28m1d0i8xu",
+      "unitOrdinal": 4,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsk00dfcz28l9scfcj0",
+      "unitOrdinal": 5,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsk00dgcz28hmr97h2z",
+      "unitOrdinal": 6,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsk00dhcz285kj155jo",
+      "unitOrdinal": 7,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsk00dicz28qdy7gbd4",
+      "unitOrdinal": 8,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovsk00djcz28htta5t8m",
+      "unitOrdinal": 9,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsk00dkcz28gh916tgp",
+      "unitOrdinal": 10,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsk00dlcz28ifgqu6mh",
+      "unitOrdinal": 11,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsk00dmcz28qqjrrk9e",
+      "unitOrdinal": 12,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsk00dncz28dfxm0qi6",
+      "unitOrdinal": 13,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsk00docz28itf6gmmc",
+      "unitOrdinal": 14,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsk00dpcz284gk63x5q",
+      "unitOrdinal": 15,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsk00dqcz28m3zxm749",
+      "unitOrdinal": 16,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsk00drcz28g8lvceyz",
+      "unitOrdinal": 17,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsl00dscz28nxim0ch4",
+      "unitOrdinal": 18,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsl00dtcz28oo3w0t0x",
+      "unitOrdinal": 19,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsl00ducz28ueu7npht",
+      "unitOrdinal": 20,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsl00dvcz28tev5m0ht",
+      "unitOrdinal": 21,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsl00dwcz28vdowlzij",
+      "unitOrdinal": 22,
+      "unitTotal": 22,
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsl00dxcz28mxnad5vg",
+      "unitOrdinal": 1,
+      "unitTotal": 5,
+      "deviceTypeCode": "TRIAL_MH_OPERATING_MICROSCOPE",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsl00dycz2804fadnp7",
+      "unitOrdinal": 2,
+      "unitTotal": 5,
+      "deviceTypeCode": "TRIAL_MH_OPERATING_MICROSCOPE",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsl00dzcz284l70hq20",
+      "unitOrdinal": 3,
+      "unitTotal": 5,
+      "deviceTypeCode": "TRIAL_MH_OPERATING_MICROSCOPE",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsl00e0cz28bt6dkt2u",
+      "unitOrdinal": 4,
+      "unitTotal": 5,
+      "deviceTypeCode": "TRIAL_MH_OPERATING_MICROSCOPE",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsm00e1cz285rpjj0of",
+      "unitOrdinal": 5,
+      "unitTotal": 5,
+      "deviceTypeCode": "TRIAL_MH_OPERATING_MICROSCOPE",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsm00e2cz285rzhfmkm",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "PARAFFIN_BATHS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsm00e3cz289okda0ex",
+      "unitOrdinal": 1,
+      "unitTotal": 5,
+      "deviceTypeCode": "PHOTOTHERAPY",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsm00e4cz2863u8qlpe",
+      "unitOrdinal": 2,
+      "unitTotal": 5,
+      "deviceTypeCode": "PHOTOTHERAPY",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsm00e5cz28dho5o890",
+      "unitOrdinal": 3,
+      "unitTotal": 5,
+      "deviceTypeCode": "PHOTOTHERAPY",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsm00e6cz28svjtajpo",
+      "unitOrdinal": 4,
+      "unitTotal": 5,
+      "deviceTypeCode": "PHOTOTHERAPY",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovsm00e7cz287ecdbpko",
+      "unitOrdinal": 5,
+      "unitTotal": 5,
+      "deviceTypeCode": "PHOTOTHERAPY",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsm00e8cz286xser0oh",
+      "unitOrdinal": 1,
+      "unitTotal": 11,
+      "deviceTypeCode": "PULSE_OXIMETERS",
+      "tier": "ALIAS",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsm00e9cz28lbsdt03i",
+      "unitOrdinal": 2,
+      "unitTotal": 11,
+      "deviceTypeCode": "PULSE_OXIMETERS",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsm00eacz28o7f13vl2",
+      "unitOrdinal": 3,
+      "unitTotal": 11,
+      "deviceTypeCode": "PULSE_OXIMETERS",
+      "tier": "ALIAS",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsm00ebcz287iafi67n",
+      "unitOrdinal": 4,
+      "unitTotal": 11,
+      "deviceTypeCode": "PULSE_OXIMETERS",
+      "tier": "ALIAS",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsm00eccz282qsk4pso",
+      "unitOrdinal": 5,
+      "unitTotal": 11,
+      "deviceTypeCode": "PULSE_OXIMETERS",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsn00edcz280i0zgph8",
+      "unitOrdinal": 6,
+      "unitTotal": 11,
+      "deviceTypeCode": "PULSE_OXIMETERS",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsn00eecz287im3og4o",
+      "unitOrdinal": 7,
+      "unitTotal": 11,
+      "deviceTypeCode": "PULSE_OXIMETERS",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsn00efcz28ddbbuqpr",
+      "unitOrdinal": 8,
+      "unitTotal": 11,
+      "deviceTypeCode": "PULSE_OXIMETERS",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsn00egcz28s2oitty0",
+      "unitOrdinal": 9,
+      "unitTotal": 11,
+      "deviceTypeCode": "PULSE_OXIMETERS",
+      "tier": "ALIAS",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsn00ehcz28qac9dlyj",
+      "unitOrdinal": 10,
+      "unitTotal": 11,
+      "deviceTypeCode": "PULSE_OXIMETERS",
+      "tier": "ALIAS",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsn00eicz28m5ieybsw",
+      "unitOrdinal": 11,
+      "unitTotal": 11,
+      "deviceTypeCode": "PULSE_OXIMETERS",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsn00ejcz283s49bvxi",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "RESUSCITATORS_PULMONARY",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsn00ekcz28qgd7o4c7",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_ROTABLATOR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsn00elcz28qp0lk3it",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_SHOCK_WAVE_THERAPY",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsn00emcz28fwfho1h6",
+      "unitOrdinal": 1,
+      "unitTotal": 2,
+      "deviceTypeCode": "STERILLIZER",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsn00encz281bejcou4",
+      "unitOrdinal": 2,
+      "unitTotal": 2,
+      "deviceTypeCode": "STERILLIZER",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsn00eocz28ztr1r1hx",
+      "unitOrdinal": 1,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsn00epcz28i69cpg1y",
+      "unitOrdinal": 2,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovso00eqcz28ri8hy6ly",
+      "unitOrdinal": 3,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovso00ercz28afy1avmw",
+      "unitOrdinal": 4,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovso00escz28k2m2a0fa",
+      "unitOrdinal": 5,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovso00etcz28cimtbusw",
+      "unitOrdinal": 6,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovso00eucz28tf6fpsrs",
+      "unitOrdinal": 7,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovso00evcz28zqekue8c",
+      "unitOrdinal": 8,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovso00ewcz284ydsvlel",
+      "unitOrdinal": 9,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovso00excz286yoi4r5n",
+      "unitOrdinal": 10,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovso00eycz280mym9rzj",
+      "unitOrdinal": 11,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovso00ezcz28fzx57v9z",
+      "unitOrdinal": 12,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovso00f0cz28yhm7k1fo",
+      "unitOrdinal": 13,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovso00f1cz28ceddvpbd",
+      "unitOrdinal": 14,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsp00f2cz28dqzpa906",
+      "unitOrdinal": 15,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsp00f3cz28d0axkxo5",
+      "unitOrdinal": 16,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsp00f4cz284250djoi",
+      "unitOrdinal": 17,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsp00f5cz28wgbkgx40",
+      "unitOrdinal": 18,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsp00f6cz28h8nrmvpz",
+      "unitOrdinal": 19,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsp00f7cz28f3noj98a",
+      "unitOrdinal": 20,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsp00f8cz280m57jikw",
+      "unitOrdinal": 21,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsp00f9cz28lu73sh3r",
+      "unitOrdinal": 22,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsp00facz287mo3t8rc",
+      "unitOrdinal": 23,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsp00fbcz28x65cgna6",
+      "unitOrdinal": 24,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsp00fccz28fuej1rzn",
+      "unitOrdinal": 25,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsp00fdcz28chuk8kil",
+      "unitOrdinal": 26,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsq00fecz28on91galx",
+      "unitOrdinal": 27,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsq00ffcz28pe0iv0y4",
+      "unitOrdinal": 28,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsq00fgcz28xsclm53v",
+      "unitOrdinal": 29,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsq00fhcz284qrncri3",
+      "unitOrdinal": 30,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsq00ficz28snxk8nev",
+      "unitOrdinal": 31,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovsq00fjcz28pickzb1v",
+      "unitOrdinal": 32,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsq00fkcz2851oyp9q2",
+      "unitOrdinal": 33,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsq00flcz28huc6fujo",
+      "unitOrdinal": 34,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsq00fmcz284znaqj0u",
+      "unitOrdinal": 35,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsq00fncz28t7lq6gvo",
+      "unitOrdinal": 36,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsq00focz28tio6aajt",
+      "unitOrdinal": 37,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsq00fpcz2887cfaig4",
+      "unitOrdinal": 38,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsq00fqcz28q85elep4",
+      "unitOrdinal": 39,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsq00frcz282nkkapmr",
+      "unitOrdinal": 40,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsr00fscz28i3zrccia",
+      "unitOrdinal": 41,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsr00ftcz28mf3aqwwr",
+      "unitOrdinal": 42,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsr00fucz28z2533ivp",
+      "unitOrdinal": 43,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsr00fvcz28f3ysvxp0",
+      "unitOrdinal": 44,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsr00fwcz28zddaa5vb",
+      "unitOrdinal": 45,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsr00fxcz28585ro3te",
+      "unitOrdinal": 46,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsr00fycz28yc417hro",
+      "unitOrdinal": 47,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsr00fzcz28sqbxgda3",
+      "unitOrdinal": 48,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsr00g0cz28u3f8ntwr",
+      "unitOrdinal": 49,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsr00g1cz28gxlef5uf",
+      "unitOrdinal": 50,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsr00g2cz28ti7c33nk",
+      "unitOrdinal": 51,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovss00g3cz28mk83r067",
+      "unitOrdinal": 52,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovss00g4cz288z3p8ogz",
+      "unitOrdinal": 53,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovss00g5cz28jmm2itn9",
+      "unitOrdinal": 54,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovss00g6cz28r10iettg",
+      "unitOrdinal": 55,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovss00g7cz28yd426vq4",
+      "unitOrdinal": 56,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovss00g8cz28az4ygfx7",
+      "unitOrdinal": 57,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovss00g9cz288x1oebq9",
+      "unitOrdinal": 58,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovss00gacz28tcvwgtea",
+      "unitOrdinal": 59,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovss00gbcz28jnxrrq69",
+      "unitOrdinal": 60,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovss00gccz282qxtq6ts",
+      "unitOrdinal": 61,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovst00gdcz28cs714hbd",
+      "unitOrdinal": 62,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovst00gecz28y4tn8aad",
+      "unitOrdinal": 63,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovst00gfcz28rp09hsbv",
+      "unitOrdinal": 64,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovst00ggcz28vc7enmk8",
+      "unitOrdinal": 65,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovst00ghcz28k1x5e2h3",
+      "unitOrdinal": 66,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovst00gicz28sim3hxn2",
+      "unitOrdinal": 67,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovst00gjcz28t6phfupu",
+      "unitOrdinal": 68,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovst00gkcz28vrk1rtuq",
+      "unitOrdinal": 69,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovst00glcz285ogcdsao",
+      "unitOrdinal": 70,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovst00gmcz28h4p1unu8",
+      "unitOrdinal": 71,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovst00gncz289jtbua4e",
+      "unitOrdinal": 72,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovst00gocz28en3fvo5b",
+      "unitOrdinal": 73,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovst00gpcz28y5c8jpmi",
+      "unitOrdinal": 74,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsu00gqcz2803lhhvu6",
+      "unitOrdinal": 75,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsu00grcz28ev1ic9uz",
+      "unitOrdinal": 76,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsu00gscz285kl3mv17",
+      "unitOrdinal": 77,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsu00gtcz28irj7i4a9",
+      "unitOrdinal": 78,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsu00gucz28uk1xf2gg",
+      "unitOrdinal": 79,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovsu00gvcz28y5y46qg9",
+      "unitOrdinal": 80,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsu00gwcz28952wccyu",
+      "unitOrdinal": 81,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsu00gxcz28w6txlt9w",
+      "unitOrdinal": 82,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsu00gycz286ugt8ymu",
+      "unitOrdinal": 83,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsu00gzcz28pvzrpajh",
+      "unitOrdinal": 84,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsu00h0cz28jr0evucw",
+      "unitOrdinal": 85,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsu00h1cz28n451d45i",
+      "unitOrdinal": 86,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsv00h2cz28jdi8l1xg",
+      "unitOrdinal": 87,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsv00h3cz282y94ob6s",
+      "unitOrdinal": 88,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsv00h4cz282i2pg67r",
+      "unitOrdinal": 89,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsv00h5cz282pey0sub",
+      "unitOrdinal": 90,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsv00h6cz28i02x5sq1",
+      "unitOrdinal": 91,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsv00h7cz28inixh028",
+      "unitOrdinal": 92,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsv00h8cz28ipqrqr4b",
+      "unitOrdinal": 93,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsv00h9cz28k4ns1k7g",
+      "unitOrdinal": 94,
+      "unitTotal": 94,
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsv00hacz286j03sayv",
+      "unitOrdinal": 1,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsv00hbcz28a3wdgvss",
+      "unitOrdinal": 2,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsv00hccz28l59jl9ov",
+      "unitOrdinal": 3,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsv00hdcz28r8o6pycl",
+      "unitOrdinal": 4,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsv00hecz28m5jhfcj0",
+      "unitOrdinal": 5,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsw00hfcz2897j70ix8",
+      "unitOrdinal": 6,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsw00hgcz2885gxi4ca",
+      "unitOrdinal": 7,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsw00hhcz28hhkkv65g",
+      "unitOrdinal": 8,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsw00hicz28bx6yyx0x",
+      "unitOrdinal": 9,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovsw00hjcz28zkn1zbxc",
+      "unitOrdinal": 10,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsw00hkcz28jluog3d2",
+      "unitOrdinal": 11,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsw00hlcz28xbe69gpf",
+      "unitOrdinal": 12,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsw00hmcz2893agwxrb",
+      "unitOrdinal": 13,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsw00hncz28oebi9yn8",
+      "unitOrdinal": 14,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsw00hocz28of7yzr1l",
+      "unitOrdinal": 15,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsw00hpcz28bbafzjt7",
+      "unitOrdinal": 16,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsw00hqcz28913y5eby",
+      "unitOrdinal": 17,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsw00hrcz28b0ulwu5y",
+      "unitOrdinal": 18,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsx00hscz28stc9l5xg",
+      "unitOrdinal": 19,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsx00htcz28ri8ten66",
+      "unitOrdinal": 20,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsx00hucz28u1xkud1z",
+      "unitOrdinal": 21,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsx00hvcz28ffqngkcd",
+      "unitOrdinal": 22,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsx00hwcz28qk1jtedd",
+      "unitOrdinal": 23,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsx00hxcz28pbyhnr4m",
+      "unitOrdinal": 24,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsx00hycz28vtb0b27g",
+      "unitOrdinal": 25,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsx00hzcz281vowfmde",
+      "unitOrdinal": 26,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsx00i0cz28lxbxvw3d",
+      "unitOrdinal": 27,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsx00i1cz28p1lh4s01",
+      "unitOrdinal": 28,
+      "unitTotal": 28,
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "tier": "REPRESENTATIVE",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsx00i2cz281d6jaon6",
+      "unitOrdinal": 1,
+      "unitTotal": 10,
+      "deviceTypeCode": "TRIAL_MH_THERMOHYGROMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsx00i3cz28j38z3nnk",
+      "unitOrdinal": 2,
+      "unitTotal": 10,
+      "deviceTypeCode": "TRIAL_MH_THERMOHYGROMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsx00i4cz28gybbtjgk",
+      "unitOrdinal": 3,
+      "unitTotal": 10,
+      "deviceTypeCode": "TRIAL_MH_THERMOHYGROMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsy00i5cz28qdhe7746",
+      "unitOrdinal": 4,
+      "unitTotal": 10,
+      "deviceTypeCode": "TRIAL_MH_THERMOHYGROMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsy00i6cz281hfgifv3",
+      "unitOrdinal": 5,
+      "unitTotal": 10,
+      "deviceTypeCode": "TRIAL_MH_THERMOHYGROMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovsy00i7cz281f6e9mw2",
+      "unitOrdinal": 6,
+      "unitTotal": 10,
+      "deviceTypeCode": "TRIAL_MH_THERMOHYGROMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsy00i8cz28u1uyt9ds",
+      "unitOrdinal": 7,
+      "unitTotal": 10,
+      "deviceTypeCode": "TRIAL_MH_THERMOHYGROMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsy00i9cz28w818u6e2",
+      "unitOrdinal": 8,
+      "unitTotal": 10,
+      "deviceTypeCode": "TRIAL_MH_THERMOHYGROMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsy00iacz28tedlyb0d",
+      "unitOrdinal": 9,
+      "unitTotal": 10,
+      "deviceTypeCode": "TRIAL_MH_THERMOHYGROMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsy00ibcz28rhmig1io",
+      "unitOrdinal": 10,
+      "unitTotal": 10,
+      "deviceTypeCode": "TRIAL_MH_THERMOHYGROMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsz00iccz28glckbfyx",
+      "unitOrdinal": 1,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsz00idcz28waafjurs",
+      "unitOrdinal": 2,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsz00iecz28mo2lbhsb",
+      "unitOrdinal": 3,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsz00ifcz28q29awm8z",
+      "unitOrdinal": 4,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsz00igcz286gx5fayd",
+      "unitOrdinal": 5,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovsz00ihcz288cxzvd2f",
+      "unitOrdinal": 6,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovsz00iicz28z9mccxts",
+      "unitOrdinal": 7,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsz00ijcz28isxzr8x0",
+      "unitOrdinal": 8,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovsz00ikcz28z52yxrqa",
+      "unitOrdinal": 9,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovsz00ilcz28cqbeleso",
+      "unitOrdinal": 10,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt000imcz28i16158ri",
+      "unitOrdinal": 11,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovt000incz28mgmxv9s5",
+      "unitOrdinal": 12,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt000iocz28d5ylgier",
+      "unitOrdinal": 13,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt000ipcz28pvhz907d",
+      "unitOrdinal": 14,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt000iqcz28sq91kpwz",
+      "unitOrdinal": 15,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovt000ircz28wucya0c1",
+      "unitOrdinal": 16,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt000iscz286n37ifl9",
+      "unitOrdinal": 17,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovt000itcz28bestnazo",
+      "unitOrdinal": 18,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovt000iucz28rnsdeic5",
+      "unitOrdinal": 19,
+      "unitTotal": 19,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "tier": "SYNTHETIC",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovt000ivcz28rc3vlxay",
+      "unitOrdinal": 1,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_DEWASA_DIGITAL",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt000iwcz28mgbmqmnx",
+      "unitOrdinal": 2,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_DEWASA_DIGITAL",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt000ixcz28h4mcgkmb",
+      "unitOrdinal": 3,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_DEWASA_DIGITAL",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt000iycz285jytgzk0",
+      "unitOrdinal": 1,
+      "unitTotal": 2,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_MASSA",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovt100izcz28817zooi3",
+      "unitOrdinal": 2,
+      "unitTotal": 2,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_MASSA",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovt100j0cz28w09gcku0",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_OBAT",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt100j1cz28aouuhfrb",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_TONOMETER",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt100j2cz286z0w8lhr",
+      "unitOrdinal": 1,
+      "unitTotal": 2,
+      "deviceTypeCode": "TRIAL_MH_TRACTION",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovt100j3cz28jtbk65wf",
+      "unitOrdinal": 2,
+      "unitTotal": 2,
+      "deviceTypeCode": "TRIAL_MH_TRACTION",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt100j4cz28ltyq5rv8",
+      "unitOrdinal": 1,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_TREADMILL",
+      "tier": "SYNTHETIC",
+      "targetStatus": "IN_PROGRESS"
+    },
+    {
+      "id": "cmujnovt100j5cz2855nwyyox",
+      "unitOrdinal": 2,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_TREADMILL",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt100j6cz28flvbrtnu",
+      "unitOrdinal": 3,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_TREADMILL",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt100j7cz28b8fus4c6",
+      "unitOrdinal": 1,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt100j8cz287ufd6vkn",
+      "unitOrdinal": 2,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "SUBMITTED"
+    },
+    {
+      "id": "cmujnovt200j9cz28zturcs49",
+      "unitOrdinal": 3,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt200jacz28uflhfn9h",
+      "unitOrdinal": 4,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt200jbcz28bj0jitr4",
+      "unitOrdinal": 5,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovt200jccz28tzps9zd0",
+      "unitOrdinal": 6,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt200jdcz28ac2hr7qr",
+      "unitOrdinal": 7,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt200jecz28vvve7751",
+      "unitOrdinal": 8,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt200jfcz28gu4ia1ny",
+      "unitOrdinal": 9,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt200jgcz282wqk7rfx",
+      "unitOrdinal": 10,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt200jhcz28q01yycb3",
+      "unitOrdinal": 11,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt200jicz28p5oguduf",
+      "unitOrdinal": 12,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "REWORK"
+    },
+    {
+      "id": "cmujnovt200jjcz287ay1k1g6",
+      "unitOrdinal": 13,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt200jkcz288xquomw8",
+      "unitOrdinal": 14,
+      "unitTotal": 14,
+      "deviceTypeCode": "TRIAL_MH_USG",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovt300jlcz28n42lg73e",
+      "unitOrdinal": 1,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_ULTRASOUND_THERAPY",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt300jmcz28m2uvawhx",
+      "unitOrdinal": 2,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_ULTRASOUND_THERAPY",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt300jncz28flo9qpmc",
+      "unitOrdinal": 3,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_ULTRASOUND_THERAPY",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt300jocz283tngr9rn",
+      "unitOrdinal": 1,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt300jpcz2879cgqoi4",
+      "unitOrdinal": 2,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt300jqcz28etratjyv",
+      "unitOrdinal": 3,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt300jrcz28xt52iuao",
+      "unitOrdinal": 4,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt300jscz284aq12gun",
+      "unitOrdinal": 5,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt300jtcz28diowfoz2",
+      "unitOrdinal": 6,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovt300jucz28t1h98jh4",
+      "unitOrdinal": 7,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt400jvcz28sk3h3pub",
+      "unitOrdinal": 8,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt400jwcz28yk7xpuvu",
+      "unitOrdinal": 9,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt400jxcz28daopwuvr",
+      "unitOrdinal": 10,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt400jycz28tseia4rt",
+      "unitOrdinal": 11,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt400jzcz28j7pqbqho",
+      "unitOrdinal": 12,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt400k0cz285zx265rs",
+      "unitOrdinal": 13,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt400k1cz28mkvwcit8",
+      "unitOrdinal": 14,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt400k2cz28bf4zs9rf",
+      "unitOrdinal": 15,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovt400k3cz28r50nn4v7",
+      "unitOrdinal": 16,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt400k4cz28y01utehi",
+      "unitOrdinal": 17,
+      "unitTotal": 17,
+      "deviceTypeCode": "VENTILATOR",
+      "tier": "EXACT",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt400k5cz28j4jzy8xr",
+      "unitOrdinal": 1,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_WATER_BATH",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt400k6cz288qed2mp7",
+      "unitOrdinal": 2,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_WATER_BATH",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt400k7cz28lb67qdj1",
+      "unitOrdinal": 3,
+      "unitTotal": 3,
+      "deviceTypeCode": "TRIAL_MH_WATER_BATH",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt500k8cz28r32t0as1",
+      "unitOrdinal": 1,
+      "unitTotal": 2,
+      "deviceTypeCode": "TRIAL_MH_WSD",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt500k9cz2867rfawip",
+      "unitOrdinal": 2,
+      "unitTotal": 2,
+      "deviceTypeCode": "TRIAL_MH_WSD",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt500kacz2815c9dpq9",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_XRAY_BMD",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt500kbcz28arkz9m5z",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_XRAY_C_ARM",
+      "tier": "SYNTHETIC",
+      "targetStatus": "ACCEPTED_BY_QA"
+    },
+    {
+      "id": "cmujnovt500kccz28ydexftfj",
+      "unitOrdinal": 1,
+      "unitTotal": 2,
+      "deviceTypeCode": "DENTAL_XRAY",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt500kdcz28j5qhz6cl",
+      "unitOrdinal": 2,
+      "unitTotal": 2,
+      "deviceTypeCode": "DENTAL_XRAY",
+      "tier": "ALIAS",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt500kecz28642z6so3",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_XRAY_MOBILE",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    },
+    {
+      "id": "cmujnovt500kfcz28wtz2gjyf",
+      "unitOrdinal": 1,
+      "unitTotal": 1,
+      "deviceTypeCode": "TRIAL_MH_XRAY_MOBILE_FDR",
+      "tier": "SYNTHETIC",
+      "targetStatus": "PENDING"
+    }
+  ],
+  "identityCorrections": [
+    {
+      "jobId": "cmujnovs70096cz28zpyglj9r",
+      "correctionId": "cmujnoy6j0175cz28sgyoqgtf",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR",
+      "unitOrdinal": 1
+    },
+    {
+      "jobId": "cmujnovs70097cz289co7moof",
+      "correctionId": "cmujnoy9w017dcz288drfl47s",
+      "finalStatus": "REJECTED",
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR",
+      "unitOrdinal": 2
+    },
+    {
+      "jobId": "cmujnovs8009gcz281hlqzyzr",
+      "correctionId": "cmujnoz4x018dcz2833pz75m1",
+      "finalStatus": "APPROVED",
+      "deviceTypeCode": "TRIAL_MH_AUTO_REFRACTOMETER",
+      "unitOrdinal": 1
+    },
+    {
+      "jobId": "cmujnovs8009icz28dznigoj4",
+      "correctionId": "cmujnoze3018pcz28vxvsakzv",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_AED",
+      "unitOrdinal": 2
+    },
+    {
+      "jobId": "cmujnovs8009jcz28klye6e1i",
+      "correctionId": "cmujnozh9018xcz280ohshto0",
+      "finalStatus": "APPROVED",
+      "deviceTypeCode": "TRIAL_MH_AED",
+      "unitOrdinal": 3
+    },
+    {
+      "jobId": "cmujnovs9009ocz28d1f4a896",
+      "correctionId": "cmujnozqp019ecz28gwt6ts99",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "CENTRIFUGE",
+      "unitOrdinal": 2
+    },
+    {
+      "jobId": "cmujnovs9009pcz28ht27vxk8",
+      "correctionId": "cmujnozu6019tcz285eoviq8r",
+      "finalStatus": "REJECTED",
+      "deviceTypeCode": "CPAP",
+      "unitOrdinal": 1
+    },
+    {
+      "jobId": "cmujnovs9009scz28z4bhfcwj",
+      "correctionId": "cmujnp07r01atcz282lphc19m",
+      "finalStatus": "APPROVED",
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "unitOrdinal": 1
+    },
+    {
+      "jobId": "cmujnovs9009ucz28qk398hkj",
+      "correctionId": "cmujnp0h701b7cz285sj1byr6",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_DEFIBRILLATOR",
+      "unitOrdinal": 3
+    },
+    {
+      "jobId": "cmujnovsa00a6cz28jx6gs4o1",
+      "correctionId": "cmujnp13501cjcz28gvzg8t0r",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "unitOrdinal": 3
+    },
+    {
+      "jobId": "cmujnovsa00a7cz2849srp4u3",
+      "correctionId": "cmujnp16i01czcz28ac38eneb",
+      "finalStatus": "APPROVED",
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS",
+      "unitOrdinal": 4
+    },
+    {
+      "jobId": "cmujnovsc00aocz288n5ggw0z",
+      "correctionId": "cmujnp3n601k3cz2857vz06ec",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_ELECTROSTIMULATOR",
+      "unitOrdinal": 1
+    },
+    {
+      "jobId": "cmujnovsc00aucz28sennxflf",
+      "correctionId": "cmujnp41n01ktcz2878iajrxw",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_ESU",
+      "unitOrdinal": 1
+    },
+    {
+      "jobId": "cmujnovsd00bccz28q8n9iqrc",
+      "correctionId": "cmujnp50y01mjcz28a5wafxd6",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_ENT_UNIT",
+      "unitOrdinal": 2
+    },
+    {
+      "jobId": "cmujnovsf00bscz28ai4cpeuc",
+      "correctionId": "cmujnp59r01mzcz28vvr4f35q",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_INFRARED_THERAPY",
+      "unitOrdinal": 1
+    },
+    {
+      "jobId": "cmujnovsf00bycz28i49vgvc1",
+      "correctionId": "cmujnp5mx01odcz28ga83xy9k",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "INFUSION_PUMP",
+      "unitOrdinal": 6
+    },
+    {
+      "jobId": "cmujnovsj00d4cz28q786vhtc",
+      "correctionId": "cmujnpa3a020ncz281agp1qxy",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_LAPAROSCOPY",
+      "unitOrdinal": 2
+    },
+    {
+      "jobId": "cmujnovsj00dacz28fv9tltka",
+      "correctionId": "cmujnpadk021dcz28j306d1jl",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_MICROSCOPE",
+      "unitOrdinal": 2
+    },
+    {
+      "jobId": "cmujnovsk00dgcz28hmr97h2z",
+      "correctionId": "cmujnpap90227cz28hjddzln5",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "NEBULIZER_COMPRESSOR",
+      "unitOrdinal": 6
+    },
+    {
+      "jobId": "cmujnovsl00dycz2804fadnp7",
+      "correctionId": "cmujnpbz6025lcz28ip7hg78r",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_OPERATING_MICROSCOPE",
+      "unitOrdinal": 2
+    },
+    {
+      "jobId": "cmujnovsm00e4cz2863u8qlpe",
+      "correctionId": "cmujnpcd10267cz28sp10utgo",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "PHOTOTHERAPY",
+      "unitOrdinal": 2
+    },
+    {
+      "jobId": "cmujnovsm00eacz28o7f13vl2",
+      "correctionId": "cmujnpczn028vcz28csvadmv1",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "PULSE_OXIMETERS",
+      "unitOrdinal": 3
+    },
+    {
+      "jobId": "cmujnovsn00emcz28fwfho1h6",
+      "correctionId": "cmujnpe1i02cvcz28px5b15gj",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "STERILLIZER",
+      "unitOrdinal": 1
+    },
+    {
+      "jobId": "cmujnovso00escz28k2m2a0fa",
+      "correctionId": "cmujnpecs02e7cz28r2bvlgaq",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "SYRINGE_PUMP",
+      "unitOrdinal": 5
+    },
+    {
+      "jobId": "cmujnovsv00hacz286j03sayv",
+      "correctionId": "cmujnplcb0367cz28ifcfg6n2",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "SPHYGMOMANOMETERS",
+      "unitOrdinal": 1
+    },
+    {
+      "jobId": "cmujnovsx00i4cz28gybbtjgk",
+      "correctionId": "cmujnpngo03dvcz281med4v9w",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_THERMOHYGROMETER",
+      "unitOrdinal": 3
+    },
+    {
+      "jobId": "cmujnovsz00igcz286gx5fayd",
+      "correctionId": "cmujnpo0e03ezcz28t94vnj2u",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_BADAN_TINGGI",
+      "unitOrdinal": 5
+    },
+    {
+      "jobId": "cmujnovt000iycz285jytgzk0",
+      "correctionId": "cmujnpoum03gpcz28iri1kypt",
+      "finalStatus": "PENDING_REVIEW",
+      "deviceTypeCode": "TRIAL_MH_TIMBANGAN_MASSA",
+      "unitOrdinal": 1
+    }
+  ],
+  "techPwaRepresentativeJobs": [
+    {
+      "jobId": "cmujnovs9009ncz28ytwrt7z2",
+      "scenario": "Simple / single-parameter Pattern A",
+      "deviceTypeCode": "CENTRIFUGE"
+    },
+    {
+      "jobId": "cmujnovs9009pcz28ht27vxk8",
+      "scenario": "Simple device, alternate",
+      "deviceTypeCode": "CPAP"
+    },
+    {
+      "jobId": "cmujnovt300jocz283tngr9rn",
+      "scenario": "Multiple parameters / most complex real flow",
+      "deviceTypeCode": "VENTILATOR"
+    },
+    {
+      "jobId": "cmujnovs8009dcz28i64vxmjg",
+      "scenario": "Device identity unresolved at arrival (search/select)",
+      "deviceTypeCode": "AUDIOMETER"
+    },
+    {
+      "jobId": "cmujnovs70096cz28zpyglj9r",
+      "scenario": "Identity Correction (BAI) wizard, full submission",
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR"
+    },
+    {
+      "jobId": "cmujnovs70098cz28mjquvzr4",
+      "scenario": "Full rework cycle (submit -> reject -> resume -> resubmit -> approve -> complete)",
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR"
+    },
+    {
+      "jobId": "cmujnovs70097cz289co7moof",
+      "scenario": "Submitted, awaiting MT quality review",
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR"
+    },
+    {
+      "jobId": "cmujnovs70099cz28566rlz0y",
+      "scenario": "Fully completed (ACCEPTED_BY_QA)",
+      "deviceTypeCode": "TRIAL_MH_ANESTHESIA_VENTILATOR"
+    },
+    {
+      "jobId": "cmujnovt100j7cz28b8fus4c6",
+      "scenario": "Representative synthetic TRIAL_MH_* device",
+      "deviceTypeCode": "TRIAL_MH_USG"
+    },
+    {
+      "jobId": "cmujnovsn00eocz28ztr1r1hx",
+      "scenario": "High-qty exact-match line (94-unit item)",
+      "deviceTypeCode": "SYRINGE_PUMP"
+    },
+    {
+      "jobId": "cmujnovsf00btcz28m900lbyn",
+      "scenario": "High-qty exact-match line, alternate",
+      "deviceTypeCode": "INFUSION_PUMP"
+    },
+    {
+      "jobId": "cmujnovsa00a4cz28bcm4f55u",
+      "scenario": "Representative-tier mapping (no alias added)",
+      "deviceTypeCode": "ELECTROCARDIOGRAPHS"
+    },
+    {
+      "jobId": "cmujnovse00bicz28mupkg2df",
+      "scenario": "Alias-tier device with zero calibration parameters (stays PENDING)",
+      "deviceTypeCode": "AMBULATORY_ECG"
+    },
+    {
+      "jobId": "cmujnovt500kccz28ydexftfj",
+      "scenario": "Alias-tier mapping",
+      "deviceTypeCode": "DENTAL_XRAY"
+    }
+  ]
+}
