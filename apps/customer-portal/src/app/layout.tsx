@@ -5,6 +5,9 @@ import { Providers } from "./providers";
 export const metadata: Metadata = {
   title: "Customer Portal",
   description: "PT. Presisi Kalibrasi Medika — Customer Portal",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export const viewport: Viewport = {
