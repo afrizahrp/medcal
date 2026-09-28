@@ -6,9 +6,15 @@ import { useAuthz } from "@medcal/auth/client";
 import { Screen } from "../../../components/layout/screen";
 import { StickyActionBar } from "../../../components/layout/sticky-action-bar";
 import { Button, LinkButton } from "../../../components/ui/button";
+import { ConfirmDialog } from "../../../components/ui/confirm-dialog";
+import {
+  COMPLETE_JOB_CONFIRMATION,
+  SUBMIT_FOR_REVIEW_CONFIRMATION,
+} from "../../../lib/calibration/job-action-confirmations";
 import { shouldShowLengkapiKontrolAlatCta } from "../../../lib/calibration/kontrol-alat";
 import { LoadingState, ErrorState } from "../../../components/ui/state-views";
 import { formatApiError } from "../../../lib/api-errors";
+import { combineQueryGroupState } from "../../../lib/query-group-state";
 import {
   canSelectDevice,
   canSubmitIdentityCorrection,
@@ -100,6 +106,12 @@ export default function JobDetailPage() {
     debouncedDeviceSearch,
   );
   const selectDeviceMutation = useSelectDevice(id);
+  // UX-01: Submit for Review / Complete Job are irreversible-in-effect job
+  // transitions (submit locks the current attempt; complete finalizes the
+  // job) — this only inserts a confirm step in front of the existing
+  // mutation call sites below; gating, the mutation, and server-side
+  // validation are unchanged.
+  const [pendingAction, setPendingAction] = useState<"submit" | "complete" | null>(null);
 
   if (jobQuery.isPending) {
     return (
@@ -195,6 +207,24 @@ export default function JobDetailPage() {
     measurementRowsByParameter.size > 0 || measurementGridRowsByParameter.size > 0,
   );
 
+  // UX-06: group each section's own independent queries into one meaningful
+  // loading/error state instead of the page reading as a cascade of unrelated
+  // spinners/retries. This only changes how the two already-related queries
+  // per section are *presented* together — it does not change which queries
+  // fire, when, or any gating logic above (which reads job/results data
+  // exactly as before). `measurementGroup` also fixes a real gap: previously
+  // only measurementParametersQuery's error was ever rendered, so a failed
+  // measurementResultsQuery was silently swallowed (rows read as simply
+  // empty) instead of shown — that hid a real error from the technician.
+  const physicalCheckGroup = combineQueryGroupState([
+    physicalCheckItemsQuery,
+    physicalCheckResultsQuery,
+  ]);
+  const measurementGroup = combineQueryGroupState([
+    measurementParametersQuery,
+    measurementResultsQuery,
+  ]);
+
   return (
     <Screen
       title={job.workOrder.number}
@@ -238,7 +268,7 @@ export default function JobDetailPage() {
             ) : null}
             {showSubmitForReview ? (
               <SubmitForReviewAction
-                onSubmit={() => submitMutation.mutate()}
+                onSubmit={() => setPendingAction("submit")}
                 pending={submitMutation.isPending}
                 disabled={submitBlockedReason !== null}
                 disabledReason={submitBlockedReason}
@@ -251,7 +281,7 @@ export default function JobDetailPage() {
             ) : null}
             {showComplete ? (
               <CompleteJobAction
-                onComplete={() => completeMutation.mutate()}
+                onComplete={() => setPendingAction("complete")}
                 pending={completeMutation.isPending}
                 error={
                   completeMutation.isError
@@ -342,24 +372,26 @@ export default function JobDetailPage() {
         />
       )}
       {showRecordPhysicalCheck ? (
-        physicalCheckItemsQuery.isPending || physicalCheckResultsQuery.isPending ? (
+        physicalCheckGroup.isPending ? (
           <LoadingState label="Memuat pemeriksaan fisik…" />
-        ) : physicalCheckItemsQuery.isError ? (
-          <ErrorState
-            message={formatApiError(
-              physicalCheckItemsQuery.error,
-              "Gagal memuat katalog pemeriksaan fisik.",
-            )}
-            onRetry={() => void physicalCheckItemsQuery.refetch()}
-          />
-        ) : physicalCheckResultsQuery.isError ? (
-          <ErrorState
-            message={formatApiError(
-              physicalCheckResultsQuery.error,
-              "Gagal memuat hasil pemeriksaan fisik.",
-            )}
-            onRetry={() => void physicalCheckResultsQuery.refetch()}
-          />
+        ) : physicalCheckGroup.isError ? (
+          physicalCheckGroup.firstErrorIndex === 0 ? (
+            <ErrorState
+              message={formatApiError(
+                physicalCheckItemsQuery.error,
+                "Gagal memuat katalog pemeriksaan fisik.",
+              )}
+              onRetry={() => void physicalCheckItemsQuery.refetch()}
+            />
+          ) : (
+            <ErrorState
+              message={formatApiError(
+                physicalCheckResultsQuery.error,
+                "Gagal memuat hasil pemeriksaan fisik.",
+              )}
+              onRetry={() => void physicalCheckResultsQuery.refetch()}
+            />
+          )
         ) : (
           <PhysicalCheckSection
             jobId={id}
@@ -372,16 +404,26 @@ export default function JobDetailPage() {
         )
       ) : null}
       {showRecordMeasurement ? (
-        measurementParametersQuery.isPending || measurementResultsQuery.isPending ? (
+        measurementGroup.isPending ? (
           <LoadingState label="Memuat parameter pengukuran…" />
-        ) : measurementParametersQuery.isError ? (
-          <ErrorState
-            message={formatApiError(
-              measurementParametersQuery.error,
-              "Gagal memuat parameter pengukuran.",
-            )}
-            onRetry={() => void measurementParametersQuery.refetch()}
-          />
+        ) : measurementGroup.isError ? (
+          measurementGroup.firstErrorIndex === 0 ? (
+            <ErrorState
+              message={formatApiError(
+                measurementParametersQuery.error,
+                "Gagal memuat parameter pengukuran.",
+              )}
+              onRetry={() => void measurementParametersQuery.refetch()}
+            />
+          ) : (
+            <ErrorState
+              message={formatApiError(
+                measurementResultsQuery.error,
+                "Gagal memuat hasil pengukuran.",
+              )}
+              onRetry={() => void measurementResultsQuery.refetch()}
+            />
+          )
         ) : (
           <MeasurementsSection
             jobId={id}
@@ -407,6 +449,32 @@ export default function JobDetailPage() {
       ) : (
         <CorrectionsListSection jobId={id} corrections={correctionsQuery.data ?? []} />
       )}
+      <ConfirmDialog
+        open={pendingAction === "submit"}
+        title={SUBMIT_FOR_REVIEW_CONFIRMATION.title}
+        message={SUBMIT_FOR_REVIEW_CONFIRMATION.message}
+        confirmLabel={SUBMIT_FOR_REVIEW_CONFIRMATION.confirmLabel}
+        destructive
+        confirmPending={submitMutation.isPending}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => {
+          setPendingAction(null);
+          submitMutation.mutate();
+        }}
+      />
+      <ConfirmDialog
+        open={pendingAction === "complete"}
+        title={COMPLETE_JOB_CONFIRMATION.title}
+        message={COMPLETE_JOB_CONFIRMATION.message}
+        confirmLabel={COMPLETE_JOB_CONFIRMATION.confirmLabel}
+        destructive
+        confirmPending={completeMutation.isPending}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => {
+          setPendingAction(null);
+          completeMutation.mutate();
+        }}
+      />
     </Screen>
   );
 }

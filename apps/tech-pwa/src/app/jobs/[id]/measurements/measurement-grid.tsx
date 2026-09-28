@@ -4,8 +4,12 @@ import { useMemo, useState } from "react";
 import { Screen } from "../../../../components/layout/screen";
 import { StickyActionBar } from "../../../../components/layout/sticky-action-bar";
 import { Button } from "../../../../components/ui/button";
+import { ConfirmDialog } from "../../../../components/ui/confirm-dialog";
 import { ErrorBanner } from "../../../../components/feedback/error-banner";
+import { SaveStatusIndicator } from "../../../../components/ui/save-status-indicator";
 import { formatApiError } from "../../../../lib/api-errors";
+import { computeSaveStatus } from "../../../../lib/calibration/save-status";
+import { useUnsavedChangesGuard } from "../../../../hooks/use-unsaved-changes-guard";
 import {
   canAddReplicateSlot,
   formatReadingDisplay,
@@ -72,6 +76,10 @@ export function MeasurementGridEntry({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
+  // UX-07: transient "did my input save" acknowledgement, shared vocabulary
+  // with Kontrol Alat/Physical Check/direct-reading entry. Save mechanism/
+  // timing (explicit "Simpan pembacaan") unchanged.
+  const [justSaved, setJustSaved] = useState(false);
 
   const rowByKey = useMemo(() => {
     const map = new Map<string, TechMeasurementResult>();
@@ -112,6 +120,7 @@ export function MeasurementGridEntry({
   const setDraft = (key: string, value: string) => {
     setTouched(true);
     setSubmitError(null);
+    setJustSaved(false);
     setDrafts((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -175,9 +184,20 @@ export function MeasurementGridEntry({
       },
     }));
   const nothingToSave = newItems.length === 0 && updates.length === 0;
+  // "Unsaved changes" for the nav guard is the raw draft-vs-stored diff
+  // (dirtyCells), not the save-eligible subset (nothingToSave) — an invalid,
+  // not-yet-corrected keystroke is still input that would be silently lost on
+  // back navigation, even though it can't be saved yet.
+  const guard = useUnsavedChangesGuard(dirtyCells.length > 0);
+  const saveStatus = computeSaveStatus({
+    isPending: saving,
+    isError: submitError !== null,
+    justSaved,
+  });
 
   async function handleSave() {
     setSubmitError(null);
+    setJustSaved(false);
     setSaving(true);
     try {
       for (let i = 0; i < newItems.length; i += BATCH_LIMIT) {
@@ -187,6 +207,7 @@ export function MeasurementGridEntry({
       await onRefetch();
       setDrafts({});
       setTouched(false);
+      setJustSaved(true);
     } catch (err) {
       setSubmitError(formatApiError(err, "Gagal menyimpan pembacaan."));
       await onRefetch();
@@ -199,11 +220,17 @@ export function MeasurementGridEntry({
     <Screen
       title={param.name}
       showBack
+      onHome={() => guard.requestHome(() => window.location.assign("/jobs"))}
       footer={
         editable ? (
           <StickyActionBar>
             {footerValidationMessage ? (
               <p className="text-center text-xs text-red-600">{footerValidationMessage}</p>
+            ) : null}
+            {saveStatus === "saved" ? (
+              <p className="text-center">
+                <SaveStatusIndicator status="saved" />
+              </p>
             ) : null}
             <Button
               fullWidth
@@ -343,6 +370,14 @@ export function MeasurementGridEntry({
             : null}
         </p>
       </div>
+      <ConfirmDialog
+        open={guard.confirmOpen}
+        title="Keluar tanpa menyimpan?"
+        message="Pembacaan yang belum disimpan akan hilang."
+        confirmLabel="Keluar"
+        onCancel={guard.cancel}
+        onConfirm={guard.confirmLeave}
+      />
     </Screen>
   );
 }

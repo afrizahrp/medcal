@@ -4,8 +4,12 @@ import { useMemo, useState } from "react";
 import { Screen } from "../../../../components/layout/screen";
 import { StickyActionBar } from "../../../../components/layout/sticky-action-bar";
 import { Button } from "../../../../components/ui/button";
+import { ConfirmDialog } from "../../../../components/ui/confirm-dialog";
 import { ErrorBanner } from "../../../../components/feedback/error-banner";
+import { SaveStatusIndicator } from "../../../../components/ui/save-status-indicator";
 import { formatApiError } from "../../../../lib/api-errors";
+import { computeSaveStatus } from "../../../../lib/calibration/save-status";
+import { useUnsavedChangesGuard } from "../../../../hooks/use-unsaved-changes-guard";
 import {
   canAddReplicateSlot,
   formatReadingDisplay,
@@ -78,6 +82,10 @@ export function NibpGroupedGrid({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
+  // UX-07: transient "did my input save" acknowledgement, shared vocabulary
+  // with the other data-entry screens. Save mechanism/timing (explicit
+  // "Simpan Semua") unchanged.
+  const [justSaved, setJustSaved] = useState(false);
 
   const siblingsWithPoints = useMemo(
     () =>
@@ -141,6 +149,7 @@ export function NibpGroupedGrid({
   const setDraft = (key: string, value: string) => {
     setTouched(true);
     setSubmitError(null);
+    setJustSaved(false);
     setDrafts((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -230,9 +239,19 @@ export function NibpGroupedGrid({
       },
     }));
   const nothingToSave = newItems.length === 0 && updates.length === 0;
+  // Same rationale as measurement-grid.tsx: the raw draft-vs-stored diff
+  // (dirtyCells) is the unsaved-changes signal, not just the save-eligible
+  // subset, so an invalid-but-typed keystroke is still guarded.
+  const guard = useUnsavedChangesGuard(dirtyCells.length > 0);
+  const saveStatus = computeSaveStatus({
+    isPending: saving,
+    isError: submitError !== null,
+    justSaved,
+  });
 
   async function handleSave() {
     setSubmitError(null);
+    setJustSaved(false);
     setSaving(true);
     try {
       for (let i = 0; i < newItems.length; i += BATCH_LIMIT) {
@@ -242,6 +261,7 @@ export function NibpGroupedGrid({
       await onRefetch();
       setDrafts({});
       setTouched(false);
+      setJustSaved(true);
     } catch (err) {
       setSubmitError(formatApiError(err, "Gagal menyimpan pembacaan."));
       // Rows saved before the failing one stay saved (each write is independently
@@ -314,6 +334,7 @@ export function NibpGroupedGrid({
     <Screen
       title="NIBP"
       showBack
+      onHome={() => guard.requestHome(() => window.location.assign("/jobs"))}
       footer={
         editable ? (
           <StickyActionBar>
@@ -322,6 +343,11 @@ export function NibpGroupedGrid({
             </p>
             {footerValidationMessage ? (
               <p className="text-center text-xs text-red-600">{footerValidationMessage}</p>
+            ) : null}
+            {saveStatus === "saved" ? (
+              <p className="text-center">
+                <SaveStatusIndicator status="saved" />
+              </p>
             ) : null}
             <Button
               fullWidth
@@ -422,6 +448,14 @@ export function NibpGroupedGrid({
           })}
         </div>
       </div>
+      <ConfirmDialog
+        open={guard.confirmOpen}
+        title="Keluar tanpa menyimpan?"
+        message="Pembacaan yang belum disimpan akan hilang."
+        confirmLabel="Keluar"
+        onCancel={guard.cancel}
+        onConfirm={guard.confirmLeave}
+      />
     </Screen>
   );
 }

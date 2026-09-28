@@ -6,9 +6,13 @@ import { useAuthz } from "@medcal/auth/client";
 import { Screen } from "../../../../../components/layout/screen";
 import { StickyActionBar } from "../../../../../components/layout/sticky-action-bar";
 import { Button } from "../../../../../components/ui/button";
+import { ConfirmDialog } from "../../../../../components/ui/confirm-dialog";
 import { ErrorBanner } from "../../../../../components/feedback/error-banner";
 import { LoadingState, ErrorState } from "../../../../../components/ui/state-views";
+import { SaveStatusIndicator } from "../../../../../components/ui/save-status-indicator";
 import { formatApiError } from "../../../../../lib/api-errors";
+import { computeSaveStatus } from "../../../../../lib/calibration/save-status";
+import { useUnsavedChangesGuard } from "../../../../../hooks/use-unsaved-changes-guard";
 import {
   canRecordMeasurement,
   formatReadingDisplay,
@@ -61,6 +65,9 @@ export default function MeasurementParameterEntryPage() {
   const [extraRows, setExtraRows] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
+  // UX-07: transient "did my input save" acknowledgement, shared vocabulary
+  // with Kontrol Alat/Physical Check. Save mechanism/timing unchanged.
+  const [justSaved, setJustSaved] = useState(false);
 
   const canRecord = Boolean(capabilities?.calibrationJobRecordMeasurement);
   const attempt = jobQuery.data?.currentAttempt ?? 1;
@@ -93,6 +100,20 @@ export default function MeasurementParameterEntryPage() {
     for (const r of existingRows) map.set(r.replicateIndex, r);
     return map;
   }, [existingRows]);
+
+  // This component either renders its own direct-reading list below, or (for
+  // GRID-kind parameters) delegates entirely to <MeasurementGridEntry>, which
+  // owns its own guard instance. Called unconditionally (rules of hooks) but
+  // only actually armed for the DIRECT path — otherwise this page's own
+  // (always-empty, for GRID) drafts would arm a second, redundant popstate
+  // listener alongside the child's, which could double-react to one gesture.
+  const isDirectEntry = entryTarget?.kind === "DIRECT";
+  const isDirty = Object.keys(drafts).some((key) => {
+    const index = Number(key);
+    const existing = rowByIndex.get(index);
+    return (drafts[index] ?? "").trim() !== readingDisplayValue(existing).trim();
+  });
+  const guard = useUnsavedChangesGuard(isDirty, { enabled: isDirectEntry });
 
   if (jobQuery.isPending || parametersQuery.isPending || resultsQuery.isPending) {
     return (
@@ -183,6 +204,7 @@ export default function MeasurementParameterEntryPage() {
   const setDraft = (index: number, value: string) => {
     setTouched(true);
     setSubmitError(null);
+    setJustSaved(false);
     setDrafts((prev) => ({ ...prev, [index]: value }));
   };
 
@@ -240,15 +262,22 @@ export default function MeasurementParameterEntryPage() {
     }));
   const nothingToSave = newItems.length === 0 && updates.length === 0;
   const saving = batchMutation.isPending || updateMutation.isPending;
+  const saveStatus = computeSaveStatus({
+    isPending: saving,
+    isError: submitError !== null,
+    justSaved,
+  });
 
   async function handleSave() {
     setSubmitError(null);
+    setJustSaved(false);
     try {
       if (newItems.length > 0) await batchMutation.mutateAsync(newItems);
       for (const u of updates) await updateMutation.mutateAsync(u);
       await resultsQuery.refetch();
       setDrafts({});
       setTouched(false);
+      setJustSaved(true);
     } catch (err) {
       setSubmitError(formatApiError(err, "Gagal menyimpan pembacaan."));
       // A row may have been saved before the failure — resync so its chip shows.
@@ -262,11 +291,17 @@ export default function MeasurementParameterEntryPage() {
     <Screen
       title={param.name}
       showBack
+      onHome={() => guard.requestHome(() => window.location.assign("/jobs"))}
       footer={
         editable ? (
           <StickyActionBar>
             {footerValidationMessage ? (
               <p className="text-center text-xs text-red-600">{footerValidationMessage}</p>
+            ) : null}
+            {saveStatus === "saved" ? (
+              <p className="text-center">
+                <SaveStatusIndicator status="saved" />
+              </p>
             ) : null}
             <Button fullWidth disabled={saving || nothingToSave || hasInvalid} onClick={handleSave}>
               {saving ? "Menyimpan…" : "Simpan pembacaan"}
@@ -356,6 +391,14 @@ export default function MeasurementParameterEntryPage() {
           </p>
         ) : null}
       </div>
+      <ConfirmDialog
+        open={guard.confirmOpen}
+        title="Keluar tanpa menyimpan?"
+        message="Pembacaan yang belum disimpan akan hilang."
+        confirmLabel="Keluar"
+        onCancel={guard.cancel}
+        onConfirm={guard.confirmLeave}
+      />
     </Screen>
   );
 }

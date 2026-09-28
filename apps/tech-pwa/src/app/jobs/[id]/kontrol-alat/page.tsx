@@ -1,12 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuthz } from "@medcal/auth/client";
 import { Screen } from "../../../../components/layout/screen";
 import { Section, SectionRow } from "../../../../components/ui/section";
 import { Button } from "../../../../components/ui/button";
 import { LoadingState, ErrorState } from "../../../../components/ui/state-views";
+import { SaveStatusIndicator } from "../../../../components/ui/save-status-indicator";
 import { formatApiError } from "../../../../lib/api-errors";
+import { computeSaveStatus } from "../../../../lib/calibration/save-status";
 import { useJobQuery } from "../use-job-query";
 import {
   useKontrolAlat,
@@ -64,7 +67,10 @@ function TriStateChip({
           disabled={disabled}
           onClick={() => onChange(opt.v === value ? null : opt.v)}
           className={[
-            "rounded-md px-2.5 py-1 text-xs font-medium transition-opacity",
+            // UX-11: raised to the app's own min-h-11/min-w-11 touch-target
+            // convention (already used by Button/AppHeader/VerdictOption) —
+            // sizing only, value semantics/labels/colors unchanged.
+            "flex min-h-11 min-w-11 items-center justify-center rounded-md px-2.5 text-xs font-medium transition-opacity",
             value === opt.v ? opt.cls : "bg-slate-50 text-slate-400",
             disabled ? "cursor-not-allowed opacity-50" : "",
           ]
@@ -80,6 +86,72 @@ function TriStateChip({
 
 // ── Inspection rows ───────────────────────────────────────────────────────────
 
+type InspBoolField =
+  | "visualPowerCable"
+  | "visualDisplay"
+  | "visualButtons"
+  | "functionInitialOk"
+  | "functionFinalOk";
+
+// UX-04: each inspection field owns its own `usePatchKontrolAlat` mutation
+// instance (the same "one mutation per independent row" pattern already used
+// by AccessoryRow below), so tapping one field only shows a pending/disabled
+// state on that field — the other four rows (three Uji Visual + the sibling
+// Uji Fungsi field, previously frozen by a single shared mutation) stay
+// interactive while one save is in flight. The PATCH endpoint
+// (`kontrol-alat.service.ts#patch`) applies each field independently via a
+// `!== undefined` spread with no cross-field read of these five booleans, so
+// concurrent independent PATCH calls for different fields are safe — unlike
+// `workExecuted`/`notExecutedReason` below, which the server validates
+// together and therefore deliberately keep sharing one mutation instance.
+function InspectionFieldRow({
+  label,
+  field,
+  value,
+  canEdit,
+  jobId,
+}: {
+  label: string;
+  field: InspBoolField;
+  value: boolean | null;
+  canEdit: boolean;
+  jobId: string;
+}) {
+  const patch = usePatchKontrolAlat(jobId);
+  const [justSaved, setJustSaved] = useState(false);
+  const status = computeSaveStatus({
+    isPending: patch.isPending,
+    isError: patch.isError,
+    justSaved,
+  });
+
+  function handleChange(next: boolean | null) {
+    setJustSaved(false);
+    patch.mutate(
+      { [field]: next },
+      { onSuccess: () => setJustSaved(true) },
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5 py-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-slate-700">{label}</span>
+        <TriStateChip value={value} onChange={handleChange} disabled={!canEdit || patch.isPending} />
+      </div>
+      {patch.isError ? (
+        <p className="text-right text-xs text-red-600">
+          {formatApiError(patch.error, "Gagal menyimpan.")}
+        </p>
+      ) : (
+        <div className="text-right">
+          <SaveStatusIndicator status={status} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InspectionSection({
   ka,
   canEdit,
@@ -89,19 +161,6 @@ function InspectionSection({
   canEdit: boolean;
   jobId: string;
 }) {
-  const patch = usePatchKontrolAlat(jobId);
-
-  type InspBoolField =
-    | "visualPowerCable"
-    | "visualDisplay"
-    | "visualButtons"
-    | "functionInitialOk"
-    | "functionFinalOk";
-
-  function handleBool(field: InspBoolField, value: boolean | null) {
-    patch.mutate({ [field]: value });
-  }
-
   return (
     <Section title="Hasil Inspeksi">
       {/* III. Uji Visual */}
@@ -115,14 +174,14 @@ function InspectionSection({
           { label: "Tombol / kontrol", field: "visualButtons" as const },
         ] as const
       ).map(({ label, field }) => (
-        <div key={field} className="flex items-center justify-between gap-2 py-1.5">
-          <span className="text-sm text-slate-700">{label}</span>
-          <TriStateChip
-            value={ka[field]}
-            onChange={(v) => handleBool(field, v)}
-            disabled={!canEdit || patch.isPending}
-          />
-        </div>
+        <InspectionFieldRow
+          key={field}
+          label={label}
+          field={field}
+          value={ka[field]}
+          canEdit={canEdit}
+          jobId={jobId}
+        />
       ))}
 
       {/* III. Uji Fungsi */}
@@ -135,21 +194,15 @@ function InspectionSection({
           { label: "Uji fungsi akhir (setelah kalibrasi)", field: "functionFinalOk" as const },
         ] as const
       ).map(({ label, field }) => (
-        <div key={field} className="flex items-center justify-between gap-2 py-1.5">
-          <span className="text-sm text-slate-700">{label}</span>
-          <TriStateChip
-            value={ka[field]}
-            onChange={(v) => handleBool(field, v)}
-            disabled={!canEdit || patch.isPending}
-          />
-        </div>
+        <InspectionFieldRow
+          key={field}
+          label={label}
+          field={field}
+          value={ka[field]}
+          canEdit={canEdit}
+          jobId={jobId}
+        />
       ))}
-
-      {patch.isError ? (
-        <p className="mt-2 text-xs text-red-600">
-          {formatApiError(patch.error, "Gagal menyimpan.")}
-        </p>
-      ) : null}
     </Section>
   );
 }
@@ -165,16 +218,32 @@ function WorkExecutedSection({
   canEdit: boolean;
   jobId: string;
 }) {
+  // NOTE (UX-04 scope decision): workExecuted and notExecutedReason are kept
+  // on this one shared mutation deliberately, not split per-field like
+  // InspectionFieldRow above. The server (`kontrol-alat.service.ts#patch`)
+  // validates them together — `workExecuted === false` requires a non-empty
+  // `notExecutedReason`, read from `existing` at request time — so two
+  // independent concurrent PATCH calls for these two fields could race and
+  // spuriously fail. This is exactly the "domain dependency requiring
+  // serialization" case the task calls out; only the feedback (below) changes.
   const patch = usePatchKontrolAlat(jobId);
+  const [justSaved, setJustSaved] = useState(false);
+  const status = computeSaveStatus({
+    isPending: patch.isPending,
+    isError: patch.isError,
+    justSaved,
+  });
 
   function toggle(next: boolean | null) {
     if (!canEdit) return;
+    setJustSaved(false);
+    const onSuccess = { onSuccess: () => setJustSaved(true) };
     if (next === true) {
-      patch.mutate({ workExecuted: true, notExecutedReason: null });
+      patch.mutate({ workExecuted: true, notExecutedReason: null }, onSuccess);
     } else if (next === false) {
-      patch.mutate({ workExecuted: false });
+      patch.mutate({ workExecuted: false }, onSuccess);
     } else {
-      patch.mutate({ workExecuted: null });
+      patch.mutate({ workExecuted: null }, onSuccess);
     }
   }
 
@@ -203,7 +272,11 @@ function WorkExecutedSection({
             onBlur={(e) => {
               const v = e.target.value.trim();
               if (v !== (ka.notExecutedReason ?? "")) {
-                patch.mutate({ notExecutedReason: v || null });
+                setJustSaved(false);
+                patch.mutate(
+                  { notExecutedReason: v || null },
+                  { onSuccess: () => setJustSaved(true) },
+                );
               }
             }}
           />
@@ -214,7 +287,11 @@ function WorkExecutedSection({
         <p className="mt-2 text-xs text-red-600">
           {formatApiError(patch.error, "Gagal menyimpan.")}
         </p>
-      ) : null}
+      ) : (
+        <div className="mt-1 text-right">
+          <SaveStatusIndicator status={status} />
+        </div>
+      )}
     </Section>
   );
 }
@@ -231,17 +308,39 @@ function AccessoryRow({
   jobId: string;
 }) {
   const update = useUpdateKontrolAlatAccessory(jobId);
+  const [justSaved, setJustSaved] = useState(false);
+  const status = computeSaveStatus({
+    isPending: update.isPending,
+    isError: update.isError,
+    justSaved,
+  });
 
   return (
-    <div className="flex items-center justify-between gap-2 py-1.5">
-      <span className="min-w-0 flex-1 text-sm text-slate-700">{acc.label}</span>
-      <TriStateChip
-        value={acc.present}
-        onChange={(v) => {
-          if (canEdit) update.mutate({ accessoryId: acc.id, input: { present: v } });
-        }}
-        disabled={!canEdit || update.isPending}
-      />
+    <div className="flex flex-col gap-0.5 py-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 flex-1 text-sm text-slate-700">{acc.label}</span>
+        <TriStateChip
+          value={acc.present}
+          onChange={(v) => {
+            if (!canEdit) return;
+            setJustSaved(false);
+            update.mutate(
+              { accessoryId: acc.id, input: { present: v } },
+              { onSuccess: () => setJustSaved(true) },
+            );
+          }}
+          disabled={!canEdit || update.isPending}
+        />
+      </div>
+      {update.isError ? (
+        <p className="text-right text-xs text-red-600">
+          {formatApiError(update.error, "Gagal menyimpan.")}
+        </p>
+      ) : (
+        <div className="text-right">
+          <SaveStatusIndicator status={status} />
+        </div>
+      )}
     </div>
   );
 }

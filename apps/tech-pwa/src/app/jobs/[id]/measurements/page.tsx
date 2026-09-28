@@ -6,6 +6,7 @@ import { useAuthz } from "@medcal/auth/client";
 import { Screen } from "../../../../components/layout/screen";
 import { StickyActionBar } from "../../../../components/layout/sticky-action-bar";
 import { Button } from "../../../../components/ui/button";
+import { ConfirmDialog } from "../../../../components/ui/confirm-dialog";
 import { LoadingState, ErrorState, EmptyState } from "../../../../components/ui/state-views";
 import { ErrorBanner } from "../../../../components/feedback/error-banner";
 import { formatApiError } from "../../../../lib/api-errors";
@@ -14,6 +15,7 @@ import {
   hasCapabilityGroups,
   measurementLockedReason,
 } from "../../../../lib/calibration/measurement";
+import { SUBMIT_FOR_REVIEW_CONFIRMATION } from "../../../../lib/calibration/job-action-confirmations";
 import { canSubmitForReview } from "../../../../lib/calibration/quality-review";
 import { isReferenceEquipmentApprovalPending } from "../../../../lib/calibration/reference-equipment";
 import { useJobQuery, useSubmitForReview } from "../use-job-query";
@@ -40,6 +42,9 @@ export default function MeasurementsPage() {
   const resultsQuery = useMeasurementResults(id);
   const submitMutation = useSubmitForReview(id);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // UX-01: same irreversible action, duplicated here as the audit notes —
+  // reuses the identical confirmation copy/dialog as job-detail's Submit.
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
 
   const canRecord = Boolean(capabilities?.calibrationJobRecordMeasurement);
 
@@ -146,7 +151,11 @@ export default function MeasurementsPage() {
       footer={
         showSubmit ? (
           <StickyActionBar>
-            <Button fullWidth disabled={pending || unresolved} onClick={() => void handleSubmit()}>
+            <Button
+              fullWidth
+              disabled={pending || unresolved}
+              onClick={() => setConfirmSubmitOpen(true)}
+            >
               {pending ? "Mengirim…" : "Kirim hasil ke Manajer Teknis"}
             </Button>
             {unresolved ? (
@@ -236,6 +245,19 @@ export default function MeasurementsPage() {
           </>
         )}
       </div>
+      <ConfirmDialog
+        open={confirmSubmitOpen}
+        title={SUBMIT_FOR_REVIEW_CONFIRMATION.title}
+        message={SUBMIT_FOR_REVIEW_CONFIRMATION.message}
+        confirmLabel={SUBMIT_FOR_REVIEW_CONFIRMATION.confirmLabel}
+        destructive
+        confirmPending={pending}
+        onCancel={() => setConfirmSubmitOpen(false)}
+        onConfirm={() => {
+          setConfirmSubmitOpen(false);
+          void handleSubmit();
+        }}
+      />
     </Screen>
   );
 }

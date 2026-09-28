@@ -6,9 +6,13 @@ import { useAuthz } from "@medcal/auth/client";
 import { Screen } from "../../../../components/layout/screen";
 import { StickyActionBar } from "../../../../components/layout/sticky-action-bar";
 import { Button } from "../../../../components/ui/button";
+import { ConfirmDialog } from "../../../../components/ui/confirm-dialog";
 import { ErrorBanner } from "../../../../components/feedback/error-banner";
 import { LoadingState, ErrorState, EmptyState } from "../../../../components/ui/state-views";
+import { SaveStatusIndicator } from "../../../../components/ui/save-status-indicator";
 import { formatApiError } from "../../../../lib/api-errors";
+import { computeSaveStatus } from "../../../../lib/calibration/save-status";
+import { useUnsavedChangesGuard } from "../../../../hooks/use-unsaved-changes-guard";
 import {
   buildPhysicalCheckSavePlan,
   canRecordPhysicalCheck,
@@ -49,6 +53,10 @@ export default function PhysicalCheckPage() {
 
   const [drafts, setDrafts] = useState<Record<string, PhysicalCheckDraft>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // UX-07: transient "did my input save" acknowledgement, shared vocabulary
+  // with Kontrol Alat/Measurement Entry. Save mechanism/timing unchanged —
+  // explicit "Simpan" still commits, nothing autosaves.
+  const [justSaved, setJustSaved] = useState(false);
 
   const canRecord = Boolean(capabilities?.calibrationJobRecordPhysicalCheck);
   const attempt = jobQuery.data?.currentAttempt ?? 1;
@@ -65,6 +73,13 @@ export default function PhysicalCheckPage() {
   }, [currentResults]);
 
   const catalog = itemsQuery.data ?? [];
+  // Hoisted above the loading/error guard clauses below so the unsaved-
+  // changes guard hook (which must be called unconditionally, before any
+  // early return) can read the same "is there anything to save" signal the
+  // save button already uses — no change to the plan/diff logic itself.
+  const plan = buildPhysicalCheckSavePlan(catalog, currentResults, drafts);
+  const nothingToSave = plan.creates.length === 0 && plan.updates.length === 0;
+  const guard = useUnsavedChangesGuard(!nothingToSave);
 
   if (jobQuery.isPending || itemsQuery.isPending || resultsQuery.isPending) {
     return (
@@ -132,16 +147,21 @@ export default function PhysicalCheckPage() {
 
   const setDraft = (itemId: string, next: PhysicalCheckDraft) => {
     setSubmitError(null);
+    setJustSaved(false);
     setDrafts((prev) => ({ ...prev, [itemId]: next }));
   };
 
-  const plan = buildPhysicalCheckSavePlan(catalog, currentResults, drafts);
-  const nothingToSave = plan.creates.length === 0 && plan.updates.length === 0;
   const saving = batchMutation.isPending || updateMutation.isPending;
+  const saveStatus = computeSaveStatus({
+    isPending: saving,
+    isError: submitError !== null,
+    justSaved,
+  });
 
   async function handleSave() {
     if (!editable || saving || nothingToSave) return;
     setSubmitError(null);
+    setJustSaved(false);
     try {
       if (plan.creates.length > 0) await batchMutation.mutateAsync(plan.creates);
       for (const u of plan.updates) {
@@ -149,6 +169,7 @@ export default function PhysicalCheckPage() {
       }
       await resultsQuery.refetch();
       setDrafts({});
+      setJustSaved(true);
     } catch (err) {
       setSubmitError(formatApiError(err, "Gagal menyimpan pemeriksaan fisik."));
       await resultsQuery.refetch();
@@ -159,9 +180,15 @@ export default function PhysicalCheckPage() {
     <Screen
       title="Pemeriksaan Fisik"
       showBack
+      onHome={() => guard.requestHome(() => window.location.assign("/jobs"))}
       footer={
         editable && catalog.length > 0 ? (
           <StickyActionBar>
+            {saveStatus === "saved" ? (
+              <p className="text-center">
+                <SaveStatusIndicator status="saved" />
+              </p>
+            ) : null}
             <Button
               fullWidth
               disabled={saving || nothingToSave}
@@ -207,6 +234,14 @@ export default function PhysicalCheckPage() {
           </ul>
         )}
       </div>
+      <ConfirmDialog
+        open={guard.confirmOpen}
+        title="Keluar tanpa menyimpan?"
+        message="Perubahan pemeriksaan fisik yang belum disimpan akan hilang."
+        confirmLabel="Keluar"
+        onCancel={guard.cancel}
+        onConfirm={guard.confirmLeave}
+      />
     </Screen>
   );
 }

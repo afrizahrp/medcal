@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { Screen } from "../../../../components/layout/screen";
 import { Button } from "../../../../components/ui/button";
+import { ConfirmDialog } from "../../../../components/ui/confirm-dialog";
 import { LoadingState, ErrorState } from "../../../../components/ui/state-views";
 import { formatApiError } from "../../../../lib/api-errors";
 import { canSubmitIdentityCorrection } from "../../../../lib/calibration/identity-gate";
@@ -144,43 +145,14 @@ export default function IdentityCorrectionLayout({ children }: { children: React
       value={{ job, state, update, requestExit: () => setExitConfirmOpen(true) }}
     >
       {children}
-      {exitConfirmOpen ? (
-        <ExitConfirmDialog onCancel={() => setExitConfirmOpen(false)} onConfirm={exitToHome} />
-      ) : null}
+      <ConfirmDialog
+        open={exitConfirmOpen}
+        title="Keluar dari koreksi identitas?"
+        message="Data yang sudah diisi (tanda tangan, foto) akan hilang."
+        confirmLabel="Ya, keluar ke Job Saya"
+        onCancel={() => setExitConfirmOpen(false)}
+        onConfirm={exitToHome}
+      />
     </WizardContext.Provider>
-  );
-}
-
-function ExitConfirmDialog({
-  onCancel,
-  onConfirm,
-}: {
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="exit-wizard-title"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
-    >
-      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
-        <h2 id="exit-wizard-title" className="text-base font-semibold text-slate-900">
-          Keluar dari koreksi identitas?
-        </h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Data yang sudah diisi (tanda tangan, foto) akan hilang.
-        </p>
-        <div className="mt-5 flex flex-col gap-2">
-          <Button variant="secondary" fullWidth onClick={onCancel}>
-            Batal
-          </Button>
-          <Button fullWidth onClick={onConfirm}>
-            Ya, keluar ke Job Saya
-          </Button>
-        </div>
-      </div>
-    </div>
   );
 }
