@@ -1,10 +1,11 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { DocumentNumberService, Prisma, allocateRevisionNumber, prisma } from "@medcal/db";
+import {
+  cancelActiveAllocationsForWorkOrder,
+  computeRemainingQtyByItemId,
+  createAllocationsAndWorkOrderItems,
+  resolveAllocationPlan,
+} from "./allocation";
 import {
   WORK_ORDER_SORTABLE_FIELDS,
   type WorkOrderAssignInput,
@@ -219,8 +220,7 @@ function assertNoActiveDeliveryNote(
 @Injectable()
 export class WorkOrdersService {
   async create(companyId: string, input: WorkOrderCreateInput): Promise<WorkOrderWithItems> {
-    try {
-      return await prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (tx) => {
         const purchaseOrder = await tx.purchaseOrder.findFirst({
           where: { id: input.purchaseOrderId, companyId },
           include: {
@@ -261,19 +261,25 @@ export class WorkOrdersService {
           });
         }
 
-        const existingActive = await tx.workOrder.findFirst({
-          where: {
-            companyId,
-            purchaseOrderId: purchaseOrder.id,
-            status: { not: "CANCELLED" },
-          },
-          select: { id: true },
-        });
-        if (existingActive) {
-          throw new ConflictException({
-            message: "An active work order already exists for this purchase order",
-            code: "DUPLICATE_ACTIVE_WORK_ORDER",
-            workOrderId: existingActive.id,
+        // Allocation & Multi-WOL Architecture: a PurchaseOrder may now have
+        // any number of simultaneously active WorkOrders — the former
+        // "one active WorkOrder per PO" check (and its backing partial
+        // unique index) is removed. Exclusivity is enforced per PO item by
+        // createAllocationsAndWorkOrderItems below, not at the PO level.
+        const itemsById = new Map(
+          purchaseOrder.items.map((item) => [item.id, { qty: item.qty }]),
+        );
+        const remainingByItemId = await computeRemainingQtyByItemId(tx, itemsById);
+        const allocationPlan = resolveAllocationPlan(
+          purchaseOrder.items.map((item) => ({ id: item.id, qty: item.qty })),
+          input.items,
+          remainingByItemId,
+        );
+        if (allocationPlan.length === 0) {
+          throw new BadRequestException({
+            message:
+              "Every active item on this purchase order is already fully allocated to other work orders",
+            code: "NOTHING_TO_ALLOCATE",
           });
         }
 
@@ -309,14 +315,16 @@ export class WorkOrdersService {
           },
         });
 
-        await tx.workOrderItem.createMany({
-          data: purchaseOrder.items.map((item) => ({
-            companyId,
-            workOrderId: workOrder.id,
-            purchaseOrderItemId: item.id,
-            description: item.description,
-            qty: item.qty,
-          })),
+        await createAllocationsAndWorkOrderItems(tx, {
+          companyId,
+          workOrderId: workOrder.id,
+          plan: allocationPlan,
+          itemsById: new Map(
+            purchaseOrder.items.map((item) => [
+              item.id,
+              { description: item.description, qty: item.qty },
+            ]),
+          ),
         });
 
         // ON_SITE only: optional initial reference-equipment selection.
@@ -351,16 +359,7 @@ export class WorkOrdersService {
           where: { id: workOrder.id, companyId },
           include: workOrderInclude,
         });
-      });
-    } catch (error) {
-      if (isUniqueConstraintError(error)) {
-        throw new ConflictException({
-          message: "An active work order already exists for this purchase order",
-          code: "DUPLICATE_ACTIVE_WORK_ORDER",
-        });
-      }
-      throw error;
-    }
+    });
   }
 
   async findAll(companyId: string, query: WorkOrderListQuery): Promise<WorkOrderListResult> {
@@ -1140,10 +1139,20 @@ export class WorkOrdersService {
     );
     assertTransition(existing.status, "CANCELLED");
 
-    return prisma.workOrder.update({
-      where: { id },
-      data: { status: "CANCELLED" },
-      include: workOrderInclude,
+    return prisma.$transaction(async (tx) => {
+      const cancelled = await tx.workOrder.update({
+        where: { id },
+        data: { status: "CANCELLED" },
+        include: workOrderInclude,
+      });
+      // Allocation & Multi-WOL Architecture: a cancelled WorkOrder must never
+      // continue to hold its PurchaseOrderItem quantity as consumed — release
+      // it back to "remaining" regardless of fan-out state. This is a side
+      // effect of WorkOrder-level cancellation (already governed by its own
+      // transition rules above); it is not a standalone Allocation-level
+      // cancellation, which remains pre-fan-out-only.
+      await cancelActiveAllocationsForWorkOrder(tx, id);
+      return cancelled;
     });
   }
 
@@ -1204,8 +1213,33 @@ export class WorkOrdersService {
     const consumedPurchaseOrderItemIds = new Set(
       existing.items.map((item) => item.purchaseOrderItemId),
     );
+    // Allocation & Multi-WOL Architecture: an active PO item is only
+    // auto-pulled into this WorkOrder if it has never been touched by ANY
+    // allocation at all (fully unallocated) — an item already partially or
+    // fully allocated to a sibling WorkOrder is never auto-claimed here,
+    // since guessing how much of its remainder this WorkOrder should take
+    // would be inventing a policy, not reconciling scope (the exact conflict
+    // this method's pull-based design has with multi-WorkOrder-per-PO —
+    // see the final architecture decision, §7). Claiming a specific quantity
+    // of an already-partially-allocated item is done deliberately through
+    // the allocation-aware WorkOrder.create() flow instead. This preserves
+    // today's exact behavior for the single-consumer case (an item with zero
+    // allocations anywhere behaves identically to before).
+    const allocatedElsewhere = await prisma.purchaseOrderItemAllocation.findMany({
+      where: {
+        purchaseOrderItemId: { in: purchaseOrder.items.map((item) => item.id) },
+        status: "ACTIVE",
+      },
+      select: { purchaseOrderItemId: true },
+      distinct: ["purchaseOrderItemId"],
+    });
+    const allocatedPurchaseOrderItemIds = new Set(
+      allocatedElsewhere.map((row) => row.purchaseOrderItemId),
+    );
     const pendingPurchaseOrderItems = purchaseOrder.items.filter(
-      (item) => !consumedPurchaseOrderItemIds.has(item.id),
+      (item) =>
+        !consumedPurchaseOrderItemIds.has(item.id) &&
+        !allocatedPurchaseOrderItemIds.has(item.id),
     );
     const itemsToRemove = existing.items.filter(
       (item) => !activePurchaseOrderItemIds.has(item.purchaseOrderItemId),
@@ -1266,18 +1300,36 @@ export class WorkOrdersService {
         await tx.workOrderItem.deleteMany({
           where: { id: { in: itemsToRemove.map((item) => item.id) } },
         });
+        // Allocation & Multi-WOL Architecture: release the quantity these
+        // items had committed back to "remaining" — a removed WorkOrderItem
+        // must never leave its backing Allocation ACTIVE.
+        const allocationIdsToCancel = itemsToRemove
+          .map((item) => item.allocationId)
+          .filter((allocationId): allocationId is string => allocationId !== null);
+        if (allocationIdsToCancel.length > 0) {
+          await tx.purchaseOrderItemAllocation.updateMany({
+            where: { id: { in: allocationIdsToCancel }, status: "ACTIVE" },
+            data: { status: "CANCELLED" },
+          });
+        }
       }
 
-      // ADDED: active PO item not yet represented on this WorkOrder.
+      // ADDED: active PO item not yet represented on this WorkOrder (and not
+      // allocated to any sibling WorkOrder — see pendingPurchaseOrderItems).
       if (pendingPurchaseOrderItems.length > 0) {
-        await tx.workOrderItem.createMany({
-          data: pendingPurchaseOrderItems.map((item) => ({
-            companyId,
-            workOrderId: id,
+        await createAllocationsAndWorkOrderItems(tx, {
+          companyId,
+          workOrderId: id,
+          plan: pendingPurchaseOrderItems.map((item) => ({
             purchaseOrderItemId: item.id,
-            description: item.description,
-            qty: item.qty,
+            qty: item.qty.toNumber(),
           })),
+          itemsById: new Map(
+            pendingPurchaseOrderItems.map((item) => [
+              item.id,
+              { description: item.description, qty: item.qty },
+            ]),
+          ),
         });
       }
 

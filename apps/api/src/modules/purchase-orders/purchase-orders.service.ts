@@ -13,6 +13,8 @@ import {
 } from "@medcal/shared";
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { recordAuditLog } from "../calibration-jobs/audit-log";
+import { computeRemainingQtyByItemId } from "../work-orders/allocation";
+import { computePoProgress, type PoProgressResult } from "./po-progress";
 import { renderPurchaseOrderPdf, type PurchaseOrderPdfResult } from "./purchase-order-pdf";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -99,6 +101,60 @@ export interface PurchaseOrderListResult {
   pageSize: number;
   total: number;
   totalPages: number;
+}
+
+/**
+ * Allocation & Multi-WOL Architecture (Phase 7 — Plan WOL/SPK UI).
+ * One active-allocation row backing this item, for the planner to see where
+ * the item's already-committed quantity went.
+ */
+export interface PurchaseOrderAllocationSummaryAllocation {
+  workOrderId: string;
+  workOrderNumber: string;
+  workOrderStatus: string;
+  qty: number;
+}
+
+export interface PurchaseOrderAllocationSummaryItem {
+  purchaseOrderItemId: string;
+  description: string;
+  qty: number;
+  allocatedQty: number;
+  remainingQty: number;
+  allocations: PurchaseOrderAllocationSummaryAllocation[];
+}
+
+/**
+ * Read-only snapshot for the Plan WOL/SPK screen: this PO's active items,
+ * each with its total/allocated/remaining quantity (derived — see
+ * computeRemainingQtyByItemId in ../work-orders/allocation — never
+ * persisted) and which WorkOrders already hold an active claim on it.
+ * Does not create, stage, or persist anything; purely a read of existing
+ * PurchaseOrderItem + PurchaseOrderItemAllocation state.
+ */
+export interface PurchaseOrderAllocationSummary {
+  purchaseOrderId: string;
+  purchaseOrderNumber: string;
+  items: PurchaseOrderAllocationSummaryItem[];
+}
+
+/**
+ * Allocation & Multi-WOL Architecture (Phase 8 — PO Detail multi-WorkOrder
+ * view). Deliberately lightweight: `itemCount`/`totalQty` are derived from
+ * this WorkOrder's own WorkOrderItem rows only (bounded by the PO's own item
+ * count, never by fanned-out CalibrationJob count). No CalibrationJob is
+ * queried here — this exists specifically so the PO Detail page's
+ * WorkOrder list never needs the heavy, unbounded-jobs `workOrderInclude`
+ * (see GET /work-orders) merely to render a list of cards.
+ */
+export interface PurchaseOrderWorkOrderSummary {
+  id: string;
+  number: string;
+  status: string;
+  serviceMode: string;
+  createdAt: Date;
+  itemCount: number;
+  totalQty: number;
 }
 
 function isUniqueConstraintError(error: unknown): boolean {
@@ -321,6 +377,135 @@ export class PurchaseOrdersService {
       });
     }
     return purchaseOrder;
+  }
+
+  /**
+   * Allocation & Multi-WOL Architecture (Phase 7 — Plan WOL/SPK UI).
+   * Read-only: for each of this PO's active items, its total/allocated/
+   * remaining quantity and which WorkOrders already hold an active
+   * allocation against it. Reuses the same `computeRemainingQtyByItemId`
+   * helper the allocation-aware WorkOrder.create() path uses (Phases 1–6,
+   * unmodified) so this view can never drift from the actual enforcement
+   * logic. Creates, stages, or persists nothing.
+   */
+  async getAllocationSummary(
+    companyId: string,
+    id: string,
+  ): Promise<PurchaseOrderAllocationSummary> {
+    const purchaseOrder = await prisma.purchaseOrder.findFirst({
+      where: { id, companyId },
+      select: {
+        id: true,
+        number: true,
+        items: {
+          where: { status: { not: "CANCELLED" } },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, description: true, qty: true },
+        },
+      },
+    });
+    if (!purchaseOrder) {
+      throw new NotFoundException({
+        message: "Purchase order not found",
+        code: "PURCHASE_ORDER_NOT_FOUND",
+      });
+    }
+
+    const itemsById = new Map(
+      purchaseOrder.items.map((item) => [item.id, { qty: item.qty }]),
+    );
+    const remainingByItemId = await computeRemainingQtyByItemId(prisma, itemsById);
+
+    const allocations = await prisma.purchaseOrderItemAllocation.findMany({
+      where: {
+        purchaseOrderItemId: { in: purchaseOrder.items.map((item) => item.id) },
+        status: "ACTIVE",
+      },
+      select: {
+        purchaseOrderItemId: true,
+        qty: true,
+        workOrder: { select: { id: true, number: true, status: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    const allocationsByItemId = new Map<string, PurchaseOrderAllocationSummaryAllocation[]>();
+    for (const row of allocations) {
+      const list = allocationsByItemId.get(row.purchaseOrderItemId) ?? [];
+      list.push({
+        workOrderId: row.workOrder.id,
+        workOrderNumber: row.workOrder.number,
+        workOrderStatus: row.workOrder.status,
+        qty: row.qty.toNumber(),
+      });
+      allocationsByItemId.set(row.purchaseOrderItemId, list);
+    }
+
+    return {
+      purchaseOrderId: purchaseOrder.id,
+      purchaseOrderNumber: purchaseOrder.number,
+      items: purchaseOrder.items.map((item) => {
+        const remaining = remainingByItemId.get(item.id) ?? item.qty;
+        return {
+          purchaseOrderItemId: item.id,
+          description: item.description,
+          qty: item.qty.toNumber(),
+          allocatedQty: item.qty.minus(remaining).toNumber(),
+          remainingQty: remaining.toNumber(),
+          allocations: allocationsByItemId.get(item.id) ?? [],
+        };
+      }),
+    };
+  }
+
+  /**
+   * Allocation & Multi-WOL Architecture (Phase 8 — PO Detail multi-WorkOrder
+   * view). Every WorkOrder belonging to this PO — ANY status, including
+   * CANCELLED (Phase 8 requires cancelled WorkOrders stay visible/
+   * distinguishable, never silently hidden). Deliberately lean: selects only
+   * WorkOrderItem.qty per row to derive itemCount/totalQty, never touches
+   * CalibrationJob, WorkOrderAssignment, WorkOrderEquipment, or any of the
+   * other nested relations `workOrderInclude` (GET /work-orders) carries —
+   * this is the "lightweight summary" the PO Detail list needs, not the
+   * full WorkOrder detail shape.
+   */
+  async getWorkOrderSummaries(
+    companyId: string,
+    id: string,
+  ): Promise<PurchaseOrderWorkOrderSummary[]> {
+    await this.findOne(companyId, id);
+
+    const workOrders = await prisma.workOrder.findMany({
+      where: { purchaseOrderId: id, companyId },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        serviceMode: true,
+        createdAt: true,
+        items: { select: { qty: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return workOrders.map((wo) => ({
+      id: wo.id,
+      number: wo.number,
+      status: wo.status,
+      serviceMode: wo.serviceMode,
+      createdAt: wo.createdAt,
+      itemCount: wo.items.length,
+      totalQty: wo.items.reduce((sum, item) => sum + item.qty.toNumber(), 0),
+    }));
+  }
+
+  /**
+   * Allocation & Multi-WOL Architecture (Phase 9 — PO Progress). See
+   * po-progress.ts for the full bucket mapping and completion predicate.
+   * Read-only: computes from existing CalibrationJob/Certificate/Allocation
+   * state, never mutates anything.
+   */
+  async getProgress(companyId: string, id: string): Promise<PoProgressResult> {
+    return computePoProgress(companyId, id);
   }
 
   async buildPdf(companyId: string, id: string): Promise<PurchaseOrderPdfResult> {

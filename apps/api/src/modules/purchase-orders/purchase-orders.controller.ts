@@ -22,11 +22,14 @@ import { UserId } from "../../common/decorators/user-id.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
   PurchaseOrdersService,
+  type PurchaseOrderAllocationSummary,
   type PurchaseOrderHistorySummary,
   type PurchaseOrderHistoryWithItems,
   type PurchaseOrderListResult,
   type PurchaseOrderWithItems,
+  type PurchaseOrderWorkOrderSummary,
 } from "./purchase-orders.service";
+import type { PoProgressResult } from "./po-progress";
 
 @Controller("purchase-orders")
 @UseGuards(CompanyRoleGuard)
@@ -81,6 +84,45 @@ export class PurchaseOrdersController {
       type: "application/pdf",
       disposition: `attachment; filename="${pdf.filename}"`,
     });
+  }
+
+  /**
+   * Allocation & Multi-WOL Architecture (Phase 7 — Plan WOL/SPK UI).
+   * Declared before `:id` so "allocation-summary" is not captured as an id.
+   */
+  @Get(":id/allocation-summary")
+  @RequirePermission("purchaseOrder", "read")
+  async allocationSummary(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<PurchaseOrderAllocationSummary> {
+    return this.service.getAllocationSummary(companyId, id);
+  }
+
+  /**
+   * Allocation & Multi-WOL Architecture (Phase 8 — PO Detail multi-WorkOrder
+   * view). Declared before `:id` so "work-orders" is not captured as an id.
+   */
+  @Get(":id/work-orders")
+  @RequirePermission("workOrder", "read")
+  async workOrderSummaries(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<PurchaseOrderWorkOrderSummary[]> {
+    return this.service.getWorkOrderSummaries(companyId, id);
+  }
+
+  /**
+   * Allocation & Multi-WOL Architecture (Phase 9 — PO Progress). Declared
+   * before `:id` so "progress" is not captured as an id.
+   */
+  @Get(":id/progress")
+  @RequirePermission("purchaseOrder", "read")
+  async progress(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<PoProgressResult> {
+    return this.service.getProgress(companyId, id);
   }
 
   @Get(":id")

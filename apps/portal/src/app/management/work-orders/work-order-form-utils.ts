@@ -21,6 +21,21 @@ export function findActiveWorkOrder<T extends { status: string }>(rows: T[]): T 
   return rows.find((row) => isActiveWorkOrderStatus(row.status));
 }
 
+/**
+ * Allocation & Multi-WOL Architecture (Phase 8 — PO Detail multi-WorkOrder
+ * view). The legacy single-WorkOrder creation flow (/work-orders/new) still
+ * gates on "no active WorkOrder exists yet" for this PO — redesigning that
+ * form is out of Phase 8's scope. PO Detail must therefore only ever offer
+ * that shortcut when following it would not dead-end: i.e. when none of the
+ * PO's current WorkOrders is active (non-cancelled). This is independent of
+ * the Plan WOL/SPK entry point, which remains available regardless.
+ */
+export function canOfferLegacyWorkOrderShortcut<T extends { status: string }>(
+  rows: T[],
+): boolean {
+  return !findActiveWorkOrder(rows);
+}
+
 export function canCreateWorkOrderFromPurchaseOrder(purchaseOrder: { status: string }): boolean {
   return purchaseOrder.status === "APPROVED";
 }

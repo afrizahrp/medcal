@@ -363,7 +363,6 @@ describe("workOrderCreateSchema", () => {
       companyId: "XXX",
       customerId: "cust-1",
       quotationId: "quo-1",
-      items: [{ qty: 9 }],
       quantity: 9,
       unitPrice: 1,
       taxCode: "T1",
@@ -376,7 +375,6 @@ describe("workOrderCreateSchema", () => {
       expect(parsed.data).not.toHaveProperty("companyId");
       expect(parsed.data).not.toHaveProperty("customerId");
       expect(parsed.data).not.toHaveProperty("quotationId");
-      expect(parsed.data).not.toHaveProperty("items");
       expect(parsed.data).not.toHaveProperty("quantity");
       expect(parsed.data).not.toHaveProperty("unitPrice");
       expect(parsed.data).not.toHaveProperty("taxCode");
@@ -384,6 +382,38 @@ describe("workOrderCreateSchema", () => {
       expect(parsed.data).not.toHaveProperty("currency");
       expect(parsed.data).not.toHaveProperty("number");
     }
+  });
+
+  it("Allocation & Multi-WOL Architecture: accepts an allocation-aware items array (purchaseOrderItemId + qty)", () => {
+    const parsed = workOrderCreateSchema.safeParse({
+      purchaseOrderId: "po-1",
+      items: [
+        { purchaseOrderItemId: "item-a", qty: 30 },
+        { purchaseOrderItemId: "item-b", qty: 20 },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.items).toEqual([
+        { purchaseOrderItemId: "item-a", qty: 30 },
+        { purchaseOrderItemId: "item-b", qty: 20 },
+      ]);
+    }
+  });
+
+  it("Allocation & Multi-WOL Architecture: rejects a non-positive or fractional allocation qty", () => {
+    expect(
+      workOrderCreateSchema.safeParse({
+        purchaseOrderId: "po-1",
+        items: [{ purchaseOrderItemId: "item-a", qty: 0 }],
+      }).success,
+    ).toBe(false);
+    expect(
+      workOrderCreateSchema.safeParse({
+        purchaseOrderId: "po-1",
+        items: [{ purchaseOrderItemId: "item-a", qty: 1.5 }],
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -574,25 +604,69 @@ describe("WorkOrdersService.create", () => {
     }
   });
 
-  it("rejects a second active WorkOrder for the same purchase order", async () => {
+  it("Allocation & Multi-WOL Architecture: rejects a default (no items) WorkOrder once everything is already allocated", async () => {
     const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
-    const first = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
 
     try {
       await workOrdersService.create(realCompanyId, { purchaseOrderId: purchaseOrder.id });
-      expect.fail("expected DUPLICATE_ACTIVE_WORK_ORDER");
+      expect.fail("expected NOTHING_TO_ALLOCATE");
     } catch (err) {
-      expect(err).toBeInstanceOf(ConflictException);
-      expect((err as ConflictException).getResponse()).toEqual(
-        expect.objectContaining({
-          code: "DUPLICATE_ACTIVE_WORK_ORDER",
-          workOrderId: first.id,
-        }),
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: "NOTHING_TO_ALLOCATE" }),
       );
     }
 
     const count = await prisma.workOrder.count({ where: { purchaseOrderId: purchaseOrder.id } });
     expect(count).toBe(1);
+  });
+
+  it("Allocation & Multi-WOL Architecture: allows a second, simultaneously-active WorkOrder for the same PO once it claims a different, still-unallocated item", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 2 });
+    const items = await prisma.purchaseOrderItem.findMany({
+      where: { purchaseOrderId: purchaseOrder.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(items).toHaveLength(2);
+
+    const first = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: items[0]!.id, qty: items[0]!.qty.toNumber() }],
+    });
+    const second = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: items[1]!.id, qty: items[1]!.qty.toNumber() }],
+    });
+
+    expect(first.status).not.toBe("CANCELLED");
+    expect(second.status).not.toBe("CANCELLED");
+    expect(second.id).not.toBe(first.id);
+    const activeCount = await prisma.workOrder.count({
+      where: { purchaseOrderId: purchaseOrder.id, status: { not: "CANCELLED" } },
+    });
+    expect(activeCount).toBe(2);
+  });
+
+  it("Allocation & Multi-WOL Architecture: rejects allocating an already-fully-allocated item to a second WorkOrder (OVER_ALLOCATION)", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
+    const item = await prisma.purchaseOrderItem.findFirstOrThrow({
+      where: { purchaseOrderId: purchaseOrder.id },
+    });
+    await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: item.qty.toNumber() }],
+    });
+
+    try {
+      await workOrdersService.create(realCompanyId, {
+        purchaseOrderId: purchaseOrder.id,
+        items: [{ purchaseOrderItemId: item.id, qty: 1 }],
+      });
+      expect.fail("expected OVER_ALLOCATION");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).getResponse()).toEqual(
+        expect.objectContaining({ code: "OVER_ALLOCATION", purchaseOrderItemId: item.id }),
+      );
+    }
   });
 
   it("does not create CalibrationJob rows", async () => {
@@ -1414,13 +1488,11 @@ describe("WorkOrdersService transaction", () => {
       fn: Parameters<typeof prisma.$transaction>[0],
     ) =>
       originalTransaction(async (tx) => {
-        const origCreateMany = tx.workOrderItem.createMany.bind(tx.workOrderItem);
-        tx.workOrderItem.createMany = (async (
-          args: Parameters<typeof tx.workOrderItem.createMany>[0],
-        ) => {
-          await origCreateMany(args);
+        const origCreate = tx.workOrderItem.create.bind(tx.workOrderItem);
+        tx.workOrderItem.create = (async (args: Parameters<typeof tx.workOrderItem.create>[0]) => {
+          await origCreate(args);
           throw new Error("forced WorkOrderItem failure");
-        }) as typeof tx.workOrderItem.createMany;
+        }) as typeof tx.workOrderItem.create;
         return (fn as (client: typeof tx) => Promise<unknown>)(tx);
       })) as typeof prisma.$transaction);
 
@@ -2186,5 +2258,292 @@ describe("WorkOrdersService.revise", () => {
 
     const removedRow = await prisma.workOrderItem.findUnique({ where: { id: workOrderItemA.id } });
     expect(removedRow).toBeNull(); // hard-deleted — always safe pre-start()
+  });
+});
+
+// =============================================================================
+// Allocation & Multi-WOL Architecture — required test matrix
+// (docs/audits/final-po-allocation-wol-spk-architecture-decision.md)
+// =============================================================================
+
+/**
+ * A single PurchaseOrderItem at an arbitrary quantity (default 100), for the
+ * quantity-splitting test matrix. Unlike createApprovedPurchaseOrder's
+ * one-device-per-item helper, this never creates per-unit Device rows —
+ * splitting/allocation is independent of device identity resolution.
+ */
+async function createApprovedPurchaseOrderWithSingleItemQty(companyId: string, qty: number) {
+  await ensureNonPpnTax(companyId);
+  const customer = await createTestCustomer(companyId);
+  const deviceTypeId = await getTestDeviceTypeId();
+  await prisma.priceListItem.create({
+    data: {
+      companyId,
+      deviceTypeId,
+      unitPrice: new Prisma.Decimal(100_000),
+      effectiveFrom: new Date("2020-01-01T00:00:00.000Z"),
+    },
+  });
+  await prisma.user.upsert({
+    where: { id: staffUserId },
+    create: { id: staffUserId, email: `${staffUserId}@medcal.test`, name: "WO Staff", status: "ACTIVE" },
+    update: {},
+  });
+
+  const request = await requestsService.create(companyId, staffUserId, {
+    customerId: customer.id,
+    serviceMode: "ON_SITE",
+    items: [{ deviceTypeId, qty }],
+  });
+  createdCalibrationRequestIds.push(request.id);
+  const submitted = await requestsService.submit(companyId, request.id);
+
+  const quotation = await quotationsService.create(companyId, {
+    requestId: submitted.id,
+    taxCode: "T0",
+  });
+  createdQuotationIds.push(quotation.id);
+  await quotationsService.send(companyId, quotation.id);
+  const approvedQuotation = await quotationsService.approve(companyId, quotation.id, staffUserId);
+
+  const createdPo = await purchaseOrdersService.create(companyId, customerPoInput(approvedQuotation.id));
+  createdPurchaseOrderIds.push(createdPo.id);
+  const purchaseOrder = await purchaseOrdersService.approve(companyId, createdPo.id, staffUserId);
+
+  const item = await prisma.purchaseOrderItem.findFirstOrThrow({
+    where: { purchaseOrderId: purchaseOrder.id },
+  });
+  return { customer, purchaseOrder, item };
+}
+
+describe("Allocation & Multi-WOL Architecture — required test matrix", () => {
+  // A — whole-item allocation (degenerate case: qty == remaining)
+  it("A: whole-item allocation (PO item qty=10, Allocation qty=10) succeeds", async () => {
+    const { purchaseOrder, item } = await createApprovedPurchaseOrderWithSingleItemQty(
+      realCompanyId,
+      10,
+    );
+    const wo = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 10 }],
+    });
+    expect(wo.items).toHaveLength(1);
+    expect(Number(wo.items[0]!.qty)).toBe(10);
+    expect(wo.items[0]!.allocationId).not.toBeNull();
+    const allocation = await prisma.purchaseOrderItemAllocation.findUniqueOrThrow({
+      where: { id: wo.items[0]!.allocationId! },
+    });
+    expect(allocation.status).toBe("ACTIVE");
+    expect(Number(allocation.qty)).toBe(10);
+  });
+
+  // B — partial allocation
+  it("B: partial allocation (PO item qty=100, Allocation qty=30) succeeds", async () => {
+    const { purchaseOrder, item } = await createApprovedPurchaseOrderWithSingleItemQty(
+      realCompanyId,
+      100,
+    );
+    const wo = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 30 }],
+    });
+    expect(Number(wo.items[0]!.qty)).toBe(30);
+  });
+
+  // C — multiple allocations summing exactly to the item's qty
+  it("C: multiple allocations (30 + 40 + 30 = 100) all succeed", async () => {
+    const { purchaseOrder, item } = await createApprovedPurchaseOrderWithSingleItemQty(
+      realCompanyId,
+      100,
+    );
+    const wo1 = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 30 }],
+    });
+    const wo2 = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 40 }],
+    });
+    const wo3 = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 30 }],
+    });
+    expect([wo1, wo2, wo3].every((wo) => wo.status !== "CANCELLED")).toBe(true);
+    const activeSum = await prisma.purchaseOrderItemAllocation.aggregate({
+      where: { purchaseOrderItemId: item.id, status: "ACTIVE" },
+      _sum: { qty: true },
+    });
+    expect(Number(activeSum._sum.qty)).toBe(100);
+  });
+
+  // D — over-allocation is rejected
+  it("D: over-allocation (30 + 40 + 31 = 101) is rejected on the third request", async () => {
+    const { purchaseOrder, item } = await createApprovedPurchaseOrderWithSingleItemQty(
+      realCompanyId,
+      100,
+    );
+    await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 30 }],
+    });
+    await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 40 }],
+    });
+    await expect(
+      workOrdersService.create(realCompanyId, {
+        purchaseOrderId: purchaseOrder.id,
+        items: [{ purchaseOrderItemId: item.id, qty: 31 }],
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "OVER_ALLOCATION" }),
+    });
+    const activeSum = await prisma.purchaseOrderItemAllocation.aggregate({
+      where: { purchaseOrderItemId: item.id, status: "ACTIVE" },
+      _sum: { qty: true },
+    });
+    expect(Number(activeSum._sum.qty)).toBe(70); // the rejected 31 never landed
+  });
+
+  // E — cancelling an allocation (pre-fan-out, via WorkOrder.cancel()) returns quantity
+  it("E: cancelling a WorkOrder pre-fan-out returns its allocation's quantity to remaining", async () => {
+    const { purchaseOrder, item } = await createApprovedPurchaseOrderWithSingleItemQty(
+      realCompanyId,
+      100,
+    );
+    const wo = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 30 }],
+    });
+    let sum = await prisma.purchaseOrderItemAllocation.aggregate({
+      where: { purchaseOrderItemId: item.id, status: "ACTIVE" },
+      _sum: { qty: true },
+    });
+    expect(Number(sum._sum.qty)).toBe(30);
+
+    await workOrdersService.cancel(realCompanyId, wo.id);
+
+    sum = await prisma.purchaseOrderItemAllocation.aggregate({
+      where: { purchaseOrderItemId: item.id, status: "ACTIVE" },
+      _sum: { qty: true },
+    });
+    expect(sum._sum.qty).toBeNull(); // fully released — remaining is back to 100
+    const allocation = await prisma.purchaseOrderItemAllocation.findFirstOrThrow({
+      where: { purchaseOrderItemId: item.id },
+    });
+    expect(allocation.status).toBe("CANCELLED");
+
+    // And the released quantity is immediately re-allocatable in full.
+    const replacement = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 100 }],
+    });
+    expect(Number(replacement.items[0]!.qty)).toBe(100);
+  });
+
+  // F — multiple simultaneously active WorkOrders drawing from the same item
+  it("F: multiple active WorkOrders coexist, each with its own allocation of the same item", async () => {
+    const { purchaseOrder, item } = await createApprovedPurchaseOrderWithSingleItemQty(
+      realCompanyId,
+      100,
+    );
+    const wo1 = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 30 }],
+    });
+    const wo2 = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 40 }],
+    });
+    const wo3 = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 30 }],
+    });
+    const activeCount = await prisma.workOrder.count({
+      where: { purchaseOrderId: purchaseOrder.id, status: { not: "CANCELLED" } },
+    });
+    expect(activeCount).toBe(3);
+    expect(new Set([wo1.id, wo2.id, wo3.id]).size).toBe(3);
+  });
+
+  // G — one WorkOrder, multiple PO items
+  it("G: one WorkOrder can hold allocations from multiple PO items", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 3 });
+    const items = await prisma.purchaseOrderItem.findMany({
+      where: { purchaseOrderId: purchaseOrder.id },
+      orderBy: { createdAt: "asc" },
+    });
+    const wo = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: items.map((i) => ({ purchaseOrderItemId: i.id, qty: i.qty.toNumber() })),
+    });
+    expect(wo.items).toHaveLength(3);
+    expect(new Set(wo.items.map((i) => i.purchaseOrderItemId)).size).toBe(3);
+  });
+
+  // H — concurrent allocation: exactly one of two overlapping requests must win
+  it("H: concurrent allocation (60 + 50 against a qty=100 item) — exactly one succeeds, never 110 allocated", async () => {
+    const { purchaseOrder, item } = await createApprovedPurchaseOrderWithSingleItemQty(
+      realCompanyId,
+      100,
+    );
+
+    const results = await Promise.allSettled([
+      workOrdersService.create(realCompanyId, {
+        purchaseOrderId: purchaseOrder.id,
+        items: [{ purchaseOrderItemId: item.id, qty: 60 }],
+      }),
+      workOrdersService.create(realCompanyId, {
+        purchaseOrderId: purchaseOrder.id,
+        items: [{ purchaseOrderItemId: item.id, qty: 50 }],
+      }),
+    ]);
+
+    for (const result of results) {
+      if (result.status === "fulfilled") createdWorkOrderIds.push(result.value.id);
+    }
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    // 60 + 50 = 110 > 100: both cannot fit, so exactly one must win.
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    const activeSum = await prisma.purchaseOrderItemAllocation.aggregate({
+      where: { purchaseOrderItemId: item.id, status: "ACTIVE" },
+      _sum: { qty: true },
+    });
+    expect([60, 50]).toContain(Number(activeSum._sum.qty));
+    expect(Number(activeSum._sum.qty)).toBeLessThanOrEqual(100);
+  });
+
+  // I — fan-out uses the allocated (WorkOrderItem) quantity, not the full PO item quantity
+  it("I: WorkOrder.start() fans out exactly the allocated quantity (30 jobs from a 100-unit item with a 30-unit allocation)", async () => {
+    const { purchaseOrder, item } = await createApprovedPurchaseOrderWithSingleItemQty(
+      realCompanyId,
+      100,
+    );
+    const wo = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id, {
+      items: [{ purchaseOrderItemId: item.id, qty: 30 }],
+    });
+    const technician = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, wo.id, {
+      technicians: [{ technicianUserId: technician.id }],
+    });
+    await workOrdersService.start(realCompanyId, wo.id);
+
+    const jobCount = await prisma.calibrationJob.count({ where: { workOrderId: wo.id } });
+    expect(jobCount).toBe(30);
+  });
+
+  // J — historical compatibility: legacy WorkOrderItem rows (allocationId = NULL) keep working
+  it("J: a WorkOrderItem created before this architecture (allocationId = NULL) still fans out correctly", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 2 });
+    const wo = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    // Simulate a pre-existing legacy row: this WorkOrder's items were in fact
+    // created through the allocation-aware path above (allocationId set) —
+    // explicitly null it out to model a row that predates this architecture,
+    // exactly as every real historical WorkOrderItem does (never backfilled).
+    await prisma.workOrderItem.updateMany({
+      where: { workOrderId: wo.id },
+      data: { allocationId: null },
+    });
+
+    const technician = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, wo.id, {
+      technicians: [{ technicianUserId: technician.id }],
+    });
+    const started = await workOrdersService.start(realCompanyId, wo.id);
+    expect(started.status).toBe("IN_PROGRESS");
+
+    const jobCount = await prisma.calibrationJob.count({ where: { workOrderId: wo.id } });
+    expect(jobCount).toBe(2); // itemCount: 2, one job per item, unaffected by allocationId being NULL
   });
 });

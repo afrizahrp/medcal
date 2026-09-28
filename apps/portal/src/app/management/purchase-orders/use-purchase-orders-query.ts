@@ -77,6 +77,62 @@ export function usePurchaseOrder(id: string | undefined) {
   });
 }
 
+/** Allocation & Multi-WOL Architecture (Phase 7 — Plan WOL/SPK UI). */
+export interface PurchaseOrderAllocationSummaryAllocation {
+  workOrderId: string;
+  workOrderNumber: string;
+  workOrderStatus: string;
+  qty: number;
+}
+
+export interface PurchaseOrderAllocationSummaryItem {
+  purchaseOrderItemId: string;
+  description: string;
+  qty: number;
+  allocatedQty: number;
+  remainingQty: number;
+  allocations: PurchaseOrderAllocationSummaryAllocation[];
+}
+
+export interface PurchaseOrderAllocationSummary {
+  purchaseOrderId: string;
+  purchaseOrderNumber: string;
+  items: PurchaseOrderAllocationSummaryItem[];
+}
+
+export function usePurchaseOrderAllocationSummary(id: string | undefined) {
+  return useQuery({
+    queryKey: [PURCHASE_ORDERS_QUERY_KEY, id, "allocation-summary"],
+    queryFn: () =>
+      apiFetch<PurchaseOrderAllocationSummary>(`/purchase-orders/${id}/allocation-summary`),
+    enabled: Boolean(id),
+  });
+}
+
+/**
+ * Allocation & Multi-WOL Architecture (Phase 8 — PO Detail multi-WorkOrder
+ * view). Deliberately lightweight — no CalibrationJob data — see
+ * PurchaseOrderWorkOrderSummary in purchase-orders.service.ts for why.
+ */
+export interface PurchaseOrderWorkOrderSummary {
+  id: string;
+  number: string;
+  status: string;
+  serviceMode: string;
+  createdAt: string;
+  itemCount: number;
+  totalQty: number;
+}
+
+export function usePurchaseOrderWorkOrders(id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: [PURCHASE_ORDERS_QUERY_KEY, id, "work-orders"],
+    queryFn: () =>
+      apiFetch<PurchaseOrderWorkOrderSummary[]>(`/purchase-orders/${id}/work-orders`),
+    enabled: Boolean(id) && enabled,
+  });
+}
+
 export function useCreatePurchaseOrder() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -8,6 +8,7 @@ import {
   Check,
   Edit,
   History as HistoryIcon,
+  ListChecks,
   Plus,
   Printer,
   RefreshCw,
@@ -51,14 +52,20 @@ import {
   usePurchaseOrder,
   usePurchaseOrderHistory,
   usePurchaseOrderHistoryRevision,
+  usePurchaseOrderWorkOrders,
   useRevisePurchaseOrder,
+  type PurchaseOrderWorkOrderSummary,
 } from "../use-purchase-orders-query";
 import {
   canCreateWorkOrderFromPurchaseOrder,
+  canOfferLegacyWorkOrderShortcut,
   findActiveWorkOrder,
 } from "../../work-orders/work-order-form-utils";
-import { StatusBadge as WorkOrderStatusBadge, type WorkOrderRow } from "../../work-orders/work-orders-ui";
-import { useWorkOrders } from "../../work-orders/use-work-orders-query";
+import {
+  ServiceModeBadge,
+  type ServiceMode,
+} from "../../calibration-requests/calibration-requests-ui";
+import { StatusBadge as WorkOrderStatusBadge } from "../../work-orders/work-orders-ui";
 
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -73,17 +80,15 @@ export default function PurchaseOrderDetailPage() {
   // preview of what the pull-based revise() will change, computed from data
   // already fetched for this page (no new preview API).
   const revisionSourceQuotationQuery = useQuotation(query.data?.quotation.id);
-  const workOrderQuery = useWorkOrders(
-    {
-      search: "",
-      status: "",
-      purchaseOrderId: params.id,
-      sortBy: "createdAt",
-      sortDir: "desc",
-      page: 1,
-      pageSize: 20,
-    },
-    Boolean(params.id && capabilities?.workOrderRead),
+  // Allocation & Multi-WOL Architecture (Phase 8): lightweight summaries only
+  // (no CalibrationJob data) — see PurchaseOrderWorkOrderSummary. Replaces
+  // the old GET /work-orders?purchaseOrderId= call, which used the heavy
+  // workOrderInclude (unbounded per-WorkOrder `jobs` array) merely to render
+  // this list — a pre-existing scalability concern this change avoids
+  // reusing, not one it introduces.
+  const workOrderQuery = usePurchaseOrderWorkOrders(
+    params.id,
+    Boolean(capabilities?.workOrderRead),
   );
 
   const [confirmAction, setConfirmAction] = useState<"approve" | "cancel" | "revise" | null>(null);
@@ -316,7 +321,7 @@ export default function PurchaseOrderDetailPage() {
             queryLoading={workOrderQuery.isLoading}
             queryError={workOrderQuery.isError}
             queryForbidden={isForbidden(workOrderQuery.error)}
-            rows={workOrderQuery.data?.data ?? []}
+            rows={workOrderQuery.data ?? []}
           />
         ) : null}
 
@@ -539,48 +544,109 @@ function PurchaseOrderWorkOrderSection({
   queryLoading: boolean;
   queryError: boolean;
   queryForbidden: boolean;
-  rows: WorkOrderRow[];
+  rows: PurchaseOrderWorkOrderSummary[];
 }) {
-  const activeWorkOrder = findActiveWorkOrder(rows);
-  const cancelledOnly = rows.length > 0 && !activeWorkOrder;
   const eligible = canCreateWorkOrderFromPurchaseOrder({ status: purchaseOrderStatus });
-  const showCreate =
-    canCreate && eligible && !queryLoading && !activeWorkOrder && (!canRead || !queryError);
+
+  // Allocation & Multi-WOL Architecture (Phase 8): retained intentionally,
+  // narrowly, for ONE purpose only — deciding whether the legacy single-WO
+  // shortcut below (`/work-orders/new`) is currently safe to offer. That
+  // page still contains its own pre-Allocation "one active WorkOrder" gate
+  // (out of Phase 8's scope per the brief — fixing it belongs to whatever
+  // phase redesigns that form), so PO Detail must not link to it when doing
+  // so would dead-end. It is NOT used to gate visibility of the WorkOrder
+  // list or the Plan WOL/SPK entry point below — those are multi-WO aware.
+  const cancelledOnly = rows.length > 0 && !findActiveWorkOrder(rows);
+  const showLegacyCreateShortcut =
+    canCreate &&
+    eligible &&
+    !queryLoading &&
+    canOfferLegacyWorkOrderShortcut(rows) &&
+    (!canRead || !queryError);
 
   return (
     <div className="mt-5 border-t border-slate-100 pt-5">
-      <h3 className="text-sm font-semibold text-slate-900">Work Order</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-slate-900">
+          Work Order{rows.length > 0 ? ` (${rows.length})` : ""}
+        </h3>
+        {/* Allocation & Multi-WOL Architecture: a PO can now have more than
+            one active Work Order, so Plan WOL/SPK is offered regardless of
+            whether any already exist — zero, one, or many. */}
+        {canCreate && eligible ? (
+          <Button type="button" variant="outline" size="sm" asChild>
+            <Link href={`/purchase-orders/${purchaseOrderId}/plan-wol`}>
+              <ListChecks className="h-4 w-4" />
+              Plan WOL/SPK
+            </Link>
+          </Button>
+        ) : null}
+      </div>
+
       {queryForbidden ? null : queryLoading ? (
         <p className="mt-2 text-sm text-slate-400">Memuat…</p>
       ) : canRead && queryError ? (
         <p className="mt-2 text-sm text-red-600">Gagal memuat work order.</p>
-      ) : activeWorkOrder ? (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/50 p-3">
-          <div>
-            <Link
-              href={`/work-orders/${activeWorkOrder.id}`}
-              className="font-mono text-sm font-medium text-brand-700 hover:underline"
-            >
-              {activeWorkOrder.number}
-            </Link>
-            <div className="mt-1">
-              <WorkOrderStatusBadge status={activeWorkOrder.status} />
-            </div>
+      ) : rows.length > 0 ? (
+        <>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {rows.map((wo) => {
+              const isCancelled = wo.status === "CANCELLED";
+              return (
+                <div
+                  key={wo.id}
+                  className={cn(
+                    "flex flex-col gap-2 rounded-lg border p-3",
+                    isCancelled
+                      ? "border-slate-200 bg-slate-50/40 opacity-70"
+                      : "border-slate-200 bg-slate-50/50",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <Link
+                      href={`/work-orders/${wo.id}`}
+                      className="font-mono text-sm font-medium text-brand-700 hover:underline"
+                    >
+                      {wo.number}
+                    </Link>
+                    <ServiceModeBadge mode={wo.serviceMode as ServiceMode} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <WorkOrderStatusBadge status={wo.status} />
+                    <span className="text-xs text-slate-500">
+                      {wo.itemCount} item · {formatQty(wo.totalQty)} unit
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">{formatDateTime(wo.createdAt)}</p>
+                  <Button type="button" variant="outline" size="sm" asChild className="mt-1 self-start">
+                    <Link href={`/work-orders/${wo.id}`}>
+                      <Wrench className="h-4 w-4" />
+                      Lihat Work Order
+                    </Link>
+                  </Button>
+                </div>
+              );
+            })}
           </div>
-          <Button type="button" variant="outline" size="sm" asChild>
-            <Link href={`/work-orders/${activeWorkOrder.id}`}>
-              <Wrench className="h-4 w-4" />
-              View Work Order
-            </Link>
-          </Button>
-        </div>
-      ) : showCreate ? (
+
+          {showLegacyCreateShortcut && cancelledOnly ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-3">
+              <p className="text-sm text-slate-600">
+                Semua Work Order di atas telah dibatalkan. Purchase Order ini dapat dibuatkan SPK
+                baru.
+              </p>
+              <Button type="button" size="sm" asChild>
+                <Link href={`/work-orders/new?purchaseOrderId=${purchaseOrderId}`}>
+                  <Plus className="h-4 w-4" />
+                  Create Work Order
+                </Link>
+              </Button>
+            </div>
+          ) : null}
+        </>
+      ) : showLegacyCreateShortcut ? (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-3">
-          <p className="text-sm text-slate-600">
-            {cancelledOnly
-              ? "Work Order sebelumnya dibatalkan. Purchase Order ini dapat dibuatkan SPK baru."
-              : "Belum ada work order untuk purchase order ini."}
-          </p>
+          <p className="text-sm text-slate-600">Belum ada work order untuk purchase order ini.</p>
           <Button type="button" size="sm" asChild>
             <Link href={`/work-orders/new?purchaseOrderId=${purchaseOrderId}`}>
               <Plus className="h-4 w-4" />

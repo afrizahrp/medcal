@@ -179,6 +179,13 @@ enum AssignmentRole {
   ASSIST
 }
 
+/// PurchaseOrderItemAllocation lifecycle. Deliberately minimal — see the
+/// model's own doc comment for why no DRAFT/REALIZED/COMPLETED state exists.
+enum AllocationStatus {
+  ACTIVE
+  CANCELLED
+}
+
 enum CalibrationJobStatus {
   PENDING
   IN_PROGRESS
@@ -1870,6 +1877,10 @@ model PurchaseOrderItem {
   workOrder       WorkOrder?       @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
   calibrationJobs CalibrationJob[]
   workOrderItems  WorkOrderItem[]
+  /// Allocation & Multi-WOL Architecture (docs/audits/final-po-allocation-wol-spk-architecture-decision.md).
+  /// Item-scoped commitments of this item's quantity to one or more WorkOrders.
+  /// SUM(qty) of ACTIVE rows here must never exceed this item's own `qty`.
+  allocations     PurchaseOrderItemAllocation[]
 
   @@unique([purchaseOrderId, quotationItemId])
   @@index([purchaseOrderId])
@@ -1927,36 +1938,99 @@ model WorkOrder {
   deliveryNote             EquipmentDeliveryNote?
   /// Legacy allocation pointer on PurchaseOrderItem. Unused by WorkOrder MVP.
   purchaseOrderItems       PurchaseOrderItem[]
-  /// Partial unique index `WorkOrder_purchaseOrderId_active_key` (status <> CANCELLED)
-  /// is created in SQL. Prisma cannot model it; do not add @@unique([purchaseOrderId]).
+  /// Allocation & Multi-WOL Architecture (docs/audits/final-po-allocation-wol-spk-architecture-decision.md).
+  /// One PurchaseOrder may now have any number of simultaneously active
+  /// WorkOrders — the former partial unique index
+  /// `WorkOrder_purchaseOrderId_active_key` (status <> CANCELLED) is REMOVED
+  /// by migration 20260928000000_add_purchase_order_item_allocation.
+  /// Exclusivity is enforced at the PurchaseOrderItemAllocation layer instead
+  /// (SUM(ACTIVE qty) <= PurchaseOrderItem.qty), not at the PO level.
+  allocations              PurchaseOrderItemAllocation[]
   // MOM #1 — Transaction Revision + Immutable History
   history                  WorkOrderHistory[]
 
   @@unique([companyId, number])
   @@index([companyId, status])
+  @@index([customerId])
   @@index([quotationId])
   @@index([purchaseOrderId])
   @@index([requestReviewCompletedByUserId])
 }
 
-/// Operational snapshot of a PurchaseOrderItem. MVP copies every PO item 1:1.
-/// Quantity and source identity are immutable after create.
+/// Operational snapshot of a PurchaseOrderItem's ALLOCATED quantity to this
+/// WorkOrder. Quantity and source identity are immutable after create.
+///
+/// Allocation & Multi-WOL Architecture
+/// (docs/audits/final-po-allocation-wol-spk-architecture-decision.md §8):
+/// `qty` means "the quantity allocated to this WorkOrder", not necessarily
+/// the PurchaseOrderItem's full quantity. `allocationId` is NULL on every
+/// row created before this architecture shipped (never backfilled — those
+/// rows were, by construction, always a 100% allocation, so their existing
+/// `qty` is correct under both the old and new meaning). Every row created
+/// through the allocation-aware flow going forward has `allocationId` set,
+/// and `qty` must equal `PurchaseOrderItemAllocation.qty` at creation.
 model WorkOrderItem {
   id                  String   @id @default(cuid())
   companyId           String
   workOrderId         String
   purchaseOrderItemId String
+  /// 1:1 with the PurchaseOrderItemAllocation that created this row. NULL for
+  /// legacy pre-allocation rows only — never backfilled.
+  allocationId        String?  @unique
   description         String
   qty                 Decimal  @default(1) @db.Decimal(18, 4)
   createdAt           DateTime @default(now())
 
-  workOrder         WorkOrder                @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  purchaseOrderItem PurchaseOrderItem        @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+  workOrder         WorkOrder                    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  purchaseOrderItem PurchaseOrderItem            @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+  allocation        PurchaseOrderItemAllocation? @relation(fields: [allocationId], references: [id], onDelete: SetNull)
   accessories       WorkOrderItemAccessory[]
 
   @@unique([workOrderId, purchaseOrderItemId])
   @@index([workOrderId])
   @@index([purchaseOrderItemId])
+}
+
+/// Allocation & Multi-WOL Architecture
+/// (docs/audits/final-po-allocation-wol-spk-architecture-decision.md §5).
+///
+/// An immutable commitment of a specific quantity of exactly one
+/// PurchaseOrderItem to exactly one WorkOrder, created atomically together
+/// with that WorkOrder's corresponding WorkOrderItem (see
+/// AllocationService.createWorkOrderWithAllocations). Whole-item allocation
+/// is the degenerate case where `qty` equals the item's full remaining
+/// quantity — there is only one allocation mechanism, not two.
+///
+/// Invariant (enforced transactionally, not just by convention — see
+/// AllocationService): for a given purchaseOrderItemId,
+/// SUM(qty WHERE status = ACTIVE) <= PurchaseOrderItem.qty.
+///
+/// Lifecycle is ACTIVE -> CANCELLED only (terminal). No DRAFT/REALIZED/
+/// COMPLETED/FULFILLED states — an Allocation never exists without its
+/// WorkOrderItem, so there is nothing to "realize" after the fact.
+/// Cancellation is only permitted before CalibrationJob fan-out
+/// (i.e. while the backing WorkOrder is PLANNED/ASSIGNED); once jobs exist,
+/// withdrawal is a WorkOrder-level cancellation, not an Allocation-level one.
+model PurchaseOrderItemAllocation {
+  id                  String           @id @default(cuid())
+  companyId           String
+  purchaseOrderItemId String
+  workOrderId         String
+  qty                 Decimal          @db.Decimal(18, 4)
+  status              AllocationStatus @default(ACTIVE)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  purchaseOrderItem PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+  // Cascade matches WorkOrderItem.workOrder's own onDelete: Cascade — an
+  // Allocation is owned by its WorkOrder exactly as tightly as its paired
+  // WorkOrderItem is (both created atomically, same lifecycle).
+  workOrder         WorkOrder         @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  workOrderItem     WorkOrderItem?
+
+  @@index([purchaseOrderItemId, status])
+  @@index([workOrderId])
+  @@index([companyId])
 }
 
 /// Initial UUT accessory / perlengkapan list entered manually on the Work Order

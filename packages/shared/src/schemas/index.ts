@@ -673,6 +673,20 @@ export const workOrderEquipmentProposalQuerySchema = z.object({
 export type WorkOrderEquipmentProposalQuery = z.infer<typeof workOrderEquipmentProposalQuerySchema>;
 
 /** POST /work-orders body — source/commercial values are derived from the PO. */
+/**
+ * Allocation & Multi-WOL Architecture
+ * (docs/audits/final-po-allocation-wol-spk-architecture-decision.md §9).
+ * Optional: which PurchaseOrderItems this WorkOrder claims, and at what
+ * quantity (must not exceed that item's remaining, unallocated quantity —
+ * enforced server-side). Omitted entirely for back-compat: the service then
+ * claims every active PO item at its current remaining quantity, exactly as
+ * before this architecture shipped.
+ */
+export const workOrderAllocationItemSchema = z.object({
+  purchaseOrderItemId: z.string().min(1),
+  qty: z.coerce.number().int().positive(),
+});
+
 export const workOrderCreateSchema = z.object({
   purchaseOrderId: z.string().min(1),
   addressText: workOrderNullableString,
@@ -687,6 +701,8 @@ export const workOrderCreateSchema = z.object({
    * be empty) for SEND_TO_LAB work orders.
    */
   equipment: z.array(workOrderEquipmentItemSchema).max(200).optional(),
+  /** See workOrderAllocationItemSchema. Omitted = claim everything remaining. */
+  items: z.array(workOrderAllocationItemSchema).min(1).max(500).optional(),
 });
 
 /** Post-parse shape (service layer): `scheduled*` are `Date`. */

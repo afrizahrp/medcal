@@ -5,6 +5,7 @@ import {
   buildWorkOrderCreatePayload,
   buildWorkOrderUpdatePayload,
   canCreateWorkOrderFromPurchaseOrder,
+  canOfferLegacyWorkOrderShortcut,
   deviceIdentifierFromItem,
   findActiveWorkOrder,
   formatWorkOrderApiError,
@@ -120,6 +121,39 @@ describe("findActiveWorkOrder", () => {
 
   it("returns undefined when only cancelled WorkOrders exist", () => {
     expect(findActiveWorkOrder([{ id: "wo-1", status: "CANCELLED" }])).toBeUndefined();
+  });
+});
+
+describe("canOfferLegacyWorkOrderShortcut — Phase 8 (PO Detail multi-WorkOrder view)", () => {
+  it("offers the shortcut when the PO has no WorkOrders at all (the true empty case)", () => {
+    expect(canOfferLegacyWorkOrderShortcut([])).toBe(true);
+  });
+
+  it("offers the shortcut when every existing WorkOrder is CANCELLED", () => {
+    expect(
+      canOfferLegacyWorkOrderShortcut([
+        { id: "wo-1", status: "CANCELLED" },
+        { id: "wo-2", status: "CANCELLED" },
+      ]),
+    ).toBe(true);
+  });
+
+  it("withholds the shortcut when at least one active WorkOrder exists, even among others", () => {
+    expect(
+      canOfferLegacyWorkOrderShortcut([
+        { id: "wo-1", status: "CANCELLED" },
+        { id: "wo-2", status: "IN_PROGRESS" },
+      ]),
+    ).toBe(false);
+  });
+
+  it("withholds the shortcut for multiple simultaneously active WorkOrders (Allocation & Multi-WOL Architecture)", () => {
+    expect(
+      canOfferLegacyWorkOrderShortcut([
+        { id: "wo-1", status: "PLANNED" },
+        { id: "wo-2", status: "IN_PROGRESS" },
+      ]),
+    ).toBe(false);
   });
 });
 

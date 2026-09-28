@@ -7,12 +7,19 @@ import { purchaseOrderCreateSchema, purchaseOrderUpdateSchema } from "@medcal/sh
 import { CalibrationRequestsService } from "../calibration-requests/calibration-requests.service";
 import { QuotationsService } from "../quotations/quotations.service";
 import { WorkOrdersService } from "../work-orders/work-orders.service";
+import { CalibrationJobsService } from "../calibration-jobs/calibration-jobs.service";
+import { DevicesService } from "../devices/devices.service";
+import type { FilesService } from "../files/files.service";
 import { PurchaseOrdersService } from "./purchase-orders.service";
 
 const purchaseOrdersService = new PurchaseOrdersService();
 const quotationsService = new QuotationsService();
 const requestsService = new CalibrationRequestsService();
 const workOrdersService = new WorkOrdersService();
+const calibrationJobsService = new CalibrationJobsService(
+  undefined as unknown as FilesService,
+  new DevicesService(),
+);
 const realCompanyId = "PKM";
 const staffUserId = "po-staff-user";
 const createdPurchaseOrderIds: string[] = [];
@@ -294,6 +301,47 @@ async function createTechnician(companyId: string) {
   return user;
 }
 
+async function createManager(companyId: string) {
+  const user = await prisma.user.create({
+    data: {
+      email: `po-mgr-${randomUUID().slice(0, 8)}@kalibrasimedika.co.id`,
+      name: "PO Manager",
+      status: "ACTIVE",
+    },
+  });
+  createdUserIds.push(user.id);
+  await prisma.userMembership.create({
+    data: { userId: user.id, companyId, role: "TECHNICIAN_MANAGER", isDefault: false },
+  });
+  return user;
+}
+
+/**
+ * A single DIRECT_REPLICATES/NUMBER calibration parameter (default
+ * entryStyle/valueType) on the given DeviceType — Phase 9's
+ * measurement-completeness split needs at least one real, eligible
+ * parameter to distinguish "in progress" (unfilled) from "measurement
+ * complete" (filled), which a bare getTestDeviceTypeId() device type
+ * (zero parameters) cannot exercise — an empty requirement set is
+ * trivially always "complete".
+ */
+async function createCalibrationParameter(deviceTypeId: string) {
+  const capability = await prisma.deviceCapability.create({
+    data: { code: `CAP${randomUUID().slice(0, 8).toUpperCase()}`, name: "Test Capability" },
+  });
+  const item = await prisma.deviceCapabilityItem.create({
+    data: { capabilityId: capability.id, name: "Test Item" },
+  });
+  return prisma.deviceCalibrationParameter.create({
+    data: {
+      deviceTypeId,
+      capabilityItemId: item.id,
+      code: `PRM${randomUUID().slice(0, 8).toUpperCase()}`,
+      name: "Test Parameter",
+    },
+  });
+}
+
 /** Builds a full chain (Requisition -> Quotation -> PO -> WorkOrder) so the
  * cross-chain safety guard tests can put a WorkOrder into IN_PROGRESS. */
 async function createWorkOrderFor(companyId: string, purchaseOrderId: string) {
@@ -304,6 +352,20 @@ async function createWorkOrderFor(companyId: string, purchaseOrderId: string) {
 
 afterAll(async () => {
   if (createdWorkOrderIds.length > 0) {
+    // Allocation & Multi-WOL Architecture (Phase 9): some tests write real
+    // Certificate/MeasurementResult/QualityReview rows against these jobs —
+    // must be cleared before the CalibrationJob rows they reference.
+    const jobIds = (
+      await prisma.calibrationJob.findMany({
+        where: { workOrderId: { in: createdWorkOrderIds } },
+        select: { id: true },
+      })
+    ).map((job) => job.id);
+    if (jobIds.length > 0) {
+      await prisma.certificate.deleteMany({ where: { calibrationJobId: { in: jobIds } } });
+      await prisma.measurementResult.deleteMany({ where: { calibrationJobId: { in: jobIds } } });
+      await prisma.qualityReview.deleteMany({ where: { calibrationJobId: { in: jobIds } } });
+    }
     await prisma.calibrationJob.deleteMany({ where: { workOrderId: { in: createdWorkOrderIds } } });
     await prisma.workOrderItem.deleteMany({ where: { workOrderId: { in: createdWorkOrderIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: createdWorkOrderIds } } });
@@ -325,6 +387,28 @@ afterAll(async () => {
   }
   if (createdDeviceTypeIds.length > 0) {
     await prisma.priceListItem.deleteMany({ where: { deviceTypeId: { in: createdDeviceTypeIds } } });
+    // Allocation & Multi-WOL Architecture (Phase 9): calibration parameters
+    // created for the measurement-completeness tests reference deviceType —
+    // clear the whole chain (parameter -> capabilityItem -> capability)
+    // before deviceType cleanup.
+    const parameters = await prisma.deviceCalibrationParameter.findMany({
+      where: { deviceTypeId: { in: createdDeviceTypeIds } },
+      select: { id: true, capabilityItemId: true },
+    });
+    if (parameters.length > 0) {
+      const capabilityItemIds = [...new Set(parameters.map((p) => p.capabilityItemId))];
+      const capabilityItems = await prisma.deviceCapabilityItem.findMany({
+        where: { id: { in: capabilityItemIds } },
+        select: { capabilityId: true },
+      });
+      await prisma.deviceCalibrationParameter.deleteMany({
+        where: { id: { in: parameters.map((p) => p.id) } },
+      });
+      await prisma.deviceCapabilityItem.deleteMany({ where: { id: { in: capabilityItemIds } } });
+      await prisma.deviceCapability.deleteMany({
+        where: { id: { in: [...new Set(capabilityItems.map((c) => c.capabilityId))] } },
+      });
+    }
     await prisma.deviceType.deleteMany({ where: { id: { in: createdDeviceTypeIds } } });
   }
   if (createdDeviceCategoryIds.length > 0) {
@@ -1171,5 +1255,491 @@ describe("PurchaseOrdersService.revise", () => {
       where: { id: itemA!.id },
     });
     expect(unchangedRow.status).not.toBe("CANCELLED");
+  });
+});
+
+/**
+ * A single PurchaseOrderItem at an arbitrary quantity (unlike
+ * createApprovedPurchaseOrder's one-device-per-item helper, whose items are
+ * always qty=1). Local to this describe block — mirrors the equivalent
+ * helper in work-orders.service.test.ts.
+ */
+async function createApprovedPurchaseOrderWithSingleItemQty(companyId: string, qty: number) {
+  await ensureNonPpnTax(companyId);
+  const customer = await createTestCustomer(companyId);
+  const deviceTypeId = await getTestDeviceTypeId();
+  await seedPrice(companyId, deviceTypeId, 100_000);
+  await prisma.user.upsert({
+    where: { id: staffUserId },
+    create: { id: staffUserId, email: `${staffUserId}@medcal.test`, name: "PO Staff", status: "ACTIVE" },
+    update: {},
+  });
+
+  const request = await requestsService.create(companyId, staffUserId, {
+    customerId: customer.id,
+    serviceMode: "ON_SITE",
+    items: [{ deviceTypeId, qty }],
+  });
+  createdCalibrationRequestIds.push(request.id);
+  const submitted = await requestsService.submit(companyId, request.id);
+
+  const quotation = await quotationsService.create(companyId, {
+    requestId: submitted.id,
+    taxCode: "T0",
+  });
+  createdQuotationIds.push(quotation.id);
+  const approvedQuotation = await approveQuotation(companyId, quotation.id);
+
+  const createdPo = await purchaseOrdersService.create(companyId, customerPoInput(approvedQuotation.id));
+  createdPurchaseOrderIds.push(createdPo.id);
+  const purchaseOrder = await purchaseOrdersService.approve(companyId, createdPo.id, staffUserId);
+  return { customer, purchaseOrder, deviceTypeId };
+}
+
+describe("PurchaseOrdersService.getAllocationSummary — Phase 7 (Plan WOL/SPK UI)", () => {
+  it("reports full remaining quantity and no allocations when nothing has claimed the PO yet", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 2 });
+
+    const summary = await purchaseOrdersService.getAllocationSummary(
+      realCompanyId,
+      purchaseOrder.id,
+    );
+
+    expect(summary.purchaseOrderId).toBe(purchaseOrder.id);
+    expect(summary.items).toHaveLength(2);
+    for (const item of summary.items) {
+      expect(item.allocatedQty).toBe(0);
+      expect(item.remainingQty).toBe(item.qty);
+      expect(item.allocations).toHaveLength(0);
+    }
+  });
+
+  it("reflects a whole-item allocation: allocatedQty = qty, remainingQty = 0, one allocation row referencing the WorkOrder", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 1 });
+    const workOrder = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+
+    const summary = await purchaseOrdersService.getAllocationSummary(
+      realCompanyId,
+      purchaseOrder.id,
+    );
+
+    expect(summary.items).toHaveLength(1);
+    const [item] = summary.items;
+    expect(item!.allocatedQty).toBe(item!.qty);
+    expect(item!.remainingQty).toBe(0);
+    expect(item!.allocations).toHaveLength(1);
+    expect(item!.allocations[0]).toMatchObject({
+      workOrderId: workOrder.id,
+      workOrderNumber: workOrder.number,
+      qty: item!.qty,
+    });
+  });
+
+  it("reflects a partial allocation across two sibling WorkOrders", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrderWithSingleItemQty(
+      realCompanyId,
+      100,
+    );
+    const item = await prisma.purchaseOrderItem.findFirstOrThrow({
+      where: { purchaseOrderId: purchaseOrder.id },
+    });
+
+    const woA = await workOrdersService.create(realCompanyId, {
+      purchaseOrderId: purchaseOrder.id,
+      items: [{ purchaseOrderItemId: item.id, qty: 40 }],
+    });
+    createdWorkOrderIds.push(woA.id);
+    const woB = await workOrdersService.create(realCompanyId, {
+      purchaseOrderId: purchaseOrder.id,
+      items: [{ purchaseOrderItemId: item.id, qty: 30 }],
+    });
+    createdWorkOrderIds.push(woB.id);
+
+    const summary = await purchaseOrdersService.getAllocationSummary(
+      realCompanyId,
+      purchaseOrder.id,
+    );
+    const [summaryItem] = summary.items;
+    expect(summaryItem!.qty).toBe(100);
+    expect(summaryItem!.allocatedQty).toBe(70);
+    expect(summaryItem!.remainingQty).toBe(30);
+    expect(summaryItem!.allocations.map((a) => a.workOrderId).sort()).toEqual(
+      [woA.id, woB.id].sort(),
+    );
+  });
+
+  it("excludes CANCELLED allocations from allocatedQty and includes their released quantity in remainingQty", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 1 });
+    const workOrder = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+    await workOrdersService.cancel(realCompanyId, workOrder.id);
+
+    const summary = await purchaseOrdersService.getAllocationSummary(
+      realCompanyId,
+      purchaseOrder.id,
+    );
+    const [item] = summary.items;
+    expect(item!.allocatedQty).toBe(0);
+    expect(item!.remainingQty).toBe(item!.qty);
+    expect(item!.allocations).toHaveLength(0);
+  });
+});
+
+describe("PurchaseOrdersService.getWorkOrderSummaries — Phase 8 (PO Detail multi-WorkOrder view)", () => {
+  it("returns an empty array for a PO with zero WorkOrders", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
+    const summaries = await purchaseOrdersService.getWorkOrderSummaries(
+      realCompanyId,
+      purchaseOrder.id,
+    );
+    expect(summaries).toEqual([]);
+  });
+
+  it("returns one summary for a PO with one WorkOrder, with the correct item/qty totals", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 2 });
+    const workOrder = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+
+    const summaries = await purchaseOrdersService.getWorkOrderSummaries(
+      realCompanyId,
+      purchaseOrder.id,
+    );
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({
+      id: workOrder.id,
+      number: workOrder.number,
+      status: "PLANNED",
+      itemCount: 2,
+    });
+    expect(summaries[0]!.totalQty).toBe(2); // itemCount:2 fixture = qty 1 each
+  });
+
+  it("returns multiple simultaneously active WorkOrders, never duplicated, each with its own item/qty totals (Allocation & Multi-WOL Architecture)", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrderWithSingleItemQty(
+      realCompanyId,
+      100,
+    );
+    const item = await prisma.purchaseOrderItem.findFirstOrThrow({
+      where: { purchaseOrderId: purchaseOrder.id },
+    });
+    const woA = await workOrdersService.create(realCompanyId, {
+      purchaseOrderId: purchaseOrder.id,
+      items: [{ purchaseOrderItemId: item.id, qty: 40 }],
+    });
+    createdWorkOrderIds.push(woA.id);
+    const woB = await workOrdersService.create(realCompanyId, {
+      purchaseOrderId: purchaseOrder.id,
+      items: [{ purchaseOrderItemId: item.id, qty: 30 }],
+    });
+    createdWorkOrderIds.push(woB.id);
+
+    const summaries = await purchaseOrdersService.getWorkOrderSummaries(
+      realCompanyId,
+      purchaseOrder.id,
+    );
+    expect(summaries).toHaveLength(2);
+    expect(new Set(summaries.map((s) => s.id))).toEqual(new Set([woA.id, woB.id]));
+    const byId = new Map(summaries.map((s) => [s.id, s]));
+    expect(byId.get(woA.id)).toMatchObject({ itemCount: 1, totalQty: 40 });
+    expect(byId.get(woB.id)).toMatchObject({ itemCount: 1, totalQty: 30 });
+  });
+
+  it("keeps a cancelled WorkOrder visible and distinguishable, never silently hidden", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
+    const workOrder = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+    await workOrdersService.cancel(realCompanyId, workOrder.id);
+
+    const summaries = await purchaseOrdersService.getWorkOrderSummaries(
+      realCompanyId,
+      purchaseOrder.id,
+    );
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({ id: workOrder.id, status: "CANCELLED" });
+  });
+
+  it("does not query or depend on CalibrationJob data (bounded by WorkOrderItem count only)", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 1 });
+    const workOrder = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+    const technician = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, workOrder.id, {
+      technicians: [{ technicianUserId: technician.id, roleOnJob: "LEAD" }],
+    });
+    await workOrdersService.start(realCompanyId, workOrder.id);
+    expect(await prisma.calibrationJob.count({ where: { workOrderId: workOrder.id } })).toBe(1);
+
+    // Summary must still report the WorkOrderItem-derived totals (1 item,
+    // qty 1) regardless of how many CalibrationJobs exist underneath it.
+    const summaries = await purchaseOrdersService.getWorkOrderSummaries(
+      realCompanyId,
+      purchaseOrder.id,
+    );
+    expect(summaries[0]).toMatchObject({ itemCount: 1, totalQty: 1, status: "IN_PROGRESS" });
+  });
+});
+
+async function assignAndStartWorkOrder(companyId: string, workOrderId: string, technicianId: string) {
+  await workOrdersService.assign(companyId, workOrderId, {
+    technicians: [{ technicianUserId: technicianId, roleOnJob: "LEAD" }],
+  });
+  return workOrdersService.start(companyId, workOrderId);
+}
+
+function bucketSumExcludingCancelled(buckets: {
+  unallocated: number;
+  allocatedNotStarted: number;
+  inProgress: number;
+  measurementComplete: number;
+  submitted: number;
+  qaAccepted: number;
+  certificateIssued: number;
+}): number {
+  return (
+    buckets.unallocated +
+    buckets.allocatedNotStarted +
+    buckets.inProgress +
+    buckets.measurementComplete +
+    buckets.submitted +
+    buckets.qaAccepted +
+    buckets.certificateIssued
+  );
+}
+
+describe("PurchaseOrdersService.getProgress — Phase 9 (PO Progress)", () => {
+  it("throws NotFoundException for a PO that does not exist", async () => {
+    await expect(
+      purchaseOrdersService.getProgress(realCompanyId, "missing-po-id"),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("a PO with zero WorkOrders reports everything as unallocated and is not complete", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 2 });
+    const progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    expect(progress.totalQty).toBe(2);
+    expect(progress.buckets.unallocated).toBe(2);
+    expect(
+      bucketSumExcludingCancelled(progress.buckets) - progress.buckets.unallocated,
+    ).toBe(0);
+    expect(progress.buckets.cancelled).toBe(0);
+    expect(progress.isComplete).toBe(false);
+  });
+
+  it("an allocated WorkOrder that hasn't started yet (pre-fan-out) is reported as allocatedNotStarted", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 1 });
+    await createWorkOrderFor(realCompanyId, purchaseOrder.id); // PLANNED, never started
+    const progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    expect(progress.buckets.unallocated).toBe(0);
+    expect(progress.buckets.allocatedNotStarted).toBe(1);
+    expect(progress.isComplete).toBe(false);
+  });
+
+  it("a freshly fanned-out PENDING job is mapped into allocatedNotStarted (documented mapping), not inProgress", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 1 });
+    const wo = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+    const tech = await createTechnician(realCompanyId);
+    await assignAndStartWorkOrder(realCompanyId, wo.id, tech.id); // fans out 1 PENDING job
+
+    const progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    expect(progress.buckets.allocatedNotStarted).toBe(1);
+    expect(progress.buckets.inProgress).toBe(0);
+  });
+
+  it("an IN_PROGRESS job with an unfilled calibration parameter is reported as inProgress, not measurementComplete", async () => {
+    const { purchaseOrder, deviceTypeId } = await createApprovedPurchaseOrderWithSingleItemQty(
+      realCompanyId,
+      1,
+    );
+    await createCalibrationParameter(deviceTypeId);
+    const wo = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+    const tech = await createTechnician(realCompanyId);
+    await assignAndStartWorkOrder(realCompanyId, wo.id, tech.id);
+    const job = await prisma.calibrationJob.findFirstOrThrow({ where: { workOrderId: wo.id } });
+    await calibrationJobsService.start(realCompanyId, job.id);
+
+    const progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    expect(progress.buckets.inProgress).toBe(1);
+    expect(progress.buckets.measurementComplete).toBe(0);
+  });
+
+  it("an IN_PROGRESS job with its calibration parameter filled is reported as measurementComplete", async () => {
+    const { purchaseOrder, deviceTypeId } = await createApprovedPurchaseOrderWithSingleItemQty(
+      realCompanyId,
+      1,
+    );
+    const param = await createCalibrationParameter(deviceTypeId);
+    const wo = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+    const tech = await createTechnician(realCompanyId);
+    await assignAndStartWorkOrder(realCompanyId, wo.id, tech.id);
+    const job = await prisma.calibrationJob.findFirstOrThrow({ where: { workOrderId: wo.id } });
+    await calibrationJobsService.start(realCompanyId, job.id);
+    await prisma.measurementResult.create({
+      data: {
+        companyId: realCompanyId,
+        calibrationJobId: job.id,
+        deviceCalibrationParameterId: param.id,
+        replicateIndex: 1,
+        attemptNumber: 1,
+        measuredValue: 10,
+        measuredText: null,
+      },
+    });
+
+    const progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    expect(progress.buckets.inProgress).toBe(0);
+    expect(progress.buckets.measurementComplete).toBe(1);
+  });
+
+  it("a SUBMITTED job is reported as submitted", async () => {
+    // Bare device type (getTestDeviceTypeId, zero parameters) — an empty
+    // requirement set is trivially measurement-complete, so this job can be
+    // submitted immediately, isolating the SUBMITTED bucket specifically.
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 1 });
+    const wo = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+    const tech = await createTechnician(realCompanyId);
+    await assignAndStartWorkOrder(realCompanyId, wo.id, tech.id);
+    const job = await prisma.calibrationJob.findFirstOrThrow({ where: { workOrderId: wo.id } });
+    await calibrationJobsService.start(realCompanyId, job.id);
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+
+    const progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    expect(progress.buckets.submitted).toBe(1);
+  });
+
+  it("an ACCEPTED_BY_QA job with no issued certificate is reported as qaAccepted, and the PO is not complete", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 1 });
+    const wo = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+    const tech = await createTechnician(realCompanyId);
+    const manager = await createManager(realCompanyId);
+    await assignAndStartWorkOrder(realCompanyId, wo.id, tech.id);
+    const job = await prisma.calibrationJob.findFirstOrThrow({ where: { workOrderId: wo.id } });
+    await calibrationJobsService.start(realCompanyId, job.id);
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    await calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+      decision: "APPROVE",
+    });
+    await calibrationJobsService.complete(realCompanyId, job.id);
+
+    const progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    expect(progress.buckets.qaAccepted).toBe(1);
+    expect(progress.buckets.certificateIssued).toBe(0);
+    expect(progress.isComplete).toBe(false);
+  });
+
+  it("an ACCEPTED_BY_QA job with an ISSUED certificate is reported as certificateIssued, and the PO becomes complete", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 1 });
+    const wo = await createWorkOrderFor(realCompanyId, purchaseOrder.id);
+    const tech = await createTechnician(realCompanyId);
+    const manager = await createManager(realCompanyId);
+    await assignAndStartWorkOrder(realCompanyId, wo.id, tech.id);
+    const job = await prisma.calibrationJob.findFirstOrThrow({ where: { workOrderId: wo.id } });
+    await calibrationJobsService.start(realCompanyId, job.id);
+    await calibrationJobsService.submitForReview(realCompanyId, job.id);
+    await calibrationJobsService.decideQualityReview(realCompanyId, job.id, manager.id, {
+      decision: "APPROVE",
+    });
+    await calibrationJobsService.complete(realCompanyId, job.id);
+
+    // Certificate issuance is a separate, unmodified subsystem (Phase 9 does
+    // not touch it) — seed a realistic ISSUED row directly, matching its
+    // real shape, rather than re-exercising the file-upload HTTP path.
+    const device = await prisma.device.findFirstOrThrow({
+      where: { customerId: purchaseOrder.customerId },
+    });
+    await prisma.calibrationJob.update({ where: { id: job.id }, data: { deviceId: device.id } });
+    await prisma.certificate.create({
+      data: {
+        companyId: realCompanyId,
+        customerId: purchaseOrder.customerId,
+        deviceId: device.id,
+        calibrationJobId: job.id,
+        number: `CER/TEST/${randomUUID().slice(0, 8).toUpperCase()}`,
+        status: "ISSUED",
+      },
+    });
+
+    const progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    expect(progress.buckets.qaAccepted).toBe(0);
+    expect(progress.buckets.certificateIssued).toBe(1);
+    expect(progress.isComplete).toBe(true);
+  });
+
+  it("REGRESSION: jobs under a CANCELLED WorkOrder never count toward progress and never block completion — released quantity flows through a replacement WorkOrder instead", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrderWithSingleItemQty(realCompanyId, 40);
+    const item = await prisma.purchaseOrderItem.findFirstOrThrow({
+      where: { purchaseOrderId: purchaseOrder.id },
+    });
+    const tech = await createTechnician(realCompanyId);
+
+    const woA = await workOrdersService.create(realCompanyId, {
+      purchaseOrderId: purchaseOrder.id,
+      items: [{ purchaseOrderItemId: item.id, qty: 40 }],
+    });
+    createdWorkOrderIds.push(woA.id);
+    await assignAndStartWorkOrder(realCompanyId, woA.id, tech.id); // 40 PENDING jobs
+
+    let progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    expect(progress.buckets.allocatedNotStarted).toBe(40);
+    expect(progress.buckets.unallocated).toBe(0);
+
+    await workOrdersService.cancel(realCompanyId, woA.id);
+
+    progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    // The 40 orphaned jobs under the now-CANCELLED WorkOrder must be
+    // completely invisible to buckets 1–7 — released back to unallocated,
+    // never counted as still "allocated" or "in progress".
+    expect(progress.buckets.unallocated).toBe(40);
+    expect(progress.buckets.allocatedNotStarted).toBe(0);
+    expect(progress.buckets.cancelled).toBe(40);
+    expect(bucketSumExcludingCancelled(progress.buckets)).toBe(40);
+    expect(progress.isComplete).toBe(false);
+
+    // Reallocate the released 40 into a brand-new, replacement WorkOrder —
+    // the intentional cancel-and-replace lifecycle (architecture clarification).
+    const woB = await workOrdersService.create(realCompanyId, {
+      purchaseOrderId: purchaseOrder.id,
+      items: [{ purchaseOrderItemId: item.id, qty: 40 }],
+    });
+    createdWorkOrderIds.push(woB.id);
+    await assignAndStartWorkOrder(realCompanyId, woB.id, tech.id); // 40 fresh PENDING jobs
+
+    progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    expect(progress.buckets.unallocated).toBe(0);
+    expect(progress.buckets.allocatedNotStarted).toBe(40); // WOL B's jobs only
+    expect(progress.buckets.cancelled).toBe(40); // WOL A's orphans — still separately visible, unaffected
+    // The critical assertion: never 80. WOL A's 40 orphaned jobs must never
+    // be double-counted alongside WOL B's 40 fresh ones.
+    expect(bucketSumExcludingCancelled(progress.buckets)).toBe(40);
+  });
+
+  it("quantity aggregation across two simultaneously active sibling WorkOrders combines correctly without merging identity", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrderWithSingleItemQty(realCompanyId, 70);
+    const item = await prisma.purchaseOrderItem.findFirstOrThrow({
+      where: { purchaseOrderId: purchaseOrder.id },
+    });
+    const tech = await createTechnician(realCompanyId);
+
+    const woA = await workOrdersService.create(realCompanyId, {
+      purchaseOrderId: purchaseOrder.id,
+      items: [{ purchaseOrderItemId: item.id, qty: 40 }],
+    });
+    createdWorkOrderIds.push(woA.id);
+    await assignAndStartWorkOrder(realCompanyId, woA.id, tech.id); // 40 PENDING
+
+    const woB = await workOrdersService.create(realCompanyId, {
+      purchaseOrderId: purchaseOrder.id,
+      items: [{ purchaseOrderItemId: item.id, qty: 30 }],
+    });
+    createdWorkOrderIds.push(woB.id);
+    // WOL B is deliberately left PLANNED (never started), to prove the
+    // pre-fan-out allocatedNotStarted path aggregates correctly alongside
+    // WOL A's post-fan-out (PENDING-job) allocatedNotStarted contribution.
+
+    const progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    expect(progress.totalQty).toBe(70);
+    expect(progress.buckets.unallocated).toBe(0);
+    expect(progress.buckets.allocatedNotStarted).toBe(70); // 40 (WOL A jobs) + 30 (WOL B pre-fan-out)
+  });
+
+  it("buckets 1-7 always sum to the PO's total ordered quantity; bucket 8 (cancelled) is reported separately", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, { itemCount: 3 });
+    const progress = await purchaseOrdersService.getProgress(realCompanyId, purchaseOrder.id);
+    expect(bucketSumExcludingCancelled(progress.buckets)).toBe(progress.totalQty);
   });
 });
