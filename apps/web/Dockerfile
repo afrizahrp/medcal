@@ -6,6 +6,7 @@
 #     --build-arg NEXT_PUBLIC_API_URL=https://api.kalibrasimedika.co.id \
 #     --build-arg NEXT_PUBLIC_WEB_API_URL=https://kalibrasimedika.co.id \
 #     --build-arg NEXT_PUBLIC_RECAPTCHA_SITE_KEY=<production site key> \
+#     --build-arg NEXT_PUBLIC_CUSTOMER_PORTAL_URL=https://customer.kalibrasimedika.co.id \
 #     -t medcal-web .
 # (docker-compose.prod.yml already sets context/dockerfile/build.args this way.)
 #
@@ -45,9 +46,11 @@ FROM installer AS builder
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_WEB_API_URL
 ARG NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+ARG NEXT_PUBLIC_CUSTOMER_PORTAL_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WEB_API_URL=$NEXT_PUBLIC_WEB_API_URL
 ENV NEXT_PUBLIC_RECAPTCHA_SITE_KEY=$NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+ENV NEXT_PUBLIC_CUSTOMER_PORTAL_URL=$NEXT_PUBLIC_CUSTOMER_PORTAL_URL
 RUN pnpm --filter=@medcal/web run build
 
 # ---- Runtime image ----
