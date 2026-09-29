@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
+  ArrowUp,
   Check,
   Edit,
   History as HistoryIcon,
@@ -27,6 +28,7 @@ import {
   formatDateTime,
   formatIdr,
   formatQty,
+  moneyNumber,
 } from "../../quotations/quotations-ui";
 import { useTaxes } from "../../quotations/use-taxes-query";
 import {
@@ -66,6 +68,38 @@ import {
   type ServiceMode,
 } from "../../calibration-requests/calibration-requests-ui";
 import { StatusBadge as WorkOrderStatusBadge } from "../../work-orders/work-orders-ui";
+
+/**
+ * Same floating control as CalibrationJobsPageClient. Hidden until the window
+ * has scrolled past 400px, then smooth-scrolls back to the top of the page.
+ * Offset sits above the global symbol-picker FAB (bottom-6/right-6, z-40).
+ */
+function ScrollToTopButton() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    function onScroll() {
+      const shouldShow = window.scrollY > 400;
+      setVisible((prev) => (prev === shouldShow ? prev : shouldShow));
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      className="fixed bottom-24 right-6 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-lg transition hover:bg-slate-50 sm:bottom-28 sm:right-8"
+      aria-label="Kembali ke atas"
+      title="Kembali ke atas"
+    >
+      <ArrowUp className="h-5 w-5" />
+    </button>
+  );
+}
 
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -309,12 +343,15 @@ export default function PurchaseOrderDetailPage() {
             currency={purchaseOrder.currency}
             taxDescription={taxDescriptionForCode(taxesQuery.data?.data, purchaseOrder.taxCode)}
             taxIsExclude={purchaseOrderTax?.isExclude ?? null}
+            collapseItems
           />
         </div>
 
         {capabilities?.workOrderRead || capabilities?.workOrderCreate ? (
           <PurchaseOrderWorkOrderSection
             purchaseOrderId={purchaseOrder.id}
+            itemCount={purchaseOrder.items.length}
+            unitCount={purchaseOrder.items.reduce((sum, item) => sum + moneyNumber(item.qty), 0)}
             purchaseOrderStatus={purchaseOrder.status}
             canCreate={Boolean(capabilities?.workOrderCreate)}
             canRead={Boolean(capabilities?.workOrderRead)}
@@ -405,6 +442,7 @@ export default function PurchaseOrderDetailPage() {
           onClose={() => setHistoryDialogOpen(false)}
         />
       ) : null}
+      <ScrollToTopButton />
     </div>
   );
 }
@@ -527,8 +565,73 @@ function CreatedBanner() {
   );
 }
 
+const HIGH_VOLUME_CREATE_WORK_ORDER_ITEM_THRESHOLD = 10;
+
+function CreateWorkOrderEntry({
+  purchaseOrderId,
+  itemCount,
+  unitCount,
+}: {
+  purchaseOrderId: string;
+  itemCount: number;
+  unitCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const createHref = `/work-orders/new?purchaseOrderId=${purchaseOrderId}`;
+
+  if (itemCount <= HIGH_VOLUME_CREATE_WORK_ORDER_ITEM_THRESHOLD) {
+    return (
+      <Button type="button" size="sm" asChild>
+        <Link href={createHref}>
+          <Plus className="h-4 w-4" />
+          Create Work Order
+        </Link>
+      </Button>
+    );
+  }
+
+  return (
+    <>
+      <Button type="button" size="sm" onClick={() => setOpen(true)}>
+        <Plus className="h-4 w-4" />
+        Create Work Order
+      </Button>
+      {open ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="high-volume-create-work-order-title"
+            className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+          >
+            <h3 id="high-volume-create-work-order-title" className="text-lg font-semibold text-slate-900">
+              Ada banyak device yang mesti dikerjakan
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              PO ini memiliki {formatQty(unitCount)} unit device. Mau menyelesaikan job ini sendiri atau share ke tim anda?
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Batal
+              </Button>
+              <Button type="button" variant="outline" asChild>
+                <Link href={createHref}>Kerjakan Sendiri</Link>
+              </Button>
+              <Button type="button" asChild>
+                <Link href={`/purchase-orders/${purchaseOrderId}/share`}>Share Pekerjaan</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function PurchaseOrderWorkOrderSection({
   purchaseOrderId,
+  itemCount,
+  unitCount,
   purchaseOrderStatus,
   canCreate,
   canRead,
@@ -538,6 +641,8 @@ function PurchaseOrderWorkOrderSection({
   rows,
 }: {
   purchaseOrderId: string;
+  itemCount: number;
+  unitCount: number;
   purchaseOrderStatus: string;
   canCreate: boolean;
   canRead: boolean;
@@ -573,14 +678,14 @@ function PurchaseOrderWorkOrderSection({
         {/* Allocation & Multi-WOL Architecture: a PO can now have more than
             one active Work Order, so Plan WOL/SPK is offered regardless of
             whether any already exist — zero, one, or many. */}
-        {canCreate && eligible ? (
+        {/* {canCreate && eligible ? (
           <Button type="button" variant="outline" size="sm" asChild>
             <Link href={`/purchase-orders/${purchaseOrderId}/plan-wol`}>
               <ListChecks className="h-4 w-4" />
               Plan WOL/SPK
             </Link>
           </Button>
-        ) : null}
+        ) : null} */}
       </div>
 
       {queryForbidden ? null : queryLoading ? (
@@ -635,24 +740,22 @@ function PurchaseOrderWorkOrderSection({
                 Semua Work Order di atas telah dibatalkan. Purchase Order ini dapat dibuatkan SPK
                 baru.
               </p>
-              <Button type="button" size="sm" asChild>
-                <Link href={`/work-orders/new?purchaseOrderId=${purchaseOrderId}`}>
-                  <Plus className="h-4 w-4" />
-                  Create Work Order
-                </Link>
-              </Button>
+              <CreateWorkOrderEntry
+                purchaseOrderId={purchaseOrderId}
+                itemCount={itemCount}
+                unitCount={unitCount}
+              />
             </div>
           ) : null}
         </>
       ) : showLegacyCreateShortcut ? (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-3">
           <p className="text-sm text-slate-600">Belum ada work order untuk purchase order ini.</p>
-          <Button type="button" size="sm" asChild>
-            <Link href={`/work-orders/new?purchaseOrderId=${purchaseOrderId}`}>
-              <Plus className="h-4 w-4" />
-              Create Work Order
-            </Link>
-          </Button>
+          <CreateWorkOrderEntry
+            purchaseOrderId={purchaseOrderId}
+            itemCount={itemCount}
+            unitCount={unitCount}
+          />
         </div>
       ) : (
         <p className="mt-2 text-sm text-slate-500">

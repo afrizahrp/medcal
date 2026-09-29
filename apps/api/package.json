@@ -8,6 +8,8 @@
     "template:requisition": "tsx src/generate-requisition-template.ts",
     "seed:trial-minto-hardjo": "tsx --env-file=../../.env scripts/trial-minto-hardjo/seed.ts",
     "reset:trial-minto-hardjo": "tsx --env-file=../../.env scripts/trial-minto-hardjo/reset.ts",
+    "seed:trial-minto-hardjo-po-only": "tsx --env-file=../../.env scripts/trial-minto-hardjo/seed-po-only.ts",
+    "reset:trial-minto-hardjo-po-only": "tsx --env-file=../../.env scripts/trial-minto-hardjo/reset-po-only.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",

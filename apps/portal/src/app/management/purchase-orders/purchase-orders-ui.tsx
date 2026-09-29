@@ -4,6 +4,12 @@ import Link from "next/link";
 import { SortableTh } from "@/components/ui/sortable-th";
 import type { TableSort } from "@/hooks/use-table-sort";
 import { Search } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +23,7 @@ import {
   formatDate,
   formatIdr,
   formatQty,
+  moneyNumber,
   quotationPdfFilename,
   type MoneyValue,
   type QuotationCustomer,
@@ -323,6 +330,66 @@ export function PurchaseOrderEmptyState({ onClearFilters }: { onClearFilters?: (
   );
 }
 
+function SnapshotItemsTable({
+  items,
+  showPricing,
+}: {
+  items: SnapshotLine[];
+  showPricing: boolean;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px]">
+        <thead>
+          <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+            <th className="px-3 py-2">Item</th>
+            <th className="px-3 py-2 text-right">Qty</th>
+            {showPricing ? (
+              <>
+                <th className="px-3 py-2 text-right">Unit Price</th>
+                <th className="px-3 py-2 text-right">Discount</th>
+                <th className="px-3 py-2 text-right">Line Total</th>
+              </>
+            ) : null}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {items.map((item) => (
+            <tr key={item.id}>
+              <td className="px-3 py-3">
+                <p className="text-sm text-slate-900">{item.description}</p>
+                {item.deviceName && item.deviceName !== item.description ? (
+                  <p className="text-xs text-slate-600">{item.deviceName}</p>
+                ) : null}
+                {item.deviceTypeName ? (
+                  <p className="text-xs text-slate-500">{item.deviceTypeName}</p>
+                ) : null}
+                {item.deviceId ? (
+                  <p className="font-mono text-xs text-slate-400">{item.deviceId}</p>
+                ) : null}
+              </td>
+              <td className="px-3 py-3 text-right text-sm text-slate-600">{formatQty(item.qty)}</td>
+              {showPricing ? (
+                <>
+                  <td className="px-3 py-3 text-right text-sm text-slate-600">
+                    {formatIdr(item.unitPrice)}
+                  </td>
+                  <td className="px-3 py-3 text-right text-sm text-slate-600">
+                    {formatIdr(item.discountAmount)}
+                  </td>
+                  <td className="px-3 py-3 text-right text-sm font-medium text-slate-900">
+                    {formatIdr(item.lineTotal)}
+                  </td>
+                </>
+              ) : null}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function PurchaseOrderSnapshot({
   quotationNumber,
   quotationId,
@@ -340,6 +407,7 @@ export function PurchaseOrderSnapshot({
   taxDescription,
   taxIsExclude,
   showPricing = true,
+  collapseItems = false,
 }: {
   quotationNumber: string;
   quotationId: string;
@@ -368,8 +436,15 @@ export function PurchaseOrderSnapshot({
    * screens (the commercial context) keep showing them. Defaults to true.
    */
   showPricing?: boolean;
+  /**
+   * PO detail only. Keeps the full item table one disclosure away so a long
+   * PO does not render every row on first paint. Other callers leave this
+   * off and keep the table expanded.
+   */
+  collapseItems?: boolean;
 }) {
   const showTaxLine = showPricing && shouldShowTaxLine({ taxCode, taxAmount, taxIsExclude });
+  const totalUnits = items.reduce((sum, item) => sum + moneyNumber(item.qty), 0);
   return (
     <section className="space-y-4">
       <h2 className="text-base font-semibold text-slate-900">Quotation Snapshot</h2>
@@ -406,60 +481,38 @@ export function PurchaseOrderSnapshot({
         ) : null}
       </dl>
 
-      <div>
-        <h3 className="text-sm font-semibold text-slate-900">Items ({items.length})</h3>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[640px]">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                <th className="px-3 py-2">Item</th>
-                <th className="px-3 py-2 text-right">Qty</th>
-                {showPricing ? (
-                  <>
-                    <th className="px-3 py-2 text-right">Unit Price</th>
-                    <th className="px-3 py-2 text-right">Discount</th>
-                    <th className="px-3 py-2 text-right">Line Total</th>
-                  </>
-                ) : null}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {items.map((item) => (
-                <tr key={item.id}>
-                  <td className="px-3 py-3">
-                    <p className="text-sm text-slate-900">{item.description}</p>
-                    {item.deviceName && item.deviceName !== item.description ? (
-                      <p className="text-xs text-slate-600">{item.deviceName}</p>
-                    ) : null}
-                    {item.deviceTypeName ? (
-                      <p className="text-xs text-slate-500">{item.deviceTypeName}</p>
-                    ) : null}
-                    {item.deviceId ? (
-                      <p className="font-mono text-xs text-slate-400">{item.deviceId}</p>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-3 text-right text-sm text-slate-600">
-                    {formatQty(item.qty)}
-                  </td>
-                  {showPricing ? (
-                    <>
-                      <td className="px-3 py-3 text-right text-sm text-slate-600">
-                        {formatIdr(item.unitPrice)}
-                      </td>
-                      <td className="px-3 py-3 text-right text-sm text-slate-600">
-                        {formatIdr(item.discountAmount)}
-                      </td>
-                      <td className="px-3 py-3 text-right text-sm font-medium text-slate-900">
-                        {formatIdr(item.lineTotal)}
-                      </td>
-                    </>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {collapseItems ? (
+        <Accordion type="single" collapsible>
+          <AccordionItem value="items" className="border-b-0 border-t border-slate-100">
+            <AccordionTrigger className="group px-0 py-3 text-sm font-semibold text-slate-900 hover:no-underline">
+              <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span>
+                  Items ({items.length})
+                  <span className="ml-2 font-normal text-slate-500">
+                    · {formatQty(totalUnits)} units
+                  </span>
+                </span>
+                <span className="text-sm font-medium text-brand-700 group-data-[state=open]:hidden">
+                  View all items
+                </span>
+                <span className="hidden text-sm font-medium text-slate-500 group-data-[state=open]:inline">
+                  Hide items
+                </span>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="pb-1">
+              <SnapshotItemsTable items={items} showPricing={showPricing} />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      ) : (
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">Items ({items.length})</h3>
+          <div className="mt-3">
+            <SnapshotItemsTable items={items} showPricing={showPricing} />
+          </div>
         </div>
-      </div>
+      )}
 
       {showTaxLine ? (
         <dl className="grid gap-4 text-sm sm:grid-cols-2">
