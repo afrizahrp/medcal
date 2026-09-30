@@ -272,6 +272,7 @@ export class MeController {
       certificateRead: hasPermission(membership.role, "certificate", "read"),
       certificateCreate: hasPermission(membership.role, "certificate", "create"),
       certificateUpdate: hasPermission(membership.role, "certificate", "update"),
+      certificateIssue: hasPermission(membership.role, "certificate", "issue"),
       certificateDelete: hasPermission(membership.role, "certificate", "delete"),
       taxManage: hasPermission(membership.role, "tax", "manage"),
       priceListItemRead: hasPermission(membership.role, "priceListItem", "read"),

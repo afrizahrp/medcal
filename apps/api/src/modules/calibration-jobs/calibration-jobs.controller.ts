@@ -914,11 +914,13 @@ export class CalibrationJobsController {
   }
 
   /**
-   * Upload or replace the certificate PDF. Creates the Certificate record on
-   * first upload if it does not exist yet. Deliberately carries NO QA-status
-   * check — upload/replace is independent of QualityReview by design.
-   * Replacing never deletes the previous file; it becomes prior history
-   * (see GET :id/certificate's `versions`).
+   * Upload an EXTERNAL certificate (source = UPLOADED). Multipart fields:
+   * `file` (the PDF) and `certificateNumber` (the number printed on that
+   * certificate — required when the certificate is first established; never
+   * parsed from the filename). First upload creates the Certificate ISSUED
+   * with a verificationToken and allocates no Medcal number. Replacing later
+   * only swaps the PDF (previous file stays as history); the number is
+   * immutable. Deliberately carries NO QA-status check.
    */
   @Post(":id/certificate/versions")
   @RequirePermission("certificate", "update")
@@ -929,12 +931,46 @@ export class CalibrationJobsController {
     @MembershipRoleParam() role: MembershipRole,
     @Param("id") id: string,
     @UploadedFile() file: UploadedFileShape | undefined,
+    @Body() body: { certificateNumber?: unknown } | undefined,
     @Req() request: Request,
   ): Promise<CertificateDetail> {
-    return this.certificate.uploadVersion(companyId, id, userId, role, file, {
+    return this.certificate.uploadVersion(companyId, id, userId, role, file, body?.certificateNumber, {
       ipAddress: request.ip ?? null,
       userAgent: request.headers["user-agent"] ?? null,
     });
+  }
+
+  /**
+   * ISSUE a Medcal-generated certificate (source = GENERATED) for a job
+   * accepted by QA: allocates CRT/YYYY/MM/NNNNN, generates the
+   * verificationToken, persists the ISSUED certificate, then renders the PDF.
+   * Idempotent for a certificate whose PDF failed to render.
+   */
+  @Post(":id/certificate/issue")
+  @HttpCode(201)
+  @RequirePermission("certificate", "issue")
+  async issueGeneratedCertificate(
+    @CompanyId() companyId: string,
+    @UserId() userId: string,
+    @MembershipRoleParam() role: MembershipRole,
+    @Param("id") id: string,
+    @Req() request: Request,
+  ): Promise<CertificateDetail> {
+    return this.certificate.issueGenerated(companyId, id, userId, role, {
+      ipAddress: request.ip ?? null,
+      userAgent: request.headers["user-agent"] ?? null,
+    });
+  }
+
+  /** PNG QR code of the certificate's verification URL (a locator: the opaque token only). */
+  @Get(":id/certificate/qr")
+  @RequirePermission("certificate", "read")
+  async getCertificateQr(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<StreamableFile> {
+    const png = await this.certificate.getQrPng(companyId, id);
+    return new StreamableFile(png, { type: "image/png", disposition: 'inline; filename="certificate-qr.png"' });
   }
 
   @Get(":id/certificate/versions/:fileId/download")

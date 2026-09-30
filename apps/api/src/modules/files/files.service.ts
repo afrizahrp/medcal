@@ -161,6 +161,46 @@ export class FilesService {
     return { stream: await this.storage.get(fileObject.storageKey), fileObject };
   }
 
+  /**
+   * Opens a stored file for a caller the OWNING MODULE has already authorised
+   * by its own rules (e.g. a customer viewing a certificate through its
+   * verification token — such a caller has no MembershipRole, so the generic
+   * role check in getForDownload does not apply). Still company-scoped and
+   * still pinned to the expected owner, so a file id can never be used to
+   * reach a different owner's file.
+   */
+  async getForAuthorizedRead(companyId: string, id: string, ownerType: string, ownerId: string) {
+    const fileObject = await this.resolve(companyId, id);
+    if (fileObject.ownerType !== ownerType || fileObject.ownerId !== ownerId) {
+      throw new NotFoundException({ code: "FILE_NOT_FOUND", message: "File not found" });
+    }
+    if (!(await this.storage.exists(fileObject.storageKey))) {
+      throw new InternalServerErrorException({
+        code: "FILE_BYTES_MISSING",
+        message: "The stored file is missing",
+      });
+    }
+    return { stream: await this.storage.get(fileObject.storageKey), fileObject };
+  }
+
+  /**
+   * Compensation for a file this process JUST stored but whose owner record
+   * could not be updated to reference it (e.g. attaching a certificate PDF
+   * failed). Removes the row and the bytes without an RBAC check — it is
+   * internal, never reachable from a route, and refuses to touch a file that
+   * some record still references. Best-effort: never throws.
+   */
+  async discardUnreferenced(companyId: string, id: string): Promise<void> {
+    try {
+      const fileObject = await prisma.fileObject.findFirst({ where: { id, companyId } });
+      if (!fileObject) return;
+      await prisma.fileObject.delete({ where: { id: fileObject.id } });
+      await this.storage.delete(fileObject.storageKey).catch(() => undefined);
+    } catch {
+      // P2003 (still referenced) or a transient failure: leave the file in place.
+    }
+  }
+
   async delete(companyId: string, id: string, role: MembershipRole) {
     const fileObject = await this.resolve(companyId, id);
     const policy = this.registry.get(fileObject.ownerType);

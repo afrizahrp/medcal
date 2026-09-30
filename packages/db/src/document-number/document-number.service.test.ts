@@ -3,8 +3,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../index";
 import { DOCUMENT_TYPE_PREFIX } from "./document-type-prefix";
 import { DOCUMENT_TYPE_NUMBER_TABLE } from "./document-type-table";
-import { DocumentNumberService } from "./document-number.service";
-import { parseDocumentNumberYearMonth } from "./format-document-number";
+import {
+  DocumentNumberCollisionError,
+  DocumentNumberSequenceExhaustedError,
+  DocumentNumberService,
+  MAX_COLLISION_ATTEMPTS,
+  MAX_DOCUMENT_SEQUENCE,
+  type DocumentNumberTransactionClient,
+} from "./document-number.service";
+import { BUSINESS_TIME_ZONE, parseDocumentNumberYearMonth } from "./format-document-number";
 
 const TEST_COMPANY_A = "TN1";
 const TEST_COMPANY_B = "TN2";
@@ -353,6 +360,316 @@ describe("DocumentNumberService.allocate", () => {
       await cleanupSequences(TEST_COMPANY_A);
       expect(await allocateKal(TEST_COMPANY_A, sep2026)).toBe("KAL/2026/09/00001");
       expect(await allocateKal(TEST_COMPANY_A, jan2027)).toBe("KAL/2027/01/00001");
+    });
+  });
+
+  describe("Generated certificate CRT sequence (Asia/Jakarta)", () => {
+    const allocateCrt = (
+      companyId: string,
+      issuedAt: Date,
+      opts: { skipExisting?: boolean } = {},
+    ) =>
+      prisma.$transaction((tx) =>
+        DocumentNumberService.allocate({
+          companyId,
+          documentType: "CERTIFICATE_GENERATED",
+          issuedAt,
+          timeZone: BUSINESS_TIME_ZONE,
+          skipExisting: opts.skipExisting ?? true,
+          tx,
+        }),
+      );
+
+    const cleanupCustomers = (companyId: string) =>
+      prisma.customer.deleteMany({ where: { companyId } });
+
+    it("maps CERTIFICATE_GENERATED to CRT / Certificate and leaves CERTIFICATE on CER", () => {
+      expect(DOCUMENT_TYPE_PREFIX.CERTIFICATE_GENERATED).toBe("CRT");
+      expect(DOCUMENT_TYPE_NUMBER_TABLE.CERTIFICATE_GENERATED).toBe("Certificate");
+      expect(DOCUMENT_TYPE_PREFIX.CERTIFICATE).toBe("CER");
+    });
+
+    it("issues CRT/YYYY/MM/NNNNN, sequence continues across months and resets each year", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+
+      expect(await allocateCrt(TEST_COMPANY_A, new Date("2026-09-15T03:00:00.000Z"))).toBe(
+        "CRT/2026/09/00001",
+      );
+      expect(await allocateCrt(TEST_COMPANY_A, new Date("2026-09-20T03:00:00.000Z"))).toBe(
+        "CRT/2026/09/00002",
+      );
+      // 2026-09-30 17:30Z is already 2026-10-01 00:30 in Jakarta: the month follows
+      // WIB and the sequence does NOT reset.
+      expect(await allocateCrt(TEST_COMPANY_A, new Date("2026-09-30T17:30:00.000Z"))).toBe(
+        "CRT/2026/10/00003",
+      );
+      // 2026-12-31 18:00Z is 2027-01-01 01:00 WIB: new year, counter restarts.
+      expect(await allocateCrt(TEST_COMPANY_A, new Date("2026-12-31T18:00:00.000Z"))).toBe(
+        "CRT/2027/01/00001",
+      );
+    });
+
+    it("keeps using UTC for other document types (behaviour unchanged)", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+      const number = await prisma.$transaction((tx) =>
+        DocumentNumberService.allocate({
+          companyId: TEST_COMPANY_A,
+          documentType: "QUOTATION",
+          issuedAt: new Date("2026-12-31T18:00:00.000Z"),
+          tx,
+        }),
+      );
+      expect(number).toBe("QUO/2026/12/00001");
+    });
+
+    it("is independent of the legacy CER counter and scoped per company", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+      await cleanupSequences(TEST_COMPANY_B);
+      const at = new Date("2026-09-15T03:00:00.000Z");
+
+      const cer = await prisma.$transaction((tx) =>
+        DocumentNumberService.allocate({
+          companyId: TEST_COMPANY_A,
+          documentType: "CERTIFICATE",
+          issuedAt: at,
+          tx,
+        }),
+      );
+      expect(cer).toBe("CER/2026/09/00001");
+      expect(await allocateCrt(TEST_COMPANY_A, at)).toBe("CRT/2026/09/00001");
+      expect(await allocateCrt(TEST_COMPANY_B, at)).toBe("CRT/2026/09/00001");
+    });
+
+    it("does not corrupt the counter when the surrounding transaction fails", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+      const at = new Date("2026-09-15T03:00:00.000Z");
+
+      await expect(
+        prisma.$transaction(async (tx) => {
+          await DocumentNumberService.allocate({
+            companyId: TEST_COMPANY_A,
+            documentType: "CERTIFICATE_GENERATED",
+            issuedAt: at,
+            timeZone: BUSINESS_TIME_ZONE,
+            skipExisting: true,
+            tx,
+          });
+          throw new Error("rollback");
+        }),
+      ).rejects.toThrow("rollback");
+
+      expect(await allocateCrt(TEST_COMPANY_A, at)).toBe("CRT/2026/09/00001");
+    });
+
+    it("allocates unique numbers under concurrent issuance", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+      const at = new Date("2026-09-15T03:00:00.000Z");
+      const count = 25;
+
+      const numbers = await Promise.all(
+        Array.from({ length: count }, () => allocateCrt(TEST_COMPANY_A, at)),
+      );
+
+      expect(new Set(numbers).size).toBe(count);
+      expect(numbers.map((n) => Number(n.split("/")[3])).sort((a, b) => a - b)).toEqual(
+        Array.from({ length: count }, (_, i) => i + 1),
+      );
+    });
+
+    it("skipExisting: skips numbers that already exist instead of returning a poisoned one", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+      await cleanupCustomers(TEST_COMPANY_A);
+      const at = new Date("2026-08-15T03:00:00.000Z");
+      const allocateCus = (skipExisting: boolean) =>
+        prisma.$transaction((tx) =>
+          DocumentNumberService.allocate({
+            companyId: TEST_COMPANY_A,
+            documentType: "CUSTOMER",
+            issuedAt: at,
+            skipExisting,
+            tx,
+          }),
+        );
+      try {
+        expect(await allocateCus(true)).toBe("CUS/2026/08/00001");
+        // Rows the allocator did not produce, sitting exactly where the counter is heading.
+        await prisma.customer.createMany({
+          data: [
+            { companyId: TEST_COMPANY_A, number: "CUS/2026/08/00002", name: "Foreign 2" },
+            { companyId: TEST_COMPANY_A, number: "CUS/2026/08/00003", name: "Foreign 3" },
+          ],
+        });
+        expect(await allocateCus(true)).toBe("CUS/2026/08/00004");
+      } finally {
+        await cleanupCustomers(TEST_COMPANY_A);
+      }
+    });
+
+    it("skipExisting: self-heals across many contiguous collisions (more than the attempt bound) and the healed counter is committed", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+      await cleanupCustomers(TEST_COMPANY_A);
+      const at = new Date("2026-08-15T03:00:00.000Z");
+      const allocateCus = () =>
+        prisma.$transaction((tx) =>
+          DocumentNumberService.allocate({
+            companyId: TEST_COMPANY_A,
+            documentType: "CUSTOMER",
+            issuedAt: at,
+            skipExisting: true,
+            tx,
+          }),
+        );
+      try {
+        expect(await allocateCus()).toBe("CUS/2026/08/00001");
+        const contiguous = MAX_COLLISION_ATTEMPTS * 10;
+        await prisma.customer.createMany({
+          data: Array.from({ length: contiguous }, (_, i) => ({
+            companyId: TEST_COMPANY_A,
+            number: `CUS/2026/08/${String(i + 2).padStart(5, "0")}`,
+            name: `Foreign ${i + 2}`,
+          })),
+        });
+        // One collision -> one counter jump -> the next number is free.
+        expect(await allocateCus()).toBe(`CUS/2026/08/${String(contiguous + 2).padStart(5, "0")}`);
+        // The jump was committed: the counter is healed, not poisoned.
+        expect(await allocateCus()).toBe(`CUS/2026/08/${String(contiguous + 3).padStart(5, "0")}`);
+      } finally {
+        await cleanupCustomers(TEST_COMPANY_A);
+      }
+    });
+
+    it("skipExisting: collisions in another month of the same year are also skipped", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+      await cleanupCustomers(TEST_COMPANY_A);
+      try {
+        await prisma.customer.createMany({
+          data: [
+            { companyId: TEST_COMPANY_A, number: "CUS/2026/03/00001", name: "March 1" },
+            { companyId: TEST_COMPANY_A, number: "CUS/2026/03/00002", name: "March 2" },
+          ],
+        });
+        // Counter row does not exist yet: seeded past the strict max regardless of month.
+        const number = await prisma.$transaction((tx) =>
+          DocumentNumberService.allocate({
+            companyId: TEST_COMPANY_A,
+            documentType: "CUSTOMER",
+            issuedAt: new Date("2026-08-15T03:00:00.000Z"),
+            skipExisting: true,
+            tx,
+          }),
+        );
+        expect(number).toBe("CUS/2026/08/00003");
+      } finally {
+        await cleanupCustomers(TEST_COMPANY_A);
+      }
+    });
+
+    it("skipExisting: stays bounded — gives up with DocumentNumberCollisionError after MAX_COLLISION_ATTEMPTS", async () => {
+      let inserts = 0;
+      const fakeTx = {
+        $queryRaw: async (strings: TemplateStringsArray) => {
+          const sql = strings.join("?");
+          if (sql.includes("INSERT INTO")) return [{ lastSequence: ++inserts, prefix: "CUS" }];
+          if (sql.includes("SELECT 1 AS found")) return [{ found: 1 }]; // every number "exists"
+          return [{ max_seq: 0 }];
+        },
+        $executeRaw: async () => 0,
+      } as unknown as DocumentNumberTransactionClient;
+
+      await expect(
+        DocumentNumberService.allocate({
+          companyId: TEST_COMPANY_A,
+          documentType: "CUSTOMER",
+          issuedAt: new Date("2026-08-15T03:00:00.000Z"),
+          skipExisting: true,
+          tx: fakeTx,
+        }),
+      ).rejects.toBeInstanceOf(DocumentNumberCollisionError);
+      expect(inserts).toBe(MAX_COLLISION_ATTEMPTS);
+    });
+
+    it("sequence boundary: 99999 is the last valid number; the next allocation throws the typed exhaustion error and leaves the counter at 99999", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+      await prisma.documentNumberSequence.create({
+        data: {
+          companyId: TEST_COMPANY_A,
+          documentType: "CUSTOMER",
+          prefix: "CUS",
+          year: 2026,
+          lastSequence: MAX_DOCUMENT_SEQUENCE - 1,
+        },
+      });
+      const at = new Date("2026-08-15T03:00:00.000Z");
+      const allocateCus = (skipExisting: boolean) =>
+        prisma.$transaction((tx) =>
+          DocumentNumberService.allocate({
+            companyId: TEST_COMPANY_A,
+            documentType: "CUSTOMER",
+            issuedAt: at,
+            skipExisting,
+            tx,
+          }),
+        );
+
+      expect(await allocateCus(false)).toBe("CUS/2026/08/99999");
+      const err = await allocateCus(false).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(DocumentNumberSequenceExhaustedError);
+      expect(err).toMatchObject({ documentType: "CUSTOMER", year: 2026 });
+      // Same typed error on the guarded path, and no partial state was committed.
+      await expect(allocateCus(true)).rejects.toBeInstanceOf(DocumentNumberSequenceExhaustedError);
+      const seq = await prisma.documentNumberSequence.findFirstOrThrow({
+        where: { companyId: TEST_COMPANY_A, documentType: "CUSTOMER", year: 2026 },
+      });
+      expect(seq.lastSequence).toBe(MAX_DOCUMENT_SEQUENCE);
+    });
+
+    it("sequence boundary: existing foreign numbers up to 99999 exhaust a fresh counter with the typed error", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+      await cleanupCustomers(TEST_COMPANY_A);
+      try {
+        await prisma.customer.create({
+          data: { companyId: TEST_COMPANY_A, number: "CUS/2026/08/99999", name: "Last" },
+        });
+        await expect(
+          prisma.$transaction((tx) =>
+            DocumentNumberService.allocate({
+              companyId: TEST_COMPANY_A,
+              documentType: "CUSTOMER",
+              issuedAt: new Date("2026-08-15T03:00:00.000Z"),
+              skipExisting: true,
+              tx,
+            }),
+          ),
+        ).rejects.toBeInstanceOf(DocumentNumberSequenceExhaustedError);
+      } finally {
+        await cleanupCustomers(TEST_COMPANY_A);
+      }
+    });
+
+    it("skipExisting: malformed / over-long foreign numbers cannot poison the first-use seed", async () => {
+      await cleanupSequences(TEST_COMPANY_A);
+      await cleanupCustomers(TEST_COMPANY_A);
+      const at = new Date("2026-08-15T03:00:00.000Z");
+      try {
+        await prisma.customer.createMany({
+          data: [
+            { companyId: TEST_COMPANY_A, number: "CUS/2026/ABC", name: "Malformed" },
+            { companyId: TEST_COMPANY_A, number: "CUS/2026/08/123456", name: "Too long" },
+          ],
+        });
+        const number = await prisma.$transaction((tx) =>
+          DocumentNumberService.allocate({
+            companyId: TEST_COMPANY_A,
+            documentType: "CUSTOMER",
+            issuedAt: at,
+            skipExisting: true,
+            tx,
+          }),
+        );
+        expect(number).toBe("CUS/2026/08/00001");
+      } finally {
+        await cleanupCustomers(TEST_COMPANY_A);
+      }
     });
   });
 });
