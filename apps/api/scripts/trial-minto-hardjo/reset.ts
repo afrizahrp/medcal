@@ -26,11 +26,31 @@ async function main(): Promise<void> {
 
   console.log(`[reset] Tearing down trial dataset created at ${manifest.createdAt}...`);
 
-  // 1. CalibrationJob and everything cascading from it (MeasurementResult,
+  // 1. Certificate has NO cascade from CalibrationJob (onDelete: Restrict) —
+  //    a Certificate created through real UI usage during the trial (manual
+  //    testing, not part of the deterministic seed) would otherwise block the
+  //    WorkOrder delete below with a foreign key violation. Must go first.
+  const jobIdsForCertCleanup = (
+    await prisma.calibrationJob.findMany({
+      where: { workOrderId: manifest.workOrderId },
+      select: { id: true },
+    })
+  ).map((j) => j.id);
+  if (jobIdsForCertCleanup.length > 0) {
+    const certCount = await prisma.certificate.count({
+      where: { calibrationJobId: { in: jobIdsForCertCleanup } },
+    });
+    if (certCount > 0) {
+      console.log(`[reset] Deleting ${certCount} Certificate row(s) created during manual trial testing...`);
+      await prisma.certificate.deleteMany({ where: { calibrationJobId: { in: jobIdsForCertCleanup } } });
+    }
+  }
+
+  // 2. CalibrationJob and everything else cascading from it (MeasurementResult,
   //    QualityReview, IdentityCorrection, KontrolAlat, JobCalibrationTestPoint,
   //    JobReferenceEquipment*, etc.) is removed by deleting the WorkOrder —
   //    CalibrationJob.workOrder has onDelete: Cascade in schema.prisma.
-  const jobCount = await prisma.calibrationJob.count({ where: { workOrderId: manifest.workOrderId } });
+  const jobCount = jobIdsForCertCleanup.length;
   console.log(`[reset] Deleting WorkOrder ${manifest.workOrderId} (cascades ${jobCount} CalibrationJob rows)...`);
   await prisma.workOrder.deleteMany({ where: { id: manifest.workOrderId } });
 

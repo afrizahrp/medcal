@@ -59,6 +59,7 @@ import {
   ensureNonPpnTax,
   ensurePriceListItems,
   ensureTrialUsers,
+  ensureTrialDevices,
   completeKontrolAlatForStart,
   fillJobMeasurements,
   planJobStates,
@@ -136,6 +137,20 @@ async function main(): Promise<void> {
     },
   });
 
+  console.log("[seed] 4.5/9 master Device rows (one per PHYSICAL UNIT, so deviceId genuinely inherits DeviceType -> Device -> CalibrationRequestItem -> QuotationItem -> PurchaseOrderItem -> CalibrationJob)...");
+  const rowsWithQty = TRIAL_DEVICE_TYPE_MAPPING.map((mapping) => ({
+    rowNumber: mapping.rowNumber,
+    deviceTypeCode: mapping.deviceTypeCode,
+    qty: TRIAL_SOURCE_ROWS.find((r) => r.rowNumber === mapping.rowNumber)!.qty,
+  }));
+  const deviceInfoByRowNumber = await ensureTrialDevices(
+    COMPANY_ID,
+    customer.id,
+    devicesService,
+    rowsWithQty,
+    deviceTypesByCode,
+  );
+
   console.log("[seed] 5/9 fixture workbook + read-only preview() cross-check...");
   await writeTrialWorkbookFixture();
   try {
@@ -163,6 +178,11 @@ async function main(): Promise<void> {
       deviceTypeId,
       customerDeviceName: row.customerDeviceName,
       qty: row.qty,
+      // Serial No lookup key -> resolves to unit #1's real Device created
+      // above, exactly as a filled "Serial No" column in a real Excel import
+      // would. The single-FK commercial chain (Request/Quotation/PO item) can
+      // only ever carry one Device reference regardless of qty.
+      deviceId: deviceInfoByRowNumber.get(row.rowNumber)!.firstUnitSerialNumber,
     };
   });
 
@@ -195,6 +215,44 @@ async function main(): Promise<void> {
     technicians: TRIAL_TECHNICIAN_USER_IDS.map((technicianUserId) => ({ technicianUserId })),
   } as never);
   await workOrdersService.start(COMPANY_ID, workOrder.id);
+
+  // ── Per-unit deviceId backfill (trial-fixture-only) ───────────────────────
+  // Fan-out (WorkOrder.start()) only sets CalibrationJob.deviceId when
+  // unitTotal===1 (the qty=1 lines — no ambiguity). For qty>1 lines it leaves
+  // deviceId null: in REAL operation, which of the N physical units a given
+  // job corresponds to is genuinely unknown until a technician verifies
+  // identity on-site (Identity Correction / BAI). This trial explicitly wants
+  // every job pre-identified for UI/UX checking, so — as a fixture-only step,
+  // never representative of real intake — it directly assigns each job's
+  // deviceId to one of the N per-unit Device rows created above, one-to-one
+  // by unitOrdinal. Consequence (documented, accepted): Tech-PWA's
+  // "search/select device" flow (CalibrationJobsService.selectDevice) refuses
+  // once deviceId is set, so that specific UI path is not exercisable in this
+  // trial dataset anymore.
+  console.log("[seed] 6.5/9 backfilling deviceId for multi-unit (qty>1) fanned-out jobs...");
+  const poItemsWithFirstDevice = await prisma.purchaseOrderItem.findMany({
+    where: { purchaseOrderId: po.id },
+    select: { id: true, device: { select: { serialNumber: true } } },
+  });
+  const rowNumberByPoItemId = new Map<string, number>();
+  for (const item of poItemsWithFirstDevice) {
+    const match = item.device?.serialNumber?.match(/^TRIAL-MH-SN-(\d+)-1$/);
+    if (match) rowNumberByPoItemId.set(item.id, Number(match[1]!));
+  }
+  const jobsNeedingDevice = await prisma.calibrationJob.findMany({
+    where: { workOrderId: workOrder.id, deviceId: null },
+    select: { id: true, purchaseOrderItemId: true, unitOrdinal: true },
+  });
+  let backfilledCount = 0;
+  for (const job of jobsNeedingDevice) {
+    const rowNumber = job.purchaseOrderItemId ? rowNumberByPoItemId.get(job.purchaseOrderItemId) : undefined;
+    if (rowNumber === undefined) continue;
+    const deviceId = deviceInfoByRowNumber.get(rowNumber)!.deviceIdsByUnit[job.unitOrdinal - 1];
+    if (!deviceId) continue;
+    await prisma.calibrationJob.update({ where: { id: job.id }, data: { deviceId } });
+    backfilledCount += 1;
+  }
+  console.log(`[seed] Backfilled deviceId on ${backfilledCount} multi-unit jobs.`);
 
   console.log("[seed] 7/9 loading fanned-out jobs + building state-distribution plan...");
   const jobs = await prisma.calibrationJob.findMany({

@@ -734,6 +734,83 @@ describe("WorkOrdersService.findOne / findAll", () => {
   });
 });
 
+describe("WorkOrdersService.findOne — TECHNICIAN row-level scoping", () => {
+  it("lets an assigned technician access their own Work Order", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
+    const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    const technicianA = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, created.id, {
+      technicians: [{ technicianUserId: technicianA.id }],
+    });
+
+    const loaded = await workOrdersService.findOne(realCompanyId, created.id, {
+      role: "TECHNICIAN",
+      userId: technicianA.id,
+    });
+    expect(loaded.id).toBe(created.id);
+  });
+
+  it("throws NotFoundException when a technician requests another technician's Work Order", async () => {
+    const { purchaseOrder: poB } = await createApprovedPurchaseOrder(realCompanyId);
+    const workOrderB = await createTrackedWorkOrder(realCompanyId, poB.id);
+    const technicianB = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, workOrderB.id, {
+      technicians: [{ technicianUserId: technicianB.id }],
+    });
+
+    const technicianA = await createTechnician(realCompanyId);
+
+    try {
+      await workOrdersService.findOne(realCompanyId, workOrderB.id, {
+        role: "TECHNICIAN",
+        userId: technicianA.id,
+      });
+      expect.fail("expected WORK_ORDER_NOT_FOUND");
+    } catch (err) {
+      expect(err).toBeInstanceOf(NotFoundException);
+      expect((err as NotFoundException).getResponse()).toEqual(
+        expect.objectContaining({ code: "WORK_ORDER_NOT_FOUND" }),
+      );
+    }
+  });
+
+  it("lets a technician assigned as ASSIST (not just LEAD) access the Work Order", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
+    const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    const lead = await createTechnician(realCompanyId);
+    const assist = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, created.id, {
+      technicians: [
+        { technicianUserId: lead.id, roleOnJob: "LEAD" },
+        { technicianUserId: assist.id, roleOnJob: "ASSIST" },
+      ],
+    });
+
+    const loaded = await workOrdersService.findOne(realCompanyId, created.id, {
+      role: "TECHNICIAN",
+      userId: assist.id,
+    });
+    expect(loaded.id).toBe(created.id);
+  });
+
+  it("does not restrict TECHNICIAN_MANAGER, SUPERVISOR, or SUPERADMIN by assignment", async () => {
+    const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId);
+    const created = await createTrackedWorkOrder(realCompanyId, purchaseOrder.id);
+    const technician = await createTechnician(realCompanyId);
+    await workOrdersService.assign(realCompanyId, created.id, {
+      technicians: [{ technicianUserId: technician.id }],
+    });
+
+    for (const role of ["TECHNICIAN_MANAGER", "SUPERVISOR", "SUPERADMIN"] as const) {
+      const loaded = await workOrdersService.findOne(realCompanyId, created.id, {
+        role,
+        userId: "some-other-user-not-assigned",
+      });
+      expect(loaded.id).toBe(created.id);
+    }
+  });
+});
+
 describe("WorkOrdersService.update", () => {
   it("updates operational fields while non-terminal and never changes serviceMode", async () => {
     const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {

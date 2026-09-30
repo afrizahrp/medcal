@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupJobsByCustomer, isJobDone } from "./job-display";
+import { filterUnits, groupJobsByCustomer, isJobDone } from "./job-display";
 import type { TechCalibrationJob } from "./types";
 
 function job(
@@ -151,5 +151,94 @@ describe("groupJobsByCustomer", () => {
     const groups = groupJobsByCustomer(jobs);
     expect(groups[0]!.workOrders[0]!.jobs).toHaveLength(2);
     expect(groups[0]!.workOrders[0]!.jobs.map((j) => j.id)).toEqual(["u1", "u2"]);
+  });
+});
+
+describe("filterUnits", () => {
+  function unit(
+    id: string,
+    unitOrdinal: number,
+    status: TechCalibrationJob["status"],
+    customerDeclaredDeviceName: string,
+  ): TechCalibrationJob {
+    return job({
+      id,
+      workOrderId: "wo",
+      customerId: "c",
+      customerName: "Cust",
+      workOrderNumber: "SPK/1",
+      unitOrdinal,
+      status,
+      customerDeclaredDeviceName,
+    });
+  }
+
+  const units = [
+    unit("u1", 1, "PENDING", "Bed Patient"),
+    unit("u2", 2, "ACCEPTED_BY_QA", "Bed Patient"),
+    unit("u3", 3, "IN_PROGRESS", "Infusion Pump"),
+    unit("u4", 4, "ACCEPTED_BY_QA", "Ventilator"),
+  ];
+
+  it("defaults to ALL and returns every unit when status is ALL", () => {
+    const result = filterUnits(units, { search: "", status: "ALL" });
+    expect(result.map((j) => j.id)).toEqual(["u1", "u2", "u3", "u4"]);
+  });
+
+  it("Selesai (DONE) returns only isJobDone === true units", () => {
+    const result = filterUnits(units, { search: "", status: "DONE" });
+    expect(result.map((j) => j.id)).toEqual(["u2", "u4"]);
+    expect(result.every(isJobDone)).toBe(true);
+  });
+
+  it("Belum selesai (OPEN) returns only isJobDone === false units", () => {
+    const result = filterUnits(units, { search: "", status: "OPEN" });
+    expect(result.map((j) => j.id)).toEqual(["u1", "u3"]);
+    expect(result.every((j) => !isJobDone(j))).toBe(true);
+  });
+
+  it("empty search does not filter by name", () => {
+    const result = filterUnits(units, { search: "   ", status: "ALL" });
+    expect(result).toHaveLength(4);
+  });
+
+  it("search matches customerDeclaredDeviceName", () => {
+    const result = filterUnits(units, { search: "pump", status: "ALL" });
+    expect(result.map((j) => j.id)).toEqual(["u3"]);
+  });
+
+  it("search is case-insensitive", () => {
+    const result = filterUnits(units, { search: "BED patient", status: "ALL" });
+    expect(result.map((j) => j.id)).toEqual(["u1", "u2"]);
+  });
+
+  it("combines search and status with AND semantics", () => {
+    const result = filterUnits(units, { search: "bed", status: "DONE" });
+    expect(result.map((j) => j.id)).toEqual(["u2"]);
+  });
+
+  it("preserves unitOrdinal ascending order in the filtered output", () => {
+    const reordered = [units[3]!, units[0]!, units[2]!, units[1]!];
+    const result = filterUnits(reordered, { search: "", status: "ALL" });
+    expect(result.map((j) => j.id)).toEqual(["u4", "u1", "u3", "u2"]);
+  });
+
+  it("does not mutate the source array or job objects", () => {
+    const source = [...units];
+    const snapshot = source.map((j) => ({ ...j }));
+    const result = filterUnits(source, { search: "bed", status: "OPEN" });
+    expect(source).toEqual(snapshot);
+    expect(source).toHaveLength(4);
+    expect(result).not.toBe(source);
+  });
+
+  it("returns an empty array when nothing matches", () => {
+    const result = filterUnits(units, { search: "nonexistent-device", status: "ALL" });
+    expect(result).toEqual([]);
+  });
+
+  it("no filtering when search is empty and status is ALL, combined default", () => {
+    const result = filterUnits(units, { search: "", status: "ALL" });
+    expect(result).toHaveLength(units.length);
   });
 });

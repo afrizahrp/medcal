@@ -29,6 +29,8 @@ import {
   type TrialDeviceTypeMappingRow,
 } from "../../../../packages/db/fixtures/trial-minto-hardjo/device-type-mapping";
 import { MeasurementResultsService } from "../../src/modules/calibration-jobs/measurement-results.service";
+import type { DevicesService } from "../../src/modules/devices/devices.service";
+import { COMPANY_EMAIL_DOMAIN } from "@medcal/shared";
 
 export const TRIAL_CUSTOMER_NAME = "RS Minto Hardjo (Trial)";
 export const TRIAL_STAFF_USER_ID = "trial-mh-staff-user";
@@ -169,11 +171,62 @@ export async function ensurePriceListItems(
   return created;
 }
 
+export interface TrialRowDevices {
+  /** One Device.id per physical unit, ordered 1..row.qty — index i matches CalibrationJob.unitOrdinal = i+1. */
+  deviceIdsByUnit: string[];
+  /** Serial No lookup key for unit #1, to pass as the line item's `deviceId` input so the existing commercial-chain propagation (Request -> Quotation -> PurchaseOrderItem, single-FK fields) resolves to the same Device as CalibrationJob unitOrdinal=1. */
+  firstUnitSerialNumber: string;
+}
+
+/**
+ * Real Device master rows per trial source row, under the trial Customer, so
+ * `deviceId` genuinely inherits DeviceType -> Device -> CalibrationRequestItem
+ * -> QuotationItem -> PurchaseOrderItem -> CalibrationJob, through the exact
+ * same resolution path a real Excel import with a filled "Serial No" column
+ * uses (`resolveRequestItemDeviceId` matches by serialNumber, scoped to this
+ * customer+company) — never a fabricated FK write.
+ *
+ * One Device PER PHYSICAL UNIT (not one per line), because Device.id is a
+ * specific physical asset, not the DeviceType category — a qty=17 line means
+ * 17 distinct real units, and `@@unique([workOrderId, deviceId])` on
+ * CalibrationJob forbids reusing one Device.id across multiple jobs in the
+ * same WorkOrder. Idempotent: reuses an existing Device with the same serial
+ * number instead of duplicating it on a reseed.
+ *
+ * Device rows are not tracked in the manifest for teardown: Device.customerId
+ * has onDelete: Cascade, so deleting the trial Customer (reset.ts) already
+ * removes every Device created here.
+ */
+export async function ensureTrialDevices(
+  companyId: string,
+  customerId: string,
+  devicesService: DevicesService,
+  rows: readonly { rowNumber: number; deviceTypeCode: string; qty: number }[],
+  deviceTypesByCode: Map<string, { id: string }>,
+): Promise<Map<number, TrialRowDevices>> {
+  const byRowNumber = new Map<number, TrialRowDevices>();
+  for (const row of rows) {
+    const deviceTypeId = deviceTypesByCode.get(row.deviceTypeCode)!.id;
+    const deviceIdsByUnit: string[] = [];
+    for (let unit = 1; unit <= row.qty; unit += 1) {
+      const serialNumber = `TRIAL-MH-SN-${row.rowNumber}-${unit}`;
+      const existing = await prisma.device.findFirst({ where: { companyId, customerId, serialNumber } });
+      const device = existing ?? (await devicesService.create(companyId, { customerId, deviceTypeId, serialNumber }));
+      deviceIdsByUnit.push(device.id);
+    }
+    byRowNumber.set(row.rowNumber, {
+      deviceIdsByUnit,
+      firstUnitSerialNumber: `TRIAL-MH-SN-${row.rowNumber}-1`,
+    });
+  }
+  return byRowNumber;
+}
+
 export async function ensureTrialUsers(companyId: string): Promise<void> {
   await prisma.user.upsert({
     where: { id: TRIAL_STAFF_USER_ID },
-    create: { id: TRIAL_STAFF_USER_ID, email: `${TRIAL_STAFF_USER_ID}@medcal.test`, name: "Trial MH Staff", status: "ACTIVE" },
-    update: { status: "ACTIVE" },
+    create: { id: TRIAL_STAFF_USER_ID, email: `${TRIAL_STAFF_USER_ID}@${COMPANY_EMAIL_DOMAIN}`, name: "Trial MH Staff", status: "ACTIVE" },
+    update: { email: `${TRIAL_STAFF_USER_ID}@${COMPANY_EMAIL_DOMAIN}`, status: "ACTIVE" },
   });
   await prisma.userMembership.upsert({
     where: { userId_companyId: { userId: TRIAL_STAFF_USER_ID, companyId } },
@@ -184,8 +237,8 @@ export async function ensureTrialUsers(companyId: string): Promise<void> {
   for (const [i, id] of TRIAL_TECHNICIAN_USER_IDS.entries()) {
     await prisma.user.upsert({
       where: { id },
-      create: { id, email: `${id}@medcal.test`, name: `Teknisi Trial ${i + 1}`, status: "ACTIVE" },
-      update: { status: "ACTIVE" },
+      create: { id, email: `${id}@${COMPANY_EMAIL_DOMAIN}`, name: `Teknisi Trial ${i + 1}`, status: "ACTIVE" },
+      update: { email: `${id}@${COMPANY_EMAIL_DOMAIN}`, status: "ACTIVE" },
     });
     await prisma.userMembership.upsert({
       where: { userId_companyId: { userId: id, companyId } },
@@ -197,8 +250,8 @@ export async function ensureTrialUsers(companyId: string): Promise<void> {
   for (const [i, id] of TRIAL_MANAGER_USER_IDS.entries()) {
     await prisma.user.upsert({
       where: { id },
-      create: { id, email: `${id}@medcal.test`, name: `Manajer Trial ${i + 1}`, status: "ACTIVE" },
-      update: { status: "ACTIVE" },
+      create: { id, email: `${id}@${COMPANY_EMAIL_DOMAIN}`, name: `Manajer Trial ${i + 1}`, status: "ACTIVE" },
+      update: { email: `${id}@${COMPANY_EMAIL_DOMAIN}`, status: "ACTIVE" },
     });
     await prisma.userMembership.upsert({
       where: { userId_companyId: { userId: id, companyId } },

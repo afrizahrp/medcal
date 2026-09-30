@@ -315,9 +315,7 @@ export default function ShareWorkloadPage() {
                     <span className="truncate">
                       {selectedIds.length === 0
                         ? "Pilih Anggota Tim"
-                        : selectedIds
-                            .map((id) => nameById.get(id) ?? id)
-                            .join(", ")}
+                        : `${selectedIds.length} anggota dipilih`}
                     </span>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>

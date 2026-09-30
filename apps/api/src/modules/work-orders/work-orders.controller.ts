@@ -12,6 +12,7 @@ import {
   StreamableFile,
   UseGuards,
 } from "@nestjs/common";
+import type { MembershipRole } from "@medcal/db";
 import {
   workOrderAssignSchema,
   workOrderCreateSchema,
@@ -24,6 +25,7 @@ import {
   workOrderItemAccessoriesReplaceSchema,
 } from "@medcal/shared";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
+import { MembershipRoleParam } from "../../common/decorators/membership-role.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { UserId } from "../../common/decorators/user-id.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
@@ -190,9 +192,11 @@ export class WorkOrdersController {
   @RequirePermission("workOrder", "read")
   async downloadPdf(
     @CompanyId() companyId: string,
+    @MembershipRoleParam() role: MembershipRole,
+    @UserId() userId: string,
     @Param("id") id: string,
   ): Promise<StreamableFile> {
-    const pdf = await this.service.buildPdf(companyId, id);
+    const pdf = await this.service.buildPdf(companyId, id, { role, userId });
     return new StreamableFile(pdf.buffer, {
       type: "application/pdf",
       disposition: `attachment; filename="${pdf.filename}"`,
@@ -203,9 +207,11 @@ export class WorkOrdersController {
   @RequirePermission("workOrder", "read")
   async findOne(
     @CompanyId() companyId: string,
+    @MembershipRoleParam() role: MembershipRole,
+    @UserId() userId: string,
     @Param("id") id: string,
   ): Promise<WorkOrderWithItems> {
-    return this.service.findOne(companyId, id);
+    return this.service.findOne(companyId, id, { role, userId });
   }
 
   @Patch(":id")

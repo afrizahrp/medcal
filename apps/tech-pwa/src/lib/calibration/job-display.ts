@@ -12,6 +12,33 @@ export function isJobDone(job: TechCalibrationJob): boolean {
   return job.status === "ACCEPTED_BY_QA";
 }
 
+/**
+ * UX-16: Unit/Device list view-level filter (search by declared name + status).
+ * Semua/ALL is the default — matches every job. Belum selesai/OPEN and
+ * Selesai/DONE reuse the existing isJobDone boolean; no new business rule.
+ */
+export type UnitStatusFilter = "ALL" | "OPEN" | "DONE";
+
+/**
+ * Narrows a unit list for display only (e.g. `DeviceList`). Pure, non-mutating:
+ * returns a new array, never touches the source array/job objects, and
+ * preserves the input's relative order (callers pass an already
+ * unitOrdinal-sorted array — see `finalizeWorkOrderGroup`).
+ */
+export function filterUnits(
+  jobs: TechCalibrationJob[],
+  { search, status }: { search: string; status: UnitStatusFilter },
+): TechCalibrationJob[] {
+  const term = search.trim().toLowerCase();
+  return jobs
+    .filter((job) => term === "" || declaredDeviceName(job).toLowerCase().includes(term))
+    .filter((job) => {
+      if (status === "ALL") return true;
+      const done = isJobDone(job);
+      return status === "DONE" ? done : !done;
+    });
+}
+
 export interface WorkOrderJobGroup {
   workOrderId: string;
   workOrderNumber: string;

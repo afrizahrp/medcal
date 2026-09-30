@@ -1,5 +1,10 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { Badge } from "../../components/ui/badge";
+import { EmptyState } from "../../components/ui/state-views";
+import { useDebouncedValue } from "../../hooks/use-debounced-value";
 import type {
   CalibrationJobStatus,
   TechCalibrationJob,
@@ -11,14 +16,22 @@ import {
 } from "../../lib/calibration/types";
 import {
   declaredDeviceName,
+  filterUnits,
   groupJobsByCustomer,
   type CustomerJobGroup,
+  type UnitStatusFilter,
   type WorkOrderJobGroup,
 } from "../../lib/calibration/job-display";
 import {
   isAwaitingQualityReview,
   isQualityReviewApproved,
 } from "../../lib/calibration/quality-review";
+
+const STATUS_FILTER_OPTIONS: { value: UnitStatusFilter; label: string }[] = [
+  { value: "ALL", label: "Semua" },
+  { value: "OPEN", label: "Belum selesai" },
+  { value: "DONE", label: "Selesai" },
+];
 
 const badgeBase = "rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide";
 
@@ -189,6 +202,17 @@ function DeviceList({
   customer: CustomerJobGroup;
   spk: WorkOrderJobGroup;
 }) {
+  // UX-16: view-level search + status filter over this SPK's already-fetched
+  // units. Purely presentational — narrows what's rendered, never touches
+  // spk.jobs or the doneCount/openCount aggregates above, which must keep
+  // reflecting the full unfiltered unit set.
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 500);
+  const [statusFilter, setStatusFilter] = useState<UnitStatusFilter>("ALL");
+
+  const visibleUnits = filterUnits(spk.jobs, { search: debouncedSearch, status: statusFilter });
+  const isFilterActive = debouncedSearch.trim() !== "" || statusFilter !== "ALL";
+
   return (
     <div className="flex flex-col gap-3 p-3">
       <div className="px-1">
@@ -197,7 +221,40 @@ function DeviceList({
           {spk.jobs.length} perangkat · {spk.doneCount} selesai · {spk.openCount} belum selesai
         </p>
       </div>
-      {spk.jobs.map((job) => (
+      <input
+        type="search"
+        inputMode="search"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Cari nama alat…"
+        aria-label="Cari nama alat"
+        className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm"
+      />
+      <div className="flex gap-2">
+        {STATUS_FILTER_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => setStatusFilter(opt.value)}
+            aria-pressed={statusFilter === opt.value}
+            className={[
+              "min-h-11 flex-1 rounded-lg border px-2 text-sm font-medium",
+              statusFilter === opt.value
+                ? "border-brand-600 bg-brand-50 text-brand-700"
+                : "border-slate-200 bg-white text-slate-600",
+            ].join(" ")}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      {visibleUnits.length === 0 && isFilterActive ? (
+        <EmptyState
+          title="Tidak ada unit yang cocok dengan pencarian/filter."
+          subtitle="Ubah kata kunci pencarian atau pilih Semua untuk melihat semua unit."
+        />
+      ) : null}
+      {visibleUnits.map((job) => (
         <UnitRow key={job.id} job={job} />
       ))}
     </div>
@@ -234,7 +291,9 @@ export function JobsHierarchy({
           </div>
         );
       }
-      return <DeviceList customer={customer} spk={spk} />;
+      // key resets local search/status filter state when the technician
+      // switches to a different SPK — filter state must never leak across SPKs.
+      return <DeviceList key={spk.workOrderId} customer={customer} spk={spk} />;
     }
 
     return <SpkList customer={customer} />;

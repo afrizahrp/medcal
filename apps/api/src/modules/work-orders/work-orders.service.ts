@@ -1,5 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { DocumentNumberService, Prisma, allocateRevisionNumber, prisma } from "@medcal/db";
+import {
+  DocumentNumberService,
+  Prisma,
+  allocateRevisionNumber,
+  prisma,
+  type MembershipRole,
+} from "@medcal/db";
 import {
   cancelActiveAllocationsForWorkOrder,
   computeRemainingQtyByItemId,
@@ -405,9 +411,27 @@ export class WorkOrdersService {
     return { data, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
   }
 
-  async findOne(companyId: string, id: string): Promise<WorkOrderWithItems> {
+  /**
+   * `viewer` is optional so every internal call site (assign/start/done/
+   * cancel/update/...) keeps its existing company-scoped-only lookup — only
+   * the read-path controller actions (GET :id, GET :id/pdf) pass it, since
+   * those are the only actions a TECHNICIAN can reach with workOrder:read.
+   * A TECHNICIAN viewer is further restricted to WorkOrders they're assigned
+   * to (LEAD or ASSIST); other roles are unaffected.
+   */
+  async findOne(
+    companyId: string,
+    id: string,
+    viewer?: { role: MembershipRole; userId: string },
+  ): Promise<WorkOrderWithItems> {
     const workOrder = await prisma.workOrder.findFirst({
-      where: { id, companyId },
+      where: {
+        id,
+        companyId,
+        ...(viewer?.role === "TECHNICIAN"
+          ? { assignments: { some: { technicianUserId: viewer.userId } } }
+          : {}),
+      },
       include: workOrderInclude,
     });
     if (!workOrder) {
@@ -419,8 +443,12 @@ export class WorkOrdersService {
     return workOrder;
   }
 
-  async buildPdf(companyId: string, id: string): Promise<WorkOrderPdfResult> {
-    const workOrder = await this.findOne(companyId, id);
+  async buildPdf(
+    companyId: string,
+    id: string,
+    viewer?: { role: MembershipRole; userId: string },
+  ): Promise<WorkOrderPdfResult> {
+    const workOrder = await this.findOne(companyId, id, viewer);
     const company = await prisma.company.findFirst({ where: { id: companyId } });
     if (!company) {
       throw new NotFoundException({
