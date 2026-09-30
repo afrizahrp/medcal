@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, buildCalibrationJobActionSignals } from "@medcal/shared";
 import {
+  certificateQrFilename,
   canDecideIdentity,
   canEscalateIdentity,
   canSubmitIdentityCorrection,
@@ -592,5 +593,14 @@ describe("formatStatusCounts", () => {
         ACCEPTED_BY_QA: 0,
       }),
     ).toBe("");
+  });
+});
+
+describe("certificateQrFilename", () => {
+  it("replaces unsafe characters", () => {
+    expect(certificateQrFilename("CRT/2026/09/00001")).toBe("QR-CRT-2026-09-00001.png");
+  });
+  it("falls back when nothing safe remains", () => {
+    expect(certificateQrFilename("///")).toBe("QR-sertifikat.png");
   });
 });
