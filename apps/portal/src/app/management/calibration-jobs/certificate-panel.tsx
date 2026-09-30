@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Download, FileText, QrCode, Trash2, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Copy, Download, ExternalLink, FileText, QrCode, Trash2, Upload } from "lucide-react";
 import { ApiError } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatDateTime } from "./calibration-jobs-ui";
+import { certificateQrFilename } from "./calibration-job-utils";
 import { ConfirmDialog } from "../calibration-requests/calibration-requests-ui";
 import {
   downloadCertificateVersion,
@@ -150,42 +151,122 @@ function suggestNumberFromFilename(name: string): string {
   return name.replace(/\.pdf$/i, "").trim();
 }
 
-/** Shows the QR of the verification URL — the customer scans it to open the certificate in Medcal. */
-function QrSection({ jobId, verificationUrl }: { jobId: string; verificationUrl: string | null }) {
+/**
+ * QR of the verification URL. Nothing is requested until the user presses
+ * "Generate QR Code"; the backend only renders the PNG for the existing
+ * `certificate.verificationUrl` (no certificate/token/URL is created here).
+ */
+function QrSection({
+  jobId,
+  certificateNumber,
+  verificationUrl,
+}: {
+  jobId: string;
+  certificateNumber: string;
+  verificationUrl: string | null;
+}) {
   const [src, setSrc] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const srcRef = useRef<string | null>(null);
 
-  async function show() {
+  useEffect(() => {
+    return () => {
+      if (srcRef.current) URL.revokeObjectURL(srcRef.current);
+    };
+  }, []);
+
+  if (!verificationUrl) {
+    return (
+      <p className="border-t border-slate-100 pt-3 text-xs text-slate-400">
+        URL verifikasi belum tersedia (portal customer belum dikonfigurasi).
+      </p>
+    );
+  }
+
+  function replaceSrc(next: string | null) {
+    if (srcRef.current) URL.revokeObjectURL(srcRef.current);
+    srcRef.current = next;
+    setSrc(next);
+  }
+
+  async function generate() {
     setErr(null);
     setLoading(true);
     try {
-      if (src) URL.revokeObjectURL(src);
-      setSrc(await fetchCertificateQrObjectUrl(jobId));
+      replaceSrc(await fetchCertificateQrObjectUrl(jobId));
     } catch (e) {
-      setErr(apiErr(e));
+      replaceSrc(null);
+      setErr(
+        e instanceof ApiError && e.data?.code === "CERTIFICATE_VERIFICATION_URL_UNAVAILABLE"
+          ? "QR Code belum dapat dibuat: URL verifikasi sertifikat ini belum tersedia."
+          : apiErr(e),
+      );
     } finally {
       setLoading(false);
     }
   }
 
+  function downloadQr() {
+    if (!src) return;
+    const a = document.createElement("a");
+    a.href = src;
+    a.download = certificateQrFilename(certificateNumber);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  async function copyUrl() {
+    setErr(null);
+    try {
+      await navigator.clipboard.writeText(verificationUrl!);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setErr("Gagal menyalin URL. Salin secara manual dari tombol Buka Verifikasi.");
+    }
+  }
+
   return (
     <div className="space-y-2 border-t border-slate-100 pt-3">
-      <Button type="button" variant="outline" size="sm" disabled={loading || !verificationUrl} onClick={show}>
-        <QrCode className="h-3.5 w-3.5" />
-        {loading ? "Memuat…" : "Tampilkan QR verifikasi"}
-      </Button>
-      {!verificationUrl ? (
-        <p className="text-xs text-slate-400">URL verifikasi belum tersedia (portal customer belum dikonfigurasi).</p>
-      ) : null}
-      {err ? <p className="text-sm text-red-600">{err}</p> : null}
-      {src ? (
-        <div className="space-y-1">
+      {!src ? (
+        <>
+          <Button type="button" variant="outline" size="sm" disabled={loading} onClick={generate}>
+            <QrCode className="h-3.5 w-3.5" />
+            {loading ? "Membuat QR Code..." : "Generate QR Code"}
+          </Button>
+          {!loading && !err ? <p className="text-xs text-slate-400">Belum ada gambar QR.</p> : null}
+        </>
+      ) : (
+        <div className="space-y-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt="QR verifikasi sertifikat" className="h-40 w-40 rounded border border-slate-200" />
-          {verificationUrl ? <p className="break-all text-xs text-slate-500">{verificationUrl}</p> : null}
+          <img
+            src={src}
+            alt="QR verifikasi sertifikat"
+            className="h-40 w-40 rounded border border-slate-200"
+            onError={() => {
+              replaceSrc(null);
+              setErr("Gambar QR gagal ditampilkan. Coba generate ulang.");
+            }}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={downloadQr}>
+              <Download className="h-3.5 w-3.5" /> Download QR
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={copyUrl}>
+              <Copy className="h-3.5 w-3.5" /> {copied ? "Tersalin" : "Copy URL"}
+            </Button>
+            <Button type="button" variant="outline" size="sm" asChild>
+              <a href={verificationUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-3.5 w-3.5" /> Buka Verifikasi
+              </a>
+            </Button>
+          </div>
         </div>
-      ) : null}
+      )}
+      {err ? <p className="text-sm text-red-600">{err}</p> : null}
     </div>
   );
 }
@@ -403,7 +484,11 @@ export function CertificatePanel({
           ) : null}
 
           {!legacyDraft ? (
-            <QrSection jobId={jobId} verificationUrl={certificate.verificationUrl} />
+            <QrSection
+              jobId={jobId}
+              certificateNumber={certificate.number}
+              verificationUrl={certificate.verificationUrl}
+            />
           ) : null}
         </>
       ) : (

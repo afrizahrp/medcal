@@ -559,3 +559,11 @@ export function toRomanNumeral(value: number): string {
   }
   return out || String(value);
 }
+
+/** Safe file name for a downloaded certificate QR: `QR-<certificate-number>.png`. */
+export function certificateQrFilename(certificateNumber: string): string {
+  const safe = certificateNumber
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `QR-${safe || "sertifikat"}.png`;
+}
