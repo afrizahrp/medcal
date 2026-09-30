@@ -12,7 +12,6 @@ import {
   Clock,
   FileDown,
   FileText,
-  QrCode,
   Save,
   ShieldAlert,
   Upload,
@@ -415,6 +414,7 @@ export default function CalibrationJobDetailPage() {
   const canReadCertificate = Boolean(capabilities?.certificateRead);
   const canUploadCertificate = Boolean(capabilities?.certificateUpdate);
   const canDeleteCertificate = Boolean(capabilities?.certificateDelete);
+  const canIssueCertificate = Boolean(capabilities?.certificateIssue);
   const correctionRows = corrections.data ?? [];
   const hasPendingCorrection = correctionRows.some((c) => c.status === "PENDING_REVIEW");
 
@@ -726,8 +726,9 @@ export default function CalibrationJobDetailPage() {
                 canRead={canReadCertificate}
                 canUpload={canUploadCertificate}
                 canDelete={canDeleteCertificate}
+                canIssue={canIssueCertificate}
+                jobAccepted={job.status === "ACCEPTED_BY_QA"}
               />
-              <GenerateQrButton />
             </AccordionContent>
           </AccordionItem>
 
@@ -821,29 +822,6 @@ function StatusStrip({
 }
 
 // ── Generate QR (placeholder) ────────────────────────────────────────────────
-
-/**
- * No QR-generation implementation exists anywhere in the app yet. Rather than
- * a dedicated tab/page, this is a single action inside the Sertifikat section
- * — a self-contained placeholder until the real feature lands, at which point
- * this button's onClick becomes the entry point.
- */
-function GenerateQrButton() {
-  const [info, setInfo] = useState(false);
-  return (
-    <div className="mt-4 border-t border-slate-100 pt-3">
-      <Button type="button" variant="outline" size="sm" onClick={() => setInfo(true)}>
-        <QrCode className="h-3.5 w-3.5" />
-        Generate QR
-      </Button>
-      {info ? (
-        <p className="mt-2 text-sm text-slate-500">
-          Fitur Generate QR belum tersedia — belum ada implementasi di alur Calibration Job.
-        </p>
-      ) : null}
-    </div>
-  );
-}
 
 // ── Kontrol Alat accordion content ────────────────────────────────────────────
 

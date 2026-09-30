@@ -18,11 +18,18 @@ export interface CertificateVersion {
 
 export type CertificateStatus = "DRAFT" | "ISSUED" | "REVOKED" | "SUPERSEDED";
 
+export type CertificateSource = "UPLOADED" | "GENERATED";
+
 export interface CertificateDetail {
   id: string;
   calibrationJobId: string;
   number: string;
+  source: CertificateSource;
   status: CertificateStatus;
+  issuedAt: string | null;
+  validUntil: string | null;
+  /** Public verification URL the QR points at (null until issued / portal URL not configured). */
+  verificationUrl: string | null;
   currentVersionId: string | null;
   createdByUserId: string | null;
   updatedByUserId: string | null;
@@ -44,15 +51,20 @@ function invalidate(queryClient: ReturnType<typeof useQueryClient>, jobId: strin
 }
 
 /**
- * Upload or replace the certificate PDF. Raw fetch (not apiFetch) because the
- * body is multipart/form-data — the browser must set its own boundary.
- * Deliberately carries no QA-status parameter: upload is independent of QA.
+ * Upload an external certificate PDF (or replace its PDF). Raw fetch (not
+ * apiFetch) because the body is multipart/form-data — the browser must set its
+ * own boundary. `certificateNumber` is the number printed on the certificate,
+ * entered/confirmed by the user (never derived from the filename by the
+ * server); it is required for the first upload and ignored-or-must-match
+ * afterwards. Deliberately carries no QA-status parameter.
  */
 export function useUploadCertificate(jobId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, certificateNumber }: { file: File; certificateNumber?: string }) => {
       const form = new FormData();
+      // Text fields before the file so multer has them by the time it parses the file part.
+      if (certificateNumber !== undefined) form.append("certificateNumber", certificateNumber);
       form.append("file", file);
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/calibration-jobs/${jobId}/certificate/versions`,
@@ -71,6 +83,24 @@ export function useUploadCertificate(jobId: string) {
     },
     onSuccess: () => invalidate(queryClient, jobId),
   });
+}
+
+/** Issue a Medcal-generated certificate (allocates CRT number, token, renders the PDF). */
+export function useIssueGeneratedCertificate(jobId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<CertificateDetail>(`/calibration-jobs/${jobId}/certificate/issue`, { method: "POST" }),
+    onSuccess: () => invalidate(queryClient, jobId),
+    // A PDF failure still issued the certificate (number is official): refresh either way.
+    onError: () => invalidate(queryClient, jobId),
+  });
+}
+
+/** QR PNG (verification-URL locator) as an object URL the caller must revoke. */
+export async function fetchCertificateQrObjectUrl(jobId: string): Promise<string> {
+  const blob = await apiFetchBlob(`/calibration-jobs/${jobId}/certificate/qr`);
+  return URL.createObjectURL(blob);
 }
 
 export function useDeleteCertificateVersion(jobId: string) {

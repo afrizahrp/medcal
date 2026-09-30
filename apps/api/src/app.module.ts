@@ -18,6 +18,7 @@ import { QuotationsModule } from "./modules/quotations/quotations.module";
 import { PurchaseOrdersModule } from "./modules/purchase-orders/purchase-orders.module";
 import { WorkOrdersModule } from "./modules/work-orders/work-orders.module";
 import { CalibrationJobsModule } from "./modules/calibration-jobs/calibration-jobs.module";
+import { CertificateVerificationModule } from "./modules/certificate-verification/certificate-verification.module";
 import { UomsModule } from "./modules/uoms/uoms.module";
 import { DeviceCategoriesModule } from "./modules/device-categories/device-categories.module";
 import { DeviceTypesModule } from "./modules/device-types/device-types.module";
@@ -46,6 +47,7 @@ import { DashboardModule } from "./modules/dashboard/dashboard.module";
     PurchaseOrdersModule,
     WorkOrdersModule,
     CalibrationJobsModule,
+    CertificateVerificationModule,
     UomsModule,
     DeviceCategoriesModule,
     DeviceTypesModule,

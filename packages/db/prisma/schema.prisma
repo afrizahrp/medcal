@@ -286,6 +286,16 @@ enum QualityReviewStatus {
   REJECTED
 }
 
+/// Where a Certificate's PDF and number originate. UPLOADED = produced outside
+/// Medcal's certificate-generation flow; `number` is the external number
+/// printed on that certificate, entered by the user. GENERATED = issued by
+/// Medcal; `number` comes from the dedicated CERTIFICATE_GENERATED sequence
+/// (CRT/YYYY/MM/NNNNN). Never inferred from filename/number/status.
+enum CertificateSource {
+  UPLOADED
+  GENERATED
+}
+
 enum CertificateStatus {
   DRAFT
   ISSUED
@@ -337,6 +347,10 @@ enum DocumentType {
   /// Kontrol Alat (In Lab intake). Prefix "KAL". Number allocated on
   /// KontrolAlat.number. F.MU.08 is the paper-form code only, not the document number.
   KONTROL_ALAT
+  /// Medcal-generated certificates only. Prefix "CRT". Number allocated on
+  /// Certificate.number in its own counter namespace, independent of the
+  /// legacy CERTIFICATE type (prefix "CER").
+  CERTIFICATE_GENERATED
 }
 
 enum ReminderChannel {
@@ -3061,7 +3075,9 @@ model Certificate {
   deviceId                String
   calibrationJobId        String                   @unique
   qualityReviewId         String?
+  /// UPLOADED: verbatim external number. GENERATED: CRT/YYYY/MM/NNNNN.
   number                  String
+  source                  CertificateSource        @default(UPLOADED)
   verificationToken       String?                  @unique
   status                  CertificateStatus        @default(DRAFT)
   billingStatus           CertificateBillingStatus @default(UNBILLED)

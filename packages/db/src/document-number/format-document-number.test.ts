@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BUSINESS_TIME_ZONE,
   formatDocumentNumber,
   isValidDocumentNumber,
   parseDocumentNumberYearMonth,
@@ -22,6 +23,17 @@ describe("formatDocumentNumber", () => {
     const issuedAt = new Date("2026-12-31T20:00:00.000Z");
 
     expect(formatDocumentNumber("CRQ", issuedAt, 3)).toBe("CRQ/2026/12/00003");
+  });
+
+  it("uses the wall-clock year and month of the given time zone", () => {
+    // 2026-12-31 18:00Z is already 2027-01-01 01:00 in Jakarta.
+    const boundary = new Date("2026-12-31T18:00:00.000Z");
+    expect(formatDocumentNumber("CRT", boundary, 1, BUSINESS_TIME_ZONE)).toBe("CRT/2027/01/00001");
+    expect(formatDocumentNumber("CRT", boundary, 1)).toBe("CRT/2026/12/00001");
+    // 2026-09-30 16:59Z is still Sep 30 in Jakarta.
+    expect(
+      formatDocumentNumber("CRT", new Date("2026-09-30T16:59:59.000Z"), 2, BUSINESS_TIME_ZONE),
+    ).toBe("CRT/2026/09/00002");
   });
 
   it("rejects invalid prefix or sequence", () => {

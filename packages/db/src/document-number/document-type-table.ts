@@ -11,6 +11,7 @@ export const DOCUMENT_TYPE_NUMBER_TABLE: Record<DocumentType, string> = {
   EQUIPMENT_DELIVERY_NOTE: "EquipmentDeliveryNote",
   INVOICE: "Invoice",
   CERTIFICATE: "Certificate",
+  CERTIFICATE_GENERATED: "Certificate",
   CREDIT_NOTE: "CreditNote",
   IDENTITY_CORRECTION_BA: "IdentityCorrection",
   KONTROL_ALAT: "KontrolAlat",

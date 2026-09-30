@@ -70,6 +70,7 @@ export type MeCapabilities = {
   certificateRead: boolean;
   certificateCreate: boolean;
   certificateUpdate: boolean;
+  certificateIssue: boolean;
   certificateDelete: boolean;
   deviceRead: boolean;
   deviceCreate: boolean;

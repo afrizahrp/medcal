@@ -3,7 +3,7 @@ import type { FileOwnerPolicy } from "../files/owner-policy";
 
 /**
  * The CERTIFICATE FileOwnerPolicy registered with the generic FilesModule.
- * A scanned certificate PDF attaches to a Certificate record (ownerId =
+ * A certificate PDF attaches to a Certificate record (ownerId =
  * Certificate.id, not the CalibrationJob — Certificate is the 1:1 owner per
  * the existing schema). Authorization reuses the `certificate` permission:
  *
@@ -12,13 +12,16 @@ import type { FileOwnerPolicy } from "../files/owner-policy";
  * - deleteAction "delete" is a SEPARATE, narrower action (see owner-policy.ts)
  *   so upload/replace can stay open to TECHNICIAN_MANAGER/SUPERVISOR/ADMIN/
  *   GENERAL_MANAGER while delete stays SUPERADMIN-only (no RolePermission
- *   row is seeded for "certificate:delete" to any role — SUPERADMIN's
+ *   row is seeded for "certificate:delete" to any other role — SUPERADMIN's
  *   unconditional hasPermission bypass is the only way to satisfy it).
  *
- * `locked` is always false: certificate "issuance"/finalization is out of
- * scope for this feature (see certificate.service.ts) and no lock concept
- * has been defined for it — inventing one here would invent business rules
- * the task explicitly said not to invent.
+ * `locked`:
+ * - UPLOADED certificates keep the existing versioning behaviour: never
+ *   locked, a replacement becomes the current version and the old one stays
+ *   as history.
+ * - GENERATED certificates are immutable once their PDF exists: the first
+ *   PDF may be attached (or re-attached after a failed render) while
+ *   pdfFileObjectId is still null, but never replaced afterwards.
  */
 export const certificateFileOwnerPolicy: FileOwnerPolicy = {
   ownerType: "CERTIFICATE",
@@ -35,8 +38,12 @@ export const certificateFileOwnerPolicy: FileOwnerPolicy = {
     // ownerId = Certificate.id
     const certificate = await prisma.certificate.findFirst({
       where: { id: ownerId, companyId },
-      select: { id: true },
+      select: { id: true, source: true, pdfFileObjectId: true },
     });
-    return { exists: Boolean(certificate), locked: false };
+    if (!certificate) return { exists: false, locked: false };
+    return {
+      exists: true,
+      locked: certificate.source === "GENERATED" && certificate.pdfFileObjectId !== null,
+    };
   },
 };

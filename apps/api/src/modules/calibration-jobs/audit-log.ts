@@ -21,8 +21,16 @@ export interface RecordAuditLogInput {
   userAgent?: string | null;
 }
 
-export async function recordAuditLog(input: RecordAuditLogInput): Promise<void> {
-  await prisma.auditLog.create({
+/**
+ * `client` lets a caller write the audit row inside its own transaction (so an
+ * event such as CERTIFICATE_ISSUED commits or rolls back together with the
+ * state change it describes). Defaults to the shared client.
+ */
+export async function recordAuditLog(
+  input: RecordAuditLogInput,
+  client: Pick<Prisma.TransactionClient, "auditLog"> = prisma,
+): Promise<void> {
+  await client.auditLog.create({
     data: {
       companyId: input.companyId,
       userId: input.userId,
