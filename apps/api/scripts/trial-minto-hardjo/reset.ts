@@ -1,12 +1,14 @@
 /**
  * Minto Hardjo High-Volume Calibration Trial — reset orchestration.
  *
- * Tears down the trial transaction chain in dependency order (CalibrationJob
- * -> WorkOrder -> PurchaseOrder -> Quotation -> CalibrationRequest ->
- * Customer) and deactivates (isActive=false, never hard-deletes) every
- * manifested synthetic master-data row. The manifest written by seed.ts is
- * the SOLE authority for what belongs to the trial — never a heuristic
- * "looks like trial data" query (plan §C.8 / §D.6).
+ * Tears down the trial transaction chain in dependency order (Certificate ->
+ * CalibrationJob -> WorkOrder -> PurchaseOrder -> Quotation ->
+ * CalibrationRequest -> per-unit Device rows) and deactivates (isActive=false,
+ * never hard-deletes) every manifested synthetic master-data row. The target
+ * Customer (TRIAL_CUSTOMER_ID, a real, permanent record) is NEVER deleted —
+ * only the transaction chain and Device rows this trial created under it. The
+ * manifest written by seed.ts is the SOLE authority for what belongs to the
+ * trial — never a heuristic "looks like trial data" query (plan §C.8 / §D.6).
  *
  * Run manually:
  *   pnpm --filter @medcal/api run reset:trial-minto-hardjo
@@ -83,8 +85,21 @@ async function main(): Promise<void> {
     await prisma.priceListItem.deleteMany({ where: { id: { in: manifest.priceListItemIds } } });
   }
 
-  console.log(`[reset] Deleting trial Customer ${manifest.customerId}...`);
-  await prisma.customer.deleteMany({ where: { id: manifest.customerId } });
+  // Target Customer is a real, permanent record — never deleted. Its Device
+  // rows ARE owned by this trial, though, and no longer get cleaned up via a
+  // Customer cascade now that the Customer itself is left in place — delete
+  // them explicitly instead. Must run after the WorkOrder/CalibrationJob
+  // delete above: CalibrationJob.deviceId has onDelete: Restrict, so a
+  // still-referenced Device cannot be removed first. Matches BOTH serial
+  // conventions this trial produces: "TRIAL-MH-SN-*" (ensureTrialDevices,
+  // lib.ts) and "TRIAL-SN-*" (a real Device created by the Identity
+  // Correction approval flow itself when a job's proposed newSerial didn't
+  // match an existing Device) — this Customer had zero Device rows before
+  // the trial, so every "TRIAL-" prefixed row under it is this trial's own.
+  const deletedDevices = await prisma.device.deleteMany({
+    where: { customerId: manifest.customerId, serialNumber: { startsWith: "TRIAL-" } },
+  });
+  console.log(`[reset] Deleted ${deletedDevices.count} trial Device rows under Customer ${manifest.customerId}.`);
 
   // 2. Deactivate (never hard-delete) every manifested synthetic master-data
   //    row — the project's existing soft-delete convention (plan §B.1/§C.8).

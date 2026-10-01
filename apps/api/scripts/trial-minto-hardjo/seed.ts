@@ -46,7 +46,7 @@ import { TRIAL_SOURCE_ROWS } from "../../../../packages/db/fixtures/trial-minto-
 import { TRIAL_DEVICE_TYPE_MAPPING } from "../../../../packages/db/fixtures/trial-minto-hardjo/device-type-mapping";
 import { seedTrialMintoHardjoDeviceTypes } from "../../../../packages/db/prisma/seed-trial-minto-hardjo-device-types";
 import {
-  TRIAL_CUSTOMER_NAME,
+  TRIAL_CUSTOMER_ID,
   TRIAL_STAFF_USER_ID,
   TRIAL_TECHNICIAN_USER_IDS,
   TRIAL_MANAGER_USER_IDS,
@@ -101,13 +101,21 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const existingCustomer = await prisma.customer.findFirst({
-    where: { companyId: COMPANY_ID, name: TRIAL_CUSTOMER_NAME },
-  });
-  if (existingCustomer) {
+  const customer = await prisma.customer.findUnique({ where: { id: TRIAL_CUSTOMER_ID } });
+  if (!customer) {
     console.error(
-      `[seed] Refusing to double-seed: Customer "${TRIAL_CUSTOMER_NAME}" already exists (id ${existingCustomer.id}) ` +
-        "with no manifest on disk. Run reset:trial-minto-hardjo first, or remove the stray Customer manually.",
+      `[seed] Target Customer ${TRIAL_CUSTOMER_ID} not found. This trial no longer creates its own ` +
+        "Customer — it reuses this fixed, real Customer id. Confirm the id in lib.ts is still correct.",
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const liveRequestCount = await prisma.calibrationRequest.count({ where: { customerId: TRIAL_CUSTOMER_ID } });
+  if (liveRequestCount > 0) {
+    console.error(
+      `[seed] Refusing to double-seed: Customer ${TRIAL_CUSTOMER_ID} already has ${liveRequestCount} ` +
+        "CalibrationRequest row(s) attached, with no manifest on disk. Run reset:trial-minto-hardjo first, " +
+        "or investigate manually before reseeding.",
     );
     process.exitCode = 1;
     return;
@@ -127,15 +135,7 @@ async function main(): Promise<void> {
   const priceListItemIds = await ensurePriceListItems(COMPANY_ID, allDeviceTypeIds);
   await ensureTrialUsers(COMPANY_ID);
 
-  console.log("[seed] 4/9 trial Customer...");
-  const customer = await prisma.customer.create({
-    data: {
-      companyId: COMPANY_ID,
-      number: `CUS/TRIAL-MH/${Date.now()}`,
-      name: TRIAL_CUSTOMER_NAME,
-      address: "Jl. Trial Data No. 1 (fictional, local-dev only)",
-    },
-  });
+  console.log(`[seed] 4/9 target Customer resolved: ${customer.name} (${customer.id})...`);
 
   console.log("[seed] 4.5/9 master Device rows (one per PHYSICAL UNIT, so deviceId genuinely inherits DeviceType -> Device -> CalibrationRequestItem -> QuotationItem -> PurchaseOrderItem -> CalibrationJob)...");
   const rowsWithQty = TRIAL_DEVICE_TYPE_MAPPING.map((mapping) => ({

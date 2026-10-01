@@ -6,10 +6,9 @@
  * `manifest-po-only.json` (see `po-only-manifest.ts`) — never touches
  * `manifest.json` or anything created by `seed.ts`/`reset.ts`.
  *
- * The trial Customer is deleted only if this script's own manifest recorded
- * that it created the Customer fresh (`customerReused: false`). If the
- * Customer was reused from a prior leftover, it is left alone, since this
- * script never owned its lifecycle.
+ * The target Customer (TRIAL_CUSTOMER_ID) is a real, permanent record this
+ * trial never owns — it is NEVER deleted here, only the transaction chain
+ * (Request/Quotation/PO) and synthetic master data this script created.
  *
  * Run manually:
  *   pnpm --filter @medcal/api run reset:trial-minto-hardjo-po-only
@@ -45,14 +44,7 @@ async function main(): Promise<void> {
     await prisma.priceListItem.deleteMany({ where: { id: { in: manifest.priceListItemIds } } });
   }
 
-  if (manifest.customerReused) {
-    console.log(
-      `[reset-po-only] Leaving Customer ${manifest.customerId} in place (it was reused, not created by this script).`,
-    );
-  } else {
-    console.log(`[reset-po-only] Deleting trial Customer ${manifest.customerId}...`);
-    await prisma.customer.deleteMany({ where: { id: manifest.customerId } });
-  }
+  console.log(`[reset-po-only] Leaving Customer ${manifest.customerId} in place (real, permanent — never owned by this script).`);
 
   // Deactivate (never hard-delete) manifested synthetic master-data rows —
   // same soft-delete convention as reset.ts.

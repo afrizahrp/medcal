@@ -32,7 +32,19 @@ import { MeasurementResultsService } from "../../src/modules/calibration-jobs/me
 import type { DevicesService } from "../../src/modules/devices/devices.service";
 import { COMPANY_EMAIL_DOMAIN } from "@medcal/shared";
 
-export const TRIAL_CUSTOMER_NAME = "RS Minto Hardjo (Trial)";
+/**
+ * The real, permanent Customer this trial models — "Rumah Sakit TNI Angkatan
+ * Laut Dr. Mintohardjo" (number CUS/2026/09/00014), already registered in the
+ * system. Previously this trial created its own disposable, fictional
+ * "RS Minto Hardjo (Trial)" Customer row per reseed; that data (406 Device,
+ * CalibrationRequest, Quotation, PurchaseOrder, WorkOrder, Certificate rows)
+ * was migrated onto this real customerId so the trial can be reused against
+ * the actual customer identity going forward. This id is FIXED and must never
+ * be created or deleted by seed.ts/reset.ts — only its CalibrationRequest ->
+ * ... -> CalibrationJob transaction chain (and the Device rows this trial
+ * creates) is ever written or torn down.
+ */
+export const TRIAL_CUSTOMER_ID = "cmuh41d130003pr0ny6ffgq61";
 export const TRIAL_STAFF_USER_ID = "trial-mh-staff-user";
 export const TRIAL_TECHNICIAN_USER_IDS = [
   "trial-mh-tech-1",

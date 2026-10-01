@@ -10,12 +10,9 @@
  * taken through Allocation -> WorkOrder manually via the Management Portal.
  *
  * Idempotent guard: refuses to run if a PO-only manifest already exists, or
- * if the trial Customer already has a live (non-deleted) CalibrationRequest
- * attached. If the trial Customer exists but is an empty shell (no requests
- * attached — e.g. left over from a prior full-trial run whose transaction
- * tables were wiped but the Customer row wasn't), it is REUSED rather than
- * duplicated, per the trial's own "use the existing canonical trial identity"
- * convention.
+ * if the target Customer (TRIAL_CUSTOMER_ID, a real, permanent, pre-existing
+ * Customer — never created or deleted by this script) already has a live
+ * CalibrationRequest attached.
  *
  * Run manually:
  *   pnpm --filter @medcal/api run seed:trial-minto-hardjo-po-only
@@ -30,7 +27,7 @@ import { TRIAL_SOURCE_ROWS } from "../../../../packages/db/fixtures/trial-minto-
 import { TRIAL_DEVICE_TYPE_MAPPING } from "../../../../packages/db/fixtures/trial-minto-hardjo/device-type-mapping";
 import { seedTrialMintoHardjoDeviceTypes } from "../../../../packages/db/prisma/seed-trial-minto-hardjo-device-types";
 import {
-  TRIAL_CUSTOMER_NAME,
+  TRIAL_CUSTOMER_ID,
   TRIAL_STAFF_USER_ID,
   FIXTURES_DIR,
   resolveDeviceTypeIdsByCode,
@@ -69,44 +66,28 @@ async function main(): Promise<void> {
   const priceListItemIds = await ensurePriceListItems(COMPANY_ID, allDeviceTypeIds);
   await ensureTrialUsers(COMPANY_ID);
 
-  console.log("[seed-po-only] 4/6 trial Customer...");
-  const existingCustomer = await prisma.customer.findFirst({
-    where: { companyId: COMPANY_ID, name: TRIAL_CUSTOMER_NAME },
-  });
-  let customerId: string;
-  let customerReused: boolean;
-  if (existingCustomer) {
-    const liveRequestCount = await prisma.calibrationRequest.count({
-      where: { customerId: existingCustomer.id },
-    });
-    if (liveRequestCount > 0) {
-      console.error(
-        `[seed-po-only] Refusing to seed: Customer "${TRIAL_CUSTOMER_NAME}" (id ${existingCustomer.id}) ` +
-          `already has ${liveRequestCount} CalibrationRequest row(s) attached. This looks like live trial ` +
-          "data, not an empty leftover shell — investigate before running this script (do not delete " +
-          "automatically).",
-      );
-      process.exitCode = 1;
-      return;
-    }
-    console.log(
-      `[seed-po-only] Reusing existing empty-shell trial Customer (id ${existingCustomer.id}) — ` +
-        "no live CalibrationRequest/Quotation/PurchaseOrder attached.",
+  console.log("[seed-po-only] 4/6 target Customer...");
+  const customer = await prisma.customer.findUnique({ where: { id: TRIAL_CUSTOMER_ID } });
+  if (!customer) {
+    console.error(
+      `[seed-po-only] Target Customer ${TRIAL_CUSTOMER_ID} not found. This trial no longer creates its ` +
+        "own Customer — it reuses this fixed, real Customer id. Confirm the id in lib.ts is still correct.",
     );
-    customerId = existingCustomer.id;
-    customerReused = true;
-  } else {
-    const customer = await prisma.customer.create({
-      data: {
-        companyId: COMPANY_ID,
-        number: `CUS/TRIAL-MH/${Date.now()}`,
-        name: TRIAL_CUSTOMER_NAME,
-        address: "Jl. Trial Data No. 1 (fictional, local-dev only)",
-      },
-    });
-    customerId = customer.id;
-    customerReused = false;
+    process.exitCode = 1;
+    return;
   }
+  const liveRequestCount = await prisma.calibrationRequest.count({ where: { customerId: TRIAL_CUSTOMER_ID } });
+  if (liveRequestCount > 0) {
+    console.error(
+      `[seed-po-only] Refusing to seed: Customer ${TRIAL_CUSTOMER_ID} (${customer.name}) already has ` +
+        `${liveRequestCount} CalibrationRequest row(s) attached. Run reset:trial-minto-hardjo-po-only first, ` +
+        "or investigate manually before reseeding.",
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const customerId = customer.id;
+  console.log(`[seed-po-only] Using ${customer.name} (${customerId}).`);
 
   console.log("[seed-po-only] 5/6 CalibrationRequest -> Quotation -> PurchaseOrder (real service calls)...");
   const items = TRIAL_SOURCE_ROWS.map((row) => {
@@ -143,7 +124,6 @@ async function main(): Promise<void> {
     createdAt: new Date().toISOString(),
     companyId: COMPANY_ID,
     customerId,
-    customerReused,
     calibrationRequestId: createdRequest.id,
     quotationId: quotation.id,
     purchaseOrderId: po.id,

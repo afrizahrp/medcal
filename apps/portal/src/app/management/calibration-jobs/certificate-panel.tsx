@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Copy, Download, ExternalLink, FileText, QrCode, Trash2, Upload } from "lucide-react";
+import { Copy, Download, ExternalLink, FileText, Printer, QrCode, Trash2, Upload } from "lucide-react";
 import { ApiError } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -169,6 +169,7 @@ function QrSection({
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const srcRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -176,6 +177,14 @@ function QrSection({
       if (srcRef.current) URL.revokeObjectURL(srcRef.current);
     };
   }, []);
+
+  // Print the already-generated QR only: the print-only block below is
+  // revealed (and the page collapsed to one sheet) by a style that exists just while `printing` is set.
+  useEffect(() => {
+    if (!printing) return;
+    window.print();
+    setPrinting(false);
+  }, [printing]);
 
   if (!verificationUrl) {
     return (
@@ -255,6 +264,9 @@ function QrSection({
             <Button type="button" variant="outline" size="sm" onClick={downloadQr}>
               <Download className="h-3.5 w-3.5" /> Download QR
             </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setPrinting(true)}>
+              <Printer className="h-3.5 w-3.5" /> Print QR
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={copyUrl}>
               <Copy className="h-3.5 w-3.5" /> {copied ? "Tersalin" : "Copy URL"}
             </Button>
@@ -264,6 +276,15 @@ function QrSection({
               </a>
             </Button>
           </div>
+          {/* Label print block: fixed to the 30 x 80 mm label (SATO LC400e Series 5 stock). */}
+          <div className="qr-print-area fixed z-[9999] hidden bg-white">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={src} alt="" className="qr-print-img" />
+            <p className="max-w-full break-all text-center font-mono text-[7pt] leading-tight">{certificateNumber}</p>
+          </div>
+          {printing ? (
+            <style>{`@page { size: 30mm 80mm; margin: 0; } @media print { html, body { height: 0 !important; margin: 0 !important; overflow: hidden !important; } body * { visibility: hidden !important; } .qr-print-area { display: flex !important; top: 0; left: 0; width: 30mm; height: 80mm; box-sizing: border-box; padding: 2mm; flex-direction: column; align-items: center; justify-content: center; gap: 2mm; overflow: hidden; } .qr-print-area, .qr-print-area * { visibility: visible !important; } .qr-print-img { width: 26mm; height: 26mm; flex: none; image-rendering: pixelated; } }`}</style>
+          ) : null}
         </div>
       )}
       {err ? <p className="text-sm text-red-600">{err}</p> : null}

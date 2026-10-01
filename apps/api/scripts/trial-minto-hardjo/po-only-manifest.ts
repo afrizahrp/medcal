@@ -20,9 +20,8 @@ export const PO_ONLY_MANIFEST_PATH = resolve(FIXTURES_DIR, "manifest-po-only.jso
 export interface TrialPoOnlyManifest {
   createdAt: string;
   companyId: string;
+  /** Always TRIAL_CUSTOMER_ID (lib.ts) — the real, permanent Customer this trial models. Never created/deleted by this script. */
   customerId: string;
-  /** True if an existing trial Customer row was reused instead of created fresh. */
-  customerReused: boolean;
   calibrationRequestId: string;
   quotationId: string;
   purchaseOrderId: string;
