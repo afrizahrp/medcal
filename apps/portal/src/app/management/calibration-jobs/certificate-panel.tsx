@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { formatDateTime } from "./calibration-jobs-ui";
 import { certificateQrFilename } from "./calibration-job-utils";
 import { ConfirmDialog } from "../calibration-requests/calibration-requests-ui";
+import logo from "../../../../public/logo.png";
 import {
   downloadCertificateVersion,
   fetchCertificateQrObjectUrl,
@@ -276,14 +277,30 @@ function QrSection({
               </a>
             </Button>
           </div>
-          {/* Label print block: fixed to the 30 x 80 mm label (SATO LC400e Series 5 stock). */}
+          {/* Label print block: one 80 x 30 mm label (SATO LC408e) — 80 mm across the head, 30 mm along the feed. */}
           <div className="qr-print-area fixed z-[9999] hidden bg-white">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={src} alt="" className="qr-print-img" />
-            <p className="max-w-full break-all text-center font-mono text-[7pt] leading-tight">{certificateNumber}</p>
+            <div className="qr-print-side">
+              {/* TEMP PRINT DIAGNOSTIC — DO NOT COMMIT. Left to right: 1 HTML text, 2 CSS black box,
+                  3a opaque black PNG, 3b black PNG with transparent border (alpha). Item 4 = logo below. */}
+              <div style={{ display: "flex", alignItems: "center", gap: "2mm", height: "6mm" }}>
+                <span style={{ fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: "11pt", lineHeight: 1, color: "#000" }}>PKM</span>
+                <span style={{ display: "block", width: "6mm", height: "6mm", background: "#000", printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }} />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img alt="" style={{ display: "block", width: "6mm", height: "6mm", imageRendering: "pixelated" }} src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAIAAADZF8uwAAAADklEQVR4nGNgGAVDFQAAAbwAATg0HvcAAAAASUVORK5CYII=" />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img alt="" style={{ display: "block", width: "6mm", height: "6mm", imageRendering: "pixelated" }} src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAFUlEQVR4nGNgoCf4TwCPaqCPBtoAAN1kP8H3vSESAAAAAElFTkSuQmCC" />
+              </div>
+              {/* END TEMP PRINT DIAGNOSTIC */}
+              {/* Plain <img>, not next/image: it must already be loaded (not lazy) when window.print() runs.
+                  Printed solid black: the thermal head is 1-bit, so the colour logo's greys threshold to white. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logo.src} alt="" className="qr-print-logo" />
+            </div>
           </div>
           {printing ? (
-            <style>{`@page { size: 30mm 80mm; margin: 0; } @media print { html, body { height: 0 !important; margin: 0 !important; overflow: hidden !important; } body * { visibility: hidden !important; } .qr-print-area { display: flex !important; top: 0; left: 0; width: 30mm; height: 80mm; box-sizing: border-box; padding: 2mm; flex-direction: column; align-items: center; justify-content: center; gap: 2mm; overflow: hidden; } .qr-print-area, .qr-print-area * { visibility: visible !important; } .qr-print-img { width: 26mm; height: 26mm; flex: none; image-rendering: pixelated; } }`}</style>
+            <style>{`@page { size: 80mm 30mm; margin: 0; } @media print { html, body { height: 0 !important; margin: 0 !important; overflow: hidden !important; } body * { visibility: hidden !important; } .qr-print-area { display: flex !important; top: 0; left: 0; width: 80mm; height: 30mm; box-sizing: border-box; padding: 2mm; flex-direction: row; align-items: center; justify-content: center; gap: 2mm; overflow: hidden; } .qr-print-side { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2mm; } .qr-print-logo { height: 7mm; width: auto; max-width: 100%; flex: none; filter: brightness(0); } .qr-print-area, .qr-print-area * { visibility: visible !important; } .qr-print-img { width: 26mm; height: 26mm; flex: none; image-rendering: pixelated; } }`}</style>
           ) : null}
         </div>
       )}
