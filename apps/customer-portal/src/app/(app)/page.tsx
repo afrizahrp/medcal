@@ -18,7 +18,7 @@ export default function CustomerPortalHome() {
         Akun Anda ({user?.email}) telah terverifikasi untuk mengakses data pelanggan.
       </p>
       <Link href="/work-orders" className={`${buttonPrimary} mt-6`}>
-        Lihat Work Order / SPK
+        Lihat Progress Kalibrasi
       </Link>
     </div>
   );

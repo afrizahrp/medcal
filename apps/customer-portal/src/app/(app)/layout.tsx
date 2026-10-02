@@ -19,7 +19,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               href="/"
               className="inline-flex min-h-11 items-center font-semibold text-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             >
-              Portal Pelanggan
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="PKM — Portal Pelanggan" className="h-9 w-auto" />
             </Link>
             <AppNav />
           </div>

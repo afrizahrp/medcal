@@ -3,10 +3,14 @@ import type { Metadata, Viewport } from "next";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Portal Pelanggan",
+  title: "Pantau Progress Kalibrasi Anda — PT. Presisi Kalibrasi Medika",
   description: "PT. Presisi Kalibrasi Medika — Portal Pelanggan",
   icons: {
-    icon: "/logo.png",
+    icon: [
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
 };
 

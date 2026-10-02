@@ -362,7 +362,7 @@ function UnitsSection({ workOrderId }: { workOrderId: string }) {
               <ClearFiltersButton onClick={clearAll} />
             </div>
           ) : (
-            <p className="text-sm text-slate-600">Belum ada unit kalibrasi. Work Order ini belum dimulai.</p>
+            <p className="text-sm text-slate-600">Belum ada unit kalibrasi. Progress ini belum dimulai.</p>
           )
         ) : result ? (
           <>
@@ -396,23 +396,23 @@ function WorkOrderDetailContent({ workOrderId }: { workOrderId: string }) {
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
       <Link href="/work-orders" className={linkAction}>
-        ← Daftar Work Order
+        ← Daftar Progress Kalibrasi
       </Link>
 
       <div className="mt-2">
         {query.isLoading ? (
-          <LoadingState label="Memuat work order…" />
+          <LoadingState label="Memuat daftar progress kalibrasi…" />
         ) : query.isError ? (
           query.error instanceof ApiError && query.error.status === 404 ? (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <h1 className="text-lg font-semibold text-slate-900">Work Order tidak ditemukan</h1>
+              <h1 className="text-lg font-semibold text-slate-900">Progress Kalibrasi tidak ditemukan</h1>
               <p className="mt-1 text-sm text-slate-600">
                 Perintah kerja ini tidak ada, atau tidak tersedia untuk akun Anda.
               </p>
             </div>
           ) : (
             <ErrorState
-              message="Work order belum bisa dimuat. Coba lagi dalam beberapa saat."
+              message="Progress Kalibrasi belum bisa dimuat. Coba lagi dalam beberapa saat."
               onRetry={() => void query.refetch()}
               retrying={query.isFetching}
             />
@@ -432,7 +432,7 @@ function WorkOrderDetailContent({ workOrderId }: { workOrderId: string }) {
 export default function WorkOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <Suspense fallback={<LoadingState label="Memuat work order…" fullPage />}>
+    <Suspense fallback={<LoadingState label="Memuat daftar progress kalibrasi…" fullPage />}>
       <WorkOrderDetailContent workOrderId={id} />
     </Suspense>
   );

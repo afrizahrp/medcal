@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const ITEMS = [{ href: "/work-orders", label: "Work Order" }] as const;
+const ITEMS = [{ href: "/work-orders", label: "Kalibrasi Alat" }] as const;
 
 /** True for the item's own page and anything nested under it (a work-order detail keeps "Work Order" active). */
 export function isActivePath(pathname: string | null, href: string): boolean {
