@@ -1,12 +1,29 @@
+const fs = require("node:fs");
 const path = require("node:path");
-// Next.js only auto-loads .env files from its own app directory, not the
-// monorepo root — load the shared root .env explicitly for dev. Production
-// sets real env vars directly (docker-compose/.env.production), so this is a
-// no-op there if the file isn't present.
-require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
+const dotenv = require("dotenv");
+const { customerPortalApiRewrites } = require("./customer-portal-api-rewrites");
+
+const rootEnvPath = path.resolve(__dirname, "../../.env");
+const rootEnv = fs.existsSync(rootEnvPath)
+  ? dotenv.parse(fs.readFileSync(rootEnvPath))
+  : {};
+dotenv.config({ path: rootEnvPath });
+
+const apiOrigin = (rootEnv.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || "").replace(
+  /\/$/,
+  "",
+);
+const sameOriginBrowserApi = process.env.NODE_ENV !== "production";
+
+if (sameOriginBrowserApi) {
+  process.env.NEXT_PUBLIC_API_URL = "";
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@medcal/ui", "@medcal/shared", "@medcal/auth"],
+  async rewrites() {
+    return sameOriginBrowserApi ? customerPortalApiRewrites(apiOrigin) : [];
+  },
 };
 module.exports = nextConfig;
