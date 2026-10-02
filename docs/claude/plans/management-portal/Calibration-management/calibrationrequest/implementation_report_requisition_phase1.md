@@ -314,7 +314,7 @@ pre-existing infra issue, reproduced on the untouched `quotations.service.test.t
 Workaround used for verification: export `DATABASE_URL` in the shell first —
 
 ```
-$env:DATABASE_URL="postgresql://postgres:Afrbyu12@localhost:5432/pkmdb?schema=public"
+$env:DATABASE_URL="postgresql://postgres:<REDACTED>@localhost:5432/pkmdb?schema=public"
 pnpm --filter @medcal/api exec vitest run calibration-requests
 ```
 

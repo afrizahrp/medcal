@@ -26,19 +26,26 @@ import "reflect-metadata";
 import { auth } from "@medcal/auth";
 import { prisma } from "@medcal/db";
 
-const CREDENTIALS: Record<string, string> = {
-  "trial-mh-tech-1": "teknisi1",
-  "trial-mh-tech-2": "teknisi2",
-  "trial-mh-tech-3": "teknisi3",
-  "trial-mh-tech-4": "teknisi4",
-  "trial-mh-manager-1": "manajerteknis1",
-  "trial-mh-manager-2": "manajerteknis2",
-};
+// Trial login passwords are supplied at run time, never stored in source:
+//   TRIAL_CREDENTIALS_JSON='{"trial-mh-tech-1":"<password>", ...}'
+// Keys are the six seeded trial User ids (trial-mh-tech-1..4, trial-mh-manager-1..2).
+function loadCredentials(): Record<string, string> {
+  const raw = process.env.TRIAL_CREDENTIALS_JSON;
+  if (!raw) {
+    throw new Error("TRIAL_CREDENTIALS_JSON is required (JSON object of userId -> password).");
+  }
+  const parsed: unknown = JSON.parse(raw);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("TRIAL_CREDENTIALS_JSON must be a JSON object of userId -> password.");
+  }
+  return parsed as Record<string, string>;
+}
 
 async function main(): Promise<void> {
   const ctx = await auth.$context;
+  const credentials = loadCredentials();
 
-  for (const [userId, password] of Object.entries(CREDENTIALS)) {
+  for (const [userId, password] of Object.entries(credentials)) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       console.error(`[set-trial-credentials] Skipping "${userId}": User does not exist (run seed first).`);

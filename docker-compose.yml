@@ -7,7 +7,7 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_USER: afriza
-      POSTGRES_PASSWORD: Afrbyu12
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: pkmdb
     volumes:
       - medcal_pg_data:/var/lib/postgresql/data

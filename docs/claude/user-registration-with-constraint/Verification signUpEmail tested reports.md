@@ -135,7 +135,7 @@ Now let's run the full regression matrix to confirm everything still passes, the
 
 Bash Re-run full affected test matrix against real Postgres
 IN
-cd /d/medcal/apps/api && DATABASE_URL="postgresql://postgres:Afrbyu12@localhost:5432/pkmdb?schema=public" npx vitest run "registration-gate" "chat-socket-auth.precedence" "chat.gateway.security" "whitelist.service" 2>&1 | tail -40
+cd /d/medcal/apps/api && DATABASE_URL="postgresql://postgres:<REDACTED>@localhost:5432/pkmdb?schema=public" npx vitest run "registration-gate" "chat-socket-auth.precedence" "chat.gateway.security" "whitelist.service" 2>&1 | tail -40
 
 OUT
 RUN v4.1.10 D:/medcal/apps/api
@@ -343,7 +343,7 @@ Now let's run the new guard test and confirm it passes against the current call 
 
 Bash Run the new signUpEmail caller regression guard test
 IN
-DATABASE_URL="postgresql://postgres:Afrbyu12@localhost:5432/pkmdb?schema=public" npx vitest run "registration-origin-callers" 2>&1 | tail -80
+DATABASE_URL="postgresql://postgres:<REDACTED>@localhost:5432/pkmdb?schema=public" npx vitest run "registration-origin-callers" 2>&1 | tail -80
 
 OUT
 RUN v4.1.10 D:/medcal/apps/api
@@ -414,7 +414,7 @@ Edit d:\medcal\apps\api\src\modules\whitelist\registration-origin-callers.test.t
 Added 4 lines
 Bash Re-run the guard test after fixing the masking heuristic
 IN
-DATABASE_URL="postgresql://postgres:Afrbyu12@localhost:5432/pkmdb?schema=public" npx vitest run "registration-origin-callers" 2>&1 | tail -60
+DATABASE_URL="postgresql://postgres:<REDACTED>@localhost:5432/pkmdb?schema=public" npx vitest run "registration-origin-callers" 2>&1 | tail -60
 
 OUT
 RUN v4.1.10 D:/medcal/apps/api
@@ -452,7 +452,7 @@ body: { email, password, name: "Precedence Test Admin" },
 cleanup.userIds.push(signUp.user.id);
 Bash Confirm the guard fails when the header is removed
 IN
-cd /d/medcal/apps/api && DATABASE_URL="postgresql://postgres:Afrbyu12@localhost:5432/pkmdb?schema=public" npx vitest run "registration-origin-callers" 2>&1 | tail -40
+cd /d/medcal/apps/api && DATABASE_URL="postgresql://postgres:<REDACTED>@localhost:5432/pkmdb?schema=public" npx vitest run "registration-origin-callers" 2>&1 | tail -40
 
 OUT
 RUN v4.1.10 D:/medcal/apps/api
@@ -531,7 +531,7 @@ Correctly restored. Now let's run the full test matrix once more to confirm ever
 
 Bash Final full regression run of the affected test matrix
 IN
-cd /d/medcal/apps/api && DATABASE_URL="postgresql://postgres:Afrbyu12@localhost:5432/pkmdb?schema=public" npx vitest run "registration-gate" "registration-origin-callers" "chat-socket-auth.precedence" "whitelist.service" 2>&1 | tail -40
+cd /d/medcal/apps/api && DATABASE_URL="postgresql://postgres:<REDACTED>@localhost:5432/pkmdb?schema=public" npx vitest run "registration-gate" "registration-origin-callers" "chat-socket-auth.precedence" "whitelist.service" 2>&1 | tail -40
 
 OUT
 RUN v4.1.10 D:/medcal/apps/api
