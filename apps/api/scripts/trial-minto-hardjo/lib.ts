@@ -34,17 +34,23 @@ import { COMPANY_EMAIL_DOMAIN } from "@medcal/shared";
 
 /**
  * The real, permanent Customer this trial models — "Rumah Sakit TNI Angkatan
- * Laut Dr. Mintohardjo" (number CUS/2026/09/00014), already registered in the
- * system. Previously this trial created its own disposable, fictional
+ * Laut Dr. Mintohardjo" (number CUS/2026/09/00014 in the dev database).
+ * Previously this trial created its own disposable, fictional
  * "RS Minto Hardjo (Trial)" Customer row per reseed; that data (406 Device,
  * CalibrationRequest, Quotation, PurchaseOrder, WorkOrder, Certificate rows)
  * was migrated onto this real customerId so the trial can be reused against
- * the actual customer identity going forward. This id is FIXED and must never
- * be created or deleted by seed.ts/reset.ts — only its CalibrationRequest ->
- * ... -> CalibrationJob transaction chain (and the Device rows this trial
- * creates) is ever written or torn down.
+ * the actual customer identity going forward. This id is FIXED per database
+ * and must never be created or deleted by seed.ts/reset.ts — only its
+ * CalibrationRequest -> ... -> CalibrationJob transaction chain (and the
+ * Device rows this trial creates) is ever written or torn down.
+ *
+ * `cuid()` ids are not portable across databases — the dev database's
+ * Customer.id for this customer will differ from any other environment's
+ * (e.g. a demo/VPS database). Override via TRIAL_CUSTOMER_ID to point at that
+ * environment's own row for the same real customer; never hardcode a second
+ * environment's id here.
  */
-export const TRIAL_CUSTOMER_ID = "cmuh41d130003pr0ny6ffgq61";
+export const TRIAL_CUSTOMER_ID = process.env.TRIAL_CUSTOMER_ID ?? "cmuh41d130003pr0ny6ffgq61";
 export const TRIAL_STAFF_USER_ID = "trial-mh-staff-user";
 export const TRIAL_TECHNICIAN_USER_IDS = [
   "trial-mh-tech-1",
