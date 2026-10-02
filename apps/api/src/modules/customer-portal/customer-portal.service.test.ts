@@ -3,11 +3,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ForbiddenException, Module, NotFoundException } from "@nestjs/common";
+import { ConflictException, ForbiddenException, Module, NotFoundException } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Prisma, prisma } from "@medcal/db";
-import type { CalibrationJobStatus, MembershipRole } from "@medcal/db";
+import type { CalibrationJobStatus, CertificateStatus, MembershipRole, WorkOrderStatus } from "@medcal/db";
 import { auth } from "@medcal/auth";
 import { CalibrationRequestsService } from "../calibration-requests/calibration-requests.service";
 import { QuotationsService } from "../quotations/quotations.service";
@@ -18,11 +18,18 @@ import { FileOwnerPolicyRegistry } from "../files/owner-policy";
 import { LocalDiskDriver } from "../files/storage/local-disk.driver";
 import { buildStorageKey } from "../files/storage/storage-key";
 import { certificateFileOwnerPolicy } from "../calibration-jobs/certificate-file-owner-policy";
+import { recordAuditLog } from "../calibration-jobs/audit-log";
 import {
   CustomerCalibrationJobsController,
   CustomerWorkOrdersController,
 } from "./customer-portal.controller";
 import { CustomerPortalService } from "./customer-portal.service";
+
+// Passthrough wrapper so a test can make the in-transaction audit write fail once.
+vi.mock("../calibration-jobs/audit-log", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../calibration-jobs/audit-log")>();
+  return { ...actual, recordAuditLog: vi.fn(actual.recordAuditLog) };
+});
 
 const companyId = "PKM";
 const staffUserId = "customer-portal-staff";
@@ -165,6 +172,7 @@ async function issueCertificate(
   customerId: string,
   deviceTypeId: string,
   withPdf: boolean,
+  status: CertificateStatus = "ISSUED",
 ) {
   const device = await prisma.device.create({
     data: {
@@ -183,7 +191,7 @@ async function issueCertificate(
       deviceId: device.id,
       calibrationJobId: jobId,
       number: `PORTAL-${randomUUID().slice(0, 8).toUpperCase()}`,
-      status: "ISSUED",
+      status,
       source: "UPLOADED",
       issuedAt: new Date("2026-09-01T00:00:00.000Z"),
     },
@@ -342,6 +350,8 @@ describe("CustomerPortalService", () => {
       await prisma.fileObject.deleteMany({ where: { id: { in: createdFileIds } } });
     }
     if (createdWorkOrderIds.length > 0) {
+      // CustomerFeedback.workOrderId is ON DELETE RESTRICT.
+      await prisma.customerFeedback.deleteMany({ where: { workOrderId: { in: createdWorkOrderIds } } });
       await prisma.workOrder.deleteMany({ where: { id: { in: createdWorkOrderIds } } });
     }
     if (createdQuotationIds.length > 0) {
@@ -369,7 +379,10 @@ describe("CustomerPortalService", () => {
       await prisma.customer.deleteMany({ where: { id: { in: createdCustomerIds } } });
     }
     await prisma.auditLog.deleteMany({
-      where: { companyId, action: "CERTIFICATE_PDF_VIEWED_VIA_CUSTOMER_PORTAL" },
+      where: {
+        companyId,
+        action: { in: ["CERTIFICATE_PDF_VIEWED_VIA_CUSTOMER_PORTAL", "CUSTOMER_FEEDBACK_SUBMITTED"] },
+      },
     });
     if (createdMembershipKeys.length > 0) {
       await prisma.userMembership.deleteMany({ where: { OR: createdMembershipKeys } });
@@ -800,6 +813,454 @@ describe("CustomerPortalService", () => {
       expect(pdf.status).toBe(200);
       expect(pdf.headers.get("content-type")).toContain("application/pdf");
       expect(Buffer.from(await pdf.arrayBuffer()).equals(PDF)).toBe(true);
+    });
+  });
+
+  describe("customer feedback", () => {
+    const TRUSTED = "https://customer.test.local";
+    let userCId = "";
+    let customerCId = "";
+    let deviceTypeC = "";
+    let technicianId = "";
+    let poolPurchaseOrderId = "";
+    let poolItemId = "";
+    let previousTrustedOrigins: string | undefined;
+
+    const jsonHeaders = { "Content-Type": "application/json", Origin: TRUSTED };
+
+    beforeAll(async () => {
+      previousTrustedOrigins = process.env.TRUSTED_ORIGINS;
+      process.env.TRUSTED_ORIGINS = `https://other.test.local, ${TRUSTED}/`;
+      technicianId = (await makeMember("TECHNICIAN")).id;
+      const chainC = await createApprovedPo(80);
+      customerCId = chainC.customerId;
+      deviceTypeC = chainC.deviceTypeId;
+      poolPurchaseOrderId = chainC.purchaseOrderId;
+      poolItemId = chainC.purchaseOrderItemId;
+      userCId = (await linkCustomer(customerCId)).id;
+    }, 120_000);
+
+    afterAll(() => {
+      if (previousTrustedOrigins === undefined) delete process.env.TRUSTED_ORIGINS;
+      else process.env.TRUSTED_ORIGINS = previousTrustedOrigins;
+    });
+
+    /** A started single-unit Work Order of customer C, forced into `status`, with an optional certificate on its job. */
+    async function feedbackWorkOrder(
+      status: WorkOrderStatus,
+      certificate: "pdf" | "no-pdf" | "draft" | "none",
+      qty = 1,
+    ) {
+      const workOrder = await createWorkOrder(poolPurchaseOrderId, poolItemId, qty);
+      await workOrdersService.assign(companyId, workOrder.id, { technicians: [{ technicianUserId: technicianId }] });
+      await workOrdersService.start(companyId, workOrder.id);
+      const job = await prisma.calibrationJob.findFirstOrThrow({
+        where: { workOrderId: workOrder.id },
+        orderBy: { unitOrdinal: "asc" },
+        select: { id: true },
+      });
+      await prisma.calibrationJob.updateMany({ where: { workOrderId: workOrder.id }, data: { status: "ACCEPTED_BY_QA" } });
+      if (certificate !== "none") {
+        await issueCertificate(
+          job.id,
+          customerCId,
+          deviceTypeC,
+          certificate === "pdf",
+          certificate === "draft" ? "DRAFT" : "ISSUED",
+        );
+      }
+      // The lifecycle itself is covered by work-orders.service.test.ts; this only fixes the state under test.
+      await prisma.workOrder.update({ where: { id: workOrder.id }, data: { status } });
+      return workOrder.id;
+    }
+
+    const ctx = { ipAddress: "203.0.113.9", userAgent: "vitest" };
+
+    async function post(workOrderId: string, body: unknown, headers: Record<string, string> = jsonHeaders) {
+      return fetch(`${base}/customer/work-orders/${workOrderId}/feedback`, {
+        method: "POST",
+        headers,
+        body: typeof body === "string" ? body : JSON.stringify(body),
+      });
+    }
+
+    async function feedbackRows(workOrderId: string) {
+      return prisma.customerFeedback.findMany({ where: { workOrderId } });
+    }
+
+    async function auditRows(feedbackId: string) {
+      return prisma.auditLog.findMany({
+        where: { action: "CUSTOMER_FEEDBACK_SUBMITTED", targetType: "CustomerFeedback", targetId: feedbackId },
+      });
+    }
+
+    describe("eligibility", () => {
+      it.each([
+        ["DONE", "DONE" as const],
+        ["legacy TECHNICALLY_DONE", "TECHNICALLY_DONE" as const],
+        ["legacy CLOSED", "CLOSED" as const],
+      ])("is eligible when %s with an available certificate", async (_label, status) => {
+        const id = await feedbackWorkOrder(status, "pdf");
+        expect(await portal.getFeedback(userCId, id)).toEqual({ eligible: true, submitted: null });
+      });
+
+      it("is eligible with just ONE available certificate among several units", async () => {
+        const id = await feedbackWorkOrder("DONE", "pdf", 3);
+        expect(await prisma.calibrationJob.count({ where: { workOrderId: id } })).toBe(3);
+        expect(await prisma.certificate.count({ where: { calibrationJob: { workOrderId: id } } })).toBe(1);
+        expect((await portal.getFeedback(userCId, id)).eligible).toBe(true);
+      });
+
+      it.each([
+        ["IN_PROGRESS", "IN_PROGRESS" as const, "pdf" as const],
+        ["PLANNED", "PLANNED" as const, "pdf" as const],
+        ["CANCELLED", "CANCELLED" as const, "pdf" as const],
+        ["DONE without a certificate", "DONE" as const, "none" as const],
+        ["DONE with an ISSUED certificate but no PDF", "DONE" as const, "no-pdf" as const],
+        ["DONE with a DRAFT certificate", "DONE" as const, "draft" as const],
+      ])("is not eligible when %s", async (_label, status, certificate) => {
+        const id = await feedbackWorkOrder(status, certificate);
+        expect(await portal.getFeedback(userCId, id)).toEqual({ eligible: false, submitted: null });
+        await expect(portal.submitFeedback(userCId, id, { rating: 3 }, ctx)).rejects.toMatchObject({
+          response: { code: "FEEDBACK_NOT_ELIGIBLE" },
+        });
+        expect(await feedbackRows(id)).toHaveLength(0);
+      });
+
+      it("treats another customer's Work Order exactly like an unknown one", async () => {
+        const id = await feedbackWorkOrder("DONE", "pdf");
+        const foreign = await caught(() => portal.getFeedback(userAId, id));
+        const missing = await caught(() => portal.getFeedback(userAId, "missing-work-order"));
+        expect(foreign).toEqual(missing);
+        expect(foreign).toMatchObject({ code: "WORK_ORDER_NOT_FOUND" });
+        const foreignPost = await caught(() => portal.submitFeedback(userAId, id, { rating: 5 }, ctx));
+        expect(foreignPost).toEqual(missing);
+        expect(await feedbackRows(id)).toHaveLength(0);
+      });
+
+      it("denies an unlinked user and a user whose membership was removed with the usual 403", async () => {
+        const id = await feedbackWorkOrder("DONE", "pdf");
+        for (const user of [unlinkedUserId, revokedUserId]) {
+          expect(await caught(() => portal.getFeedback(user, id))).toMatchObject({ code: "CUSTOMER_ACCESS_REQUIRED" });
+          expect(await caught(() => portal.submitFeedback(user, id, { rating: 5 }, ctx))).toMatchObject({
+            code: "CUSTOMER_ACCESS_REQUIRED",
+          });
+        }
+      });
+    });
+
+    describe("submission", () => {
+      it("stores one immutable row owned by the server-resolved customer and user, plus one audit row", async () => {
+        const id = await feedbackWorkOrder("DONE", "pdf");
+        const result = await portal.submitFeedback(userCId, id, { rating: 5, comment: "Cepat dan rapi" }, ctx);
+        expect(result.rating).toBe(5);
+
+        const rows = await feedbackRows(id);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+          companyId,
+          workOrderId: id,
+          customerId: customerCId,
+          submittedByUserId: userCId,
+          rating: 5,
+          comment: "Cepat dan rapi",
+        });
+
+        const audits = await auditRows(rows[0]!.id);
+        expect(audits).toHaveLength(1);
+        expect(audits[0]).toMatchObject({
+          companyId,
+          userId: userCId,
+          outcome: "SUCCESS",
+          ipAddress: ctx.ipAddress,
+          userAgent: ctx.userAgent,
+          metadata: { workOrderId: id, customerId: customerCId, rating: 5, hasComment: true },
+        });
+        // The comment text never reaches the audit log.
+        expect(JSON.stringify(audits[0]!.metadata)).not.toContain("Cepat dan rapi");
+
+        const state = await portal.getFeedback(userCId, id);
+        expect(state.eligible).toBe(false);
+        expect(state.submitted?.rating).toBe(5);
+      });
+
+      it("accepts a 1-star rating without a comment and stores a whitespace comment as null", async () => {
+        session = { user: { id: userCId, email: "c@test.local" } };
+        const first = await feedbackWorkOrder("DONE", "pdf");
+        expect((await post(first, { rating: 1 })).status).toBe(201);
+        expect((await feedbackRows(first))[0]).toMatchObject({ rating: 1, comment: null });
+
+        const second = await feedbackWorkOrder("DONE", "pdf");
+        expect((await post(second, { rating: 4, comment: "   \n  " })).status).toBe(201);
+        expect((await feedbackRows(second))[0]).toMatchObject({ rating: 4, comment: null });
+      });
+
+      it("ignores client-supplied ownership fields", async () => {
+        session = { user: { id: userCId, email: "c@test.local" } };
+        const id = await feedbackWorkOrder("DONE", "pdf");
+        const res = await post(id, {
+          rating: 3,
+          customerId: customerAId,
+          companyId: "OTHER",
+          userId: userAId,
+          submittedByUserId: userAId,
+          workOrderId: otherId,
+        });
+        expect(res.status).toBe(201);
+        expect(await feedbackRows(otherId)).toHaveLength(0);
+        expect((await feedbackRows(id))[0]).toMatchObject({
+          companyId,
+          customerId: customerCId,
+          submittedByUserId: userCId,
+          workOrderId: id,
+        });
+      });
+
+      it("rejects a second submission with 409 FEEDBACK_ALREADY_SUBMITTED and keeps the first", async () => {
+        const id = await feedbackWorkOrder("DONE", "pdf");
+        await portal.submitFeedback(userCId, id, { rating: 2 }, ctx);
+        const err = await portal.submitFeedback(userCId, id, { rating: 5, comment: "ganti" }, ctx).catch((e) => e);
+        expect(err).toBeInstanceOf(ConflictException);
+        expect(err.getResponse()).toMatchObject({
+          code: "FEEDBACK_ALREADY_SUBMITTED",
+          submitted: { rating: 2 },
+        });
+        const rows = await feedbackRows(id);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ rating: 2, comment: null });
+        expect(await auditRows(rows[0]!.id)).toHaveLength(1);
+      });
+
+      it("keeps exactly one feedback and one audit row under concurrent submissions", async () => {
+        const id = await feedbackWorkOrder("DONE", "pdf");
+        const results = await Promise.allSettled(
+          Array.from({ length: 6 }, (_, index) =>
+            portal.submitFeedback(userCId, id, { rating: (index % 5) + 1 }, ctx),
+          ),
+        );
+        const ok = results.filter((r) => r.status === "fulfilled");
+        const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+        expect(ok).toHaveLength(1);
+        expect(failed).toHaveLength(5);
+        for (const f of failed) {
+          expect(f.reason).toBeInstanceOf(ConflictException);
+          expect(f.reason.getResponse()).toMatchObject({ code: "FEEDBACK_ALREADY_SUBMITTED" });
+        }
+        const rows = await feedbackRows(id);
+        expect(rows).toHaveLength(1);
+        expect(await auditRows(rows[0]!.id)).toHaveLength(1);
+        expect(await prisma.auditLog.count({ where: { action: "CUSTOMER_FEEDBACK_SUBMITTED", metadata: { path: ["workOrderId"], equals: id } } })).toBe(1);
+      });
+
+      it("returns 409 FEEDBACK_NOT_ELIGIBLE when eligibility is lost between GET and POST", async () => {
+        const id = await feedbackWorkOrder("DONE", "pdf");
+        expect((await portal.getFeedback(userCId, id)).eligible).toBe(true);
+        await prisma.certificate.updateMany({
+          where: { calibrationJob: { workOrderId: id } },
+          data: { status: "REVOKED" },
+        });
+        const err = await portal.submitFeedback(userCId, id, { rating: 5 }, ctx).catch((e) => e);
+        expect(err).toBeInstanceOf(ConflictException);
+        expect(err.getResponse()).toMatchObject({ code: "FEEDBACK_NOT_ELIGIBLE" });
+        expect(await feedbackRows(id)).toHaveLength(0);
+      });
+
+      it("rolls the feedback back when the audit write fails", async () => {
+        const id = await feedbackWorkOrder("DONE", "pdf");
+        vi.mocked(recordAuditLog).mockRejectedValueOnce(new Error("audit unavailable"));
+        await expect(portal.submitFeedback(userCId, id, { rating: 5 }, ctx)).rejects.toThrow("audit unavailable");
+        expect(await feedbackRows(id)).toHaveLength(0);
+        expect(
+          await prisma.auditLog.count({ where: { action: "CUSTOMER_FEEDBACK_SUBMITTED", metadata: { path: ["workOrderId"], equals: id } } }),
+        ).toBe(0);
+        // Nothing was left behind, so a retry succeeds.
+        await expect(portal.submitFeedback(userCId, id, { rating: 5 }, ctx)).resolves.toMatchObject({ rating: 5 });
+      });
+
+      it("enforces the 1..5 rating CHECK and the unique workOrderId in the database", async () => {
+        const id = await feedbackWorkOrder("DONE", "pdf");
+        const data = { companyId, workOrderId: id, customerId: customerCId, submittedByUserId: userCId };
+        await expect(prisma.customerFeedback.create({ data: { ...data, rating: 0 } })).rejects.toThrow();
+        await expect(prisma.customerFeedback.create({ data: { ...data, rating: 6 } })).rejects.toThrow();
+        await prisma.customerFeedback.create({ data: { ...data, rating: 3 } });
+        await expect(prisma.customerFeedback.create({ data: { ...data, rating: 4 } })).rejects.toMatchObject({
+          code: "P2002",
+        });
+      });
+    });
+
+    describe("HTTP", () => {
+      it("returns 401 without a session (GET and POST)", async () => {
+        session = null;
+        const id = await feedbackWorkOrder("DONE", "pdf");
+        expect((await fetch(`${base}/customer/work-orders/${id}/feedback`)).status).toBe(401);
+        expect((await post(id, { rating: 5 })).status).toBe(401);
+        expect(await feedbackRows(id)).toHaveLength(0);
+      });
+
+      it("serves the three GET states and the same 404 for foreign and unknown ids", async () => {
+        session = { user: { id: userCId, email: "c@test.local" } };
+        const eligible = await feedbackWorkOrder("DONE", "pdf");
+        const notEligible = await feedbackWorkOrder("IN_PROGRESS", "pdf");
+        expect(await (await fetch(`${base}/customer/work-orders/${eligible}/feedback`)).json()).toEqual({
+          eligible: true,
+          submitted: null,
+        });
+        expect(await (await fetch(`${base}/customer/work-orders/${notEligible}/feedback`)).json()).toEqual({
+          eligible: false,
+          submitted: null,
+        });
+        expect((await post(eligible, { rating: 5 })).status).toBe(201);
+        const submitted = (await (await fetch(`${base}/customer/work-orders/${eligible}/feedback`)).json()) as {
+          eligible: boolean;
+          submitted: { rating: number; submittedAt: string };
+        };
+        expect(submitted).toMatchObject({ eligible: false, submitted: { rating: 5 } });
+        expect(Number.isNaN(Date.parse(submitted.submitted.submittedAt))).toBe(false);
+
+        session = { user: { id: userAId, email: "a@test.local" } };
+        const foreign = await fetch(`${base}/customer/work-orders/${eligible}/feedback`);
+        const missing = await fetch(`${base}/customer/work-orders/missing-work-order/feedback`);
+        expect(foreign.status).toBe(404);
+        expect(await foreign.json()).toEqual(await missing.json());
+        expect((await post(eligible, { rating: 1 })).status).toBe(404);
+      });
+
+      it("validates the body with 400 INVALID_CUSTOMER_FEEDBACK and creates nothing", async () => {
+        session = { user: { id: userCId, email: "c@test.local" } };
+        const id = await feedbackWorkOrder("DONE", "pdf");
+        const bad: unknown[] = [
+          {},
+          { rating: 0 },
+          { rating: 6 },
+          { rating: -1 },
+          { rating: 1.5 },
+          { rating: "5" },
+          { rating: null },
+          { rating: 5, comment: 42 },
+          { rating: 5, comment: { text: "x" } },
+          { rating: 5, comment: "x".repeat(2001) },
+          [],
+        ];
+        for (const body of bad) {
+          const res = await post(id, body);
+          expect(res.status, JSON.stringify(body)).toBe(400);
+          expect(await res.json()).toMatchObject({ code: "INVALID_CUSTOMER_FEEDBACK" });
+        }
+        // Malformed JSON is refused by the body parser before the handler runs.
+        expect((await post(id, "rating=5")).status).toBe(400);
+        expect(await feedbackRows(id)).toHaveLength(0);
+        expect((await post(id, { rating: 5, comment: "x".repeat(2000) })).status).toBe(201);
+      });
+
+      it("does not let a form-encoded rating bypass numeric validation", async () => {
+        session = { user: { id: userCId, email: "c@test.local" } };
+        const id = await feedbackWorkOrder("DONE", "pdf");
+        const res = await post(id, "rating=5", {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: TRUSTED,
+        });
+        expect(res.status).toBe(400);
+        const plain = await post(id, JSON.stringify({ rating: 5 }), { "Content-Type": "text/plain", Origin: TRUSTED });
+        expect(plain.status).toBe(400);
+        expect(await feedbackRows(id)).toHaveLength(0);
+      });
+
+      describe("Origin protection", () => {
+        it("accepts a trusted Origin (trailing slash in TRUSTED_ORIGINS is normalised)", async () => {
+          session = { user: { id: userCId, email: "c@test.local" } };
+          const id = await feedbackWorkOrder("DONE", "pdf");
+          expect((await post(id, { rating: 5 }, jsonHeaders)).status).toBe(201);
+        });
+
+        it("rejects an untrusted Origin with 403 and creates nothing", async () => {
+          session = { user: { id: userCId, email: "c@test.local" } };
+          const id = await feedbackWorkOrder("DONE", "pdf");
+          for (const origin of ["https://evil.example", "null", `${TRUSTED}.evil.example`, "http://customer.test.local"]) {
+            const res = await post(id, { rating: 5 }, { "Content-Type": "application/json", Origin: origin });
+            expect(res.status, origin).toBe(403);
+            expect(await res.json()).toMatchObject({ code: "ORIGIN_NOT_ALLOWED" });
+          }
+          expect(await feedbackRows(id)).toHaveLength(0);
+        });
+
+        it("does not fall back to Referer when an Origin is present but untrusted", async () => {
+          session = { user: { id: userCId, email: "c@test.local" } };
+          const id = await feedbackWorkOrder("DONE", "pdf");
+          const res = await post(id, { rating: 5 }, {
+            "Content-Type": "application/json",
+            Origin: "https://evil.example",
+            Referer: `${TRUSTED}/work-orders/${id}`,
+          });
+          expect(res.status).toBe(403);
+          expect(await feedbackRows(id)).toHaveLength(0);
+        });
+
+        it("lets a trusted Origin govern: a trusted or untrusted Referer alongside it changes nothing", async () => {
+          session = { user: { id: userCId, email: "c@test.local" } };
+          const first = await feedbackWorkOrder("DONE", "pdf");
+          const withTrustedReferer = await post(first, { rating: 5 }, {
+            "Content-Type": "application/json",
+            Origin: TRUSTED,
+            Referer: `${TRUSTED}/work-orders/${first}`,
+          });
+          expect(withTrustedReferer.status).toBe(201);
+
+          const second = await feedbackWorkOrder("DONE", "pdf");
+          const withUntrustedReferer = await post(second, { rating: 5 }, {
+            "Content-Type": "application/json",
+            Origin: TRUSTED,
+            Referer: "https://evil.example/page",
+          });
+          expect(withUntrustedReferer.status).toBe(201);
+        });
+
+        it("rejects a request with neither Origin nor Referer", async () => {
+          session = { user: { id: userCId, email: "c@test.local" } };
+          const id = await feedbackWorkOrder("DONE", "pdf");
+          const res = await post(id, { rating: 5 }, { "Content-Type": "application/json" });
+          expect(res.status).toBe(403);
+          expect(await feedbackRows(id)).toHaveLength(0);
+        });
+
+        it("falls back to a trusted Referer when Origin is absent, and rejects an untrusted one", async () => {
+          session = { user: { id: userCId, email: "c@test.local" } };
+          const id = await feedbackWorkOrder("DONE", "pdf");
+          const untrusted = await post(id, { rating: 5 }, {
+            "Content-Type": "application/json",
+            Referer: "https://evil.example/page",
+          });
+          expect(untrusted.status).toBe(403);
+          const garbage = await post(id, { rating: 5 }, { "Content-Type": "application/json", Referer: "not a url" });
+          expect(garbage.status).toBe(403);
+          expect(await feedbackRows(id)).toHaveLength(0);
+
+          const trusted = await post(id, { rating: 5 }, {
+            "Content-Type": "application/json",
+            Referer: `${TRUSTED}/work-orders/${id}?x=1`,
+          });
+          expect(trusted.status).toBe(201);
+        });
+
+        it("rejects every origin when TRUSTED_ORIGINS is unset", async () => {
+          session = { user: { id: userCId, email: "c@test.local" } };
+          const id = await feedbackWorkOrder("DONE", "pdf");
+          const saved = process.env.TRUSTED_ORIGINS;
+          delete process.env.TRUSTED_ORIGINS;
+          try {
+            expect((await post(id, { rating: 5 })).status).toBe(403);
+          } finally {
+            process.env.TRUSTED_ORIGINS = saved;
+          }
+          expect(await feedbackRows(id)).toHaveLength(0);
+        });
+
+        it("does not require an Origin for the read-only GET", async () => {
+          session = { user: { id: userCId, email: "c@test.local" } };
+          const id = await feedbackWorkOrder("DONE", "pdf");
+          expect((await fetch(`${base}/customer/work-orders/${id}/feedback`)).status).toBe(200);
+        });
+      });
     });
   });
 });

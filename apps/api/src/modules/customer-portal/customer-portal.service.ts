@@ -1,7 +1,8 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, prisma } from "@medcal/db";
 import type { CalibrationJobStatus } from "@medcal/db";
 import type {
+  CustomerFeedbackSubmit,
   CustomerJobListQuery,
   CustomerUnitGroupListQuery,
   CustomerWorkOrderListQuery,
@@ -80,6 +81,17 @@ export interface CustomerPage<T> {
   totalPages: number;
 }
 
+export interface CustomerFeedbackSummary {
+  rating: number;
+  submittedAt: Date;
+}
+
+/** Server-derived feedback state of one owned Work Order. Never persisted. */
+export interface CustomerFeedbackState {
+  eligible: boolean;
+  submitted: CustomerFeedbackSummary | null;
+}
+
 export interface CustomerPortalRequestContext {
   ipAddress: string | null;
   userAgent: string | null;
@@ -93,6 +105,19 @@ const WORK_ORDER_NOT_FOUND = () =>
 
 const JOB_NOT_FOUND = () =>
   new NotFoundException({ code: "CALIBRATION_JOB_NOT_FOUND", message: "Calibration job not found" });
+
+const FEEDBACK_ALREADY_SUBMITTED = (submitted: CustomerFeedbackSummary) =>
+  new ConflictException({
+    code: "FEEDBACK_ALREADY_SUBMITTED",
+    message: "Feedback has already been submitted for this work order",
+    submitted,
+  });
+
+const FEEDBACK_NOT_ELIGIBLE = () =>
+  new ConflictException({
+    code: "FEEDBACK_NOT_ELIGIBLE",
+    message: "This work order is not eligible for feedback",
+  });
 
 const PDF_UNAVAILABLE = () =>
   new NotFoundException({
@@ -411,6 +436,116 @@ export class CustomerPortalService {
     const { workOrder } = await this.findOwnedWorkOrder(userId, workOrderId);
     const aggregates = await this.aggregate([workOrder.id]);
     return toSummary(workOrder, aggregates.get(workOrder.id));
+  }
+
+  /**
+   * Eligibility, minus "no feedback yet" (that is the unique row itself): the
+   * Work Order is the caller's, is in the customer-facing COMPLETED state, and
+   * has at least one customer-openable certificate. Takes the client so the
+   * POST can evaluate it inside its write transaction.
+   */
+  private async isFeedbackEligible(
+    client: Pick<Prisma.TransactionClient, "workOrder">,
+    scope: { companyId: string; customerId: string },
+    workOrderId: string,
+  ): Promise<boolean> {
+    const count = await client.workOrder.count({
+      where: {
+        id: workOrderId,
+        companyId: scope.companyId,
+        customerId: scope.customerId,
+        status: { in: [...WORK_ORDER_STATUSES_BY_CUSTOMER_STATUS.COMPLETED] },
+        jobs: { some: { certificate: availableCertificateWhere } },
+      },
+    });
+    return count > 0;
+  }
+
+  async getFeedback(userId: string, workOrderId: string): Promise<CustomerFeedbackState> {
+    const { workOrder, companyId, customerId } = await this.findOwnedWorkOrder(userId, workOrderId);
+    const existing = await prisma.customerFeedback.findUnique({
+      where: { workOrderId: workOrder.id },
+      select: { rating: true, submittedAt: true },
+    });
+    if (existing) return { eligible: false, submitted: existing };
+    const eligible = await this.isFeedbackEligible(prisma, { companyId, customerId }, workOrder.id);
+    return { eligible, submitted: null };
+  }
+
+  /**
+   * Creates the Work Order's single, immutable feedback row and its audit row in
+   * one transaction. Eligibility is re-evaluated inside it. The unique index on
+   * workOrderId is the concurrency guarantee: a losing writer hits P2002, which
+   * Postgres reports by aborting the transaction, so it is caught out here and
+   * leaves neither a feedback nor an audit row.
+   */
+  async submitFeedback(
+    userId: string,
+    workOrderId: string,
+    input: CustomerFeedbackSubmit,
+    ctx: CustomerPortalRequestContext,
+  ): Promise<CustomerFeedbackSummary> {
+    const { workOrder, companyId, customerId } = await this.findOwnedWorkOrder(userId, workOrderId);
+    const comment = input.comment && input.comment.length > 0 ? input.comment : null;
+
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const existing = await tx.customerFeedback.findUnique({
+          where: { workOrderId: workOrder.id },
+          select: { rating: true, submittedAt: true },
+        });
+        if (existing) throw FEEDBACK_ALREADY_SUBMITTED(existing);
+        if (!(await this.isFeedbackEligible(tx, { companyId, customerId }, workOrder.id))) {
+          throw FEEDBACK_NOT_ELIGIBLE();
+        }
+
+        const feedback = await tx.customerFeedback.create({
+          data: {
+            companyId,
+            workOrderId: workOrder.id,
+            customerId,
+            submittedByUserId: userId,
+            rating: input.rating,
+            comment,
+          },
+          select: { id: true, rating: true, submittedAt: true },
+        });
+        await recordAuditLog(
+          {
+            companyId,
+            userId,
+            action: "CUSTOMER_FEEDBACK_SUBMITTED",
+            outcome: "SUCCESS",
+            targetType: "CustomerFeedback",
+            targetId: feedback.id,
+            metadata: {
+              workOrderId: workOrder.id,
+              workOrderNumber: workOrder.number,
+              customerId,
+              rating: feedback.rating,
+              hasComment: comment !== null,
+            },
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+          },
+          tx,
+        );
+        return { rating: feedback.rating, submittedAt: feedback.submittedAt };
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002" &&
+        String(error.meta?.target ?? "").includes("workOrderId")
+      ) {
+        const winner = await prisma.customerFeedback.findUnique({
+          where: { workOrderId: workOrder.id },
+          select: { rating: true, submittedAt: true },
+        });
+        if (winner) throw FEEDBACK_ALREADY_SUBMITTED(winner);
+      }
+      throw error;
+    }
   }
 
   /** Resolves an opaque group key to its order line, only among the lines of a Work Order the caller owns. */

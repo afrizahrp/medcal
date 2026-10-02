@@ -17,6 +17,9 @@ export const linkAction = `inline-flex min-h-11 items-center rounded-md px-1 tex
 export const fieldClass =
   "mt-1 h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-600";
 
+export const textareaClass =
+  "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-600";
+
 export const selectClass =
   "mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-600";
 

@@ -1,25 +1,32 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Get,
   Inject,
   Param,
+  Post,
   Query,
   Req,
   StreamableFile,
   UnauthorizedException,
+  UseGuards,
 } from "@nestjs/common";
 import type { Request } from "express";
 import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "@medcal/auth";
 import {
+  customerFeedbackSubmitSchema,
   customerJobListQuerySchema,
   customerUnitGroupListQuerySchema,
   customerWorkOrderListQuerySchema,
 } from "@medcal/shared";
+import { TrustedOriginGuard } from "../../common/guards/trusted-origin.guard";
 import {
   CustomerPortalService,
   type CustomerCertificateView,
+  type CustomerFeedbackState,
+  type CustomerFeedbackSummary,
   type CustomerJobView,
   type CustomerPage,
   type CustomerUnitGroupPage,
@@ -87,6 +94,31 @@ export class CustomerWorkOrdersController {
     const parsed = customerJobListQuerySchema.safeParse(rawQuery);
     if (!parsed.success) throw invalidQuery(parsed.error.flatten());
     return this.portal.listJobs(await sessionUserId(request), id, parsed.data);
+  }
+
+  @Get(":id/feedback")
+  async feedback(@Param("id") id: string, @Req() request: Request): Promise<CustomerFeedbackState> {
+    return this.portal.getFeedback(await sessionUserId(request), id);
+  }
+
+  /** The portal's only customer write: cookie-authenticated, so the Origin must be a trusted one. */
+  @Post(":id/feedback")
+  @UseGuards(TrustedOriginGuard)
+  async submitFeedback(
+    @Param("id") id: string,
+    @Req() request: Request,
+    @Body() rawBody: unknown,
+  ): Promise<CustomerFeedbackSummary> {
+    const userId = await sessionUserId(request);
+    const parsed = customerFeedbackSubmitSchema.safeParse(rawBody ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid feedback",
+        code: "INVALID_CUSTOMER_FEEDBACK",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.portal.submitFeedback(userId, id, parsed.data, requestContext(request));
   }
 
   @Get(":id")

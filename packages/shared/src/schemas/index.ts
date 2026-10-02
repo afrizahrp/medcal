@@ -2811,3 +2811,15 @@ export const customerJobListQuerySchema = customerUnitGroupListQuerySchema.exten
   group: z.string().trim().min(1).max(64).optional(),
 });
 export type CustomerJobListQuery = z.infer<typeof customerJobListQuerySchema>;
+
+/**
+ * POST /customer/work-orders/:id/feedback body. There is deliberately no
+ * customerId / userId / workOrderId: ownership comes from the session and the
+ * URL. `rating` is not coerced, so a form-encoded "5" is rejected. An empty or
+ * whitespace-only comment is stored as null by the service.
+ */
+export const customerFeedbackSubmitSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().trim().max(2000).optional(),
+});
+export type CustomerFeedbackSubmit = z.infer<typeof customerFeedbackSubmitSchema>;

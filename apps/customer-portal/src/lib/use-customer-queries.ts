@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@medcal/shared";
 import { customerQueryKey } from "./customer-query";
+import { feedbackPath, type CustomerFeedbackState } from "./customer-feedback";
 import {
   jobListPath,
   unitGroupListPath,
@@ -62,5 +63,34 @@ export function useWorkOrderUnitGroups(workOrderId: string, params: UnitGroupLis
     queryFn: () => apiFetch<CustomerUnitGroupPage>(unitGroupListPath(workOrderId, params)),
     enabled: Boolean(userId),
     placeholderData: (previous) => previous,
+  });
+}
+
+/**
+ * The Work Order's feedback state ({ eligible, submitted }) from its own
+ * endpoint, so the work-order list path stays untouched. Server-derived on
+ * every fetch.
+ */
+export function useWorkOrderFeedback(workOrderId: string) {
+  const userId = useSessionUserId();
+  return useQuery({
+    queryKey: customerQueryKey(userId, "work-order-feedback", workOrderId),
+    queryFn: () => apiFetch<CustomerFeedbackState>(feedbackPath(workOrderId)),
+    enabled: Boolean(userId),
+  });
+}
+
+/** Submits feedback; callers decide what to do with each error (see describeFeedbackSubmitError). */
+export function useSubmitWorkOrderFeedback(workOrderId: string) {
+  const userId = useSessionUserId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { rating: number; comment?: string }) =>
+      apiFetch<{ rating: number; submittedAt: string }>(feedbackPath(workOrderId), {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: customerQueryKey(userId, "work-order-feedback", workOrderId) }),
   });
 }

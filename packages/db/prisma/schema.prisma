@@ -524,6 +524,7 @@ model Company {
   workOrderEquipment          WorkOrderEquipment[]
   equipmentDeliveryNotes      EquipmentDeliveryNote[]
   auditLogs                   AuditLog[]
+  customerFeedbacks           CustomerFeedback[]
 }
 
 model DocumentNumberSequence {
@@ -610,6 +611,7 @@ model User {
   quotationsApproved                    Quotation[]                     @relation("QuotationApprovedBy")
   purchaseOrdersConfirmed               PurchaseOrder[]                 @relation("PurchaseOrderConfirmedBy")
   auditLogs                             AuditLog[]
+  customerFeedbacksSubmitted            CustomerFeedback[]
   lkDownloadAuthorizations              LkDownloadAuthorization[]
   // MOM #1 — Transaction Revision + Immutable History
   calibrationRequestRevisions           CalibrationRequestHistory[]     @relation("CalibrationRequestHistoryRevisedBy")
@@ -1089,6 +1091,7 @@ model Customer {
   quotations          Quotation[]
   purchaseOrders      PurchaseOrder[]
   workOrders          WorkOrder[]
+  customerFeedbacks   CustomerFeedback[]
   certificates        Certificate[]
   invoices            Invoice[]
   creditNotes         CreditNote[]
@@ -1965,6 +1968,7 @@ model WorkOrder {
   allocations              PurchaseOrderItemAllocation[]
   // MOM #1 — Transaction Revision + Immutable History
   history                  WorkOrderHistory[]
+  customerFeedback         CustomerFeedback?
 
   @@unique([companyId, number])
   @@index([companyId, status])
@@ -3352,6 +3356,32 @@ model AuditLog {
 enum AuditLogOutcome {
   SUCCESS
   FAILURE
+}
+
+/// Customer Portal feedback on a completed Work Order: at most one per Work
+/// Order (`workOrderId` is unique and is the concurrency guarantee), immutable
+/// after insert. Eligibility is derived on read, never stored. `customerId` is
+/// stored redundantly (as on Certificate/Invoice); `submittedByUserId` survives
+/// as NULL if the user is deleted. `rating` is 1..5, enforced by a raw-SQL
+/// CHECK in the migration (Prisma cannot model it).
+model CustomerFeedback {
+  id                String   @id @default(cuid())
+  companyId         String
+  workOrderId       String   @unique
+  customerId        String
+  submittedByUserId String?
+  rating            Int
+  comment           String?
+  submittedAt       DateTime @default(now())
+
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workOrder       WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  submittedByUser User?     @relation(fields: [submittedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, submittedAt])
+  @@index([customerId])
+  @@index([submittedByUserId])
 }
 
 /// Short-lived, single-use step-up authorization proving the caller re-entered

@@ -6,6 +6,7 @@ import { ApiError, apiFetchBlob } from "@medcal/shared";
 import { CUSTOMER_CERTIFICATE_FILTER_VALUES, CUSTOMER_JOB_STATUS_VALUES } from "@medcal/shared";
 import { ClearFiltersButton, FilterSelect, SearchBox } from "../../../../components/list-controls";
 import { PaginationBar } from "../../../../components/pagination-bar";
+import { WorkOrderFeedback } from "../../../../components/work-order-feedback";
 import { ErrorState, LoadingState } from "../../../../components/status-blocks";
 import { CertificateCount, WorkOrderProgress, WorkOrderStatusBadge } from "../../../../components/work-order-progress";
 import {
@@ -419,6 +420,7 @@ function WorkOrderDetailContent({ workOrderId }: { workOrderId: string }) {
         ) : query.data ? (
           <div className="space-y-6">
             <WorkOrderHeader workOrder={query.data} />
+            <WorkOrderFeedback workOrderId={workOrderId} />
             <UnitsSection workOrderId={workOrderId} />
           </div>
         ) : null}
