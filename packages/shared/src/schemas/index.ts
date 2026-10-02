@@ -710,12 +710,97 @@ export type WorkOrderCreateInput = z.infer<typeof workOrderCreateSchema>;
 /** Request-body shape (client): `scheduled*` are `YYYY-MM-DD` strings. */
 export type WorkOrderCreateBody = z.input<typeof workOrderCreateSchema>;
 
+/**
+ * Shared ON_SITE SPK ("Share Job") — one Child SPK of a Parent SPK. Each Child
+ * is an executable SPK with its own technician, allocated (item, qty) batch and
+ * planned schedule. See POST /work-orders/shared.
+ */
+const sharedSpkChildFields = {
+  technicianUserId: z.string().min(1),
+  items: z.array(workOrderAllocationItemSchema).min(1).max(500),
+  scheduledStart: workOrderNullableDate,
+  scheduledEnd: workOrderNullableDate,
+};
+
+function refineChildSchedule(
+  child: { scheduledStart?: Date | null; scheduledEnd?: Date | null },
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+) {
+  if (child.scheduledStart && child.scheduledEnd && child.scheduledEnd < child.scheduledStart) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "scheduledEnd must not be before scheduledStart",
+      path: [...path, "scheduledEnd"],
+    });
+  }
+}
+
+/** POST /work-orders/shared body — Parent + Child SPKs are created atomically. */
+export const sharedSpkCreateSchema = z
+  .object({
+    purchaseOrderId: z.string().min(1),
+    addressText: workOrderNullableString,
+    geoLat: workOrderNullableCoord,
+    geoLng: workOrderNullableCoord,
+    locationNotes: workOrderNullableString,
+    children: z.array(z.object(sharedSpkChildFields)).min(2).max(50),
+  })
+  .superRefine((value, ctx) => {
+    value.children.forEach((child, index) => refineChildSchedule(child, ctx, ["children", index]));
+  });
+
+export type SharedSpkCreateInput = z.infer<typeof sharedSpkCreateSchema>;
+export type SharedSpkCreateBody = z.input<typeof sharedSpkCreateSchema>;
+
+/**
+ * PUT /work-orders/shared/:id/distribution body — revise the still-unstarted
+ * part of a shared job. `children` entries with `workOrderId` replace that
+ * unstarted Child's technician / items / schedule; entries without it add a new
+ * Child (next childSequence). `removeWorkOrderIds` cancels unstarted Children.
+ * Started Children are locked and may not be referenced.
+ */
+export const sharedSpkReviseSchema = z
+  .object({
+    children: z
+      .array(z.object({ workOrderId: z.string().min(1).optional(), ...sharedSpkChildFields }))
+      .max(50)
+      .default([]),
+    removeWorkOrderIds: z.array(z.string().min(1)).max(50).default([]),
+  })
+  .superRefine((value, ctx) => {
+    value.children.forEach((child, index) => refineChildSchedule(child, ctx, ["children", index]));
+    const referenced = [
+      ...value.children.flatMap((child) => (child.workOrderId ? [child.workOrderId] : [])),
+      ...value.removeWorkOrderIds,
+    ];
+    if (new Set(referenced).size !== referenced.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A child work order may be referenced only once",
+        path: ["children"],
+      });
+    }
+    if (value.children.length === 0 && value.removeWorkOrderIds.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Nothing to revise",
+        path: ["children"],
+      });
+    }
+  });
+
+export type SharedSpkReviseInput = z.infer<typeof sharedSpkReviseSchema>;
+export type SharedSpkReviseBody = z.input<typeof sharedSpkReviseSchema>;
+
 /** GET /work-orders query params */
 export const workOrderListQuerySchema = baseListQuerySchema.extend({
   status: z.enum(workOrderStatusValues).optional(),
   customerId: z.string().optional(),
   purchaseOrderId: z.string().optional(),
   quotationId: z.string().optional(),
+  /** Only Child SPKs of this Parent SPK (shared ON_SITE). */
+  parentSpkId: z.string().optional(),
 });
 
 export type WorkOrderListQuery = z.infer<typeof workOrderListQuerySchema>;
