@@ -2743,3 +2743,71 @@ export const dashboardSummaryResponseSchema = z.object({
 });
 
 export type DashboardSummaryResponse = z.infer<typeof dashboardSummaryResponseSchema>;
+
+// =============================================================================
+// Customer Portal (customer-scoped, read-only)
+// =============================================================================
+
+/**
+ * Customer-facing statuses and filters. These are the portal contract: the
+ * internal WorkOrder / CalibrationJob enums never appear in a query string.
+ */
+export const CUSTOMER_WORK_ORDER_STATUS_VALUES = [
+  "NOT_STARTED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "CANCELLED",
+] as const;
+export const CUSTOMER_JOB_STATUS_VALUES = ["NOT_STARTED", "IN_PROGRESS", "COMPLETED"] as const;
+/** How many of a Work Order's units are finished. */
+export const CUSTOMER_PROGRESS_FILTER_VALUES = [
+  "NONE_COMPLETED",
+  "PARTIALLY_COMPLETED",
+  "ALL_COMPLETED",
+] as const;
+/** Only the positive case: a "no certificate" filter would have to decide how revoked/superseded certificates are shown. */
+export const CUSTOMER_CERTIFICATE_FILTER_VALUES = ["AVAILABLE"] as const;
+
+export type CustomerWorkOrderStatusValue = (typeof CUSTOMER_WORK_ORDER_STATUS_VALUES)[number];
+export type CustomerJobStatusValue = (typeof CUSTOMER_JOB_STATUS_VALUES)[number];
+export type CustomerProgressFilterValue = (typeof CUSTOMER_PROGRESS_FILTER_VALUES)[number];
+export type CustomerCertificateFilterValue = (typeof CUSTOMER_CERTIFICATE_FILTER_VALUES)[number];
+
+const customerListQueryBase = {
+  search: z.string().trim().min(1).max(100).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
+  certificate: z.enum(CUSTOMER_CERTIFICATE_FILTER_VALUES).optional(),
+};
+
+/**
+ * GET /customer/work-orders query params. There is deliberately no customerId:
+ * the customer is always derived from the session.
+ */
+export const customerWorkOrderListQuerySchema = z.object({
+  ...customerListQueryBase,
+  status: z.enum(CUSTOMER_WORK_ORDER_STATUS_VALUES).optional(),
+  progress: z.enum(CUSTOMER_PROGRESS_FILTER_VALUES).optional(),
+});
+export type CustomerWorkOrderListQuery = z.infer<typeof customerWorkOrderListQuerySchema>;
+
+/**
+ * GET /customer/work-orders/:id/unit-groups query params: the same search and
+ * filters as the unit list, applied to the units before they are grouped by
+ * order line.
+ */
+export const customerUnitGroupListQuerySchema = z.object({
+  ...customerListQueryBase,
+  status: z.enum(CUSTOMER_JOB_STATUS_VALUES).optional(),
+});
+export type CustomerUnitGroupListQuery = z.infer<typeof customerUnitGroupListQuerySchema>;
+
+/**
+ * GET /customer/work-orders/:id/jobs query params. `group` is the opaque key
+ * from a unit-groups response (never an internal id) and narrows the list to
+ * that group's units.
+ */
+export const customerJobListQuerySchema = customerUnitGroupListQuerySchema.extend({
+  group: z.string().trim().min(1).max(64).optional(),
+});
+export type CustomerJobListQuery = z.infer<typeof customerJobListQuerySchema>;
