@@ -34,10 +34,11 @@ import {
 } from "../../../work-orders/work-order-form-utils";
 import { PageHeader, Surface } from "../../../work-orders/work-orders-ui";
 import {
-  useAssignWorkOrder,
   useAssignableUsers,
-  useCreateWorkOrder,
+  useCreateSharedSpk,
 } from "../../../work-orders/use-work-orders-query";
+import type { SharedSpkDetail } from "../../../work-orders/shared-spk-types";
+import { DateField } from "@/components/ui/date-field";
 import {
   moveUnits,
   planForMember,
@@ -72,11 +73,10 @@ function memberBalanceLabel(total: number, rows: { total: number }[]): string {
   return "Beban seimbang";
 }
 
-interface CreatedShare {
-  id: string;
-  number: string;
-  memberId: string;
-  memberName: string;
+/** A planned (not yet persisted) schedule for one Child, as `YYYY-MM-DD` strings. */
+interface ChildSchedule {
+  start: string;
+  end: string;
 }
 
 export default function ShareWorkloadPage() {
@@ -89,8 +89,7 @@ export default function ShareWorkloadPage() {
     capabilities?.purchaseOrderRead ? purchaseOrderId : undefined,
   );
   const usersQuery = useAssignableUsers(Boolean(capabilities?.workOrderAssign));
-  const createMutation = useCreateWorkOrder();
-  const assignMutation = useAssignWorkOrder();
+  const createMutation = useCreateSharedSpk();
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [distribution, setDistribution] = useState<WorkloadDistribution>({});
@@ -102,7 +101,9 @@ export default function ShareWorkloadPage() {
   const [reviewing, setReviewing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [created, setCreated] = useState<CreatedShare[]>([]);
+  // Per-Child planned schedule, keyed by team member. Nothing is persisted until "Lanjut".
+  const [schedules, setSchedules] = useState<Record<string, ChildSchedule>>({});
+  const [created, setCreated] = useState<SharedSpkDetail | null>(null);
   const [showAllDevices, setShowAllDevices] = useState<Record<string, boolean>>({});
   const [memberPickerOpen, setMemberPickerOpen] = useState(false);
   const [devicePickerOpen, setDevicePickerOpen] = useState(false);
@@ -144,7 +145,24 @@ export default function ShareWorkloadPage() {
   );
   const nameById = new Map(users.map((user) => [user.id, user.name ?? user.email]));
   const summaryRows = workloadSummary(distribution, units, selectedIds);
-  const validationError = validateDistribution(distribution, units, selectedIds);
+  const distributionError = validateDistribution(distribution, units, selectedIds);
+  // Every Child must receive work, and a shared job needs at least two Children.
+  const workingMemberIds = selectedIds
+    .filter((memberId) => planForMember(distribution, memberId).length > 0)
+    .sort((a, b) => a.localeCompare(b));
+  const scheduleError = workingMemberIds.some((memberId) => {
+    const schedule = schedules[memberId];
+    return Boolean(schedule?.start && schedule?.end && schedule.end < schedule.start);
+  })
+    ? "Tanggal selesai tidak boleh sebelum tanggal mulai."
+    : null;
+  const validationError =
+    distributionError ??
+    (workingMemberIds.length < 2
+      ? "Pembagian bersama membutuhkan minimal dua anggota tim yang mendapat pekerjaan."
+      : null) ??
+    scheduleError;
+  const isOnSite = purchaseOrder?.quotation.request?.serviceMode === "ON_SITE";
   const deviceOptions = [
     ...new Map(
       units.map((unit) => {
@@ -187,7 +205,7 @@ export default function ShareWorkloadPage() {
     );
   }
 
-  const eligible = canCreateWorkOrderFromPurchaseOrder(purchaseOrder);
+  const eligible = canCreateWorkOrderFromPurchaseOrder(purchaseOrder) && isOnSite;
 
   function toggleMember(id: string) {
     setSelectedIds((current) =>
@@ -206,48 +224,96 @@ export default function ShareWorkloadPage() {
     setDistribution(result.distribution);
   }
 
+  function setSchedule(memberId: string, patch: Partial<ChildSchedule>) {
+    setSchedules((current) => ({
+      ...current,
+      [memberId]: { ...(current[memberId] ?? { start: "", end: "" }), ...patch },
+    }));
+  }
+
+  /**
+   * "Lanjut": ONE atomic server request creates the Parent SPK and every Child
+   * SPK (technician, allocated batch, schedule). Nothing exists before this —
+   * editing the distribution never creates anything — and a failure creates
+   * nothing at all.
+   */
   async function confirmShare() {
-    if (validationError || !eligible) return;
+    if (validationError || !eligible || created) return;
     setSubmitting(true);
     setSubmitError(null);
-    const newlyCreated: CreatedShare[] = [...created];
-    const doneMembers = new Set(created.map((row) => row.memberId));
-
-    for (const memberId of selectedIds.slice().sort((a, b) => a.localeCompare(b))) {
-      const memberName = nameById.get(memberId) ?? memberId;
-      if (doneMembers.has(memberId)) continue;
-      const items = planForMember(distribution, memberId);
-      if (items.length === 0) continue;
-      try {
-        const workOrder = await createMutation.mutateAsync({ purchaseOrderId, items });
-        try {
-          await assignMutation.mutateAsync({
-            id: workOrder.id,
-            input: { technicians: [{ technicianUserId: memberId, roleOnJob: "LEAD" }] },
-          });
-        } catch (err) {
-          newlyCreated.push({ id: workOrder.id, number: workOrder.number, memberId, memberName });
-          setCreated(newlyCreated);
-          setSubmitError(
-            `${formatWorkOrderApiError(err, "Work Order dibuat, tetapi penugasan teknisi gagal.").message} ${workOrder.number} sudah ada dan belum ditugaskan.`,
-          );
-          setSubmitting(false);
-          return;
-        }
-        newlyCreated.push({ id: workOrder.id, number: workOrder.number, memberId, memberName });
-        doneMembers.add(memberId);
-        setCreated([...newlyCreated]);
-      } catch (err) {
-        setCreated(newlyCreated);
-        setSubmitError(formatWorkOrderApiError(err, "Gagal membuat Work Order untuk anggota ini.").message);
-        setSubmitting(false);
-        return;
-      }
+    try {
+      const parent = await createMutation.mutateAsync({
+        purchaseOrderId,
+        children: workingMemberIds.map((memberId) => ({
+          technicianUserId: memberId,
+          items: planForMember(distribution, memberId),
+          scheduledStart: schedules[memberId]?.start || undefined,
+          scheduledEnd: schedules[memberId]?.end || undefined,
+        })),
+      });
+      setCreated(parent);
+      await summaryQuery.refetch();
+    } catch (err) {
+      setSubmitError(
+        formatWorkOrderApiError(err, "Gagal membuat SPK bersama. Tidak ada SPK yang dibuat.").message,
+      );
+    } finally {
+      setSubmitting(false);
     }
+  }
 
-    setCreated(newlyCreated);
-    setSubmitting(false);
-    await summaryQuery.refetch();
+  if (created) {
+    return (
+      <div className={formPageClass}>
+        <PageHeader
+          title="SPK Bersama Dibuat"
+          crumbs={[
+            { href: "/", label: "Dashboard" },
+            { href: "/purchase-orders", label: "Purchase Orders" },
+            { href: `/purchase-orders/${purchaseOrder.id}`, label: purchaseOrder.number },
+            { label: created.number },
+          ]}
+        />
+        <Surface className={formSurfaceClass}>
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3">
+            <p className="text-sm font-medium text-emerald-800">
+              SPK bersama berhasil dibuat:{" "}
+              <Link
+                href={`/work-orders/shared/${created.id}`}
+                className="font-mono text-brand-700 hover:underline"
+              >
+                {created.number}
+              </Link>
+            </p>
+            <ul className="mt-2 space-y-1">
+              {created.children.map((child) => (
+                <li key={child.id}>
+                  <Link
+                    href={`/work-orders/${child.id}`}
+                    className="font-mono text-sm text-brand-700 hover:underline"
+                  >
+                    {child.number}
+                  </Link>
+                  <span className="text-sm text-slate-600">
+                    {" "}
+                    · {child.technicians.map((row) => row.name ?? row.email).join(", ")} ·{" "}
+                    {formatQty(child.progress.total)} unit
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <Button type="button" variant="outline" asChild>
+              <Link href={`/purchase-orders/${purchaseOrder.id}`}>Kembali ke PO</Link>
+            </Button>
+            <Button type="button" asChild>
+              <Link href={`/work-orders/shared/${created.id}`}>Buka SPK Induk</Link>
+            </Button>
+          </div>
+        </Surface>
+      </div>
+    );
   }
 
   return (
@@ -263,7 +329,11 @@ export default function ShareWorkloadPage() {
       />
 
       <Surface className={formSurfaceClass}>
-        {!eligible ? (
+        {!isOnSite ? (
+          <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Bagikan Pekerjaan hanya tersedia untuk Purchase Order ON_SITE (SPK).
+          </p>
+        ) : !canCreateWorkOrderFromPurchaseOrder(purchaseOrder) ? (
           <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
             Purchase Order ini belum APPROVED, sehingga Work Order tidak dapat dibuat.
           </p>
@@ -309,7 +379,7 @@ export default function ShareWorkloadPage() {
                     role="combobox"
                     aria-expanded={memberPickerOpen}
                     aria-label="Pilih Anggota Tim"
-                    disabled={submitting || created.length > 0}
+                    disabled={submitting}
                     className="mt-2 w-full justify-between font-normal"
                   >
                     <span className="truncate">
@@ -529,12 +599,45 @@ export default function ShareWorkloadPage() {
                 {reviewing ? (
                   <div className="mt-6 rounded-md border border-slate-200 p-3">
                     <h3 className="text-sm font-semibold text-slate-900">Tinjau pembagian</h3>
-                    <ul className="mt-2 space-y-1 text-sm text-slate-700">
-                      {summaryRows.map((row) => (
-                        <li key={row.memberId}>
-                          {nameById.get(row.memberId) ?? row.memberId}: {formatQty(row.total)} unit
-                        </li>
-                      ))}
+                    <p className="mt-1 text-xs text-slate-500">
+                      Setiap anggota tim di bawah ini akan menjadi satu SPK yang dapat dijalankan sendiri,
+                      lengkap dengan jadwal rencananya. Jadwal bersifat rencana, bukan realisasi.
+                    </p>
+                    <ul className="mt-3 space-y-3">
+                      {summaryRows
+                        .filter((row) => row.total > 0)
+                        .map((row, index) => (
+                          <li
+                            key={row.memberId}
+                            className="rounded-md border border-slate-200 p-3 text-sm text-slate-700"
+                          >
+                            <p className="font-medium text-slate-900">
+                              SPK {index + 1} · {nameById.get(row.memberId) ?? row.memberId}
+                            </p>
+                            <p className="mt-0.5 text-slate-600">
+                              {formatQty(row.total)} unit
+                              {row.devices.length > 0
+                                ? ` · ${row.devices.map((d) => `${d.deviceLabel} ×${formatQty(d.qty)}`).join(", ")}`
+                                : ""}
+                            </p>
+                            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                              <DateField
+                                label="Jadwal Mulai"
+                                value={schedules[row.memberId]?.start ?? ""}
+                                onChange={(start) => setSchedule(row.memberId, { start })}
+                                disabled={submitting}
+                                aria-label={`Jadwal mulai ${nameById.get(row.memberId) ?? row.memberId}`}
+                              />
+                              <DateField
+                                label="Jadwal Selesai"
+                                value={schedules[row.memberId]?.end ?? ""}
+                                onChange={(end) => setSchedule(row.memberId, { end })}
+                                disabled={submitting}
+                                aria-label={`Jadwal selesai ${nameById.get(row.memberId) ?? row.memberId}`}
+                              />
+                            </div>
+                          </li>
+                        ))}
                     </ul>
                     <p className="mt-2 text-sm text-slate-600">
                       Total {formatQty(totalUnits)} unit
@@ -546,22 +649,6 @@ export default function ShareWorkloadPage() {
                 {submitError ? (
                   <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{submitError}</p>
                 ) : null}
-                {created.length > 0 ? (
-                  <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3">
-                    <p className="text-sm font-medium text-emerald-800">Work Order yang sudah dibuat:</p>
-                    <ul className="mt-2 space-y-1">
-                      {created.map((row) => (
-                        <li key={row.id}>
-                          <Link href={`/work-orders/${row.id}`} className="font-mono text-sm text-brand-700 hover:underline">
-                            {row.number}
-                          </Link>
-                          <span className="text-sm text-slate-600"> · {row.memberName}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-
                 <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
                   {reviewing ? (
                     <Button type="button" variant="outline" onClick={() => setReviewing(false)} disabled={submitting}>
@@ -569,25 +656,16 @@ export default function ShareWorkloadPage() {
                     </Button>
                   ) : null}
                   {!reviewing ? (
-                    <Button type="button" onClick={() => setReviewing(true)} disabled={Boolean(validationError) || !eligible}>
+                    <Button type="button" onClick={() => setReviewing(true)} disabled={Boolean(distributionError) || !eligible}>
                       Tinjau
                     </Button>
                   ) : (
                     <Button
                       type="button"
                       onClick={confirmShare}
-                      disabled={
-                        Boolean(validationError) ||
-                        !eligible ||
-                        submitting ||
-                        selectedIds.every(
-                          (id) =>
-                            planForMember(distribution, id).length === 0 ||
-                            created.some((row) => row.memberId === id),
-                        )
-                      }
+                      disabled={Boolean(validationError) || !eligible || submitting}
                     >
-                      {submitting ? "Membagikan…" : "Konfirmasi & Bagikan"}
+                      {submitting ? "Membuat SPK…" : "Lanjut"}
                     </Button>
                   )}
                 </div>

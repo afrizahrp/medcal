@@ -41,7 +41,7 @@ export interface PurchaseOrderQuotationRef {
   status: string;
   requestId: string;
   customerId: string;
-  request?: { number: string } | null;
+  request?: { number: string; serviceMode?: "ON_SITE" | "SEND_TO_LAB" } | null;
 }
 
 export interface PurchaseOrderItem {

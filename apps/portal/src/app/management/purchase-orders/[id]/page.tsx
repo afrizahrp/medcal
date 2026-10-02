@@ -62,6 +62,7 @@ import {
   canCreateWorkOrderFromPurchaseOrder,
   canOfferLegacyWorkOrderShortcut,
   findActiveWorkOrder,
+  groupWorkOrdersByParent,
 } from "../../work-orders/work-order-form-utils";
 import {
   ServiceModeBadge,
@@ -352,6 +353,7 @@ export default function PurchaseOrderDetailPage() {
             purchaseOrderId={purchaseOrder.id}
             itemCount={purchaseOrder.items.length}
             unitCount={purchaseOrder.items.reduce((sum, item) => sum + moneyNumber(item.qty), 0)}
+            serviceMode={purchaseOrder.quotation.request?.serviceMode}
             purchaseOrderStatus={purchaseOrder.status}
             canCreate={Boolean(capabilities?.workOrderCreate)}
             canRead={Boolean(capabilities?.workOrderRead)}
@@ -571,15 +573,18 @@ function CreateWorkOrderEntry({
   purchaseOrderId,
   itemCount,
   unitCount,
+  serviceMode,
 }: {
   purchaseOrderId: string;
   itemCount: number;
   unitCount: number;
+  serviceMode?: string;
 }) {
   const [open, setOpen] = useState(false);
   const createHref = `/work-orders/new?purchaseOrderId=${purchaseOrderId}`;
 
-  if (itemCount <= HIGH_VOLUME_CREATE_WORK_ORDER_ITEM_THRESHOLD) {
+  // Share Job (Parent/Child SPK) is an ON_SITE-only execution mode.
+  if (itemCount <= HIGH_VOLUME_CREATE_WORK_ORDER_ITEM_THRESHOLD || serviceMode !== "ON_SITE") {
     return (
       <Button type="button" size="sm" asChild>
         <Link href={createHref}>
@@ -628,10 +633,48 @@ function CreateWorkOrderEntry({
   );
 }
 
+function WorkOrderSummaryCard({ wo }: { wo: PurchaseOrderWorkOrderSummary }) {
+  const isCancelled = wo.status === "CANCELLED";
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-2 rounded-lg border p-3",
+        isCancelled
+          ? "border-slate-200 bg-slate-50/40 opacity-70"
+          : "border-slate-200 bg-slate-50/50",
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <Link
+          href={`/work-orders/${wo.id}`}
+          className="font-mono text-sm font-medium text-brand-700 hover:underline"
+        >
+          {wo.number}
+        </Link>
+        <ServiceModeBadge mode={wo.serviceMode as ServiceMode} />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <WorkOrderStatusBadge status={wo.status} />
+        <span className="text-xs text-slate-500">
+          {wo.itemCount} item · {formatQty(wo.totalQty)} unit
+        </span>
+      </div>
+      <p className="text-xs text-slate-400">{formatDateTime(wo.createdAt)}</p>
+      <Button type="button" variant="outline" size="sm" asChild className="mt-1 self-start">
+        <Link href={`/work-orders/${wo.id}`}>
+          <Wrench className="h-4 w-4" />
+          Lihat Work Order
+        </Link>
+      </Button>
+    </div>
+  );
+}
+
 function PurchaseOrderWorkOrderSection({
   purchaseOrderId,
   itemCount,
   unitCount,
+  serviceMode,
   purchaseOrderStatus,
   canCreate,
   canRead,
@@ -643,6 +686,7 @@ function PurchaseOrderWorkOrderSection({
   purchaseOrderId: string;
   itemCount: number;
   unitCount: number;
+  serviceMode?: string;
   purchaseOrderStatus: string;
   canCreate: boolean;
   canRead: boolean;
@@ -694,44 +738,43 @@ function PurchaseOrderWorkOrderSection({
         <p className="mt-2 text-sm text-red-600">Gagal memuat work order.</p>
       ) : rows.length > 0 ? (
         <>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {rows.map((wo) => {
-              const isCancelled = wo.status === "CANCELLED";
-              return (
-                <div
-                  key={wo.id}
-                  className={cn(
-                    "flex flex-col gap-2 rounded-lg border p-3",
-                    isCancelled
-                      ? "border-slate-200 bg-slate-50/40 opacity-70"
-                      : "border-slate-200 bg-slate-50/50",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <Link
-                      href={`/work-orders/${wo.id}`}
-                      className="font-mono text-sm font-medium text-brand-700 hover:underline"
-                    >
-                      {wo.number}
-                    </Link>
-                    <ServiceModeBadge mode={wo.serviceMode as ServiceMode} />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <WorkOrderStatusBadge status={wo.status} />
-                    <span className="text-xs text-slate-500">
-                      {wo.itemCount} item · {formatQty(wo.totalQty)} unit
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400">{formatDateTime(wo.createdAt)}</p>
-                  <Button type="button" variant="outline" size="sm" asChild className="mt-1 self-start">
-                    <Link href={`/work-orders/${wo.id}`}>
-                      <Wrench className="h-4 w-4" />
-                      Lihat Work Order
-                    </Link>
-                  </Button>
+          <div className="mt-3 space-y-3">
+            {groupWorkOrdersByParent(rows).map((group) =>
+              group.kind === "single" ? (
+                <div key={group.row.id} className="grid gap-3 sm:grid-cols-2">
+                  <WorkOrderSummaryCard wo={group.row} />
                 </div>
-              );
-            })}
+              ) : (
+                <div
+                  key={group.parentSpkId}
+                  className="rounded-lg border border-slate-300 bg-white p-3"
+                >
+                  {/* Parent SPK is a non-executable container — a header, never a Work Order card. */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <Link
+                        href={`/work-orders/shared/${group.parentSpkId}`}
+                        className="font-mono text-sm font-semibold text-brand-700 hover:underline"
+                      >
+                        {group.parentSpkNumber}
+                      </Link>
+                      <p className="text-xs text-slate-500">
+                        SPK Induk · {group.children.length} SPK Child ·{" "}
+                        {formatQty(group.children.reduce((sum, wo) => sum + wo.totalQty, 0))} unit
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <Link href={`/work-orders/shared/${group.parentSpkId}`}>Lihat SPK Induk</Link>
+                    </Button>
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {group.children.map((wo) => (
+                      <WorkOrderSummaryCard key={wo.id} wo={wo} />
+                    ))}
+                  </div>
+                </div>
+              ),
+            )}
           </div>
 
           {showLegacyCreateShortcut && cancelledOnly ? (
@@ -744,6 +787,7 @@ function PurchaseOrderWorkOrderSection({
                 purchaseOrderId={purchaseOrderId}
                 itemCount={itemCount}
                 unitCount={unitCount}
+                serviceMode={serviceMode}
               />
             </div>
           ) : null}
@@ -755,6 +799,7 @@ function PurchaseOrderWorkOrderSection({
             purchaseOrderId={purchaseOrderId}
             itemCount={itemCount}
             unitCount={unitCount}
+            serviceMode={serviceMode}
           />
         </div>
       ) : (

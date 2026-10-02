@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiFetchBlob } from "@medcal/shared";
 import type {
+  SharedSpkCreateBody,
+  SharedSpkReviseBody,
   WorkOrderAssignInput,
   WorkOrderCreateBody,
   WorkOrderEquipmentReplaceInput,
@@ -11,6 +13,7 @@ import type {
   WorkOrderUpdateBody,
 } from "@medcal/shared";
 import { PURCHASE_ORDERS_QUERY_KEY } from "../purchase-orders/use-purchase-orders-query";
+import type { SharedSpkDetail } from "./shared-spk-types";
 import type {
   WorkOrderEquipmentProposalResponse,
   WorkOrderListResponse,
@@ -118,6 +121,52 @@ export function useCreateWorkOrder() {
     onSuccess: (data) => {
       invalidateWorkOrderQueries(queryClient, data.id);
       queryClient.setQueryData([WORK_ORDERS_QUERY_KEY, data.id], data);
+    },
+  });
+}
+
+export const SHARED_SPK_QUERY_KEY = "shared-spk" as const;
+
+/** Read-only Parent SPK aggregate (derived status/progress + Child SPKs). */
+export function useSharedSpk(id: string | undefined, options: { poll?: boolean } = {}) {
+  return useQuery({
+    queryKey: [SHARED_SPK_QUERY_KEY, id],
+    queryFn: () => apiFetch<SharedSpkDetail>(`/work-orders/shared/${id}`),
+    enabled: Boolean(id),
+    // The revision screen turns polling off: an editing session must not be
+    // re-rendered under the user. It refetches on focus and after a failed save.
+    refetchInterval: options.poll === false ? false : 6000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** "Lanjut": one atomic request creates the Parent SPK and every Child SPK. */
+export function useCreateSharedSpk() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SharedSpkCreateBody) =>
+      apiFetch<SharedSpkDetail>("/work-orders/shared", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (data) => {
+      invalidateWorkOrderQueries(queryClient);
+      queryClient.setQueryData([SHARED_SPK_QUERY_KEY, data.id], data);
+    },
+  });
+}
+
+export function useReviseSharedSpk() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: SharedSpkReviseBody }) =>
+      apiFetch<SharedSpkDetail>(`/work-orders/shared/${id}/distribution`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (data) => {
+      invalidateWorkOrderQueries(queryClient);
+      queryClient.setQueryData([SHARED_SPK_QUERY_KEY, data.id], data);
     },
   });
 }

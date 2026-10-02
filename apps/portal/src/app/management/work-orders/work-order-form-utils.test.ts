@@ -9,6 +9,7 @@ import {
   deviceIdentifierFromItem,
   findActiveWorkOrder,
   formatWorkOrderApiError,
+  groupWorkOrdersByParent,
   isActiveWorkOrderStatus,
   isWorkOrderTerminal,
   toScheduleDateValue,
@@ -323,5 +324,46 @@ describe("formatWorkOrderApiError", () => {
   it("maps invalid status transition", () => {
     const err = new ApiError(400, "Bad Request", { code: "INVALID_STATUS_TRANSITION" });
     expect(formatWorkOrderApiError(err, "fallback").message).toContain("tidak diizinkan");
+  });
+});
+
+describe("groupWorkOrdersByParent (shared ON_SITE SPK)", () => {
+  const row = (
+    id: string,
+    parent: { id: string; number: string; seq: number } | null = null,
+  ) => ({
+    id,
+    parentSpkId: parent?.id ?? null,
+    parentSpkNumber: parent?.number ?? null,
+    childSequence: parent?.seq ?? null,
+  });
+
+  it("keeps single/flat SPK standalone — no artificial Parent", () => {
+    const groups = groupWorkOrdersByParent([row("a"), row("b")]);
+    expect(groups.map((group) => group.kind)).toEqual(["single", "single"]);
+  });
+
+  it("gathers Children under one Parent group ordered by childSequence, never listing the Parent as a row", () => {
+    const parent = { id: "p1", number: "SPK/2026/10/00001" };
+    const groups = groupWorkOrdersByParent([
+      row("c2", { ...parent, seq: 2 }),
+      row("flat"),
+      row("c1", { ...parent, seq: 1 }),
+    ]);
+    expect(groups).toHaveLength(2);
+    const first = groups[0]!;
+    expect(first.kind).toBe("parent");
+    if (first.kind === "parent") {
+      expect(first.parentSpkNumber).toBe("SPK/2026/10/00001");
+      expect(first.children.map((child) => child.id)).toEqual(["c1", "c2"]);
+    }
+    expect(groups[1]!.kind).toBe("single");
+  });
+
+  it("maps the shared-SPK error codes to messages", () => {
+    const locked = new ApiError(409, "Conflict", { code: "SHARED_CHILD_LOCKED" });
+    expect(formatWorkOrderApiError(locked, "fallback").message).toContain("terkunci");
+    const over = new ApiError(409, "Conflict", { code: "OVER_ALLOCATION" });
+    expect(formatWorkOrderApiError(over, "fallback").message).toContain("melebihi");
   });
 });

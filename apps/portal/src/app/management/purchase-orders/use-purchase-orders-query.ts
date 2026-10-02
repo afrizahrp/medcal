@@ -122,6 +122,10 @@ export interface PurchaseOrderWorkOrderSummary {
   createdAt: string;
   itemCount: number;
   totalQty: number;
+  /** Shared ON_SITE Child SPK → its Parent; null for single/flat SPK and WOL. */
+  parentSpkId: string | null;
+  parentSpkNumber: string | null;
+  childSequence: number | null;
 }
 
 export function usePurchaseOrderWorkOrders(id: string | undefined, enabled = true) {

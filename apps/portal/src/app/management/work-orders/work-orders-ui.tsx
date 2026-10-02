@@ -197,6 +197,10 @@ export interface WorkOrderRow {
   scheduledEnd: string | null;
   status: WorkOrderStatus;
   equipmentConfirmedAt: string | null;
+  /** Shared ON_SITE only: the non-executable Parent SPK; null for single/flat SPK and WOL. */
+  parentSpkId: string | null;
+  childSequence: number | null;
+  parentSpk: { id: string; number: string } | null;
   /** II. Kaji Ulang Permintaan (customer request review) — SEND_TO_LAB only. */
   requestReviewMethodOk: boolean | null;
   requestReviewEquipmentOk: boolean | null;

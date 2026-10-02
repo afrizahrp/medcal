@@ -235,6 +235,10 @@ export default function WorkOrderDetailPage() {
         crumbs={[
           { href: "/", label: "Dashboard" },
           { href: "/work-orders", label: "Work Orders" },
+          // Shared ON_SITE: this Child SPK's non-executable Parent.
+          ...(workOrder.parentSpk
+            ? [{ href: `/work-orders/shared/${workOrder.parentSpk.id}`, label: workOrder.parentSpk.number }]
+            : []),
           { label: workOrder.number },
         ]}
       />
@@ -280,6 +284,18 @@ export default function WorkOrderDetailPage() {
           <DetailField label="Work Order Number">
             <span className="font-mono">{workOrder.number}</span>
           </DetailField>
+
+          {workOrder.parentSpk ? (
+            <DetailField label="SPK Induk (Parent)">
+              <Link
+                href={`/work-orders/shared/${workOrder.parentSpk.id}`}
+                className="font-mono text-brand-700 hover:underline"
+              >
+                {workOrder.parentSpk.number}
+              </Link>
+              <span className="ml-2 text-slate-400">· Child #{workOrder.childSequence}</span>
+            </DetailField>
+          ) : null}
 
           <DetailField label="Customer">
             <Link

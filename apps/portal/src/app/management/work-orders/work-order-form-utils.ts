@@ -36,6 +36,50 @@ export function canOfferLegacyWorkOrderShortcut<T extends { status: string }>(
   return !findActiveWorkOrder(rows);
 }
 
+/**
+ * Shared ON_SITE SPK: groups a PO's Work Order rows for display. Child SPKs
+ * (those with a Parent) are gathered under their Parent in first-appearance
+ * order; single/flat SPK and WOL rows stay standalone. The Parent is NOT a Work
+ * Order — it is a non-executable container shown only as a group header.
+ */
+export type WorkOrderRowGroup<T> =
+  | { kind: "single"; row: T }
+  | {
+      kind: "parent";
+      parentSpkId: string;
+      parentSpkNumber: string;
+      children: T[];
+    };
+
+export function groupWorkOrdersByParent<
+  T extends { parentSpkId?: string | null; parentSpkNumber?: string | null; childSequence?: number | null },
+>(rows: T[]): WorkOrderRowGroup<T>[] {
+  const groups: WorkOrderRowGroup<T>[] = [];
+  const parents = new Map<string, Extract<WorkOrderRowGroup<T>, { kind: "parent" }>>();
+  for (const row of rows) {
+    if (!row.parentSpkId) {
+      groups.push({ kind: "single", row });
+      continue;
+    }
+    let group = parents.get(row.parentSpkId);
+    if (!group) {
+      group = {
+        kind: "parent",
+        parentSpkId: row.parentSpkId,
+        parentSpkNumber: row.parentSpkNumber ?? row.parentSpkId,
+        children: [],
+      };
+      parents.set(row.parentSpkId, group);
+      groups.push(group);
+    }
+    group.children.push(row);
+  }
+  for (const group of parents.values()) {
+    group.children.sort((a, b) => (a.childSequence ?? 0) - (b.childSequence ?? 0));
+  }
+  return groups;
+}
+
 export function canCreateWorkOrderFromPurchaseOrder(purchaseOrder: { status: string }): boolean {
   return purchaseOrder.status === "APPROVED";
 }
@@ -260,6 +304,17 @@ export function formatWorkOrderApiError(
       INVALID_STATUS_FOR_REVISE: "Work Order tidak dalam status yang bisa direvisi.",
       NO_PENDING_SCOPE_CHANGE:
         "Tidak ada perubahan scope dari Purchase Order untuk diterapkan ke Work Order ini.",
+      // Shared ON_SITE SPK (Parent / Child)
+      SHARED_SPK_ON_SITE_ONLY: "Bagikan Pekerjaan hanya tersedia untuk Purchase Order ON_SITE.",
+      INVALID_SHARED_SPK: "Data pembagian pekerjaan tidak valid.",
+      OVER_ALLOCATION:
+        "Jumlah unit yang dibagikan melebihi sisa unit pada Purchase Order. Muat ulang halaman lalu bagikan kembali.",
+      PURCHASE_ORDER_ITEM_NOT_ACTIVE: "Item Purchase Order tidak aktif atau tidak ditemukan.",
+      DUPLICATE_ALLOCATION_ITEM: "Item yang sama dibagikan lebih dari sekali pada satu SPK Child.",
+      SHARED_CHILD_LOCKED: "SPK Child sudah dimulai dan terkunci untuk revisi.",
+      SHARED_CHILD_SCHEDULE_LOCKED: "Jadwal SPK Child yang sudah dimulai tidak dapat diubah.",
+      SHARED_CHILD_NOT_FOUND: "SPK Child bukan bagian dari SPK bersama ini.",
+      SHARED_SPK_NO_ACTIVE_CHILD: "SPK bersama harus memiliki minimal satu SPK Child aktif.",
     };
     if (code && messages[code]) {
       return { message: messages[code], workOrderId };
