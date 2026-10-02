@@ -513,6 +513,7 @@ model Company {
   quotations                  Quotation[]
   purchaseOrders              PurchaseOrder[]
   workOrders                  WorkOrder[]
+  spkParents                  SpkParent[]
   certificates                Certificate[]
   invoices                    Invoice[]
   creditNotes                 CreditNote[]
@@ -610,6 +611,7 @@ model User {
   paymentsUpdated                       Payment[]                       @relation("PaymentUpdatedBy")
   quotationsApproved                    Quotation[]                     @relation("QuotationApprovedBy")
   purchaseOrdersConfirmed               PurchaseOrder[]                 @relation("PurchaseOrderConfirmedBy")
+  spkParentsCreated                     SpkParent[]                     @relation("SpkParentCreatedBy")
   auditLogs                             AuditLog[]
   customerFeedbacksSubmitted            CustomerFeedback[]
   lkDownloadAuthorizations              LkDownloadAuthorization[]
@@ -1091,6 +1093,7 @@ model Customer {
   quotations          Quotation[]
   purchaseOrders      PurchaseOrder[]
   workOrders          WorkOrder[]
+  spkParents          SpkParent[]
   customerFeedbacks   CustomerFeedback[]
   certificates        Certificate[]
   invoices            Invoice[]
@@ -1862,6 +1865,7 @@ model PurchaseOrder {
   confirmedBy User?                  @relation("PurchaseOrderConfirmedBy", fields: [confirmedByUserId], references: [id])
   items       PurchaseOrderItem[]
   workOrders  WorkOrder[]
+  spkParents  SpkParent[]
   // MOM #1 — Transaction Revision + Immutable History
   history     PurchaseOrderHistory[]
 
@@ -1928,6 +1932,16 @@ model WorkOrder {
   /// Always null for SEND_TO_LAB.
   equipmentConfirmedAt DateTime?
 
+  /// Shared ON_SITE only: the non-executable Parent SPK this Child SPK belongs
+  /// to. NULL for every single/flat WorkOrder (all pre-existing rows — never
+  /// backfilled) and for every SEND_TO_LAB WorkOrder. `parentSpkId` and
+  /// `childSequence` are both NULL or both set (DB CHECK).
+  parentSpkId          String?
+  /// 1-based sequence of this Child within its Parent. Local to the Parent —
+  /// never consumes the global SPK sequence and is never reused once issued.
+  /// `number` of a Child is `${SpkParent.number}-${childSequence}`.
+  childSequence        Int?
+
   // ── Customer request review (F.MU.08 II — Kaji Ulang Permintaan Pelanggan) ─
   // Owned on WorkOrder so one customer/work event (one WOL) shares the same
   // review across all sibling CalibrationJobs. Meaningful for SEND_TO_LAB only;
@@ -1951,6 +1965,7 @@ model WorkOrder {
   purchaseOrder            PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
   customer                 Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
   requestReviewCompletedBy User?                  @relation("WorkOrderRequestReviewCompletedBy", fields: [requestReviewCompletedByUserId], references: [id])
+  parentSpk                SpkParent?             @relation(fields: [parentSpkId], references: [id], onDelete: Restrict)
   items                    WorkOrderItem[]
   assignments              WorkOrderAssignment[]
   jobs                     CalibrationJob[]
@@ -1971,11 +1986,41 @@ model WorkOrder {
   customerFeedback         CustomerFeedback?
 
   @@unique([companyId, number])
+  @@unique([parentSpkId, childSequence])
   @@index([companyId, status])
   @@index([customerId])
   @@index([quotationId])
   @@index([purchaseOrderId])
   @@index([requestReviewCompletedByUserId])
+  @@index([parentSpkId])
+}
+
+/// Shared ON_SITE only. The non-executable aggregate/container identity of a
+/// shared (high-volume) SPK — created atomically with its Child SPKs when the
+/// user confirms the distribution ("Lanjut"). Deliberately NOT a WorkOrder: it
+/// has no status, no schedule, no Start/Done, no DLN, and its progress is
+/// always derived from its Children at read time. Exactly one level: only
+/// WorkOrder rows may reference it, so nesting is structurally impossible.
+/// `number` is drawn from the global SPK sequence (SPK/YYYY/MM/NNNNN); Child
+/// numbers append `-${childSequence}` and do not consume that sequence.
+model SpkParent {
+  id              String   @id @default(cuid())
+  companyId       String
+  purchaseOrderId String
+  customerId      String
+  number          String
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdBy     User?         @relation("SpkParentCreatedBy", fields: [createdByUserId], references: [id])
+  children      WorkOrder[]
+
+  @@unique([companyId, number])
+  @@index([purchaseOrderId])
+  @@index([customerId])
 }
 
 /// Operational snapshot of a PurchaseOrderItem's ALLOCATED quantity to this

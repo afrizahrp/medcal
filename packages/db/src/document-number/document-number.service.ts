@@ -85,11 +85,16 @@ async function readMaxExistingSequence(
     return rows[0]?.max_seq ?? 0;
   }
 
+  // The 4th segment must be purely numeric before it is cast: a shared ON_SITE
+  // Child SPK number (`SPK/YYYY/MM/00001-1`) carries a `-N` suffix on that
+  // segment, and casting it would abort every later allocation. Child numbers
+  // never consume the global sequence, so ignoring them here is correct.
   const rows = await tx.$queryRaw<{ max_seq: number }[]>`
     SELECT COALESCE(MAX(CAST(SPLIT_PART("number", '/', 4) AS INTEGER)), 0)::int AS max_seq
     FROM ${Prisma.raw(`"${tableName}"`)}
     WHERE "companyId" = ${companyId}
       AND "number" LIKE ${`${prefix}/${year}/%`}
+      AND SPLIT_PART("number", '/', 4) ~ '^[0-9]+$'
   `;
 
   return rows[0]?.max_seq ?? 0;

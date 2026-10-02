@@ -221,6 +221,35 @@ describe("DocumentNumberService.allocate", () => {
     }
   });
 
+  it("ignores suffixed Child-style numbers (NNNNN-N) when bootstrapping the sequence", async () => {
+    await cleanupSequences(TEST_COMPANY_A);
+
+    const issuedAt = new Date("2026-08-24T00:00:00.000Z");
+    const rows = await Promise.all(
+      ["CUS/2026/08/00004", "CUS/2026/08/00009-1", "CUS/2026/08/00009-2"].map((number) =>
+        prisma.customer.create({
+          data: { companyId: TEST_COMPANY_A, number, name: `Suffix ${number}` },
+        }),
+      ),
+    );
+
+    try {
+      // Without the numeric guard this CAST('00009-1' AS INTEGER) aborts the
+      // allocation; with it, only the plain 00004 seeds the counter.
+      const nextNumber = await prisma.$transaction((tx) =>
+        DocumentNumberService.allocate({
+          companyId: TEST_COMPANY_A,
+          documentType: "CUSTOMER",
+          issuedAt,
+          tx,
+        }),
+      );
+      expect(nextNumber).toBe("CUS/2026/08/00005");
+    } finally {
+      await prisma.customer.deleteMany({ where: { id: { in: rows.map((row) => row.id) } } });
+    }
+  });
+
   describe("Work Order SPK / WOL split", () => {
     const aug2026 = new Date("2026-08-15T08:00:00.000Z");
     const sep2026 = new Date("2026-09-15T08:00:00.000Z");
