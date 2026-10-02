@@ -42,7 +42,8 @@ export class CertificateVerificationService {
 
   /**
    * Resolves `token` to a certificate only if `userId` may see it:
-   * - an ACTIVE user linked (CustomerUserLink) to the certificate's customer, or
+   * - an ACTIVE user with a company membership and a CustomerUserLink to the
+   *   certificate's customer, or
    * - an ACTIVE company member whose role holds certificate:read (staff).
    * Possession of the token alone is never sufficient: the token is a locator,
    * not a credential.
@@ -63,8 +64,14 @@ export class CertificateVerificationService {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { status: true } });
     if (!user || user.status !== "ACTIVE") return null;
 
-    const link = await prisma.customerUserLink.findUnique({
-      where: { userId_customerId: { userId, customerId: certificate.customerId } },
+    // A link only counts while the user still holds a membership in the
+    // certificate's company — a removed membership keeps no access.
+    const link = await prisma.customerUserLink.findFirst({
+      where: {
+        userId,
+        customerId: certificate.customerId,
+        user: { memberships: { some: { companyId: certificate.companyId } } },
+      },
       select: { id: true },
     });
     if (link) return certificate;

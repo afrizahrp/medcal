@@ -947,6 +947,8 @@ describe("CertificateVerificationService", () => {
     });
     createdUserIds.push(customer.id);
     customerUserId = customer.id;
+    await prisma.userMembership.create({ data: { userId: customer.id, companyId, role: "CUSTOMER", isDefault: false } });
+    createdMembershipKeys.push({ userId: customer.id, companyId });
     for (const id of [uploaded.id, generated.id]) {
       const c = await prisma.certificate.findUniqueOrThrow({ where: { id }, select: { customerId: true } });
       await prisma.customerUserLink.create({ data: { userId: customer.id, customerId: c.customerId } });
@@ -998,6 +1000,22 @@ describe("CertificateVerificationService", () => {
       where: { action: "CERTIFICATE_PDF_VIEWED_VIA_VERIFICATION", targetId: generatedCertId },
     });
     expect(log.userId).toBe(customerUserId);
+  });
+
+  it("a leftover CustomerUserLink grants nothing once the user's membership is removed", async () => {
+    await prisma.userMembership.delete({ where: { userId_companyId: { userId: customerUserId, companyId } } });
+    try {
+      for (const attempt of [
+        () => verification.resolve(uploadedToken, customerUserId),
+        () => verification.openPdf(uploadedToken, customerUserId, ctx),
+      ]) {
+        await expect(attempt()).rejects.toMatchObject(notFound);
+      }
+    } finally {
+      await prisma.userMembership.create({ data: { userId: customerUserId, companyId, role: "CUSTOMER", isDefault: false } });
+    }
+    // Restored membership → access is back (the link was never the problem).
+    await expect(verification.resolve(uploadedToken, customerUserId)).resolves.toMatchObject({ status: "VALID" });
   });
 
   it("gives the identical not-found response for a malformed token, an unknown token and a certificate that is not yours", async () => {
@@ -1225,6 +1243,8 @@ describe("HTTP layer (multipart upload, issue, QR and verification routes)", () 
       createdUserIds.push(customer.id, stranger.id);
       customerUserId = customer.id;
       strangerUserId = stranger.id;
+      await prisma.userMembership.create({ data: { userId: customer.id, companyId, role: "CUSTOMER", isDefault: false } });
+      createdMembershipKeys.push({ userId: customer.id, companyId });
       await prisma.customerUserLink.create({ data: { userId: customer.id, customerId: row.customerId } });
     });
 

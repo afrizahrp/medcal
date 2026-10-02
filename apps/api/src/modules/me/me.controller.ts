@@ -291,9 +291,11 @@ export class MeController {
   /**
    * "Which Customer (if any) is this session's user linked to" — the
    * Customer Portal authorization signal, deliberately separate from getMe()
-   * above. Session-only (no ACTIVE-membership requirement): a customer who
-   * has signed up but not yet been approved must still be able to call this
-   * to learn they're not linked yet, without it throwing ACCOUNT_PENDING.
+   * above. Never throws ACCOUNT_PENDING: a customer who has signed up but not
+   * yet been approved can still call this to learn they're not linked yet.
+   * A link only counts while the user is ACTIVE and still holds a membership
+   * in this company — a removed membership must not keep access through a
+   * leftover link.
    *
    * Per the Customer Portal architecture: CUSTOMER role alone is never proof
    * of access to a specific Customer — only a real CustomerUserLink row is
@@ -313,7 +315,11 @@ export class MeController {
     }
 
     const link = await prisma.customerUserLink.findFirst({
-      where: { userId: session.user.id, customer: { companyId } },
+      where: {
+        userId: session.user.id,
+        customer: { companyId },
+        user: { status: "ACTIVE", memberships: { some: { companyId } } },
+      },
       select: { customerId: true },
     });
 

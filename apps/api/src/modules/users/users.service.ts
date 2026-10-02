@@ -1,12 +1,13 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { prisma } from "@medcal/db";
-import type { MembershipRole, Prisma, User, UserMembership, UserStatus } from "@medcal/db";
-import { isAllowedRegistrationDomain } from "@medcal/shared";
+import { Prisma, prisma } from "@medcal/db";
+import type { MembershipRole, User, UserMembership, UserStatus } from "@medcal/db";
+import { isAllowedRegistrationDomain, normalizeEmail } from "@medcal/shared";
 import { resolveOrderBy } from "../../common/sort-query";
 
 /** Whitelisted `sortBy` values for GET /users — see resolveOrderBy. */
@@ -23,7 +24,36 @@ const INTERNAL_STAFF_DOMAIN_ERROR = {
   code: "INTERNAL_STAFF_DOMAIN_REQUIRED",
 };
 
+const CUSTOMER_EMAIL_MISMATCH_ERROR = {
+  message: "The user's email does not match the selected Customer's PIC Email",
+  code: "CUSTOMER_EMAIL_MISMATCH",
+};
+
+const CUSTOMER_ALREADY_HAS_PORTAL_USER_ERROR = {
+  message: "This Customer already has an approved Customer Portal user",
+  code: "CUSTOMER_ALREADY_HAS_PORTAL_USER",
+};
+
 const DEFAULT_PAGE_SIZE = 10;
+
+/**
+ * Customer Portal eligibility: the user's email equals Customer.email (the
+ * PIC Email). CustomerContact.email is deliberately never consulted. Being
+ * eligible only lets staff approve; it grants no access by itself.
+ */
+export function isCustomerPortalEligible(userEmail: string, customerEmail: string | null): boolean {
+  if (!customerEmail || !customerEmail.trim()) return false;
+  return normalizeEmail(userEmail) === normalizeEmail(customerEmail);
+}
+
+export interface EligibleCustomer {
+  id: string;
+  number: string;
+  name: string;
+  email: string;
+  /** True when another portal user is already approved for this Customer. */
+  hasPortalUser: boolean;
+}
 
 export type UserWithMembership = Prisma.UserGetPayload<{
   include: { memberships: { where: { companyId: string } } };
@@ -180,6 +210,30 @@ export class UsersService {
     });
   }
 
+  /**
+   * Customers whose Customer.email (PIC Email) equals this user's email. The
+   * same email may match several Customers; staff pick which one the user is
+   * approved for.
+   */
+  async findEligibleCustomers(companyId: string, userId: string): Promise<EligibleCustomer[]> {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!user) {
+      throw new NotFoundException({ message: "User not found", code: "USER_NOT_FOUND" });
+    }
+    const customers = await prisma.customer.findMany({
+      where: { companyId, email: { equals: normalizeEmail(user.email), mode: "insensitive" } },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      select: { id: true, number: true, name: true, email: true, userLinks: { select: { userId: true } } },
+    });
+    return customers.map((customer) => ({
+      id: customer.id,
+      number: customer.number,
+      name: customer.name,
+      email: customer.email ?? "",
+      hasPortalUser: customer.userLinks.some((link) => link.userId !== userId),
+    }));
+  }
+
   async assignMembership(
     companyId: string,
     userId: string,
@@ -231,9 +285,25 @@ export class UsersService {
       if (!customer) {
         throw new NotFoundException({ message: "Customer not found", code: "CUSTOMER_NOT_FOUND" });
       }
+      // Eligibility is re-derived here from the stored emails; the client's
+      // selection is never trusted. Customer.email only — not the contact's.
+      if (!isCustomerPortalEligible(user.email, customer.email)) {
+        throw new BadRequestException(CUSTOMER_EMAIL_MISMATCH_ERROR);
+      }
     }
 
     return prisma.$transaction(async (tx) => {
+      if (role === "CUSTOMER" && customerId) {
+        // One Customer, at most one approved portal user. The unique index on
+        // CustomerUserLink.customerId is the backstop for a concurrent approval.
+        const occupied = await tx.customerUserLink.findFirst({
+          where: { customerId, userId: { not: userId } },
+          select: { id: true },
+        });
+        if (occupied) {
+          throw new ConflictException(CUSTOMER_ALREADY_HAS_PORTAL_USER_ERROR);
+        }
+      }
       const membership = await tx.userMembership.create({
         data: { userId, companyId, role, isDefault: false },
       });
@@ -249,11 +319,18 @@ export class UsersService {
         // exists (e.g. membership was previously removed and re-approved
         // against the same Customer) — the unique constraint is on
         // [userId, customerId], not scoped to this membership's lifecycle.
-        await tx.customerUserLink.upsert({
-          where: { userId_customerId: { userId, customerId } },
-          create: { userId, customerId },
-          update: {},
-        });
+        try {
+          await tx.customerUserLink.upsert({
+            where: { userId_customerId: { userId, customerId } },
+            create: { userId, customerId },
+            update: {},
+          });
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+            throw new ConflictException(CUSTOMER_ALREADY_HAS_PORTAL_USER_ERROR);
+          }
+          throw err;
+        }
       }
       return membership;
     });
@@ -294,9 +371,16 @@ export class UsersService {
       throw new ForbiddenException(INTERNAL_STAFF_DOMAIN_ERROR);
     }
 
-    return prisma.userMembership.update({
-      where: { userId_companyId: { userId, companyId } },
-      data: { role },
+    // Leaving the CUSTOMER role ends the Customer Portal authorization too:
+    // the link is the access record, so it must not outlive the role.
+    return prisma.$transaction(async (tx) => {
+      if (role !== "CUSTOMER") {
+        await tx.customerUserLink.deleteMany({ where: { userId, customer: { companyId } } });
+      }
+      return tx.userMembership.update({
+        where: { userId_companyId: { userId, companyId } },
+        data: { role },
+      });
     });
   }
 
@@ -341,9 +425,11 @@ export class UsersService {
       });
     }
 
-    await prisma.userMembership.delete({
-      where: { userId_companyId: { userId, companyId } },
-    });
+    // Revoking access also frees the Customer for another portal user.
+    await prisma.$transaction([
+      prisma.customerUserLink.deleteMany({ where: { userId, customer: { companyId } } }),
+      prisma.userMembership.delete({ where: { userId_companyId: { userId, companyId } } }),
+    ]);
   }
 
   async findUsersWithoutMembership(

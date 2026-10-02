@@ -6,8 +6,6 @@ import Link from "next/link";
 import { ArrowLeft, UserPlus, Users } from "lucide-react";
 import { ApiError, apiFetch, isAllowedRegistrationDomain } from "@medcal/shared";
 import { Button } from "@/components/ui/button";
-import { CustomerCommandSelect } from "../../calibration-requests/calibration-requests-ui";
-import { useCustomers } from "../../customers/use-customers-query";
 
 type MembershipRole =
   | "ADMIN"
@@ -23,6 +21,16 @@ interface UserWithoutMembership {
   id: string;
   email: string;
   name: string | null;
+}
+
+// Customers whose Customer.email (PIC Email) equals the selected user's email —
+// computed by the API. The server re-checks the match on approval.
+interface EligibleCustomer {
+  id: string;
+  number: string;
+  name: string;
+  email: string;
+  hasPortalUser: boolean;
 }
 
 const ROLE_LABELS: Record<MembershipRole, string> = {
@@ -62,17 +70,10 @@ export default function AssignUserPage() {
 
   // Only fetched/shown when the CUSTOMER role is selected — this is the
   // explicit staff action that creates the User -> CustomerUserLink ->
-  // Customer authorization relationship. Never inferred from the user's
-  // email domain or any registration-time input.
-  const customersQuery = useCustomers({
-    search: "",
-    status: "ACTIVE",
-    sortBy: "name",
-    sortDir: "asc",
-    page: 1,
-    pageSize: 100,
-  });
-  const customers = customersQuery.data?.data ?? [];
+  // Customer authorization relationship. The user's email only makes a
+  // Customer eligible; staff still choose which one to approve.
+  const [eligibleCustomers, setEligibleCustomers] = useState<EligibleCustomer[]>([]);
+  const [eligibleLoading, setEligibleLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -120,7 +121,39 @@ export default function AssignUserPage() {
   }, [selectedUserId]);
 
   const customerRequired = selectedRole === "CUSTOMER";
-  const canAssign = !!selectedUserId && (!customerRequired || !!selectedCustomerId);
+
+  useEffect(() => {
+    if (!customerRequired || !selectedUserId) {
+      setEligibleCustomers([]);
+      return;
+    }
+    let cancelled = false;
+    setEligibleLoading(true);
+    apiFetch<EligibleCustomer[]>(`/users/${selectedUserId}/eligible-customers`)
+      .then((data) => {
+        if (cancelled) return;
+        setEligibleCustomers(data);
+        // Pre-select only when there is exactly one free match.
+        const free = data.filter((customer) => !customer.hasPortalUser);
+        if (free.length === 1) setSelectedCustomerId(free[0].id);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEligibleCustomers([]);
+          setError("Gagal memuat Customer yang sesuai dengan email user.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setEligibleLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerRequired, selectedUserId]);
+
+  const selectedEligible = eligibleCustomers.find((customer) => customer.id === selectedCustomerId);
+  const canAssign =
+    !!selectedUserId && (!customerRequired || (!!selectedEligible && !selectedEligible.hasPortalUser));
 
   async function assignMembership() {
     if (!canAssign) return;
@@ -145,6 +178,10 @@ export default function AssignUserPage() {
         setError("Pilih Customer untuk role Customer.");
       } else if (err instanceof ApiError && err.data?.code === "CUSTOMER_NOT_FOUND") {
         setError("Customer yang dipilih tidak ditemukan.");
+      } else if (err instanceof ApiError && err.data?.code === "CUSTOMER_EMAIL_MISMATCH") {
+        setError("Email user tidak sama dengan Email (PIC) Customer yang dipilih.");
+      } else if (err instanceof ApiError && err.data?.code === "CUSTOMER_ALREADY_HAS_PORTAL_USER") {
+        setError("Customer ini sudah memiliki user Customer Portal yang disetujui.");
       } else {
         setError("Gagal assign membership.");
       }
@@ -228,18 +265,33 @@ export default function AssignUserPage() {
                 <label className="block text-sm font-medium text-slate-700">
                   Customer <span className="text-red-500">*</span>
                 </label>
-                <div className="mt-1.5">
-                  <CustomerCommandSelect
+                {eligibleLoading ? (
+                  <p className="mt-1.5 text-sm text-slate-400">Memuat...</p>
+                ) : eligibleCustomers.length === 0 ? (
+                  <p className="mt-1.5 text-sm text-amber-700">
+                    Tidak ada Customer dengan Email (PIC) yang sama dengan email user ini, jadi user
+                    belum dapat disetujui sebagai user Customer Portal.
+                  </p>
+                ) : (
+                  <select
                     value={selectedCustomerId}
-                    onChange={setSelectedCustomerId}
-                    customers={customers}
-                    loading={customersQuery.isLoading}
+                    onChange={(e) => setSelectedCustomerId(e.target.value)}
+                    className={`${selectClassName} mt-1.5`}
                     disabled={assigning}
-                  />
-                </div>
+                  >
+                    <option value="">Pilih Customer…</option>
+                    {eligibleCustomers.map((customer) => (
+                      <option key={customer.id} value={customer.id} disabled={customer.hasPortalUser}>
+                        {customer.number} — {customer.name}
+                        {customer.hasPortalUser ? " (sudah punya user portal)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <p className="mt-1.5 text-xs text-slate-400">
-                  User akan diberi akses hanya ke data milik Customer yang dipilih di sini. Pilihan ini
-                  wajib dan tidak ditentukan otomatis dari email atau nama perusahaan.
+                  Hanya Customer yang Email-nya (PIC) sama dengan email user yang bisa dipilih. Jika
+                  beberapa Customer cocok, pilih Customer yang disetujui untuk user ini. Satu Customer
+                  hanya boleh memiliki satu user Customer Portal.
                 </p>
               </div>
             )}

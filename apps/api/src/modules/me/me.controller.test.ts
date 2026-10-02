@@ -141,14 +141,42 @@ describe("MeController.getCustomerLink", () => {
     expect(result).toEqual({ customerId: null });
   });
 
-  it("returns the linked customerId once a CustomerUserLink exists, without requiring ACTIVE membership", async () => {
-    const user = await makeUser("INVITED");
+  it("returns the linked customerId for an ACTIVE user with a membership and a CustomerUserLink", async () => {
+    const user = await makeUser("ACTIVE");
     const customer = await makeCustomer();
+    await prisma.userMembership.create({
+      data: { userId: user.id, companyId, role: "CUSTOMER", isDefault: false },
+    });
+    createdMembershipKeys.push({ userId: user.id, companyId });
     await prisma.customerUserLink.create({ data: { userId: user.id, customerId: customer.id } });
     getSessionMock.mockResolvedValueOnce({ user: { id: user.id, email: user.email } });
 
     const result = await controller.getCustomerLink(request());
     expect(result).toEqual({ customerId: customer.id });
+  });
+
+  it("does not honour a leftover CustomerUserLink once the membership is gone", async () => {
+    const user = await makeUser("ACTIVE");
+    const customer = await makeCustomer();
+    await prisma.customerUserLink.create({ data: { userId: user.id, customerId: customer.id } });
+    getSessionMock.mockResolvedValueOnce({ user: { id: user.id, email: user.email } });
+
+    expect(await controller.getCustomerLink(request())).toEqual({ customerId: null });
+  });
+
+  it("does not honour a CustomerUserLink for a DISABLED or INVITED user even with a membership", async () => {
+    for (const status of ["DISABLED", "INVITED"] as const) {
+      const user = await makeUser(status);
+      const customer = await makeCustomer();
+      await prisma.userMembership.create({
+        data: { userId: user.id, companyId, role: "CUSTOMER", isDefault: false },
+      });
+      createdMembershipKeys.push({ userId: user.id, companyId });
+      await prisma.customerUserLink.create({ data: { userId: user.id, customerId: customer.id } });
+      getSessionMock.mockResolvedValueOnce({ user: { id: user.id, email: user.email } });
+
+      expect(await controller.getCustomerLink(request())).toEqual({ customerId: null });
+    }
   });
 
   it("does not use a CUSTOMER-role membership alone as proof of a link", async () => {

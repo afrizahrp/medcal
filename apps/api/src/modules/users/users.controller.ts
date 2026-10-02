@@ -116,6 +116,12 @@ export class UsersController {
     return this.service.findUsersWithoutMembership(companyId);
   }
 
+  @Get(":id/eligible-customers")
+  @RequirePermission("membership", "manage")
+  async eligibleCustomers(@CompanyId() companyId: string, @Param("id") id: string) {
+    return this.service.findEligibleCustomers(companyId, id);
+  }
+
   @Get(":id")
   @RequirePermission("users", "read")
   async findOne(@CompanyId() companyId: string, @Param("id") id: string): Promise<UserListRow> {

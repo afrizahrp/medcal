@@ -787,7 +787,8 @@ model CustomerUserLink {
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@unique([userId, customerId])
-  @@index([customerId])
+  // One Customer has at most one approved Customer Portal user.
+  @@unique([customerId])
 }
 
 model FCMToken {
