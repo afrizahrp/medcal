@@ -83,7 +83,8 @@ const purchaseOrderInclude = {
       status: true,
       requestId: true,
       customerId: true,
-      request: { select: { number: true } },
+      // serviceMode: lets the UI offer Share Job (ON_SITE only).
+      request: { select: { number: true, serviceMode: true } },
     },
   },
   // Who approved the PO, resolved for display — `name` is nullable, so `email`
@@ -155,6 +156,10 @@ export interface PurchaseOrderWorkOrderSummary {
   createdAt: Date;
   itemCount: number;
   totalQty: number;
+  /** Shared ON_SITE: the Parent SPK this Child belongs to; NULL for single/flat SPK and WOL. */
+  parentSpkId: string | null;
+  parentSpkNumber: string | null;
+  childSequence: number | null;
 }
 
 function isUniqueConstraintError(error: unknown): boolean {
@@ -482,6 +487,8 @@ export class PurchaseOrdersService {
         status: true,
         serviceMode: true,
         createdAt: true,
+        childSequence: true,
+        parentSpk: { select: { id: true, number: true } },
         items: { select: { qty: true } },
       },
       orderBy: { createdAt: "asc" },
@@ -495,6 +502,9 @@ export class PurchaseOrdersService {
       createdAt: wo.createdAt,
       itemCount: wo.items.length,
       totalQty: wo.items.reduce((sum, item) => sum + item.qty.toNumber(), 0),
+      parentSpkId: wo.parentSpk?.id ?? null,
+      parentSpkNumber: wo.parentSpk?.number ?? null,
+      childSequence: wo.childSequence,
     }));
   }
 

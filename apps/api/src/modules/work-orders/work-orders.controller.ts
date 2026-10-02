@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Inject,
   Param,
@@ -12,6 +13,7 @@ import {
   StreamableFile,
   UseGuards,
 } from "@nestjs/common";
+import { hasPermission } from "@medcal/auth";
 import type { MembershipRole } from "@medcal/db";
 import {
   workOrderAssignSchema,
@@ -23,12 +25,15 @@ import {
   workOrderRequestReviewSchema,
   workOrderUpdateSchema,
   workOrderItemAccessoriesReplaceSchema,
+  sharedSpkCreateSchema,
+  sharedSpkReviseSchema,
 } from "@medcal/shared";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { MembershipRoleParam } from "../../common/decorators/membership-role.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { UserId } from "../../common/decorators/user-id.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
+import { SharedSpkService, type SharedSpkDetail } from "./shared-spk.service";
 import {
   WorkOrdersService,
   type WorkOrderHistorySummary,
@@ -43,7 +48,71 @@ export class WorkOrdersController {
   constructor(
     @Inject(WorkOrdersService)
     private readonly service: WorkOrdersService,
+    @Inject(SharedSpkService)
+    private readonly sharedSpk: SharedSpkService,
   ) {}
+
+  /**
+   * Shared ON_SITE SPK ("Share Job"): confirm a distribution ("Lanjut") →
+   * Parent SPK + Child SPKs, atomically. Distributing work also assigns the
+   * technicians, so `workOrder:assign` is required in addition to the route's
+   * `workOrder:create`. Declared before the `:id` routes.
+   */
+  @Post("shared")
+  @RequirePermission("workOrder", "create")
+  async createShared(
+    @CompanyId() companyId: string,
+    @MembershipRoleParam() role: MembershipRole,
+    @UserId() userId: string,
+    @Body() rawBody: unknown,
+  ): Promise<SharedSpkDetail> {
+    if (!hasPermission(role, "workOrder" as never, "assign")) {
+      throw new ForbiddenException("Forbidden");
+    }
+    const parsed = sharedSpkCreateSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid shared SPK payload",
+        code: "INVALID_SHARED_SPK",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.sharedSpk.create(companyId, userId, parsed.data);
+  }
+
+  /** Read-only Parent SPK aggregate: derived status/progress + Child SPKs. */
+  @Get("shared/:id")
+  @RequirePermission("workOrder", "read")
+  async findShared(
+    @CompanyId() companyId: string,
+    @Param("id") id: string,
+  ): Promise<SharedSpkDetail> {
+    return this.sharedSpk.findOne(companyId, id);
+  }
+
+  /** Revise the unstarted part of a shared job (per-Child locking). */
+  @Put("shared/:id/distribution")
+  @RequirePermission("workOrder", "update")
+  async reviseShared(
+    @CompanyId() companyId: string,
+    @MembershipRoleParam() role: MembershipRole,
+    @UserId() userId: string,
+    @Param("id") id: string,
+    @Body() rawBody: unknown,
+  ): Promise<SharedSpkDetail> {
+    if (!hasPermission(role, "workOrder" as never, "assign")) {
+      throw new ForbiddenException("Forbidden");
+    }
+    const parsed = sharedSpkReviseSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "Invalid shared SPK revision",
+        code: "INVALID_SHARED_SPK_REVISION",
+        issues: parsed.error.flatten(),
+      });
+    }
+    return this.sharedSpk.revise(companyId, userId, id, parsed.data);
+  }
 
   @Post()
   @RequirePermission("workOrder", "create")

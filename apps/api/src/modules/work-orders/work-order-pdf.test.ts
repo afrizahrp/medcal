@@ -121,6 +121,24 @@ describe("renderWorkOrderPdf", () => {
     expect(pageCount(result.buffer)).toBe(1);
   });
 
+  it("renders a shared ON_SITE Child SPK (parent-child number) as an SPK with its own filename", async () => {
+    const child1 = await renderWorkOrderPdf({
+      workOrder: makeSource({ number: "SPK/2026/10/00001-1" }),
+      company,
+    });
+    const child2 = await renderWorkOrderPdf({
+      workOrder: makeSource({ number: "SPK/2026/10/00001-2" }),
+      company,
+    });
+
+    expect(child1.buffer.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(pageCount(child1.buffer)).toBe(1);
+    expect(pdfDecodedText(child1.buffer)).toContain("SPK/2026/10/00001-1");
+    // Distinct, filesystem-safe names so sibling Child PDFs never overwrite each other.
+    expect(child1.filename).toBe("PKM-SPK-2026-10-00001-1.pdf");
+    expect(child2.filename).toBe("PKM-SPK-2026-10-00001-2.pdf");
+  });
+
   it("renders a WOL (Formulir Work Order) for a SEND_TO_LAB Work Order", async () => {
     const result = await renderWorkOrderPdf({
       workOrder: makeSource({ number: "WOL/2026/09/00001", serviceMode: "SEND_TO_LAB" }),

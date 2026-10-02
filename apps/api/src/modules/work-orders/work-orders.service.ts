@@ -2,7 +2,6 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import {
   DocumentNumberService,
   Prisma,
-  allocateRevisionNumber,
   prisma,
   type MembershipRole,
 } from "@medcal/db";
@@ -25,6 +24,8 @@ import {
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { recordAuditLog } from "../calibration-jobs/audit-log";
 import { renderWorkOrderPdf, type WorkOrderPdfResult } from "./work-order-pdf";
+import { snapshotWorkOrderHistory } from "./work-order-history";
+import { loadWorkOrderSourcePurchaseOrder } from "./work-order-source";
 import {
   WORK_ORDER_EQUIPMENT_ORDER_STEP,
   deviceTypeIdsFromItems,
@@ -92,6 +93,9 @@ const workOrderInclude = {
     orderBy: { unitOrdinal: "asc" as const },
   },
   customer: { include: { contacts: true } },
+  // Shared ON_SITE: the non-executable Parent this Child SPK belongs to (NULL
+  // for single/flat SPK and WOL).
+  parentSpk: { select: { id: true, number: true } },
   requestReviewCompletedBy: { select: { id: true, name: true } },
   purchaseOrder: {
     select: {
@@ -227,45 +231,11 @@ function assertNoActiveDeliveryNote(
 export class WorkOrdersService {
   async create(companyId: string, input: WorkOrderCreateInput): Promise<WorkOrderWithItems> {
     return prisma.$transaction(async (tx) => {
-        const purchaseOrder = await tx.purchaseOrder.findFirst({
-          where: { id: input.purchaseOrderId, companyId },
-          include: {
-            // MOM #1 — Revision Scope Design: only active PO scope may ever
-            // propagate downstream.
-            items: { where: { status: { not: "CANCELLED" } }, orderBy: { createdAt: "asc" } },
-            quotation: {
-              include: { request: { select: { id: true, serviceMode: true } } },
-            },
-          },
-        });
-        if (!purchaseOrder) {
-          throw new NotFoundException({
-            message: "Purchase order not found",
-            code: "PURCHASE_ORDER_NOT_FOUND",
-          });
-        }
-
-        if (purchaseOrder.status !== "APPROVED") {
-          throw new BadRequestException({
-            message: "Only APPROVED purchase orders can create a work order",
-            code: "INVALID_STATUS_FOR_WORK_ORDER",
-          });
-        }
-
-        if (purchaseOrder.items.length === 0) {
-          throw new BadRequestException({
-            message: "Purchase order has no items to snapshot",
-            code: "PURCHASE_ORDER_HAS_NO_ITEMS",
-          });
-        }
-
-        const request = purchaseOrder.quotation.request;
-        if (!request) {
-          throw new BadRequestException({
-            message: "Purchase order is missing its source calibration request",
-            code: "CALIBRATION_REQUEST_NOT_FOUND",
-          });
-        }
+        const { purchaseOrder, request } = await loadWorkOrderSourcePurchaseOrder(
+          tx,
+          companyId,
+          input.purchaseOrderId,
+        );
 
         // Allocation & Multi-WOL Architecture: a PurchaseOrder may now have
         // any number of simultaneously active WorkOrders — the former
@@ -378,6 +348,7 @@ export class WorkOrdersService {
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.purchaseOrderId ? { purchaseOrderId: query.purchaseOrderId } : {}),
       ...(query.quotationId ? { quotationId: query.quotationId } : {}),
+      ...(query.parentSpkId ? { parentSpkId: query.parentSpkId } : {}),
       ...(query.search
         ? {
             OR: [
@@ -470,6 +441,21 @@ export class WorkOrdersService {
       "INVALID_STATUS_FOR_UPDATE",
       "Cannot update a terminal work order",
     );
+
+    // Shared ON_SITE Child SPK: once started, its planned schedule is part of
+    // the execution record and is not rewritten through ordinary updates. (A
+    // post-start rescheduling workflow is deliberately out of scope.) Single /
+    // flat SPK and WOL keep their existing behaviour.
+    if (
+      existing.parentSpkId !== null &&
+      existing.status === "IN_PROGRESS" &&
+      (input.scheduledStart !== undefined || input.scheduledEnd !== undefined)
+    ) {
+      throw new BadRequestException({
+        message: "The schedule of a started Child SPK can no longer be changed",
+        code: "SHARED_CHILD_SCHEDULE_LOCKED",
+      });
+    }
 
     await prisma.workOrder.update({
       where: { id },
@@ -1281,46 +1267,7 @@ export class WorkOrdersService {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // Row lock for concurrent revise() calls on the same work order — see
-      // allocateRevisionNumber for why this must happen before it is called.
-      await tx.workOrder.update({ where: { id }, data: {} });
-
-      const revisionNumber = await allocateRevisionNumber({
-        tx,
-        historyTable: "WorkOrderHistory",
-        parentIdColumn: "workOrderId",
-        parentId: id,
-      });
-
-      await tx.workOrderHistory.create({
-        data: {
-          workOrderId: id,
-          revisionNumber,
-          companyId,
-          quotationId: existing.quotationId,
-          purchaseOrderId: existing.purchaseOrderId,
-          customerId: existing.customerId,
-          number: existing.number,
-          serviceMode: existing.serviceMode,
-          addressText: existing.addressText,
-          geoLat: existing.geoLat,
-          geoLng: existing.geoLng,
-          locationNotes: existing.locationNotes,
-          scheduledStart: existing.scheduledStart,
-          scheduledEnd: existing.scheduledEnd,
-          status: existing.status,
-          equipmentConfirmedAt: existing.equipmentConfirmedAt,
-          revisedByUserId: userId,
-          items: {
-            create: existing.items.map((item) => ({
-              sourceItemId: item.id,
-              purchaseOrderItemId: item.purchaseOrderItemId,
-              description: item.description,
-              qty: item.qty,
-            })),
-          },
-        },
-      });
+      await snapshotWorkOrderHistory(tx, existing, userId);
 
       // REMOVED: source PurchaseOrderItem is no longer active. Always a safe
       // hard delete — no CalibrationJob can exist yet at PLANNED/ASSIGNED.

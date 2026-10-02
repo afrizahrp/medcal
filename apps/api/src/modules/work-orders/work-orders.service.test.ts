@@ -5,7 +5,10 @@ import { Prisma, prisma } from "@medcal/db";
 import { isValidDocumentNumber } from "@medcal/db";
 import {
   workOrderAssignSchema,
+  sharedSpkCreateSchema,
+  sharedSpkReviseSchema,
   workOrderCreateSchema,
+  workOrderListQuerySchema,
   workOrderUpdateSchema,
 } from "@medcal/shared";
 import { CalibrationRequestsService } from "../calibration-requests/calibration-requests.service";
@@ -13,6 +16,7 @@ import { QuotationsService } from "../quotations/quotations.service";
 import { PurchaseOrdersService } from "../purchase-orders/purchase-orders.service";
 import { WorkOrdersService } from "./work-orders.service";
 import { DeliveryNotesService } from "./delivery-notes.service";
+import { SharedSpkService } from "./shared-spk.service";
 
 const workOrdersService = new WorkOrdersService();
 const purchaseOrdersService = new PurchaseOrdersService();
@@ -21,6 +25,7 @@ const requestsService = new CalibrationRequestsService();
 const realCompanyId = "PKM";
 const staffUserId = "wo-staff-user";
 const createdWorkOrderIds: string[] = [];
+const createdSpkParentIds: string[] = [];
 const createdPurchaseOrderIds: string[] = [];
 const createdQuotationIds: string[] = [];
 const createdCalibrationRequestIds: string[] = [];
@@ -309,7 +314,15 @@ async function createTrackedWorkOrder(
 }
 
 afterAll(async () => {
+  // Shared ON_SITE: Children (WorkOrder) reference their Parent with RESTRICT, and
+  // the Parent references the PurchaseOrder with RESTRICT — delete in that order.
+  if (createdSpkParentIds.length > 0) {
+    await prisma.workOrder.deleteMany({ where: { parentSpkId: { in: createdSpkParentIds } } });
+  }
   await cleanupWorkOrders();
+  if (createdSpkParentIds.length > 0) {
+    await prisma.spkParent.deleteMany({ where: { id: { in: createdSpkParentIds } } });
+  }
   if (createdDeviceIds.length > 0) {
     await prisma.device.deleteMany({ where: { id: { in: createdDeviceIds } } });
   }
@@ -2622,5 +2635,814 @@ describe("Allocation & Multi-WOL Architecture — required test matrix", () => {
 
     const jobCount = await prisma.calibrationJob.count({ where: { workOrderId: wo.id } });
     expect(jobCount).toBe(2); // itemCount: 2, one job per item, unaffected by allocationId being NULL
+  });
+});
+
+// =============================================================================
+// Shared ON_SITE SPK — Parent / Child SPK
+// =============================================================================
+
+describe("Shared ON_SITE SPK (Parent / Child)", () => {
+  const sharedSpkService = new SharedSpkService();
+  const deliveryNotesService = new DeliveryNotesService();
+  const createdEquipmentTypeIds: string[] = [];
+  const createdEquipmentIds: string[] = [];
+
+  afterAll(async () => {
+    await prisma.workOrderEquipment.deleteMany({
+      where: { equipmentId: { in: createdEquipmentIds } },
+    });
+    if (createdEquipmentIds.length > 0) {
+      await prisma.equipment.deleteMany({ where: { id: { in: createdEquipmentIds } } });
+    }
+    if (createdEquipmentTypeIds.length > 0) {
+      await prisma.equipmentType.deleteMany({ where: { id: { in: createdEquipmentTypeIds } } });
+    }
+  });
+
+  type Batch = {
+    qty: number;
+    scheduledStart?: Date;
+    scheduledEnd?: Date;
+    technicianUserId?: string;
+  };
+
+  /** Creates a Parent + Children (one technician each) and tracks them for cleanup. */
+  async function createShared(
+    purchaseOrderId: string,
+    itemId: string,
+    batches: Batch[],
+    extra?: { addressText?: string },
+  ) {
+    const children = [];
+    for (const batch of batches) {
+      const technicianUserId = batch.technicianUserId ?? (await createTechnician(realCompanyId)).id;
+      children.push({
+        technicianUserId,
+        items: [{ purchaseOrderItemId: itemId, qty: batch.qty }],
+        scheduledStart: batch.scheduledStart,
+        scheduledEnd: batch.scheduledEnd,
+      });
+    }
+    const detail = await sharedSpkService.create(realCompanyId, staffUserId, {
+      purchaseOrderId,
+      addressText: extra?.addressText,
+      children,
+    });
+    createdSpkParentIds.push(detail.id);
+    return detail;
+  }
+
+  async function sharedPo(qty: number) {
+    return createApprovedPurchaseOrderWithSingleItemQty(realCompanyId, qty);
+  }
+
+  async function activeAllocationSum(itemId: string): Promise<number> {
+    const agg = await prisma.purchaseOrderItemAllocation.aggregate({
+      where: { purchaseOrderItemId: itemId, status: "ACTIVE" },
+      _sum: { qty: true },
+    });
+    return agg._sum.qty?.toNumber() ?? 0;
+  }
+
+  /** Every ACTIVE allocation must be backed by exactly one WorkOrderItem and vice versa. */
+  async function expectNoOrphanedAllocations(itemId: string, parentId: string) {
+    const activeAllocations = await prisma.purchaseOrderItemAllocation.findMany({
+      where: { purchaseOrderItemId: itemId, status: "ACTIVE" },
+      include: { workOrderItem: true, workOrder: { select: { parentSpkId: true, status: true } } },
+    });
+    for (const allocation of activeAllocations) {
+      expect(allocation.workOrderItem).not.toBeNull();
+      expect(allocation.workOrderItem!.qty.equals(allocation.qty)).toBe(true);
+      expect(allocation.workOrder.status).not.toBe("CANCELLED");
+    }
+    const children = await prisma.workOrder.findMany({
+      where: { parentSpkId: parentId, status: { not: "CANCELLED" } },
+      include: { items: true },
+    });
+    const itemQty = children.flatMap((child) => child.items).reduce((sum, row) => sum + row.qty.toNumber(), 0);
+    const allocQty = activeAllocations.reduce((sum, row) => sum + row.qty.toNumber(), 0);
+    expect(itemQty).toBe(allocQty);
+  }
+
+  async function startChild(workOrderId: string) {
+    return workOrdersService.start(realCompanyId, workOrderId);
+  }
+
+  // ---- schemas ----------------------------------------------------------------
+
+  describe("schemas", () => {
+    const child = { technicianUserId: "u1", items: [{ purchaseOrderItemId: "i1", qty: 5 }] };
+
+    it("requires at least two Children", () => {
+      expect(sharedSpkCreateSchema.safeParse({ purchaseOrderId: "po", children: [child] }).success).toBe(false);
+      expect(sharedSpkCreateSchema.safeParse({ purchaseOrderId: "po", children: [child, child] }).success).toBe(true);
+    });
+
+    it("rejects a schedule that ends before it starts", () => {
+      const parsed = sharedSpkCreateSchema.safeParse({
+        purchaseOrderId: "po",
+        children: [child, { ...child, scheduledStart: "2026-10-05", scheduledEnd: "2026-10-01" }],
+      });
+      expect(parsed.success).toBe(false);
+    });
+
+    it("rejects an empty revision and a Child referenced twice", () => {
+      expect(sharedSpkReviseSchema.safeParse({}).success).toBe(false);
+      expect(
+        sharedSpkReviseSchema.safeParse({ children: [{ ...child, workOrderId: "w1" }], removeWorkOrderIds: ["w1"] })
+          .success,
+      ).toBe(false);
+    });
+  });
+
+  // ---- numbering --------------------------------------------------------------
+
+  describe("numbering", () => {
+    it("gives the Parent the global SPK number and Children parentNumber-1..N", async () => {
+      const { purchaseOrder, item } = await sharedPo(30);
+      const parent = await createShared(purchaseOrder.id, item.id, [{ qty: 10 }, { qty: 10 }, { qty: 10 }]);
+
+      expect(isValidDocumentNumber(parent.number)).toBe(true);
+      expect(parent.number.startsWith("SPK/")).toBe(true);
+      expect(parent.children.map((child) => child.number)).toEqual([
+        `${parent.number}-1`,
+        `${parent.number}-2`,
+        `${parent.number}-3`,
+      ]);
+      expect(parent.children.map((child) => child.childSequence)).toEqual([1, 2, 3]);
+    });
+
+    it("does not let Child numbers consume the global SPK sequence, and later SPK allocation still works", async () => {
+      const first = await sharedPo(20);
+      const parent = await createShared(first.purchaseOrder.id, first.item.id, [{ qty: 10 }, { qty: 10 }]);
+
+      const second = await createApprovedPurchaseOrder(realCompanyId, { serviceMode: "ON_SITE" });
+      const single = await createTrackedWorkOrder(realCompanyId, second.purchaseOrder.id);
+      const wol = await createApprovedPurchaseOrder(realCompanyId, { serviceMode: "SEND_TO_LAB" });
+      const lab = await createTrackedWorkOrder(realCompanyId, wol.purchaseOrder.id);
+
+      // The Parent took one SPK number; the two Children took none → next flat SPK is parent + 1.
+      expect(Number(single.number.split("/")[3])).toBe(Number(parent.number.split("/")[3]) + 1);
+      expect(isValidDocumentNumber(single.number)).toBe(true);
+      expect(isValidDocumentNumber(lab.number)).toBe(true);
+      expect(lab.number.startsWith("WOL/")).toBe(true);
+      expect(single.parentSpkId).toBeNull();
+      expect(single.childSequence).toBeNull();
+    });
+  });
+
+  // ---- atomic creation ----------------------------------------------------------
+
+  describe("creation", () => {
+    it("creates Parent + Children atomically with assignment, allocation and per-Child schedule", async () => {
+      const { purchaseOrder, item } = await sharedPo(40);
+      const techA = await createTechnician(realCompanyId);
+      const techB = await createTechnician(realCompanyId);
+      const parent = await createShared(
+        purchaseOrder.id,
+        item.id,
+        [
+          { qty: 15, technicianUserId: techA.id, scheduledStart: new Date("2026-10-01"), scheduledEnd: new Date("2026-10-01") },
+          { qty: 25, technicianUserId: techB.id, scheduledStart: new Date("2026-10-02"), scheduledEnd: new Date("2026-10-04") },
+        ],
+        { addressText: "RS Contoh" },
+      );
+
+      expect(parent.status).toBe("NOT_STARTED");
+      expect(parent.children).toHaveLength(2);
+      expect(parent.children.map((child) => child.status)).toEqual(["ASSIGNED", "ASSIGNED"]);
+      expect(parent.children[0]!.technicians.map((row) => row.id)).toEqual([techA.id]);
+      expect(parent.children[1]!.technicians.map((row) => row.id)).toEqual([techB.id]);
+      expect(parent.children[1]!.scheduledStart?.toISOString().slice(0, 10)).toBe("2026-10-02");
+      expect(parent.children[1]!.scheduledEnd?.toISOString().slice(0, 10)).toBe("2026-10-04");
+      expect(parent.children.map((child) => child.items[0]!.qty)).toEqual([15, 25]);
+      expect(await activeAllocationSum(item.id)).toBe(40);
+
+      const rows = await prisma.workOrder.findMany({ where: { parentSpkId: parent.id } });
+      expect(rows.every((row) => row.serviceMode === "ON_SITE" && row.addressText === "RS Contoh")).toBe(true);
+    });
+
+    it("rejects a SEND_TO_LAB purchase order (ON_SITE only) and creates nothing", async () => {
+      const { purchaseOrder } = await createApprovedPurchaseOrder(realCompanyId, {
+        serviceMode: "SEND_TO_LAB",
+        itemCount: 2,
+      });
+      const items = await prisma.purchaseOrderItem.findMany({ where: { purchaseOrderId: purchaseOrder.id } });
+      const techA = await createTechnician(realCompanyId);
+      const techB = await createTechnician(realCompanyId);
+      await expect(
+        sharedSpkService.create(realCompanyId, staffUserId, {
+          purchaseOrderId: purchaseOrder.id,
+          children: [
+            { technicianUserId: techA.id, items: [{ purchaseOrderItemId: items[0]!.id, qty: 1 }] },
+            { technicianUserId: techB.id, items: [{ purchaseOrderItemId: items[1]!.id, qty: 1 }] },
+          ],
+        }),
+      ).rejects.toMatchObject({ response: { code: "SHARED_SPK_ON_SITE_ONLY" } });
+      expect(await prisma.spkParent.count({ where: { purchaseOrderId: purchaseOrder.id } })).toBe(0);
+    });
+
+    it("requires an APPROVED purchase order", async () => {
+      const { purchaseOrder, item } = await sharedPo(10);
+      await prisma.purchaseOrder.update({ where: { id: purchaseOrder.id }, data: { status: "DRAFT" } });
+      const techA = await createTechnician(realCompanyId);
+      const techB = await createTechnician(realCompanyId);
+      await expect(
+        sharedSpkService.create(realCompanyId, staffUserId, {
+          purchaseOrderId: purchaseOrder.id,
+          children: [
+            { technicianUserId: techA.id, items: [{ purchaseOrderItemId: item.id, qty: 5 }] },
+            { technicianUserId: techB.id, items: [{ purchaseOrderItemId: item.id, qty: 5 }] },
+          ],
+        }),
+      ).rejects.toMatchObject({ response: { code: "INVALID_STATUS_FOR_WORK_ORDER" } });
+    });
+
+    it("rejects an inactive / unknown technician and creates nothing", async () => {
+      const { purchaseOrder, item } = await sharedPo(10);
+      const techA = await createTechnician(realCompanyId);
+      await expect(
+        sharedSpkService.create(realCompanyId, staffUserId, {
+          purchaseOrderId: purchaseOrder.id,
+          children: [
+            { technicianUserId: techA.id, items: [{ purchaseOrderItemId: item.id, qty: 5 }] },
+            { technicianUserId: "no-such-user", items: [{ purchaseOrderItemId: item.id, qty: 5 }] },
+          ],
+        }),
+      ).rejects.toMatchObject({ response: { code: "INVALID_WORK_ORDER_ASSIGNEE" } });
+      expect(await prisma.spkParent.count({ where: { purchaseOrderId: purchaseOrder.id } })).toBe(0);
+      expect(await prisma.workOrder.count({ where: { purchaseOrderId: purchaseOrder.id } })).toBe(0);
+    });
+
+    it("rejects an invalid allocation (non-active item, duplicate item in one Child)", async () => {
+      const { purchaseOrder, item } = await sharedPo(10);
+      const techA = await createTechnician(realCompanyId);
+      const techB = await createTechnician(realCompanyId);
+      await expect(
+        sharedSpkService.create(realCompanyId, staffUserId, {
+          purchaseOrderId: purchaseOrder.id,
+          children: [
+            { technicianUserId: techA.id, items: [{ purchaseOrderItemId: "not-an-item", qty: 5 }] },
+            { technicianUserId: techB.id, items: [{ purchaseOrderItemId: item.id, qty: 5 }] },
+          ],
+        }),
+      ).rejects.toMatchObject({ response: { code: "PURCHASE_ORDER_ITEM_NOT_ACTIVE" } });
+      await expect(
+        sharedSpkService.create(realCompanyId, staffUserId, {
+          purchaseOrderId: purchaseOrder.id,
+          children: [
+            {
+              technicianUserId: techA.id,
+              items: [
+                { purchaseOrderItemId: item.id, qty: 2 },
+                { purchaseOrderItemId: item.id, qty: 3 },
+              ],
+            },
+            { technicianUserId: techB.id, items: [{ purchaseOrderItemId: item.id, qty: 5 }] },
+          ],
+        }),
+      ).rejects.toMatchObject({ response: { code: "DUPLICATE_ALLOCATION_ITEM" } });
+      expect(await prisma.spkParent.count({ where: { purchaseOrderId: purchaseOrder.id } })).toBe(0);
+    });
+
+    it("rolls back the Parent and every Child when Child #3 fails (over-allocation)", async () => {
+      const { purchaseOrder, item } = await sharedPo(30);
+      const sequenceBefore = await prisma.documentNumberSequence.findFirst({
+        where: { companyId: realCompanyId, documentType: "WORK_ORDER" },
+      });
+      const techs = [
+        await createTechnician(realCompanyId),
+        await createTechnician(realCompanyId),
+        await createTechnician(realCompanyId),
+        await createTechnician(realCompanyId),
+      ];
+      await expect(
+        sharedSpkService.create(realCompanyId, staffUserId, {
+          purchaseOrderId: purchaseOrder.id,
+          children: [
+            { technicianUserId: techs[0]!.id, items: [{ purchaseOrderItemId: item.id, qty: 10 }] },
+            { technicianUserId: techs[1]!.id, items: [{ purchaseOrderItemId: item.id, qty: 10 }] },
+            { technicianUserId: techs[2]!.id, items: [{ purchaseOrderItemId: item.id, qty: 11 }] }, // 31 > 30
+            { technicianUserId: techs[3]!.id, items: [{ purchaseOrderItemId: item.id, qty: 5 }] },
+          ],
+        }),
+      ).rejects.toMatchObject({ response: { code: "OVER_ALLOCATION" } });
+
+      expect(await prisma.spkParent.count({ where: { purchaseOrderId: purchaseOrder.id } })).toBe(0);
+      expect(await prisma.workOrder.count({ where: { purchaseOrderId: purchaseOrder.id } })).toBe(0);
+      expect(await prisma.workOrderAssignment.count({ where: { technicianUserId: { in: techs.map((t) => t.id) } } })).toBe(0);
+      expect(await activeAllocationSum(item.id)).toBe(0);
+      // The number consumed inside the failed transaction was rolled back too.
+      const sequenceAfter = await prisma.documentNumberSequence.findFirst({
+        where: { companyId: realCompanyId, documentType: "WORK_ORDER" },
+      });
+      expect(sequenceAfter?.lastSequence).toBe(sequenceBefore?.lastSequence);
+    });
+
+    it("is safe to double-submit: the second identical submit is rejected and adds nothing", async () => {
+      const { purchaseOrder, item } = await sharedPo(20);
+      const techA = await createTechnician(realCompanyId);
+      const techB = await createTechnician(realCompanyId);
+      const payload = {
+        purchaseOrderId: purchaseOrder.id,
+        children: [
+          { technicianUserId: techA.id, items: [{ purchaseOrderItemId: item.id, qty: 10 }] },
+          { technicianUserId: techB.id, items: [{ purchaseOrderItemId: item.id, qty: 10 }] },
+        ],
+      };
+      const first = await sharedSpkService.create(realCompanyId, staffUserId, payload);
+      createdSpkParentIds.push(first.id);
+      await expect(sharedSpkService.create(realCompanyId, staffUserId, payload)).rejects.toMatchObject({
+        response: { code: "OVER_ALLOCATION" },
+      });
+      expect(await prisma.spkParent.count({ where: { purchaseOrderId: purchaseOrder.id } })).toBe(1);
+      expect(await prisma.workOrder.count({ where: { purchaseOrderId: purchaseOrder.id } })).toBe(2);
+      expect(await activeAllocationSum(item.id)).toBe(20);
+    });
+
+    it("keeps single/flat SPK untouched (no Parent) and exposes parentSpk on Children via findOne", async () => {
+      const single = await createApprovedPurchaseOrder(realCompanyId, { serviceMode: "ON_SITE" });
+      const flat = await createTrackedWorkOrder(realCompanyId, single.purchaseOrder.id);
+      expect(flat.parentSpk).toBeNull();
+
+      const { purchaseOrder, item } = await sharedPo(10);
+      const parent = await createShared(purchaseOrder.id, item.id, [{ qty: 5 }, { qty: 5 }]);
+      const child = await workOrdersService.findOne(realCompanyId, parent.children[0]!.id);
+      expect(child.parentSpk).toEqual({ id: parent.id, number: parent.number });
+      const listed = await workOrdersService.findAll(realCompanyId, workOrderListQuerySchema.parse({ parentSpkId: parent.id }));
+      expect(listed.data.map((row) => row.id).sort()).toEqual(parent.children.map((row) => row.id).sort());
+    });
+
+    it("enforces the DB invariants: parentSpkId/childSequence both-or-neither, and a unique sequence per Parent", async () => {
+      const { purchaseOrder, item } = await sharedPo(10);
+      const parent = await createShared(purchaseOrder.id, item.id, [{ qty: 5 }, { qty: 5 }]);
+      const [first, second] = parent.children;
+
+      await expect(
+        prisma.workOrder.update({ where: { id: first!.id }, data: { childSequence: null } }),
+      ).rejects.toThrow();
+      await expect(
+        prisma.workOrder.update({ where: { id: second!.id }, data: { childSequence: 1 } }),
+      ).rejects.toThrow();
+
+      const flat = await createApprovedPurchaseOrder(realCompanyId, { serviceMode: "ON_SITE" });
+      const flatWo = await createTrackedWorkOrder(realCompanyId, flat.purchaseOrder.id);
+      await expect(
+        prisma.workOrder.update({ where: { id: flatWo.id }, data: { childSequence: 4 } }),
+      ).rejects.toThrow();
+    });
+  });
+
+  // ---- progress -------------------------------------------------------------------
+
+  describe("progress", () => {
+    it("is quantity-weighted: 100/100 + 120/120 + 50/86 + 0/100 = 270/406", async () => {
+      const { purchaseOrder, item } = await sharedPo(406);
+      const parent = await createShared(purchaseOrder.id, item.id, [
+        { qty: 100 },
+        { qty: 120 },
+        { qty: 86 },
+        { qty: 100 },
+      ]);
+      expect(parent.progress).toEqual({ total: 406, completed: 0, percentage: 0 });
+
+      const [c1, c2, c3] = parent.children;
+      await startChild(c1!.id);
+      await startChild(c2!.id);
+      await startChild(c3!.id);
+      await acceptAllJobs(c1!.id);
+      await acceptAllJobs(c2!.id);
+      const c3Jobs = await prisma.calibrationJob.findMany({
+        where: { workOrderId: c3!.id },
+        orderBy: { unitOrdinal: "asc" },
+        take: 50,
+        select: { id: true },
+      });
+      await prisma.calibrationJob.updateMany({
+        where: { id: { in: c3Jobs.map((job) => job.id) } },
+        data: { status: "ACCEPTED_BY_QA" },
+      });
+
+      const detail = await sharedSpkService.findOne(realCompanyId, parent.id);
+      expect(detail.children.map((child) => [child.progress.completed, child.progress.total])).toEqual([
+        [100, 100],
+        [120, 120],
+        [50, 86],
+        [0, 100],
+      ]);
+      expect(detail.progress.completed).toBe(270);
+      expect(detail.progress.total).toBe(406);
+      // 270/406 = 66.5% — NOT the 64% average of (100,100,58,0).
+      expect(detail.progress.percentage).toBe(67);
+      expect(detail.status).toBe("IN_PROGRESS");
+    });
+
+    it("excludes a cancelled Child from the aggregate (its allocation is released)", async () => {
+      const { purchaseOrder, item } = await sharedPo(30);
+      const parent = await createShared(purchaseOrder.id, item.id, [{ qty: 10 }, { qty: 20 }]);
+      await workOrdersService.cancel(realCompanyId, parent.children[1]!.id);
+
+      const detail = await sharedSpkService.findOne(realCompanyId, parent.id);
+      expect(detail.progress).toEqual({ total: 10, completed: 0, percentage: 0 });
+      expect(detail.children[1]!.status).toBe("CANCELLED");
+      expect(await activeAllocationSum(item.id)).toBe(10);
+      expect(detail.status).toBe("NOT_STARTED");
+    });
+
+    it("derives COMPLETED only when every active Child is DONE, with no Parent state stored", async () => {
+      const { purchaseOrder, item } = await sharedPo(4);
+      const parent = await createShared(purchaseOrder.id, item.id, [{ qty: 2 }, { qty: 2 }]);
+      for (const child of parent.children) {
+        await startChild(child.id);
+        await acceptAllJobs(child.id);
+        await workOrdersService.done(realCompanyId, child.id);
+      }
+      const detail = await sharedSpkService.findOne(realCompanyId, parent.id);
+      expect(detail.status).toBe("COMPLETED");
+      expect(detail.progress).toEqual({ total: 4, completed: 4, percentage: 100 });
+      // The Parent row itself carries no execution state.
+      const row = await prisma.spkParent.findUniqueOrThrow({ where: { id: parent.id } });
+      expect(Object.keys(row)).not.toContain("status");
+      expect(Object.keys(row)).not.toContain("scheduledStart");
+    });
+  });
+
+  // ---- DLN ---------------------------------------------------------------------------
+
+  describe("DLN", () => {
+    async function giveConfirmedEquipment(workOrderId: string) {
+      const type = await prisma.equipmentType.create({
+        data: { code: `EQT-${randomUUID().slice(0, 8).toUpperCase()}`, name: "Shared SPK Test Type" },
+      });
+      createdEquipmentTypeIds.push(type.id);
+      const unit = await prisma.equipment.create({
+        data: {
+          companyId: realCompanyId,
+          equipmentTypeId: type.id,
+          code: `EQU-${randomUUID().slice(0, 8).toUpperCase()}`,
+          brand: "Fluke",
+          model: "ESA620",
+          serialNumber: randomUUID().slice(0, 8),
+          isActive: true,
+        },
+      });
+      createdEquipmentIds.push(unit.id);
+      await workOrdersService.replaceEquipment(realCompanyId, workOrderId, {
+        equipment: [{ equipmentId: unit.id, equipmentTypeId: type.id }],
+      });
+      await workOrdersService.confirmEquipment(realCompanyId, workOrderId);
+    }
+
+    it("lets each Child own a DLN with its own date; the Parent can never have one", async () => {
+      const { purchaseOrder, item } = await sharedPo(20);
+      const parent = await createShared(purchaseOrder.id, item.id, [
+        { qty: 10, scheduledStart: new Date("2026-10-01") },
+        { qty: 10, scheduledStart: new Date("2026-10-02") },
+      ]);
+      const [c1, c2] = parent.children;
+      await giveConfirmedEquipment(c1!.id);
+      await giveConfirmedEquipment(c2!.id);
+
+      const dn1 = await deliveryNotesService.issue(realCompanyId, c1!.id);
+      const dn2 = await deliveryNotesService.issue(realCompanyId, c2!.id);
+
+      expect(dn1.number.startsWith("DLN/")).toBe(true);
+      expect(isValidDocumentNumber(dn1.number)).toBe(true);
+      expect(Number(dn2.number.split("/")[3])).toBe(Number(dn1.number.split("/")[3]) + 1);
+      expect(dn1.workOrderNumber).toBe(`${parent.number}-1`);
+      expect(dn2.workOrderNumber).toBe(`${parent.number}-2`);
+      expect(dn1.issuedAt.toISOString().slice(0, 10)).toBe("2026-10-01");
+      expect(dn2.issuedAt.toISOString().slice(0, 10)).toBe("2026-10-02");
+
+      // Parent is not a WorkOrder: it cannot enter the DLN flow at all.
+      await expect(deliveryNotesService.issue(realCompanyId, parent.id)).rejects.toMatchObject({
+        response: { code: "WORK_ORDER_NOT_FOUND" },
+      });
+      await expect(workOrdersService.start(realCompanyId, parent.id)).rejects.toMatchObject({
+        response: { code: "WORK_ORDER_NOT_FOUND" },
+      });
+    });
+  });
+
+  // ---- revision -----------------------------------------------------------------------
+
+  describe("revision (per-Child locking)", () => {
+    it("fully revises an all-unstarted shared job: quantity, technician, schedule, add and remove Children", async () => {
+      const { purchaseOrder, item } = await sharedPo(40);
+      const parent = await createShared(purchaseOrder.id, item.id, [{ qty: 10 }, { qty: 10 }, { qty: 20 }]);
+      const [c1, c2, c3] = parent.children;
+      const newTech = await createTechnician(realCompanyId);
+      const addTech = await createTechnician(realCompanyId);
+
+      const revised = await sharedSpkService.revise(
+        realCompanyId,
+        staffUserId,
+        parent.id,
+        sharedSpkReviseSchema.parse({
+          children: [
+            // c1: 10 -> 15, new technician, new schedule
+            {
+              workOrderId: c1!.id,
+              technicianUserId: newTech.id,
+              items: [{ purchaseOrderItemId: item.id, qty: 15 }],
+              scheduledStart: "2026-11-03",
+              scheduledEnd: "2026-11-05",
+            },
+            // c2 untouched except schedule
+            {
+              workOrderId: c2!.id,
+              technicianUserId: c2!.technicians[0]!.id,
+              items: [{ purchaseOrderItemId: item.id, qty: 10 }],
+              scheduledStart: "2026-11-06",
+            },
+            // new Child takes the 5 units freed from c3 (20 -> removed) + others
+            { technicianUserId: addTech.id, items: [{ purchaseOrderItemId: item.id, qty: 15 }] },
+          ],
+          removeWorkOrderIds: [c3!.id],
+        }),
+      );
+
+      // Parent identity is stable.
+      expect(revised.id).toBe(parent.id);
+      expect(revised.number).toBe(parent.number);
+
+      const byNumber = new Map(revised.children.map((child) => [child.number, child]));
+      const r1 = byNumber.get(`${parent.number}-1`)!;
+      expect(r1.items[0]!.qty).toBe(15);
+      expect(r1.technicians.map((row) => row.id)).toEqual([newTech.id]);
+      expect(r1.scheduledStart?.toISOString().slice(0, 10)).toBe("2026-11-03");
+      expect(byNumber.get(`${parent.number}-2`)!.scheduledStart?.toISOString().slice(0, 10)).toBe("2026-11-06");
+      expect(byNumber.get(`${parent.number}-3`)!.status).toBe("CANCELLED");
+      // New Child gets the next sequence, never a reused one.
+      const added = byNumber.get(`${parent.number}-4`)!;
+      expect(added.childSequence).toBe(4);
+      expect(added.items[0]!.qty).toBe(15);
+      expect(added.status).toBe("ASSIGNED");
+
+      expect(await activeAllocationSum(item.id)).toBe(40);
+      await expectNoOrphanedAllocations(item.id, parent.id);
+      // Append-only history was written for every revised/removed Child.
+      expect(await prisma.workOrderHistory.count({ where: { workOrderId: { in: [c1!.id, c2!.id, c3!.id] } } })).toBe(3);
+    });
+
+    it("locks only the started Child; the others stay revisable", async () => {
+      const { purchaseOrder, item } = await sharedPo(30);
+      const parent = await createShared(purchaseOrder.id, item.id, [
+        { qty: 10, scheduledStart: new Date("2026-10-01") },
+        { qty: 10 },
+        { qty: 10 },
+      ]);
+      const [c1, c2, c3] = parent.children;
+      await startChild(c1!.id);
+
+      const tech = await createTechnician(realCompanyId);
+      const body = (workOrderId: string, qty: number, extra: object = {}) => ({
+        workOrderId,
+        technicianUserId: tech.id,
+        items: [{ purchaseOrderItemId: item.id, qty }],
+        ...extra,
+      });
+
+      // Started Child: editing, removing and moving its quantity are all refused.
+      await expect(
+        sharedSpkService.revise(realCompanyId, staffUserId, parent.id, sharedSpkReviseSchema.parse({ children: [body(c1!.id, 5)] })),
+      ).rejects.toMatchObject({ response: { code: "SHARED_CHILD_LOCKED" } });
+      await expect(
+        sharedSpkService.revise(realCompanyId, staffUserId, parent.id, sharedSpkReviseSchema.parse({ removeWorkOrderIds: [c1!.id] })),
+      ).rejects.toMatchObject({ response: { code: "SHARED_CHILD_LOCKED" } });
+      await expect(
+        sharedSpkService.revise(
+          realCompanyId,
+          staffUserId,
+          parent.id,
+          sharedSpkReviseSchema.parse({ children: [body(c2!.id, 20)], removeWorkOrderIds: [c1!.id] }),
+        ),
+      ).rejects.toMatchObject({ response: { code: "SHARED_CHILD_LOCKED" } });
+
+      // Nothing leaked from the refused attempts.
+      const c1After = await prisma.workOrder.findUniqueOrThrow({
+        where: { id: c1!.id },
+        include: { items: true, assignments: true },
+      });
+      expect(c1After.status).toBe("IN_PROGRESS");
+      expect(c1After.items.map((row) => row.qty.toNumber())).toEqual([10]);
+      expect(c1After.assignments.map((row) => row.technicianUserId)).toEqual([c1!.technicians[0]!.id]);
+      expect(await activeAllocationSum(item.id)).toBe(30);
+
+      // Unstarted Children #2/#3 are still fully revisable.
+      const revised = await sharedSpkService.revise(
+        realCompanyId,
+        staffUserId,
+        parent.id,
+        sharedSpkReviseSchema.parse({
+          children: [body(c2!.id, 12, { scheduledStart: "2026-11-10" }), body(c3!.id, 8)],
+        }),
+      );
+      expect(revised.children.map((child) => child.items[0]!.qty)).toEqual([10, 12, 8]);
+      expect(revised.children.map((child) => child.locked)).toEqual([true, false, false]);
+      expect(await activeAllocationSum(item.id)).toBe(30);
+      await expectNoOrphanedAllocations(item.id, parent.id);
+      // The started Child's allocation was never cancelled or recreated.
+      const c1Allocations = await prisma.purchaseOrderItemAllocation.findMany({ where: { workOrderId: c1!.id } });
+      expect(c1Allocations.map((row) => row.status)).toEqual(["ACTIVE"]);
+    });
+
+    it("refuses to move a started Child's quantity to another Child by exceeding the PO quantity", async () => {
+      const { purchaseOrder, item } = await sharedPo(20);
+      const parent = await createShared(purchaseOrder.id, item.id, [{ qty: 10 }, { qty: 10 }]);
+      const [c1, c2] = parent.children;
+      await startChild(c1!.id);
+
+      const tech = await createTechnician(realCompanyId);
+      await expect(
+        sharedSpkService.revise(
+          realCompanyId,
+          staffUserId,
+          parent.id,
+          sharedSpkReviseSchema.parse({
+            children: [{ workOrderId: c2!.id, technicianUserId: tech.id, items: [{ purchaseOrderItemId: item.id, qty: 15 }] }],
+          }),
+        ),
+      ).rejects.toMatchObject({ response: { code: "OVER_ALLOCATION" } });
+
+      // The revision rolled back: c2 still holds its original allocation.
+      const c2After = await prisma.workOrder.findUniqueOrThrow({ where: { id: c2!.id }, include: { items: true } });
+      expect(c2After.items.map((row) => row.qty.toNumber())).toEqual([10]);
+      expect(await activeAllocationSum(item.id)).toBe(20);
+      await expectNoOrphanedAllocations(item.id, parent.id);
+    });
+
+    it("lets quantity move between two unstarted Children inside one revision", async () => {
+      const { purchaseOrder, item } = await sharedPo(20);
+      const parent = await createShared(purchaseOrder.id, item.id, [{ qty: 10 }, { qty: 10 }]);
+      const [c1, c2] = parent.children;
+      const techA = c1!.technicians[0]!.id;
+      const techB = c2!.technicians[0]!.id;
+
+      const revised = await sharedSpkService.revise(
+        realCompanyId,
+        staffUserId,
+        parent.id,
+        sharedSpkReviseSchema.parse({
+          children: [
+            { workOrderId: c1!.id, technicianUserId: techA, items: [{ purchaseOrderItemId: item.id, qty: 4 }] },
+            { workOrderId: c2!.id, technicianUserId: techB, items: [{ purchaseOrderItemId: item.id, qty: 16 }] },
+          ],
+        }),
+      );
+      expect(revised.children.map((child) => child.items[0]!.qty)).toEqual([4, 16]);
+      expect(await activeAllocationSum(item.id)).toBe(20);
+      await expectNoOrphanedAllocations(item.id, parent.id);
+      // Technicians unchanged → assignments were not churned.
+      expect(revised.children[0]!.technicians.map((row) => row.id)).toEqual([techA]);
+    });
+
+    it("refuses to remove the last active Child and rolls everything back", async () => {
+      const { purchaseOrder, item } = await sharedPo(20);
+      const parent = await createShared(purchaseOrder.id, item.id, [{ qty: 10 }, { qty: 10 }]);
+      await expect(
+        sharedSpkService.revise(
+          realCompanyId,
+          staffUserId,
+          parent.id,
+          sharedSpkReviseSchema.parse({ removeWorkOrderIds: parent.children.map((child) => child.id) }),
+        ),
+      ).rejects.toMatchObject({ response: { code: "SHARED_SPK_NO_ACTIVE_CHILD" } });
+      const after = await sharedSpkService.findOne(realCompanyId, parent.id);
+      expect(after.children.map((child) => child.status)).toEqual(["ASSIGNED", "ASSIGNED"]);
+      expect(await activeAllocationSum(item.id)).toBe(20);
+    });
+
+    it("rejects a Child that does not belong to this shared job", async () => {
+      const a = await sharedPo(10);
+      const b = await sharedPo(10);
+      const parentA = await createShared(a.purchaseOrder.id, a.item.id, [{ qty: 5 }, { qty: 5 }]);
+      const parentB = await createShared(b.purchaseOrder.id, b.item.id, [{ qty: 5 }, { qty: 5 }]);
+      await expect(
+        sharedSpkService.revise(
+          realCompanyId,
+          staffUserId,
+          parentA.id,
+          sharedSpkReviseSchema.parse({ removeWorkOrderIds: [parentB.children[0]!.id] }),
+        ),
+      ).rejects.toMatchObject({ response: { code: "SHARED_CHILD_NOT_FOUND" } });
+    });
+  });
+
+  // ---- end-to-end workflow ---------------------------------------------------------------
+
+  describe("end-to-end", () => {
+    it("PO → distribute → schedule → Lanjut → start a Child → revise the unstarted ones → progress stays derived", async () => {
+      const { purchaseOrder, item } = await sharedPo(406);
+      const [a, b, c, d] = [
+        await createTechnician(realCompanyId),
+        await createTechnician(realCompanyId),
+        await createTechnician(realCompanyId),
+        await createTechnician(realCompanyId),
+      ];
+
+      // Lanjut: Parent + 4 Children, each with its own technician, batch and schedule.
+      const parent = await createShared(purchaseOrder.id, item.id, [
+        { qty: 100, technicianUserId: a.id, scheduledStart: new Date("2026-10-01") },
+        { qty: 120, technicianUserId: b.id, scheduledStart: new Date("2026-10-02") },
+        { qty: 86, technicianUserId: c.id, scheduledStart: new Date("2026-10-03") },
+        { qty: 100, technicianUserId: d.id, scheduledStart: new Date("2026-10-04") },
+      ]);
+      expect(parent.children.map((child) => child.number)).toEqual([1, 2, 3, 4].map((n) => `${parent.number}-${n}`));
+      expect(parent.progress).toEqual({ total: 406, completed: 0, percentage: 0 });
+
+      // Child #1 starts and finishes part of its work: it is now execution-locked.
+      const [c1, c2, c3, c4] = parent.children;
+      await startChild(c1!.id);
+      await acceptAllJobs(c1!.id);
+
+      // Revise the unstarted Children: reassign, reschedule, shift quantity, drop one, add one.
+      const newTech = await createTechnician(realCompanyId);
+      const extraTech = await createTechnician(realCompanyId);
+      const revised = await sharedSpkService.revise(
+        realCompanyId,
+        staffUserId,
+        parent.id,
+        sharedSpkReviseSchema.parse({
+          children: [
+            { workOrderId: c2!.id, technicianUserId: newTech.id, items: [{ purchaseOrderItemId: item.id, qty: 140 }], scheduledStart: "2026-10-05" },
+            { workOrderId: c3!.id, technicianUserId: c!.id, items: [{ purchaseOrderItemId: item.id, qty: 76 }] },
+            { technicianUserId: extraTech.id, items: [{ purchaseOrderItemId: item.id, qty: 90 }], scheduledStart: "2026-10-06" },
+          ],
+          removeWorkOrderIds: [c4!.id],
+        }),
+      );
+
+      expect(revised.number).toBe(parent.number); // Parent identity unchanged
+      const byNumber = new Map(revised.children.map((child) => [child.number, child]));
+      expect(byNumber.get(`${parent.number}-1`)).toMatchObject({ locked: true, status: "IN_PROGRESS" });
+      expect(byNumber.get(`${parent.number}-2`)!.technicians[0]!.id).toBe(newTech.id);
+      expect(byNumber.get(`${parent.number}-4`)!.status).toBe("CANCELLED");
+      expect(byNumber.get(`${parent.number}-5`)).toMatchObject({ locked: false, status: "ASSIGNED" });
+
+      // Locked Child #1 is untouched; an attempt to change it is refused.
+      await expect(
+        sharedSpkService.revise(
+          realCompanyId,
+          staffUserId,
+          parent.id,
+          sharedSpkReviseSchema.parse({ children: [{ workOrderId: c1!.id, technicianUserId: a.id, items: [{ purchaseOrderItemId: item.id, qty: 50 }] }] }),
+        ),
+      ).rejects.toMatchObject({ response: { code: "SHARED_CHILD_LOCKED" } });
+
+      // The revised Children start normally; progress is derived from the Children only.
+      const secondStart = await startChild(c2!.id);
+      expect(secondStart.status).toBe("IN_PROGRESS");
+      expect(await prisma.calibrationJob.count({ where: { workOrderId: c2!.id } })).toBe(140);
+      await prisma.calibrationJob.updateMany({
+        where: { id: { in: (await prisma.calibrationJob.findMany({ where: { workOrderId: c2!.id }, take: 40, select: { id: true } })).map((row) => row.id) } },
+        data: { status: "ACCEPTED_BY_QA" },
+      });
+
+      const detail = await sharedSpkService.findOne(realCompanyId, parent.id);
+      // Active scope after revision: 100 + 140 + 76 + 90 = 406 (cancelled #4 excluded); done = 100 + 40.
+      expect(detail.progress.total).toBe(406);
+      expect(detail.progress.completed).toBe(140);
+      expect(detail.status).toBe("IN_PROGRESS");
+      expect(await activeAllocationSum(item.id)).toBe(406);
+      await expectNoOrphanedAllocations(item.id, parent.id);
+    });
+  });
+
+  // ---- schedule lock via ordinary update ------------------------------------------------
+
+  describe("schedule vs actual execution", () => {
+    it("locks a started Child's schedule but not an unstarted Child's; single SPK keeps its existing behaviour", async () => {
+      const { purchaseOrder, item } = await sharedPo(20);
+      const parent = await createShared(purchaseOrder.id, item.id, [
+        { qty: 10, scheduledStart: new Date("2026-10-01"), scheduledEnd: new Date("2026-10-01") },
+        { qty: 10, scheduledStart: new Date("2026-10-02"), scheduledEnd: new Date("2026-10-02") },
+      ]);
+      const [c1, c2] = parent.children;
+      await startChild(c1!.id);
+
+      await expect(
+        workOrdersService.update(realCompanyId, c1!.id, { scheduledStart: new Date("2026-10-09") }),
+      ).rejects.toMatchObject({ response: { code: "SHARED_CHILD_SCHEDULE_LOCKED" } });
+      const lockedRow = await prisma.workOrder.findUniqueOrThrow({ where: { id: c1!.id } });
+      expect(lockedRow.scheduledStart?.toISOString().slice(0, 10)).toBe("2026-10-01");
+
+      // Non-schedule edits on the started Child follow the existing rules.
+      const addressOnly = await workOrdersService.update(realCompanyId, c1!.id, { addressText: "Gedung B" });
+      expect(addressOnly.addressText).toBe("Gedung B");
+
+      const moved = await workOrdersService.update(realCompanyId, c2!.id, { scheduledStart: new Date("2026-10-09") });
+      expect(moved.scheduledStart?.toISOString().slice(0, 10)).toBe("2026-10-09");
+
+      // Single/flat SPK: unchanged — schedule still editable while IN_PROGRESS.
+      const flat = await createApprovedPurchaseOrder(realCompanyId, { serviceMode: "ON_SITE" });
+      const flatWo = await createTrackedWorkOrder(realCompanyId, flat.purchaseOrder.id);
+      const tech = await createTechnician(realCompanyId);
+      await workOrdersService.assign(realCompanyId, flatWo.id, { technicians: [{ technicianUserId: tech.id }] });
+      await workOrdersService.start(realCompanyId, flatWo.id);
+      const flatMoved = await workOrdersService.update(realCompanyId, flatWo.id, { scheduledStart: new Date("2026-10-20") });
+      expect(flatMoved.scheduledStart?.toISOString().slice(0, 10)).toBe("2026-10-20");
+    });
   });
 });
