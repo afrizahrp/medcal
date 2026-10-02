@@ -4,10 +4,9 @@ import { Suspense, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@medcal/auth/client";
 import { AuthCard } from "../../../components/auth/auth-card";
+import { NETWORK_ERROR_MESSAGE, signUpErrorMessage } from "../../../lib/auth-messages";
 import { sanitizeReturnTo } from "../../../lib/return-to";
-
-const fieldClass =
-  "mt-1 h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-600";
+import { buttonPrimary, fieldClass } from "../../../lib/ui-classes";
 
 function RegisterForm() {
   const router = useRouter();
@@ -22,10 +21,11 @@ function RegisterForm() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (submitting) return;
     setError(null);
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError("Kata sandi dan konfirmasi tidak sama.");
       return;
     }
 
@@ -36,15 +36,22 @@ function RegisterForm() {
     // application code can or should override it — see
     // registration-origin-callers.test.ts's ALLOWLISTED_FILES entry for this
     // file.
-    const { error: signUpError } = await authClient.signUp.email({
-      email,
-      password,
-      name,
-    });
+    let signUpError: Awaited<ReturnType<typeof authClient.signUp.email>>["error"];
+    try {
+      ({ error: signUpError } = await authClient.signUp.email({
+        email,
+        password,
+        name,
+      }));
+    } catch {
+      setSubmitting(false);
+      setError(NETWORK_ERROR_MESSAGE);
+      return;
+    }
     setSubmitting(false);
 
     if (signUpError) {
-      setError(signUpError.message ?? "Registration failed");
+      setError(signUpErrorMessage(signUpError));
       return;
     }
 
@@ -60,23 +67,23 @@ function RegisterForm() {
 
   return (
     <AuthCard
-      title="Create an account"
+      title="Buat akun pelanggan"
       subtitle="PT. Presisi Kalibrasi Medika"
-      footerLabel="Already have an account?"
+      footerLabel="Sudah punya akun?"
       footerHref={signInHref}
-      footerLinkText="Sign in"
+      footerLinkText="Masuk"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-slate-700" htmlFor="name">
-            Name
+            Nama
           </label>
           <input
             id="name"
             type="text"
             required
             autoComplete="name"
-            placeholder="Please input your name"
+            placeholder="Nama lengkap Anda"
             value={name}
             onChange={(event) => setName(event.target.value)}
             className={fieldClass}
@@ -91,7 +98,7 @@ function RegisterForm() {
             type="email"
             required
             autoComplete="email"
-            placeholder="Please input your email"
+            placeholder="nama@perusahaan.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             className={fieldClass}
@@ -99,7 +106,7 @@ function RegisterForm() {
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700" htmlFor="password">
-            Password
+            Kata sandi
           </label>
           <div className="relative">
             <input
@@ -107,42 +114,43 @@ function RegisterForm() {
               type={showPassword ? "text" : "password"}
               required
               autoComplete="new-password"
-              placeholder="Please input your password"
+              placeholder="Buat kata sandi"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className={`${fieldClass} pr-16`}
+              className={`${fieldClass} pr-20`}
             />
             <button
               type="button"
               onClick={() => setShowPassword((visible) => !visible)}
-              className="absolute inset-y-0 right-2 my-auto text-xs font-medium text-brand-700 active:underline"
+              aria-pressed={showPassword}
+              className="absolute inset-y-0 right-1 my-auto h-11 min-w-16 rounded-lg px-2 text-sm font-medium text-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             >
-              {showPassword ? "Hide" : "Show"}
+              {showPassword ? "Sembunyikan" : "Tampilkan"}
             </button>
           </div>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700" htmlFor="confirmPassword">
-            Confirm password
+            Konfirmasi kata sandi
           </label>
           <input
             id="confirmPassword"
             type={showPassword ? "text" : "password"}
             required
             autoComplete="new-password"
-            placeholder="Confirm your password"
+            placeholder="Ulangi kata sandi"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
             className={fieldClass}
           />
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="min-h-11 w-full rounded-lg bg-brand-700 px-3 text-base font-semibold text-white active:bg-brand-800 disabled:opacity-50"
-        >
-          {submitting ? "Creating account…" : "Sign up"}
+        {error && (
+          <p role="alert" className="text-sm text-red-700">
+            {error}
+          </p>
+        )}
+        <button type="submit" disabled={submitting} className={`${buttonPrimary} w-full text-base`}>
+          {submitting ? "Memproses…" : "Daftar"}
         </button>
       </form>
     </AuthCard>

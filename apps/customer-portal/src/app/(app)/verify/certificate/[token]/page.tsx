@@ -1,15 +1,18 @@
 "use client";
 
-import { use, useState } from "react";
+import { use } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ApiError, apiFetch, apiFetchBlob } from "@medcal/shared";
+import { ApiError, apiFetch } from "@medcal/shared";
 import {
   formatDate,
   isPlausibleToken,
   presentStatus,
   type CertificateVerification,
 } from "../../../../../lib/certificate-verification";
-import { openPdfFromGesture } from "../../../../../lib/open-pdf";
+import { CertificatePdfViewer } from "../../../../../components/certificate-pdf-viewer";
+import { ErrorState, LoadingState } from "../../../../../components/status-blocks";
+import { customerQueryKey } from "../../../../../lib/customer-query";
+import { useSessionUserId } from "../../../../../lib/session";
 
 const TONE_CLASS = {
   ok: "border-emerald-200 bg-emerald-50 text-emerald-900",
@@ -40,51 +43,29 @@ function NotFound() {
 export default function VerifyCertificatePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
   const plausible = isPlausibleToken(token);
-  const [pdfError, setPdfError] = useState<string | null>(null);
-  const [opening, setOpening] = useState(false);
+  const userId = useSessionUserId();
 
   const query = useQuery({
-    queryKey: ["certificate-verification", token],
+    queryKey: customerQueryKey(userId, "certificate-verification", token),
     queryFn: () => apiFetch<CertificateVerification>(`/certificate-verification/${encodeURIComponent(token)}`),
-    enabled: plausible,
-    retry: false,
+    enabled: plausible && Boolean(userId),
   });
 
-  // Runs inside the tap: openPdfFromGesture opens the window synchronously
-  // (before the PDF is fetched) so mobile popup blockers allow it, and falls
-  // back to navigating this tab if a window still cannot be opened.
-  async function openPdf() {
-    setPdfError(null);
-    setOpening(true);
-    try {
-      await openPdfFromGesture({
-        openWindow: () => window.open("", "_blank"),
-        fetchBlob: () => apiFetchBlob(`/certificate-verification/${encodeURIComponent(token)}/pdf`),
-        createObjectURL: (blob) => URL.createObjectURL(blob),
-        navigateCurrent: (url) => window.location.assign(url),
-      });
-    } catch (err) {
-      setPdfError(
-        err instanceof ApiError && err.status === 404
-          ? "PDF sertifikat tidak tersedia."
-          : "Gagal membuka PDF. Coba lagi.",
-      );
-    } finally {
-      setOpening(false);
-    }
-  }
-
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div className="mx-auto max-w-3xl px-4 py-8">
       {!plausible ? (
         <NotFound />
       ) : query.isLoading ? (
-        <p className="text-slate-500">Memeriksa sertifikat…</p>
+        <LoadingState label="Memeriksa sertifikat…" />
       ) : query.isError ? (
         query.error instanceof ApiError && query.error.status === 404 ? (
           <NotFound />
         ) : (
-          <p className="text-sm text-red-600">Gagal memuat sertifikat. Coba lagi nanti.</p>
+          <ErrorState
+            message="Sertifikat belum bisa dimuat. Coba lagi dalam beberapa saat."
+            onRetry={() => void query.refetch()}
+            retrying={query.isFetching}
+          />
         )
       ) : query.data ? (
         (() => {
@@ -100,43 +81,33 @@ export default function VerifyCertificatePage({ params }: { params: Promise<{ to
 
               <dl className="space-y-3 text-sm">
                 <div>
-                  <dt className="text-slate-500">Nomor sertifikat</dt>
+                  <dt className="text-slate-600">Nomor sertifikat</dt>
                   <dd className="break-all font-mono text-base text-slate-900">{cert.number}</dd>
                 </div>
                 <div>
-                  <dt className="text-slate-500">Pelanggan</dt>
+                  <dt className="text-slate-600">Pelanggan</dt>
                   <dd className="text-slate-900">{cert.customerName}</dd>
                 </div>
                 <div>
-                  <dt className="text-slate-500">Alat</dt>
+                  <dt className="text-slate-600">Alat</dt>
                   <dd className="text-slate-900">{device}</dd>
                 </div>
                 <div className="flex gap-8">
                   <div>
-                    <dt className="text-slate-500">Tanggal terbit</dt>
+                    <dt className="text-slate-600">Tanggal terbit</dt>
                     <dd className="text-slate-900">{formatDate(cert.issuedAt)}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">Berlaku sampai</dt>
+                    <dt className="text-slate-600">Berlaku sampai</dt>
                     <dd className="text-slate-900">{formatDate(cert.validUntil)}</dd>
                   </div>
                 </div>
               </dl>
 
               {cert.pdfAvailable ? (
-                <div>
-                  <button
-                    type="button"
-                    onClick={openPdf}
-                    disabled={opening}
-                    className="rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-                  >
-                    {opening ? "Membuka…" : "Lihat sertifikat (PDF)"}
-                  </button>
-                  {pdfError ? <p className="mt-2 text-sm text-red-600">{pdfError}</p> : null}
-                </div>
+                <CertificatePdfViewer token={token} />
               ) : (
-                <p className="text-sm text-slate-500">PDF sertifikat tidak tersedia untuk status ini.</p>
+                <p className="text-sm text-slate-600">PDF sertifikat tidak tersedia untuk status ini.</p>
               )}
             </div>
           );

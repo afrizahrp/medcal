@@ -63,3 +63,8 @@ export function formatDate(value: string | null): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : DATE_FORMAT.format(date);
 }
+
+/** Message shown in the inline viewer when the certificate PDF cannot be loaded. */
+export function pdfLoadErrorMessage(status: number | null): string {
+  return status === 404 ? "PDF sertifikat tidak tersedia." : "Sertifikat tidak dapat ditampilkan.";
+}

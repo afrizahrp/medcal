@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from "next";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Customer Portal",
-  description: "PT. Presisi Kalibrasi Medika — Customer Portal",
+  title: "Portal Pelanggan",
+  description: "PT. Presisi Kalibrasi Medika — Portal Pelanggan",
   icons: {
     icon: "/logo.png",
   },

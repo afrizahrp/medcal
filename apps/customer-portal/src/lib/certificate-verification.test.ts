@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, isPlausibleToken, presentStatus } from "./certificate-verification";
+import { formatDate, isPlausibleToken, pdfLoadErrorMessage, presentStatus } from "./certificate-verification";
 
 describe("presentStatus", () => {
   it("tells the reader the actual state, not merely that a certificate exists", () => {
@@ -31,5 +31,13 @@ describe("formatDate", () => {
     expect(formatDate("2026-09-30T17:30:00.000Z")).toBe("1 Oktober 2026");
     expect(formatDate(null)).toBe("—");
     expect(formatDate("not-a-date")).toBe("—");
+  });
+});
+
+describe("pdfLoadErrorMessage", () => {
+  it("distinguishes a missing PDF from a failed load", () => {
+    expect(pdfLoadErrorMessage(404)).toBe("PDF sertifikat tidak tersedia.");
+    expect(pdfLoadErrorMessage(500)).toBe("Sertifikat tidak dapat ditampilkan.");
+    expect(pdfLoadErrorMessage(null)).toBe("Sertifikat tidak dapat ditampilkan.");
   });
 });

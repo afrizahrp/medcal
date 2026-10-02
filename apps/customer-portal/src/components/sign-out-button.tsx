@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { signOut } from "@medcal/auth/client";
+import { buttonSecondary } from "../lib/ui-classes";
 
 export function SignOutButton() {
   const router = useRouter();
@@ -14,9 +15,9 @@ export function SignOutButton() {
         router.push("/sign-in");
         router.refresh();
       }}
-      className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      className={buttonSecondary}
     >
-      Sign out
+      Keluar
     </button>
   );
 }

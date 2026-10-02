@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import logo from "../../../public/logo.png";
+import { linkAction } from "../../lib/ui-classes";
 
 export function AuthCard({
   title,
@@ -25,7 +26,7 @@ export function AuthCard({
       <div className="mb-5 flex flex-col items-center text-center">
         <Image
           src={logo}
-          alt="PKM"
+          alt="PT. Presisi Kalibrasi Medika"
           width={180}
           height={72}
           className="h-14 w-auto object-contain"
@@ -35,9 +36,9 @@ export function AuthCard({
         {subtitle && <p className="mt-1 text-sm text-slate-600">{subtitle}</p>}
       </div>
       {children}
-      <p className="mt-6 text-center text-sm text-slate-600">
-        {footerLabel}{" "}
-        <Link href={footerHref} className="font-medium text-brand-700 active:underline">
+      <p className="mt-4 flex flex-wrap items-center justify-center gap-x-1 text-center text-sm text-slate-600">
+        {footerLabel}
+        <Link href={footerHref} className={linkAction}>
           {footerLinkText}
         </Link>
       </p>

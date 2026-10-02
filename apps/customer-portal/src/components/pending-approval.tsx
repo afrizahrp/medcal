@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { signOut } from "@medcal/auth/client";
+import { buttonPrimary, buttonSecondary } from "../lib/ui-classes";
 
 /**
  * Shown for two states this app deliberately does not distinguish in the UI
@@ -10,28 +11,29 @@ import { signOut } from "@medcal/auth/client";
  * account whose CustomerUserLink hasn't been established. Mirrors
  * apps/portal's PendingAuthorization UX pattern; this app's own copy since
  * apps/customer-portal is isolated from apps/portal (no cross-app import).
+ *
+ * Only reached when the server has actually answered "not linked" — a failed
+ * lookup is an error state (AuthGate), never this screen. The wording is
+ * neutral because a returning, not-yet-approved user also lands here.
  */
 export function PendingApproval() {
   const router = useRouter();
 
   return (
     <main className="mx-auto max-w-md px-4 py-16 text-center">
-      <h1 className="text-2xl font-semibold text-brand-800">Registrasi Berhasil</h1>
+      <h1 className="text-2xl font-semibold text-brand-800">Menunggu persetujuan akun</h1>
       <p className="mt-2 text-slate-600">
-        Akun Anda telah berhasil dibuat dan saat ini menunggu otorisasi dari tim Kalibrasi
-        Medika sebelum dapat mengakses data pelanggan.
+        Akun Anda sudah terdaftar, tetapi belum dihubungkan ke data pelanggan oleh tim Kalibrasi
+        Medika. Anda dapat mengakses portal setelah akun disetujui.
       </p>
-      <p className="mt-2 text-slate-600">
-        Mohon tunggu hingga akun Anda dikaitkan dengan data Customer Anda.
-      </p>
-      <div className="mt-6 flex items-center justify-center gap-4">
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
         <button
           type="button"
           // A full reload (not router.refresh()) is required: this
           // component's status derives from client-side query state, which
           // router.refresh() does not reset.
           onClick={() => window.location.reload()}
-          className="h-11 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          className={buttonSecondary}
         >
           Periksa status
         </button>
@@ -42,9 +44,9 @@ export function PendingApproval() {
             router.push("/sign-in");
             router.refresh();
           }}
-          className="h-11 rounded-lg bg-brand-800 px-4 text-sm font-medium text-white hover:bg-brand-700"
+          className={buttonPrimary}
         >
-          Kembali ke Sign In
+          Kembali ke halaman masuk
         </button>
       </div>
     </main>
