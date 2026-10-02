@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { verifyRecaptcha } from "./recaptcha";
+import { RecaptchaUnavailableError, verifyRecaptcha } from "./recaptcha";
 
 const originalSecret = process.env.RECAPTCHA_SECRET_KEY;
 const originalMinScore = process.env.RECAPTCHA_MIN_SCORE;
@@ -55,5 +55,10 @@ describe("verifyRecaptcha", () => {
   it("rejects when the HTTP call to Google itself fails", async () => {
     mockFetchOnce({}, false);
     await expect(verifyRecaptcha("token", "contact_submit")).resolves.toBe(false);
+  });
+
+  it("throws RecaptchaUnavailableError (never resolves true) when the request to Google throws", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    await expect(verifyRecaptcha("token", "contact_submit")).rejects.toBeInstanceOf(RecaptchaUnavailableError);
   });
 });

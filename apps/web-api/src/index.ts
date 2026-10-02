@@ -9,7 +9,7 @@ import { publicChatSessionSchema } from "./public-chat-session-schema";
 import { publicContactFormSchema } from "./public-contact-form-schema";
 import { publicWebChatSchema } from "./public-web-chat-schema";
 import { publicWhatsappLeadSchema } from "./public-whatsapp-lead-schema";
-import { verifyRecaptcha } from "./recaptcha";
+import { checkCaptcha } from "./captcha-gate";
 
 /**
  * Public edge only — captcha/rate-limit/forward.
@@ -163,9 +163,9 @@ app.post("/public/contact-messages", contactFormLimiter, async (req, res) => {
   }
 
   const { captchaToken, ...formData } = parsed.data;
-  const captchaOk = await verifyRecaptcha(captchaToken, "contact_submit");
-  if (!captchaOk) {
-    res.status(400).json({ error: "CAPTCHA verification failed" });
+  const captcha = await checkCaptcha(captchaToken, "contact_submit");
+  if (!captcha.ok) {
+    res.status(captcha.status).json({ error: captcha.error });
     return;
   }
 
@@ -204,9 +204,9 @@ app.post("/public/web-chat", webChatLimiter, async (req, res) => {
   }
 
   const { captchaToken, ...formData } = parsed.data;
-  const captchaOk = await verifyRecaptcha(captchaToken, "webchat_submit");
-  if (!captchaOk) {
-    res.status(400).json({ error: "CAPTCHA verification failed" });
+  const captcha = await checkCaptcha(captchaToken, "webchat_submit");
+  if (!captcha.ok) {
+    res.status(captcha.status).json({ error: captcha.error });
     return;
   }
 
@@ -246,9 +246,9 @@ app.post("/public/whatsapp-lead", whatsappLeadLimiter, async (req, res) => {
   }
 
   const { captchaToken, ...formData } = parsed.data;
-  const captchaOk = await verifyRecaptcha(captchaToken, "whatsapp_lead_submit");
-  if (!captchaOk) {
-    res.status(400).json({ error: "CAPTCHA verification failed" });
+  const captcha = await checkCaptcha(captchaToken, "whatsapp_lead_submit");
+  if (!captcha.ok) {
+    res.status(captcha.status).json({ error: captcha.error });
     return;
   }
 
@@ -295,9 +295,9 @@ app.post("/public/chat-sessions", chatSessionCors, chatSessionLimiter, async (re
   }
 
   const { captchaToken, ...formData } = parsed.data;
-  const captchaOk = await verifyRecaptcha(captchaToken, "chat_session_create");
-  if (!captchaOk) {
-    res.status(400).json({ error: "CAPTCHA verification failed" });
+  const captcha = await checkCaptcha(captchaToken, "chat_session_create");
+  if (!captcha.ok) {
+    res.status(captcha.status).json({ error: captcha.error });
     return;
   }
 

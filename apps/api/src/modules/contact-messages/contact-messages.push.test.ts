@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { push } from "@medcal/notifications";
 import { prisma } from "@medcal/db";
 import { ContactMessagesService } from "./contact-messages.service";
@@ -59,6 +59,12 @@ vi.mock("@medcal/db", async (importOriginal) => {
 });
 
 describe("ContactMessagesService.notifyNewContactMessage", () => {
+  // The prisma mock is module-level; without this the call recorded by the
+  // first test leaks into the "not injected" assertion below.
+  beforeEach(() => {
+    vi.mocked(prisma.contactMessage.findFirst).mockReset();
+  });
+
   it("dispatches formatted push to all company recipients", async () => {
     const sendToCompanyRecipients = vi.fn().mockResolvedValue({
       tokens: 1,
@@ -97,6 +103,29 @@ describe("ContactMessagesService.notifyNewContactMessage", () => {
         topic: "Kalibrasi",
       }),
     });
+  });
+
+  it("never rejects when dispatch fails — logs and resolves", async () => {
+    const sendToCompanyRecipients = vi.fn().mockRejectedValue(new Error("dispatch down"));
+    vi.mocked(prisma.contactMessage.findFirst).mockResolvedValue({
+      id: "msg-1",
+      name: "Budi",
+      message: "Butuh kalibrasi",
+      leadId: null,
+      topic: null,
+      company: { name: "PT Kalibrasi Medika" },
+    } as never);
+
+    const service = new ContactMessagesService({
+      sendToCompanyRecipients,
+    } as unknown as NotificationDispatchService);
+    const logError = vi
+      .spyOn((service as unknown as { logger: { error: (...a: unknown[]) => void } }).logger, "error")
+      .mockImplementation(() => {});
+
+    await expect(service.notifyNewContactMessage("PKM", "msg-1")).resolves.toBeUndefined();
+    expect(sendToCompanyRecipients).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledTimes(1);
   });
 
   it("no-ops when dispatch service is not injected", async () => {

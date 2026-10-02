@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
   Optional,
 } from "@nestjs/common";
@@ -56,6 +57,8 @@ export interface ContactMessageListResult {
 
 @Injectable()
 export class ContactMessagesService {
+  private readonly logger = new Logger(ContactMessagesService.name);
+
   constructor(
     @Optional()
     @Inject(NotificationDispatchService)
@@ -206,8 +209,27 @@ export class ContactMessagesService {
   /**
    * Dispatch FCM to company members opted in via UserMembership.receiveNotifications.
    * No lead assignment required — eligibility is membership-level, not per-lead.
+   *
+   * Callers invoke this fire-and-forget AFTER the ContactMessage is already
+   * committed, so it must never reject: a notification failure is logged and
+   * swallowed (persistence of the customer's message does not depend on
+   * notification delivery, and a floating rejection would be an unhandled
+   * rejection that can terminate the process).
    */
   async notifyNewContactMessage(companyId: string, messageId: string): Promise<void> {
+    try {
+      await this.dispatchNewContactMessageNotification(companyId, messageId);
+    } catch (err) {
+      this.logger.error(
+        `New contact message notification failed (messageId=${messageId}): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        err instanceof Error ? err.stack : undefined,
+      );
+    }
+  }
+
+  private async dispatchNewContactMessageNotification(companyId: string, messageId: string): Promise<void> {
     if (!this.notificationDispatch) {
       return;
     }
