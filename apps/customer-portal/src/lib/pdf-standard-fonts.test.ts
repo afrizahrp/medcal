@@ -17,7 +17,8 @@ describe("bundled PDF.js standard fonts", () => {
   it("are identical to the ones shipped with the installed pdfjs-dist", () => {
     const names = readdirSync(packaged).sort();
     expect(readdirSync(bundled).sort()).toEqual(names);
-    for (const name of names) {
+    // Font files only: git may rewrite line endings of the LICENSE text files on checkout.
+    for (const name of names.filter((n) => /\.(ttf|pfb)$/.test(n))) {
       expect(readFileSync(path.join(bundled, name)).equals(readFileSync(path.join(packaged, name))), name).toBe(true);
     }
   });
