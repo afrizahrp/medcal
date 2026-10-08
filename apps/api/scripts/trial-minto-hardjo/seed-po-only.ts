@@ -27,17 +27,16 @@ import { TRIAL_SOURCE_ROWS } from "../../../../packages/db/fixtures/trial-minto-
 import { TRIAL_DEVICE_TYPE_MAPPING } from "../../../../packages/db/fixtures/trial-minto-hardjo/device-type-mapping";
 import { seedTrialMintoHardjoDeviceTypes } from "../../../../packages/db/prisma/seed-trial-minto-hardjo-device-types";
 import {
-  TRIAL_CUSTOMER_ID,
-  TRIAL_STAFF_USER_ID,
   FIXTURES_DIR,
   resolveDeviceTypeIdsByCode,
   ensureNonPpnTax,
   ensurePriceListItems,
-  ensureTrialUsers,
 } from "./lib";
 import { PO_ONLY_MANIFEST_PATH, readPoOnlyManifest, writePoOnlyManifest, type TrialPoOnlyManifest } from "./po-only-manifest";
 
 const COMPANY_ID = process.env.COMPANY_ID ?? "PKM";
+const STAFF_USER_ID = process.env.TRIAL_USER_ID ?? "6Oy86oQ5xKgHt1D6T2pjQJcuMRCeeYAg";
+const TARGET_CUSTOMER_NUMBER = process.env.TRIAL_CUSTOMER_NUMBER ?? "CUS/2026/09/00014";
 
 const calibrationRequestsService = new CalibrationRequestsService();
 const quotationsService = new QuotationsService();
@@ -60,26 +59,24 @@ async function main(): Promise<void> {
   console.log("[seed-po-only] 2/6 resolving DeviceType ids for all 56 rows...");
   const deviceTypesByCode = await resolveDeviceTypeIdsByCode();
 
-  console.log("[seed-po-only] 3/6 tax + price list + trial users...");
+  console.log("[seed-po-only] 3/6 tax + price list...");
   const taxCode = await ensureNonPpnTax(COMPANY_ID);
   const allDeviceTypeIds = TRIAL_DEVICE_TYPE_MAPPING.map((m) => deviceTypesByCode.get(m.deviceTypeCode)!.id);
   const priceListItemIds = await ensurePriceListItems(COMPANY_ID, allDeviceTypeIds);
-  await ensureTrialUsers(COMPANY_ID);
 
   console.log("[seed-po-only] 4/6 target Customer...");
-  const customer = await prisma.customer.findUnique({ where: { id: TRIAL_CUSTOMER_ID } });
+  const customer = await prisma.customer.findFirst({ where: { companyId: COMPANY_ID, number: TARGET_CUSTOMER_NUMBER } });
   if (!customer) {
     console.error(
-      `[seed-po-only] Target Customer ${TRIAL_CUSTOMER_ID} not found. This trial no longer creates its ` +
-        "own Customer — it reuses this fixed, real Customer id. Confirm the id in lib.ts is still correct.",
+      `[seed-po-only] Target Customer ${TARGET_CUSTOMER_NUMBER} not found in company ${COMPANY_ID}.`,
     );
     process.exitCode = 1;
     return;
   }
-  const liveRequestCount = await prisma.calibrationRequest.count({ where: { customerId: TRIAL_CUSTOMER_ID } });
+  const liveRequestCount = await prisma.calibrationRequest.count({ where: { customerId: customer.id } });
   if (liveRequestCount > 0) {
     console.error(
-      `[seed-po-only] Refusing to seed: Customer ${TRIAL_CUSTOMER_ID} (${customer.name}) already has ` +
+      `[seed-po-only] Refusing to seed: Customer ${TARGET_CUSTOMER_NUMBER} (${customer.name}) already has ` +
         `${liveRequestCount} CalibrationRequest row(s) attached. Run reset:trial-minto-hardjo-po-only first, ` +
         "or investigate manually before reseeding.",
     );
@@ -100,9 +97,9 @@ async function main(): Promise<void> {
     };
   });
 
-  const createdRequest = await calibrationRequestsService.create(COMPANY_ID, TRIAL_STAFF_USER_ID, {
+  const createdRequest = await calibrationRequestsService.create(COMPANY_ID, STAFF_USER_ID, {
     customerId,
-    serviceMode: "SEND_TO_LAB",
+    serviceMode: "ON_SITE",
     items,
   } as never);
 
@@ -110,14 +107,14 @@ async function main(): Promise<void> {
 
   const quotation = await quotationsService.create(COMPANY_ID, { requestId: createdRequest.id, taxCode } as never);
   await quotationsService.send(COMPANY_ID, quotation.id);
-  await quotationsService.approve(COMPANY_ID, quotation.id, TRIAL_STAFF_USER_ID);
+  await quotationsService.approve(COMPANY_ID, quotation.id, STAFF_USER_ID);
 
   const po = await purchaseOrdersService.create(COMPANY_ID, {
     quotationId: quotation.id,
     customerPoNumber: `CPO-TRIAL-MH-PO-ONLY-${Date.now()}`,
     customerPoDate: new Date(),
   } as never);
-  await purchaseOrdersService.approve(COMPANY_ID, po.id, TRIAL_STAFF_USER_ID);
+  await purchaseOrdersService.approve(COMPANY_ID, po.id, STAFF_USER_ID);
 
   console.log("[seed-po-only] 6/6 writing manifest (STOPPING at approved PurchaseOrder)...");
   const manifest: TrialPoOnlyManifest = {
@@ -127,7 +124,7 @@ async function main(): Promise<void> {
     calibrationRequestId: createdRequest.id,
     quotationId: quotation.id,
     purchaseOrderId: po.id,
-    staffUserId: TRIAL_STAFF_USER_ID,
+    staffUserId: STAFF_USER_ID,
     taxCode,
     priceListItemIds,
     syntheticDeviceCategoryIds: syntheticManifest.categories.map((c) => c.id),

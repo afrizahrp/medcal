@@ -12,10 +12,16 @@
 --                WorkOrder + CalibrationJob + QA + Certificate descendants,
 --                plus all 2026 DocumentNumberSequence counters owned by that chain
 --                (CRQ/QUO/PUR/SPK/WOL/DLN/BAI/CER).
---  NOT touched : Device, DeviceType, Equipment, EquipmentType,
---                EquipmentCalibrationRecord, Customer, Lead, User, Company,
---                UserMembership, DeviceCalibrationParameter, PriceListItem,
---                and the CUSTOMER (CUS) DocumentNumberSequence row.
+--                plus master rows by prefix: Device WHERE code starts with 'TRIAL_'
+--                and Customer WHERE number starts with 'TRIAL_' (a Customer
+--                delete cascades to its remaining dependent rows), plus
+--                DeviceType / DeviceCategory WHERE code starts with 'TRIAL_'
+--                together with their parameters, physical-check items,
+--                equipment requirements, price-list items and Devices.
+--  NOT touched : every other Device / Customer / DeviceType, Equipment,
+--                EquipmentType, EquipmentCalibrationRecord, Lead, User,
+--                Company, UserMembership, DeviceCalibrationParameter,
+--                PriceListItem, and the CUSTOMER (CUS) DocumentNumberSequence row.
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -82,10 +88,14 @@ UNION ALL SELECT 'QualityReview',               count(*) FROM "QualityReview"
 UNION ALL SELECT 'Certificate',                 count(*) FROM "Certificate"
 UNION ALL SELECT 'InvoiceCertificate',          count(*) FROM "InvoiceCertificate"
 UNION ALL SELECT 'FileObject (trial-owned)',    count(*) FROM "_TrialFileObjectToDelete"
+UNION ALL SELECT 'Device (code TRIAL_*)',       count(*) FROM "Device" WHERE left("code", 6) = 'TRIAL_'
+UNION ALL SELECT 'Customer (number TRIAL_*)',   count(*) FROM "Customer" WHERE left("number", 6) = 'TRIAL_'
+UNION ALL SELECT 'DeviceType (code TRIAL_*)',    count(*) FROM "DeviceType" WHERE left("code", 6) = 'TRIAL_'
+UNION ALL SELECT 'DeviceCategory (code TRIAL_*)',count(*) FROM "DeviceCategory" WHERE left("code", 6) = 'TRIAL_'
 ORDER BY 1;
 
 \echo ''
-\echo '################  BEFORE - excluded master tables (must NOT change)  ################'
+\echo '################  BEFORE - excluded master tables (only TRIAL_ rows are removed from Customer/Device/DeviceType/DeviceCategory/DeviceCalibrationParameter/PriceListItem)  ################'
 SELECT 'Company'                    AS "table", count(*) AS rows FROM "Company"
 UNION ALL SELECT 'User',                       count(*) FROM "User"
 UNION ALL SELECT 'UserMembership',             count(*) FROM "UserMembership"
@@ -94,6 +104,7 @@ UNION ALL SELECT 'Lead',                       count(*) FROM "Lead"
 UNION ALL SELECT 'Device',                     count(*) FROM "Device"
 UNION ALL SELECT 'DeviceType',                 count(*) FROM "DeviceType"
 UNION ALL SELECT 'DeviceCalibrationParameter', count(*) FROM "DeviceCalibrationParameter"
+UNION ALL SELECT 'DeviceCategory',             count(*) FROM "DeviceCategory"
 UNION ALL SELECT 'Equipment',                  count(*) FROM "Equipment"
 UNION ALL SELECT 'EquipmentType',              count(*) FROM "EquipmentType"
 UNION ALL SELECT 'EquipmentCalibrationRecord', count(*) FROM "EquipmentCalibrationRecord"
@@ -110,6 +121,7 @@ ORDER BY "documentType", "year";
 -- ----------------------------------------------------------------------------
 --  DELETE - commercial chain, FK-safe order (children before parents)
 --  RESTRICT edges honoured:
+--    SpkParent->PurchaseOrder (delete SpkParent after WorkOrder, before PurchaseOrder),
 --    PurchaseOrder->Quotation, PurchaseOrderItem->QuotationItem,
 --    Quotation->CalibrationRequest, WorkOrder->Quotation/PurchaseOrder,
 --    WorkOrderItem->PurchaseOrderItem, Certificate->CalibrationJob,
@@ -135,6 +147,7 @@ DELETE FROM "WorkOrderItem";
 DELETE FROM "WorkOrderEquipment";
 DELETE FROM "WorkOrderAssignment";
 DELETE FROM "WorkOrder";
+DELETE FROM "SpkParent";
 DELETE FROM "PurchaseOrderItem";
 DELETE FROM "PurchaseOrder";
 DELETE FROM "QuotationItem";
@@ -143,6 +156,41 @@ DELETE FROM "CalibrationRequestItem";
 DELETE FROM "CalibrationRequest";
 DELETE FROM "FileObject"
 WHERE id IN (SELECT id FROM "_TrialFileObjectToDelete");
+
+-- ----------------------------------------------------------------------------
+--  DELETE - TRIAL_ master rows (after the chain: CalibrationJob.deviceId and
+--  WorkOrderItem.deviceId are ON DELETE RESTRICT). left(...) is used instead of
+--  LIKE 'TRIAL_%' because "_" is a LIKE wildcard. Device before Customer.
+-- ----------------------------------------------------------------------------
+\echo ''
+\echo '################  DELETE - TRIAL_ master rows  ################'
+DELETE FROM "Device"   WHERE left("code", 6)   = 'TRIAL_';
+DELETE FROM "Customer" WHERE left("number", 6) = 'TRIAL_';
+
+-- ----------------------------------------------------------------------------
+--  DELETE - TRIAL_ catalog rows: DeviceType (code) then DeviceCategory (code).
+--  Dependents that RESTRICT a DeviceType are removed first (children before
+--  parents): parameters, physical-check items, equipment requirements, price
+--  list items and any Device of a trial type. Aliases / capability orders
+--  cascade from DeviceType.
+-- ----------------------------------------------------------------------------
+\echo ''
+\echo '################  DELETE - TRIAL_ DeviceType / DeviceCategory  ################'
+CREATE TEMP TABLE "_TrialDeviceTypeToDelete" ON COMMIT DROP AS
+SELECT id FROM "DeviceType" WHERE left("code", 6) = 'TRIAL_';
+
+DELETE FROM "DeviceCalibrationParameter"
+WHERE "deviceTypeId" IN (SELECT id FROM "_TrialDeviceTypeToDelete");
+DELETE FROM "DevicePhysicalCheckItem"
+WHERE "deviceTypeId" IN (SELECT id FROM "_TrialDeviceTypeToDelete");
+DELETE FROM "DeviceTypeEquipmentRequirement"
+WHERE "deviceTypeId" IN (SELECT id FROM "_TrialDeviceTypeToDelete");
+DELETE FROM "PriceListItem"
+WHERE "deviceTypeId" IN (SELECT id FROM "_TrialDeviceTypeToDelete");
+DELETE FROM "Device"
+WHERE "deviceTypeId" IN (SELECT id FROM "_TrialDeviceTypeToDelete");
+DELETE FROM "DeviceType"     WHERE id IN (SELECT id FROM "_TrialDeviceTypeToDelete");
+DELETE FROM "DeviceCategory" WHERE left("code", 6) = 'TRIAL_';
 
 -- ----------------------------------------------------------------------------
 --  RESET - DocumentNumberSequence counters used during the trial
@@ -199,10 +247,14 @@ UNION ALL SELECT 'FileObject (trial-owned)',    count(*) FROM "_TrialFileObjectT
                                                       SELECT 1 FROM "FileObject" live
                                                       WHERE live.id = f.id
                                                     )
+UNION ALL SELECT 'Device (code TRIAL_*)',       count(*) FROM "Device" WHERE left("code", 6) = 'TRIAL_'
+UNION ALL SELECT 'Customer (number TRIAL_*)',   count(*) FROM "Customer" WHERE left("number", 6) = 'TRIAL_'
+UNION ALL SELECT 'DeviceType (code TRIAL_*)',    count(*) FROM "DeviceType" WHERE left("code", 6) = 'TRIAL_'
+UNION ALL SELECT 'DeviceCategory (code TRIAL_*)',count(*) FROM "DeviceCategory" WHERE left("code", 6) = 'TRIAL_'
 ORDER BY 1;
 
 \echo ''
-\echo '################  AFTER - excluded master tables (expect IDENTICAL to BEFORE)  ################'
+\echo '################  AFTER - excluded master tables (expect BEFORE minus TRIAL_ rows and their dependents)  ################'
 SELECT 'Company'                    AS "table", count(*) AS rows FROM "Company"
 UNION ALL SELECT 'User',                       count(*) FROM "User"
 UNION ALL SELECT 'UserMembership',             count(*) FROM "UserMembership"
@@ -211,6 +263,7 @@ UNION ALL SELECT 'Lead',                       count(*) FROM "Lead"
 UNION ALL SELECT 'Device',                     count(*) FROM "Device"
 UNION ALL SELECT 'DeviceType',                 count(*) FROM "DeviceType"
 UNION ALL SELECT 'DeviceCalibrationParameter', count(*) FROM "DeviceCalibrationParameter"
+UNION ALL SELECT 'DeviceCategory',             count(*) FROM "DeviceCategory"
 UNION ALL SELECT 'Equipment',                  count(*) FROM "Equipment"
 UNION ALL SELECT 'EquipmentType',              count(*) FROM "EquipmentType"
 UNION ALL SELECT 'EquipmentCalibrationRecord', count(*) FROM "EquipmentCalibrationRecord"

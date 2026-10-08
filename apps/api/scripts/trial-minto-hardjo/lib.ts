@@ -206,9 +206,7 @@ export interface TrialRowDevices {
  *
  * One Device PER PHYSICAL UNIT (not one per line), because Device.id is a
  * specific physical asset, not the DeviceType category — a qty=17 line means
- * 17 distinct real units, and `@@unique([workOrderId, deviceId])` on
- * CalibrationJob forbids reusing one Device.id across multiple jobs in the
- * same WorkOrder. Idempotent: reuses an existing Device with the same serial
+ * 17 distinct real units. Idempotent: reuses an existing Device with the same serial
  * number instead of duplicating it on a reseed.
  *
  * Device rows are not tracked in the manifest for teardown: Device.customerId
