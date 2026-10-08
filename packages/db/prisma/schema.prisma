@@ -1721,6 +1721,7 @@ model ServiceTariff {
   name      String
   unitPrice Decimal  @db.Decimal(18, 2)
   currency  String   @default("IDR")
+  workOrderItems          WorkOrderItem[]
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2198,11 +2199,19 @@ model QuotationHistory {
   totalAmount          Decimal         @db.Decimal(18, 2)
   currency             String
   approvedAt           DateTime?
+  /// Explicit device lineage: Requisition item -> QuotationItem ->
+  /// PurchaseOrderItem -> WorkOrderItem -> CalibrationJob. Copied verbatim from
+  /// PurchaseOrderItem.deviceId when the WorkOrderItem is created (see
+  /// createAllocationsAndWorkOrderItems) — never re-resolved or inferred later.
+  /// NULL only when identity is not yet known upstream, and for legacy
+  /// pre-lineage rows (never backfilled).
+  deviceId            String?
   approvedByUserId     String?
   customerApprovedAt   DateTime?
   revisedByUserId      String?
   revisedAt            DateTime        @default(now())
 
+  device            Device?                      @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   quotation Quotation              @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   revisedBy User?                  @relation("QuotationHistoryRevisedBy", fields: [revisedByUserId], references: [id])
   items     QuotationItemHistory[]
@@ -2210,6 +2219,7 @@ model QuotationHistory {
   @@unique([quotationId, revisionNumber])
   @@index([quotationId])
 }
+  @@index([deviceId])
 
 /// Complete snapshot of one QuotationItem row. See
 /// CalibrationRequestItemHistory for the `sourceItemId` contract.
@@ -2462,9 +2472,10 @@ model CalibrationJob {
   /// Physical Device master row, once a technician has verified identity on-site.
   /// NULLABLE: identity is normally unknown until on-site verification, and the
   /// WorkOrder proceeds to IN_PROGRESS regardless. A NULL deviceId is a normal
-  /// pending state, not an error. Postgres treats NULLs as distinct, so many
-  /// jobs with deviceId = NULL may coexist under one WorkOrder; the
-  /// @@unique([workOrderId, deviceId]) constraint only binds once deviceId is set.
+  /// pending state, not an error. Inherited verbatim from WorkOrderItem.deviceId
+  /// for EVERY fan-out job of that item (including qty > 1). deviceId identifies
+  /// the device, CalibrationJob.id identifies the job — deviceId is deliberately
+  /// not unique per WorkOrder.
   deviceId                 String?
   /// Trace back to the original customer requisition line this job fulfils, so
   /// the customer's declaration (name / deviceId / akdAkl) stays reachable even
@@ -2490,6 +2501,7 @@ model CalibrationJob {
   unitTotal   Int
 
   // ── Identity snapshot ──────────────────────────────────────────────────────
+  deviceId            String?
   // Frozen ON the job, not read through Device, so later edits to the mutable
   // Device master never rewrite what this calibration actually saw.
   /// Device name as the customer originally described it (snapshot of
@@ -2563,7 +2575,6 @@ model CalibrationJob {
   /// Frozen test-point allowlist copied at start() (or backfill for pre-feature jobs).
   jobTestPoints               JobCalibrationTestPoint[]
 
-  @@unique([workOrderId, deviceId])
   @@unique([workOrderId, purchaseOrderItemId, unitOrdinal])
   @@index([companyId, status])
   @@index([companyId, createdAt])

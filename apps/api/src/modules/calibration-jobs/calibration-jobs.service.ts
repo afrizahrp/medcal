@@ -1646,18 +1646,7 @@ export class CalibrationJobsService {
       });
     }
 
-    try {
-      await prisma.calibrationJob.update({ where: { id: jobId }, data: { deviceId } });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        throw new ConflictException({
-          message: "Another job on this Work Order is already bound to that device",
-          code: "CALIBRATION_JOB_DEVICE_ALREADY_BOUND_TO_WORK_ORDER",
-          deviceId,
-        });
-      }
-      throw error;
-    }
+    await prisma.calibrationJob.update({ where: { id: jobId }, data: { deviceId } });
 
     return this.findOne(companyId, jobId);
   }

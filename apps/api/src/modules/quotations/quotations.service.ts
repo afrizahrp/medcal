@@ -309,6 +309,23 @@ async function assertFullScopeItems(
   }
 }
 
+/**
+ * Requisition-owned device identity per request item. The manual PATCH/revise
+ * paths accept an optional per-line `deviceId`; when the caller omits it the
+ * line must inherit CalibrationRequestItem.deviceId verbatim rather than
+ * silently nulling the lineage.
+ */
+async function loadRequestItemDeviceIds(
+  tx: Prisma.TransactionClient,
+  requestId: string,
+): Promise<Map<string, string | null>> {
+  const rows = await tx.calibrationRequestItem.findMany({
+    where: { requestId },
+    select: { id: true, deviceId: true },
+  });
+  return new Map(rows.map((row) => [row.id, row.deviceId]));
+}
+
 interface QuotationItemRow {
   companyId: string;
   quotationId: string;
@@ -332,6 +349,7 @@ function buildItemRows(
   companyId: string,
   quotationId: string,
   items: ItemInput[],
+  requestItemDeviceIds: Map<string, string | null>,
 ): QuotationItemRow[] {
   return items.map((item) => {
     const qty = toDecimal(item.qty ?? DEFAULT_QTY);
@@ -341,7 +359,7 @@ function buildItemRows(
       companyId,
       quotationId,
       requestItemId: item.requestItemId,
-      deviceId: item.deviceId ?? null,
+      deviceId: item.deviceId ?? requestItemDeviceIds.get(item.requestItemId) ?? null,
       tariffId: item.tariffId ?? null,
       description: item.description,
       qty,
@@ -691,7 +709,12 @@ export class QuotationsService {
 
         await tx.quotationItem.deleteMany({ where: { quotationId: id } });
         await tx.quotationItem.createMany({
-          data: buildItemRows(companyId, id, input.items),
+          data: buildItemRows(
+            companyId,
+            id,
+            input.items,
+            await loadRequestItemDeviceIds(tx, requestId),
+          ),
         });
       }
 
@@ -988,6 +1011,8 @@ export class QuotationsService {
         }
       }
 
+      const requestItemDeviceIds = await loadRequestItemDeviceIds(tx, existing.requestId);
+
       // ADDED / UNCHANGED / QTY_CHANGED.
       for (const item of input.items) {
         if (!item.id) {
@@ -1010,7 +1035,7 @@ export class QuotationsService {
               companyId,
               quotationId: id,
               requestItemId: item.requestItemId,
-              deviceId: item.deviceId ?? null,
+              deviceId: item.deviceId ?? requestItemDeviceIds.get(item.requestItemId) ?? null,
               tariffId: item.tariffId ?? null,
               description: item.description,
               qty,
@@ -1043,7 +1068,7 @@ export class QuotationsService {
             where: { id: item.id },
             data: {
               requestItemId: item.requestItemId,
-              deviceId: item.deviceId ?? null,
+              deviceId: item.deviceId ?? requestItemDeviceIds.get(item.requestItemId) ?? null,
               tariffId: item.tariffId ?? null,
               description: item.description,
               qty,

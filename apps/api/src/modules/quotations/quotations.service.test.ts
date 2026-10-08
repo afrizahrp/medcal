@@ -826,6 +826,22 @@ describe("QuotationsService.update (manual override of a DRAFT quotation)", () =
     expect(Number(updated.subtotal)).toBe(175_000);
   });
 
+  it("deviceId lineage — omitting deviceId on a manual PATCH keeps the Requisition item's deviceId", async () => {
+    const dt = await makeDeviceType();
+    await seedPrice(realCompanyId, dt.id, 100_000);
+    const { request } = await createSubmittedRequest(realCompanyId, { deviceTypeId: dt.id });
+    const requestDeviceId = request.items[0]!.deviceId;
+    expect(requestDeviceId).toBeTruthy();
+    const created = await createQuoted(realCompanyId, { requestId: request.id });
+    createdQuotationIds.push(created.id);
+    expect(created.items[0]?.deviceId).toBe(requestDeviceId);
+
+    const updated = await quotationsService.update(realCompanyId, created.id, {
+      items: [{ requestItemId: request.items[0]!.id, description: dt.name, unitPrice: 175_000 }],
+    });
+    expect(updated.items[0]?.deviceId).toBe(requestDeviceId);
+  });
+
   it("rejects update when status is not DRAFT", async () => {
     const dt = await makeDeviceType();
     await seedPrice(realCompanyId, dt.id, 100_000);
@@ -922,6 +938,27 @@ describe("QuotationsService.revise", () => {
         items: [{ id: created.items[0]!.id, requestItemId: created.items[0]!.requestItemId!, unitPrice: 1, qty: 3 }],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("deviceId lineage — omitting deviceId on revise keeps the Requisition item's deviceId", async () => {
+    const sent = await sentQuotation();
+    const requestItemId = sent.items[0]!.requestItemId!;
+    const requestItem = await prisma.calibrationRequestItem.findUniqueOrThrow({
+      where: { id: requestItemId },
+    });
+    expect(requestItem.deviceId).toBeTruthy();
+
+    const rev = await quotationsService.revise(realCompanyId, sent.id, staffUserId, {
+      items: [
+        {
+          id: sent.items[0]!.id,
+          requestItemId,
+          unitPrice: Number(sent.items[0]!.unitPrice),
+          qty: 2,
+        },
+      ],
+    });
+    expect(rev.items[0]!.deviceId).toBe(requestItem.deviceId);
   });
 
   it("MOM #1 example: QUO-01 1 -> 3 -> 4 grows qty in place before any PO exists, number stays QUO-01", async () => {

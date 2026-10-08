@@ -507,6 +507,8 @@ describe("WorkOrdersService.create", () => {
       expect(item.purchaseOrderItem.deviceId).toBe(
         item.purchaseOrderItem.quotationItem.requestItem?.deviceId,
       );
+      // ...and WorkOrderItem carries the same device identity explicitly.
+      expect(item.deviceId).toBe(item.purchaseOrderItem.deviceId);
     }
     expect(result.quotation.request?.id).toBe(request.id);
 
@@ -1268,7 +1270,7 @@ describe("WorkOrdersService CalibrationJob fan-out on start()", () => {
     return created;
   }
 
-  it("creates qty-many jobs with correct unitOrdinal/unitTotal, null deviceId, and requestItem linkage", async () => {
+  it("creates qty-many jobs with correct unitOrdinal/unitTotal, inherited deviceId, and requestItem linkage", async () => {
     const created = await assignedWorkOrderReadyToStart();
     const item = created.items[0]!;
     const requestItemId = item.purchaseOrderItem.quotationItem.requestItem!.id;
@@ -1294,7 +1296,7 @@ describe("WorkOrdersService CalibrationJob fan-out on start()", () => {
     expect(jobs.map((job) => job.unitOrdinal)).toEqual([1, 2, 3]);
     for (const job of jobs) {
       expect(job.unitTotal).toBe(3);
-      expect(job.deviceId).toBeNull();
+      expect(job.deviceId).toBe(item.deviceId);
       expect(job.purchaseOrderItemId).toBe(item.purchaseOrderItemId);
       expect(job.calibrationRequestItemId).toBe(requestItemId);
       expect(job.customerDeclaredDeviceName).toBe("Infusion Pump A");
@@ -1304,7 +1306,7 @@ describe("WorkOrdersService CalibrationJob fan-out on start()", () => {
     }
   });
 
-  it("propagates PurchaseOrderItem.deviceId (Master Device already known upstream) to the qty-1 CalibrationJob.deviceId", async () => {
+  it("propagates WorkOrderItem.deviceId (Master Device already known upstream) to the qty-1 CalibrationJob.deviceId", async () => {
     const created = await assignedWorkOrderReadyToStart();
     const item = created.items[0]!;
     const device = await prisma.device.create({
@@ -1317,8 +1319,8 @@ describe("WorkOrdersService CalibrationJob fan-out on start()", () => {
       },
     });
     createdDeviceIds.push(device.id);
-    await prisma.purchaseOrderItem.update({
-      where: { id: item.purchaseOrderItemId },
+    await prisma.workOrderItem.update({
+      where: { id: item.id },
       data: { deviceId: device.id },
     });
 
@@ -1331,7 +1333,23 @@ describe("WorkOrdersService CalibrationJob fan-out on start()", () => {
     expect(jobs[0]!.technicianObservedSerial).toBeNull();
   });
 
-  it("does not propagate PurchaseOrderItem.deviceId onto a qty>1 line (ambiguous — which unit is that device?)", async () => {
+  it("lineage: Requisition.deviceId -> WorkOrderItem.deviceId -> PurchaseOrderItem.deviceId -> CalibrationJob.deviceId are the same Device.id", async () => {
+    const created = await assignedWorkOrderReadyToStart();
+    const item = created.items[0]!;
+    const requestDeviceId = item.purchaseOrderItem.quotationItem.requestItem?.deviceId;
+    expect(requestDeviceId).toBeTruthy();
+    expect(item.purchaseOrderItem.quotationItem.deviceId).toBe(requestDeviceId);
+    expect(item.purchaseOrderItem.deviceId).toBe(requestDeviceId);
+    expect(item.deviceId).toBe(requestDeviceId);
+
+    await workOrdersService.start(realCompanyId, created.id);
+
+    const jobs = await prisma.calibrationJob.findMany({ where: { workOrderId: created.id } });
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]!.deviceId).toBe(requestDeviceId);
+  });
+
+  it("propagates WorkOrderItem.deviceId to EVERY fan-out job on a qty>1 line (CalibrationJob.id identifies the job)", async () => {
     const created = await assignedWorkOrderReadyToStart();
     const item = created.items[0]!;
     const device = await prisma.device.create({
@@ -1344,21 +1362,18 @@ describe("WorkOrdersService CalibrationJob fan-out on start()", () => {
       },
     });
     createdDeviceIds.push(device.id);
-    await prisma.purchaseOrderItem.update({
-      where: { id: item.purchaseOrderItemId },
-      data: { deviceId: device.id },
-    });
     await prisma.workOrderItem.update({
       where: { id: item.id },
-      data: { qty: new Prisma.Decimal(2) },
+      data: { deviceId: device.id, qty: new Prisma.Decimal(3) },
     });
 
     await workOrdersService.start(realCompanyId, created.id);
 
     const jobs = await prisma.calibrationJob.findMany({ where: { workOrderId: created.id } });
-    expect(jobs).toHaveLength(2);
+    expect(jobs).toHaveLength(3);
+    expect(new Set(jobs.map((job) => job.id)).size).toBe(3);
     for (const job of jobs) {
-      expect(job.deviceId).toBeNull();
+      expect(job.deviceId).toBe(device.id);
     }
   });
 

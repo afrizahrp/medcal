@@ -136,8 +136,11 @@ export async function createAllocationsAndWorkOrderItems(
     companyId: string;
     workOrderId: string;
     plan: AllocationRequestItem[];
-    /** description + full qty per item, for WorkOrderItem.description and the remaining-qty check */
-    itemsById: Map<string, { description: string; qty: Prisma.Decimal }>;
+    /** description + deviceId + full qty per item, for WorkOrderItem.description/deviceId and the remaining-qty check */
+    itemsById: Map<
+      string,
+      { description: string; qty: Prisma.Decimal; deviceId: string | null }
+    >;
   },
 ): Promise<void> {
   const { companyId, workOrderId, plan, itemsById } = params;
@@ -199,6 +202,8 @@ export async function createAllocationsAndWorkOrderItems(
         workOrderId,
         purchaseOrderItemId: row.purchaseOrderItemId,
         allocationId: allocation.id,
+        // Explicit lineage: PurchaseOrderItem.deviceId copied verbatim.
+        deviceId: source.deviceId,
         description: source.description,
         qty: requestedQty,
       },

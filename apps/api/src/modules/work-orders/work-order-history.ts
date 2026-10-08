@@ -49,6 +49,7 @@ export async function snapshotWorkOrderHistory(
         create: existing.items.map((item) => ({
           sourceItemId: item.id,
           purchaseOrderItemId: item.purchaseOrderItemId,
+          deviceId: item.deviceId,
           description: item.description,
           qty: item.qty,
         })),

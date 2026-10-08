@@ -82,7 +82,10 @@ export interface SharedSpkDetail {
 
 type TxClient = Prisma.TransactionClient;
 type ReadClient = Prisma.TransactionClient | typeof prisma;
-type ItemSource = Map<string, { description: string; qty: Prisma.Decimal }>;
+type ItemSource = Map<
+  string,
+  { description: string; qty: Prisma.Decimal; deviceId: string | null }
+>;
 
 function notFound(): NotFoundException {
   return new NotFoundException({
@@ -166,7 +169,7 @@ export class SharedSpkService {
       const itemsById: ItemSource = new Map(
         purchaseOrder.items.map((item) => [
           item.id,
-          { description: item.description, qty: item.qty },
+          { description: item.description, qty: item.qty, deviceId: item.deviceId },
         ]),
       );
       // Validate every Child's batch (active item, positive whole qty, no
@@ -388,7 +391,7 @@ export class SharedSpkService {
       const itemsById: ItemSource = new Map(
         purchaseOrder.items.map((item) => [
           item.id,
-          { description: item.description, qty: item.qty },
+          { description: item.description, qty: item.qty, deviceId: item.deviceId },
         ]),
       );
 

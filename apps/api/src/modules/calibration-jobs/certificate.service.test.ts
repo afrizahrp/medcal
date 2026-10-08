@@ -171,12 +171,9 @@ async function makeJob(opts: { withDevice: boolean }) {
     },
   });
 
-  // qty: 2 — a qty>1 line always fans out with CalibrationJob.deviceId left
-  // null (ambiguous, one Device per line vs. N physical units), regardless of
-  // this fixture's own resolved CalibrationRequestItem.deviceId. This keeps
-  // `withDevice: false` producing a genuinely unresolved job, unaffected by
-  // the (separate, qty=1-only) automatic PurchaseOrderItem -> CalibrationJob
-  // propagation this fixture would otherwise trigger.
+  // qty: 2 gives the fan-out >1 job; every job inherits the resolved
+  // deviceId, so for `withDevice: false` the job is explicitly unbound below to
+  // produce a genuinely unresolved (pending-identity) job.
   const request = await calibrationRequestsService.create(companyId, staffUserId, {
     customerId: customer.id,
     serviceMode: "SEND_TO_LAB",
@@ -207,6 +204,10 @@ async function makeJob(opts: { withDevice: boolean }) {
   const technician = await makeMember("TECHNICIAN");
   await workOrdersService.assign(companyId, workOrder.id, { technicians: [{ technicianUserId: technician.id }] });
   await workOrdersService.start(companyId, workOrder.id);
+  await prisma.calibrationJob.updateMany({
+    where: { workOrderId: workOrder.id },
+    data: { deviceId: null },
+  });
   const jobs = await prisma.calibrationJob.findMany({ where: { workOrderId: workOrder.id } });
   const jobId = jobs[0]!.id;
 

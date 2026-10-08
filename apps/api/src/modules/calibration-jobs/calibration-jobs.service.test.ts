@@ -227,6 +227,16 @@ async function startedWorkOrderJobs(
   });
   await workOrdersService.start(companyId, workOrder.id);
 
+  // Fan-out inherits the resolved deviceId onto every job (any qty). Tests that
+  // pass qty > 1 do so to get jobs with a still-unresolved device (pending
+  // technician identity), so unbind them explicitly here.
+  if (opts?.qty && opts.qty !== 1) {
+    await prisma.calibrationJob.updateMany({
+      where: { workOrderId: workOrder.id },
+      data: { deviceId: null },
+    });
+  }
+
   const jobs = await prisma.calibrationJob.findMany({
     where: { workOrderId: workOrder.id },
     orderBy: { unitOrdinal: "asc" },
@@ -3578,17 +3588,6 @@ describe("CalibrationJobsService — Technician Device Lookup (selectDevice)", (
     await expect(
       calibrationJobsService.selectDevice(realCompanyId, jobs[0]!.id, device.id),
     ).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it("selectDevice surfaces a 409 when @@unique([workOrderId, deviceId]) fires (a realistic qty>1 fan-out scenario)", async () => {
-    const { jobs, customerId, deviceTypeId } = await startedWorkOrderJobs(realCompanyId, { qty: 2 });
-    expect(jobs).toHaveLength(2);
-    const device = await createDevice(customerId, deviceTypeId);
-    await calibrationJobsService.selectDevice(realCompanyId, jobs[0]!.id, device.id);
-
-    await expect(
-      calibrationJobsService.selectDevice(realCompanyId, jobs[1]!.id, device.id),
-    ).rejects.toBeInstanceOf(ConflictException);
   });
 });
 
