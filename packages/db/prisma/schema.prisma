@@ -486,17 +486,18 @@ enum EmailStatus {
 // =============================================================================
 
 model Company {
-  id           String        @id @db.Char(3)
-  name         String        @db.VarChar(50)
-  legalName    String?       @db.VarChar(50)
-  taxId        String?       @db.VarChar(25)
-  address      String?       @db.VarChar(100)
-  phone        String?       @db.VarChar(25)
-  email        String?       @db.VarChar(50)
-  status       CompanyStatus @default(ACTIVE)
-  settingsJson Json?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id              String        @id @db.Char(3)
+  name            String        @db.VarChar(50)
+  legalName       String?       @db.VarChar(50)
+  taxId           String?       @db.VarChar(25)
+  address         String?       @db.VarChar(100)
+  phone           String?       @db.VarChar(25)
+  email           String?       @db.VarChar(50)
+  status          CompanyStatus @default(ACTIVE)
+  settingsJson    Json?
+  createdAt       DateTime      @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime      @updatedAt
 
   memberships                 UserMembership[]
   contactMessages             ContactMessage[]
@@ -526,6 +527,8 @@ model Company {
   equipmentDeliveryNotes      EquipmentDeliveryNote[]
   auditLogs                   AuditLog[]
   customerFeedbacks           CustomerFeedback[]
+
+  updatedBy User? @relation("CompanyUpdatedBy", fields: [updatedByUserId], references: [id])
 }
 
 model DocumentNumberSequence {
@@ -559,16 +562,17 @@ model MasterCodeSequence {
 }
 
 model User {
-  id            String     @id @default(cuid())
-  email         String     @unique @db.VarChar(50)
-  name          String?    @db.VarChar(50)
-  status        UserStatus @default(INVITED)
+  id              String     @id @default(cuid())
+  email           String     @unique @db.VarChar(50)
+  name            String?    @db.VarChar(50)
+  status          UserStatus @default(INVITED)
   // Better Auth-owned bookkeeping fields (locked: no email verification step enforced,
   // but the column is part of Better Auth's own user-model contract).
-  emailVerified Boolean    @default(false)
-  image         String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  emailVerified   Boolean    @default(false)
+  image           String?
+  createdAt       DateTime   @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime   @updatedAt
 
   memberships                           UserMembership[]
   customerLinks                         CustomerUserLink[]
@@ -620,6 +624,61 @@ model User {
   quotationRevisions                    QuotationHistory[]              @relation("QuotationHistoryRevisedBy")
   purchaseOrderRevisions                PurchaseOrderHistory[]          @relation("PurchaseOrderHistoryRevisedBy")
   workOrderRevisions                    WorkOrderHistory[]              @relation("WorkOrderHistoryRevisedBy")
+
+  updatedBy                                 User?                               @relation("UserUpdatedBy", fields: [updatedByUserId], references: [id])
+  // Update-audit back-relations (updatedByUserId on every auditable model)
+  companysUpdated                           Company[]                           @relation("CompanyUpdatedBy")
+  usersUpdated                              User[]                              @relation("UserUpdatedBy")
+  userMembershipsUpdated                    UserMembership[]                    @relation("UserMembershipUpdatedBy")
+  uomsUpdated                               Uom[]                               @relation("UomUpdatedBy")
+  leadsUpdated                              Lead[]                              @relation("LeadUpdatedBy")
+  contactMessagesUpdated                    ContactMessage[]                    @relation("ContactMessageUpdatedBy")
+  contactTopicsUpdated                      ContactTopic[]                      @relation("ContactTopicUpdatedBy")
+  emailsUpdated                             Email[]                             @relation("EmailUpdatedBy")
+  customersUpdated                          Customer[]                          @relation("CustomerUpdatedBy")
+  customerContactsUpdated                   CustomerContact[]                   @relation("CustomerContactUpdatedBy")
+  deviceCategorysUpdated                    DeviceCategory[]                    @relation("DeviceCategoryUpdatedBy")
+  deviceTypesUpdated                        DeviceType[]                        @relation("DeviceTypeUpdatedBy")
+  deviceTypeAliassUpdated                   DeviceTypeAlias[]                   @relation("DeviceTypeAliasUpdatedBy")
+  equipmentTypesUpdated                     EquipmentType[]                     @relation("EquipmentTypeUpdatedBy")
+  equipmentsUpdated                         Equipment[]                         @relation("EquipmentUpdatedBy")
+  equipmentCalibrationRecordsUpdated        EquipmentCalibrationRecord[]        @relation("EquipmentCalibrationRecordUpdatedBy")
+  deviceTypeEquipmentRequirementsUpdated    DeviceTypeEquipmentRequirement[]    @relation("DeviceTypeEquipmentRequirementUpdatedBy")
+  deviceManufacturersUpdated                DeviceManufacturer[]                @relation("DeviceManufacturerUpdatedBy")
+  deviceModelsUpdated                       DeviceModel[]                       @relation("DeviceModelUpdatedBy")
+  deviceCapabilitysUpdated                  DeviceCapability[]                  @relation("DeviceCapabilityUpdatedBy")
+  deviceCapabilityItemsUpdated              DeviceCapabilityItem[]              @relation("DeviceCapabilityItemUpdatedBy")
+  deviceCalibrationParametersUpdated        DeviceCalibrationParameter[]        @relation("DeviceCalibrationParameterUpdatedBy")
+  deviceTypeCapabilityOrdersUpdated         DeviceTypeCapabilityOrder[]         @relation("DeviceTypeCapabilityOrderUpdatedBy")
+  devicePhysicalCheckItemsUpdated           DevicePhysicalCheckItem[]           @relation("DevicePhysicalCheckItemUpdatedBy")
+  devicesUpdated                            Device[]                            @relation("DeviceUpdatedBy")
+  calibrationRequestItemsUpdated            CalibrationRequestItem[]            @relation("CalibrationRequestItemUpdatedBy")
+  serviceTariffsUpdated                     ServiceTariff[]                     @relation("ServiceTariffUpdatedBy")
+  priceListItemsUpdated                     PriceListItem[]                     @relation("PriceListItemUpdatedBy")
+  quotationsUpdated                         Quotation[]                         @relation("QuotationUpdatedBy")
+  quotationItemsUpdated                     QuotationItem[]                     @relation("QuotationItemUpdatedBy")
+  purchaseOrdersUpdated                     PurchaseOrder[]                     @relation("PurchaseOrderUpdatedBy")
+  purchaseOrderItemsUpdated                 PurchaseOrderItem[]                 @relation("PurchaseOrderItemUpdatedBy")
+  workOrdersUpdated                         WorkOrder[]                         @relation("WorkOrderUpdatedBy")
+  purchaseOrderItemAllocationsUpdated       PurchaseOrderItemAllocation[]       @relation("PurchaseOrderItemAllocationUpdatedBy")
+  workOrderEquipmentsUpdated                WorkOrderEquipment[]                @relation("WorkOrderEquipmentUpdatedBy")
+  equipmentDeliveryNotesUpdated             EquipmentDeliveryNote[]             @relation("EquipmentDeliveryNoteUpdatedBy")
+  calibrationJobsUpdated                    CalibrationJob[]                    @relation("CalibrationJobUpdatedBy")
+  kontrolAlatsUpdated                       KontrolAlat[]                       @relation("KontrolAlatUpdatedBy")
+  kontrolAlatAccessorysUpdated              KontrolAlatAccessory[]              @relation("KontrolAlatAccessoryUpdatedBy")
+  kontrolAlatSignaturesUpdated              KontrolAlatSignature[]              @relation("KontrolAlatSignatureUpdatedBy")
+  calibrationTestPointsUpdated              CalibrationTestPoint[]              @relation("CalibrationTestPointUpdatedBy")
+  jobCalibrationTestPointsUpdated           JobCalibrationTestPoint[]           @relation("JobCalibrationTestPointUpdatedBy")
+  measurementResultsUpdated                 MeasurementResult[]                 @relation("MeasurementResultUpdatedBy")
+  physicalCheckResultsUpdated               PhysicalCheckResult[]               @relation("PhysicalCheckResultUpdatedBy")
+  jobReferenceEquipmentUsedsUpdated         JobReferenceEquipmentUsed[]         @relation("JobReferenceEquipmentUsedUpdatedBy")
+  jobReferenceEquipmentApprovalsUpdated     JobReferenceEquipmentApproval[]     @relation("JobReferenceEquipmentApprovalUpdatedBy")
+  jobReferenceEquipmentApprovalItemsUpdated JobReferenceEquipmentApprovalItem[] @relation("JobReferenceEquipmentApprovalItemUpdatedBy")
+  identityCorrectionsUpdated                IdentityCorrection[]                @relation("IdentityCorrectionUpdatedBy")
+  identityCorrectionSignaturesUpdated       IdentityCorrectionSignature[]       @relation("IdentityCorrectionSignatureUpdatedBy")
+  qualityReviewsUpdated                     QualityReview[]                     @relation("QualityReviewUpdatedBy")
+  taxsUpdated                               Tax[]                               @relation("TaxUpdatedBy")
+  creditNotesUpdated                        CreditNote[]                        @relation("CreditNoteUpdatedBy")
 }
 
 // =============================================================================
@@ -683,10 +742,13 @@ model UserMembership {
   // When false, dispatch must not send FCM to this user for this company.
   receiveNotifications Boolean        @default(false)
   createdAt            DateTime       @default(now())
+  updatedByUserId      String?
   updatedAt            DateTime       @updatedAt
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  updatedBy User? @relation("UserMembershipUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([userId, companyId])
   @@index([companyId])
@@ -840,6 +902,7 @@ model ContactMessage {
   confirmedAt       DateTime?
   leadId            String?
   createdAt         DateTime       @default(now())
+  updatedByUserId   String?
   updatedAt         DateTime       @updatedAt
 
   company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -853,6 +916,8 @@ model ContactMessage {
   chatSession     ChatSession?
   emails          Email[]
 
+  updatedBy User? @relation("ContactMessageUpdatedBy", fields: [updatedByUserId], references: [id])
+
   @@index([companyId, createdAt])
   @@index([companyId, email])
   @@index([companyId, status])
@@ -863,13 +928,16 @@ model ContactMessage {
 // Static, seeded lookup for Contact Form topic selection — global (no companyId),
 // no admin CRUD by design (matches the reference implementation's own proportions).
 model ContactTopic {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  name            String   @unique
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   messages ContactMessage[]
+
+  updatedBy User? @relation("ContactTopicUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([isActive])
 }
@@ -878,17 +946,20 @@ model ContactTopic {
 // universal scientific standards (mmHg, °C, kPa, etc.) that don't vary by
 // company. Admin CRUD enabled for extensibility, unlike ContactTopic.
 model Uom {
-  id        String      @id @default(cuid())
-  code      String      @unique
-  name      String
-  symbol    String
-  category  UomCategory
-  isActive  Boolean     @default(true)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id              String      @id @default(cuid())
+  code            String      @unique
+  name            String
+  symbol          String
+  category        UomCategory
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime    @updatedAt
 
   calibrationParameters DeviceCalibrationParameter[]
   measurementResults    MeasurementResult[]
+
+  updatedBy User? @relation("UomUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([category])
   @@index([isActive])
@@ -912,6 +983,7 @@ model Lead {
   assignedToUserId String?
   customerId       String?
   createdAt        DateTime   @default(now())
+  updatedByUserId  String?
   updatedAt        DateTime   @updatedAt
 
   company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -921,6 +993,8 @@ model Lead {
   calibrationRequests CalibrationRequest[]
   suggestedInEmails   Email[]              @relation("EmailSuggestion")
   emails              Email[]              @relation("EmailAssociation")
+
+  updatedBy User? @relation("LeadUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([companyId, status])
   @@index([companyId, createdAt])
@@ -1042,12 +1116,13 @@ model Email {
   sentByUserId String?
 
   // Timestamps
-  sentAt     DateTime?
-  receivedAt DateTime?
-  readAt     DateTime?
-  deletedAt  DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  sentAt          DateTime?
+  receivedAt      DateTime?
+  readAt          DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime  @updatedAt
 
   // Relations
   company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1057,6 +1132,8 @@ model Email {
   sentBy         User?           @relation("EmailSender", fields: [sentByUserId], references: [id])
   parentEmail    Email?          @relation("EmailThread", fields: [parentEmailId], references: [id], onDelete: SetNull)
   replies        Email[]         @relation("EmailThread")
+
+  updatedBy User? @relation("EmailUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([companyId, folder])
   @@index([companyId, status])
@@ -1069,19 +1146,20 @@ model Email {
 }
 
 model Customer {
-  id        String         @id @default(cuid())
-  companyId String
-  number    String
-  name      String
-  legalName String?
-  taxId     String?
-  address   String?
-  phone     String?
-  mobile    String?
-  email     String?
-  status    CustomerStatus @default(ACTIVE)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id              String         @id @default(cuid())
+  companyId       String
+  number          String
+  name            String
+  legalName       String?
+  taxId           String?
+  address         String?
+  phone           String?
+  mobile          String?
+  email           String?
+  status          CustomerStatus @default(ACTIVE)
+  createdAt       DateTime       @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime       @updatedAt
 
   company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   contacts            CustomerContact[]
@@ -1101,24 +1179,29 @@ model Customer {
   reminderEvents      ReminderEvent[]
   fileObjects         FileObject[]
 
+  updatedBy User? @relation("CustomerUpdatedBy", fields: [updatedByUserId], references: [id])
+
   @@unique([companyId, number])
   @@index([companyId, status])
   @@index([companyId, name])
 }
 
 model CustomerContact {
-  id         String   @id @default(cuid())
-  companyId  String
-  customerId String
-  name       String
-  email      String?
-  phone      String?
-  title      String?
-  isPrimary  Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id              String   @id @default(cuid())
+  companyId       String
+  customerId      String
+  name            String
+  email           String?
+  phone           String?
+  title           String?
+  isPrimary       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  updatedBy User? @relation("CustomerContactUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([customerId])
   @@index([companyId, email])
@@ -1133,28 +1216,32 @@ model CustomerContact {
 // confirmed Kemenkes capability list (35 types). Device.deviceTypeId is the
 // required FK to DeviceType; Device.category remains a free-text snapshot.
 model DeviceCategory {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   types DeviceType[]
+
+  updatedBy User? @relation("DeviceCategoryUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([isActive])
 }
 
 model DeviceType {
-  id          String   @id @default(cuid())
-  categoryId  String
-  code        String   @unique
-  name        String
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  categoryId      String
+  code            String   @unique
+  name            String
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   category                DeviceCategory                   @relation(fields: [categoryId], references: [id])
   devices                 Device[]
@@ -1165,6 +1252,8 @@ model DeviceType {
   equipmentRequirements   DeviceTypeEquipmentRequirement[]
   aliases                 DeviceTypeAlias[]
   priceListItems          PriceListItem[]
+
+  updatedBy User? @relation("DeviceTypeUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([categoryId])
   @@index([isActive])
@@ -1185,9 +1274,12 @@ model DeviceTypeAlias {
   normalizedAlias String
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
+  updatedByUserId String?
   updatedAt       DateTime @updatedAt
 
   deviceType DeviceType @relation(fields: [deviceTypeId], references: [id], onDelete: Cascade)
+
+  updatedBy User? @relation("DeviceTypeAliasUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([normalizedAlias])
   @@index([deviceTypeId])
@@ -1205,17 +1297,20 @@ model DeviceTypeAlias {
 // kept a nullable string rather than an enum until a controlled vocabulary is
 // confirmed).
 model EquipmentType {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
-  description String?
-  category    String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String
+  description     String?
+  category        String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   deviceRequirements DeviceTypeEquipmentRequirement[]
   equipment          Equipment[]
+
+  updatedBy User? @relation("EquipmentTypeUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([isActive])
 }
@@ -1240,6 +1335,7 @@ model Equipment {
   isActive        Boolean  @default(true)
   notes           String?
   createdAt       DateTime @default(now())
+  updatedByUserId String?
   updatedAt       DateTime @updatedAt
 
   company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1249,6 +1345,8 @@ model Equipment {
   workOrderSelections             WorkOrderEquipment[]
   jobReferenceUsages              JobReferenceEquipmentUsed[]
   referenceEquipmentApprovalItems JobReferenceEquipmentApprovalItem[]
+
+  updatedBy User? @relation("EquipmentUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([companyId, code])
   @@index([companyId, isActive])
@@ -1293,6 +1391,7 @@ model EquipmentCalibrationRecord {
   status            EquipmentCalibrationRecordStatus @default(DRAFT)
   createdByUserId   String?
   createdAt         DateTime                         @default(now())
+  updatedByUserId   String?
   updatedAt         DateTime                         @updatedAt
 
   company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1302,6 +1401,8 @@ model EquipmentCalibrationRecord {
 
   jobReferenceUsages              JobReferenceEquipmentUsed[]
   referenceEquipmentApprovalItems JobReferenceEquipmentApprovalItem[]
+
+  updatedBy User? @relation("EquipmentCalibrationRecordUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([equipmentId, calibrationDate])
   @@index([equipmentId, validUntil])
@@ -1329,10 +1430,13 @@ model DeviceTypeEquipmentRequirement {
   // row-creation order by the add_equipment_requirement_sort_order migration.
   sortOrder       Int      @default(0)
   createdAt       DateTime @default(now())
+  updatedByUserId String?
   updatedAt       DateTime @updatedAt
 
   deviceType    DeviceType    @relation(fields: [deviceTypeId], references: [id])
   equipmentType EquipmentType @relation(fields: [equipmentTypeId], references: [id])
+
+  updatedBy User? @relation("DeviceTypeEquipmentRequirementUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([deviceTypeId, equipmentTypeId])
   @@index([deviceTypeId])
@@ -1343,15 +1447,18 @@ model DeviceTypeEquipmentRequirement {
 // convention as DeviceType/DeviceCategory. `code` is system-issued (MFR-000001),
 // immutable, and never derived from `name`.
 model DeviceManufacturer {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   models DeviceModel[]
+
+  updatedBy User? @relation("DeviceManufacturerUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([isActive])
 }
@@ -1363,16 +1470,19 @@ model DeviceManufacturer {
 // system-issued (MOD-000001), immutable, and never derived from `model`.
 // Do not FK DeviceType or Device to this model.
 model DeviceModel {
-  id             String   @id @default(cuid())
-  code           String   @unique
-  manufacturerId String
-  model          String
-  description    String?
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(cuid())
+  code            String   @unique
+  manufacturerId  String
+  model           String
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   manufacturer DeviceManufacturer @relation(fields: [manufacturerId], references: [id])
+
+  updatedBy User? @relation("DeviceModelUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([manufacturerId, model])
   @@index([manufacturerId])
@@ -1386,16 +1496,19 @@ model DeviceModel {
 // per (deviceTypeId, capabilityItemId, code). Do not FK DeviceModel or Device
 // to these models this phase.
 model DeviceCapability {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   items            DeviceCapabilityItem[]
   deviceTypeOrders DeviceTypeCapabilityOrder[]
+
+  updatedBy User? @relation("DeviceCapabilityUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([isActive])
 }
@@ -1404,16 +1517,19 @@ model DeviceCapability {
 // DeviceCapability (e.g. NIBP -> Systolic / Diastolic / MAP). No business
 // identity — identified by `id` and `name` only; deliberately has no `code`.
 model DeviceCapabilityItem {
-  id           String   @id @default(cuid())
-  capabilityId String
-  name         String
-  description  String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  capabilityId    String
+  name            String
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   capability            DeviceCapability             @relation(fields: [capabilityId], references: [id])
   calibrationParameters DeviceCalibrationParameter[]
+
+  updatedBy User? @relation("DeviceCapabilityItemUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([capabilityId, name])
   @@index([capabilityId])
@@ -1504,6 +1620,7 @@ model DeviceCalibrationParameter {
   /// every non-DERIVED row and for every pre-existing row.
   derivation             Json?
   createdAt              DateTime                       @default(now())
+  updatedByUserId        String?
   updatedAt              DateTime                       @updatedAt
 
   deviceType     DeviceType           @relation(fields: [deviceTypeId], references: [id])
@@ -1513,6 +1630,8 @@ model DeviceCalibrationParameter {
   testPoints         CalibrationTestPoint[]
   measurementResults MeasurementResult[]
   jobTestPoints      JobCalibrationTestPoint[]
+
+  updatedBy User? @relation("DeviceCalibrationParameterUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([deviceTypeId, capabilityItemId, code])
   // One column position per logical test, per device type. NULLs are DISTINCT in
@@ -1532,15 +1651,18 @@ model DeviceCalibrationParameter {
 // `sortOrder` is an integer written in a single transactional pass (multiples
 // of 10); reads tie-break on capability name for determinism.
 model DeviceTypeCapabilityOrder {
-  id           String   @id @default(cuid())
-  deviceTypeId String
-  capabilityId String
-  sortOrder    Int
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  deviceTypeId    String
+  capabilityId    String
+  sortOrder       Int
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   deviceType DeviceType       @relation(fields: [deviceTypeId], references: [id], onDelete: Cascade)
   capability DeviceCapability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+
+  updatedBy User? @relation("DeviceTypeCapabilityOrderUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([deviceTypeId, capabilityId])
   @@index([deviceTypeId])
@@ -1561,10 +1683,13 @@ model DevicePhysicalCheckItem {
   sortOrder       Int      @default(0)
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
+  updatedByUserId String?
   updatedAt       DateTime @updatedAt
 
   deviceType DeviceType            @relation(fields: [deviceTypeId], references: [id])
   results    PhysicalCheckResult[]
+
+  updatedBy User? @relation("DevicePhysicalCheckItemUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([deviceTypeId, code])
   @@index([deviceTypeId])
@@ -1572,21 +1697,22 @@ model DevicePhysicalCheckItem {
 }
 
 model Device {
-  id           String       @id @default(cuid())
-  companyId    String
+  id              String       @id @default(cuid())
+  companyId       String
   // Auto-generated, immutable business code (DVC-000001), unique per company.
   // Issued by MasterCodeService on create; never user-supplied or editable.
-  code         String
-  customerId   String
-  deviceTypeId String
-  brand        String?
-  model        String?
-  serialNumber String?
-  category     String?
-  locationText String?
-  status       DeviceStatus @default(ACTIVE)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  code            String
+  customerId      String
+  deviceTypeId    String
+  brand           String?
+  model           String?
+  serialNumber    String?
+  category        String?
+  locationText    String?
+  status          DeviceStatus @default(ACTIVE)
+  createdAt       DateTime     @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime     @updatedAt
 
   company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
@@ -1595,10 +1721,13 @@ model Device {
   calibrationRequestItems CalibrationRequestItem[]
   quotationItems          QuotationItem[]
   purchaseOrderItems      PurchaseOrderItem[]
+  workOrderItems          WorkOrderItem[]
   calibrationJobs         CalibrationJob[]
   certificates            Certificate[]
   identityCorrectionsPrev IdentityCorrection[]     @relation("IdentityCorrectionPrevDevice")
   identityCorrectionsNew  IdentityCorrection[]     @relation("IdentityCorrectionNewDevice")
+
+  updatedBy User? @relation("DeviceUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([companyId, code])
   @@index([companyId, customerId])
@@ -1698,12 +1827,16 @@ model CalibrationRequestItem {
   /// only ever becomes false for an already-consumed row, never deleted.
   isActive           Boolean           @default(true)
   createdAt          DateTime          @default(now())
+  updatedByUserId    String?
+  updatedAt          DateTime          @updatedAt
 
   request         CalibrationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   deviceType      DeviceType         @relation(fields: [deviceTypeId], references: [id])
   device          Device?            @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   quotationItems  QuotationItem[]
   calibrationJobs CalibrationJob[]
+
+  updatedBy User? @relation("CalibrationRequestItemUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([requestId])
   @@index([deviceTypeId])
@@ -1715,20 +1848,22 @@ model CalibrationRequestItem {
 // =============================================================================
 
 model ServiceTariff {
-  id        String   @id @default(cuid())
-  companyId String
-  code      String
-  name      String
-  unitPrice Decimal  @db.Decimal(18, 2)
-  currency  String   @default("IDR")
-  workOrderItems          WorkOrderItem[]
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  companyId       String
+  code            String
+  name            String
+  unitPrice       Decimal  @db.Decimal(18, 2)
+  currency        String   @default("IDR")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   items              QuotationItem[]
   purchaseOrderItems PurchaseOrderItem[]
+
+  updatedBy User? @relation("ServiceTariffUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([companyId, code])
 }
@@ -1746,20 +1881,23 @@ model ServiceTariff {
 /// quotation. Overlapping active windows for the same (companyId, deviceTypeId)
 /// are rejected at the service layer.
 model PriceListItem {
-  id             String    @id @default(cuid())
-  companyId      String
-  deviceTypeId   String
-  unitPrice      Decimal   @db.Decimal(18, 2)
-  currency       String    @default("IDR")
-  effectiveFrom  DateTime  @db.Date
-  effectiveUntil DateTime? @db.Date
-  isActive       Boolean   @default(true)
-  notes          String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  companyId       String
+  deviceTypeId    String
+  unitPrice       Decimal   @db.Decimal(18, 2)
+  currency        String    @default("IDR")
+  effectiveFrom   DateTime  @db.Date
+  effectiveUntil  DateTime? @db.Date
+  isActive        Boolean   @default(true)
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime  @updatedAt
 
   company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   deviceType DeviceType @relation(fields: [deviceTypeId], references: [id])
+
+  updatedBy User? @relation("PriceListItemUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([companyId, deviceTypeId, effectiveFrom])
   @@index([companyId, deviceTypeId, effectiveFrom])
@@ -1786,6 +1924,7 @@ model Quotation {
   approvedByUserId     String?
   customerApprovedAt   DateTime?
   createdAt            DateTime        @default(now())
+  updatedByUserId      String?
   updatedAt            DateTime        @updatedAt
 
   company        Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1798,6 +1937,8 @@ model Quotation {
   // MOM #1 — Transaction Revision + Immutable History
   history        QuotationHistory[]
 
+  updatedBy User? @relation("QuotationUpdatedBy", fields: [updatedByUserId], references: [id])
+
   @@unique([companyId, number])
   @@index([companyId, status])
   @@index([customerId])
@@ -1805,34 +1946,38 @@ model Quotation {
 }
 
 model QuotationItem {
-  id             String   @id @default(cuid())
-  companyId      String
-  quotationId    String
-  deviceId       String?
-  requestItemId  String?
-  tariffId       String?
-  description    String
-  qty            Decimal  @default(1) @db.Decimal(18, 4)
-  unitPrice      Decimal  @db.Decimal(18, 2)
-  discountAmount Decimal  @default(0) @db.Decimal(18, 2)
-  lineTotal      Decimal  @db.Decimal(18, 2)
+  id              String   @id @default(cuid())
+  companyId       String
+  quotationId     String
+  deviceId        String?
+  requestItemId   String?
+  tariffId        String?
+  description     String
+  qty             Decimal  @default(1) @db.Decimal(18, 4)
+  unitPrice       Decimal  @db.Decimal(18, 2)
+  discountAmount  Decimal  @default(0) @db.Decimal(18, 2)
+  lineTotal       Decimal  @db.Decimal(18, 2)
   /// True when quotation generation found no applicable PriceListItem for this
   /// line's DeviceType. unitPrice is stored as 0 and the Quotation cannot be
   /// sent/approved until a real price is entered (see QuotationsService.send).
-  pricePending   Boolean  @default(false)
+  pricePending    Boolean  @default(false)
   /// MOM #1 — Revision Scope Design. true = active (part of the quotation's
   /// current desired scope); false = retired by a revision that removed this
   /// line after a downstream PurchaseOrderItem had already been generated
   /// from it (see mom-1-final-revision-scope-design-20260920.md §6). A row
   /// with no downstream PurchaseOrderItem is hard-deleted on removal instead.
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   quotation          Quotation               @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   device             Device?                 @relation(fields: [deviceId], references: [id])
   requestItem        CalibrationRequestItem? @relation(fields: [requestItemId], references: [id])
   tariff             ServiceTariff?          @relation(fields: [tariffId], references: [id])
   purchaseOrderItems PurchaseOrderItem[]
+
+  updatedBy User? @relation("QuotationItemUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([quotationId])
 }
@@ -1858,6 +2003,7 @@ model PurchaseOrder {
   confirmedByUserId    String?
   notes                String?
   createdAt            DateTime            @default(now())
+  updatedByUserId      String?
   updatedAt            DateTime            @updatedAt
 
   company     Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1869,6 +2015,8 @@ model PurchaseOrder {
   spkParents  SpkParent[]
   // MOM #1 — Transaction Revision + Immutable History
   history     PurchaseOrderHistory[]
+
+  updatedBy User? @relation("PurchaseOrderUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([companyId, number])
   @@unique([companyId, customerId, customerPoNumber])
@@ -1894,18 +2042,22 @@ model PurchaseOrderItem {
   workOrderId     String?
   status          PurchaseOrderItemStatus @default(OPEN)
   createdAt       DateTime                @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime                @updatedAt
 
-  purchaseOrder   PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  quotationItem   QuotationItem    @relation(fields: [quotationItemId], references: [id], onDelete: Restrict)
-  device          Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
-  tariff          ServiceTariff?   @relation(fields: [tariffId], references: [id], onDelete: SetNull)
-  workOrder       WorkOrder?       @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  purchaseOrder   PurchaseOrder                 @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  quotationItem   QuotationItem                 @relation(fields: [quotationItemId], references: [id], onDelete: Restrict)
+  device          Device?                       @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  tariff          ServiceTariff?                @relation(fields: [tariffId], references: [id], onDelete: SetNull)
+  workOrder       WorkOrder?                    @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
   calibrationJobs CalibrationJob[]
   workOrderItems  WorkOrderItem[]
   /// Allocation & Multi-WOL Architecture (docs/audits/final-po-allocation-wol-spk-architecture-decision.md).
   /// Item-scoped commitments of this item's quantity to one or more WorkOrders.
   /// SUM(qty) of ACTIVE rows here must never exceed this item's own `qty`.
   allocations     PurchaseOrderItemAllocation[]
+
+  updatedBy User? @relation("PurchaseOrderItemUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([purchaseOrderId, quotationItemId])
   @@index([purchaseOrderId])
@@ -1937,11 +2089,11 @@ model WorkOrder {
   /// to. NULL for every single/flat WorkOrder (all pre-existing rows — never
   /// backfilled) and for every SEND_TO_LAB WorkOrder. `parentSpkId` and
   /// `childSequence` are both NULL or both set (DB CHECK).
-  parentSpkId          String?
+  parentSpkId   String?
   /// 1-based sequence of this Child within its Parent. Local to the Parent —
   /// never consumes the global SPK sequence and is never reused once issued.
   /// `number` of a Child is `${SpkParent.number}-${childSequence}`.
-  childSequence        Int?
+  childSequence Int?
 
   // ── Customer request review (F.MU.08 II — Kaji Ulang Permintaan Pelanggan) ─
   // Owned on WorkOrder so one customer/work event (one WOL) shares the same
@@ -1958,15 +2110,16 @@ model WorkOrder {
   requestReviewCompletedAt       DateTime?
   requestReviewCompletedByUserId String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
-  company                  Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  quotation                Quotation              @relation(fields: [quotationId], references: [id])
-  purchaseOrder            PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
-  customer                 Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  requestReviewCompletedBy User?                  @relation("WorkOrderRequestReviewCompletedBy", fields: [requestReviewCompletedByUserId], references: [id])
-  parentSpk                SpkParent?             @relation(fields: [parentSpkId], references: [id], onDelete: Restrict)
+  company                  Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  quotation                Quotation                     @relation(fields: [quotationId], references: [id])
+  purchaseOrder            PurchaseOrder                 @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  customer                 Customer                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  requestReviewCompletedBy User?                         @relation("WorkOrderRequestReviewCompletedBy", fields: [requestReviewCompletedByUserId], references: [id])
+  parentSpk                SpkParent?                    @relation(fields: [parentSpkId], references: [id], onDelete: Restrict)
   items                    WorkOrderItem[]
   assignments              WorkOrderAssignment[]
   jobs                     CalibrationJob[]
@@ -1985,6 +2138,8 @@ model WorkOrder {
   // MOM #1 — Transaction Revision + Immutable History
   history                  WorkOrderHistory[]
   customerFeedback         CustomerFeedback?
+
+  updatedBy User? @relation("WorkOrderUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([companyId, number])
   @@unique([parentSpkId, childSequence])
@@ -2044,11 +2199,19 @@ model WorkOrderItem {
   /// 1:1 with the PurchaseOrderItemAllocation that created this row. NULL for
   /// legacy pre-allocation rows only — never backfilled.
   allocationId        String?  @unique
+  /// Explicit device lineage: Requisition item -> QuotationItem ->
+  /// PurchaseOrderItem -> WorkOrderItem -> CalibrationJob. Copied verbatim from
+  /// PurchaseOrderItem.deviceId when the WorkOrderItem is created (see
+  /// createAllocationsAndWorkOrderItems) — never re-resolved or inferred later.
+  /// NULL only when identity is not yet known upstream, and for legacy
+  /// pre-lineage rows (never backfilled).
+  deviceId            String?
   description         String
   qty                 Decimal  @default(1) @db.Decimal(18, 4)
   createdAt           DateTime @default(now())
 
   workOrder         WorkOrder                    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  device            Device?                      @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   purchaseOrderItem PurchaseOrderItem            @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
   allocation        PurchaseOrderItemAllocation? @relation(fields: [allocationId], references: [id], onDelete: SetNull)
   accessories       WorkOrderItemAccessory[]
@@ -2056,6 +2219,7 @@ model WorkOrderItem {
   @@unique([workOrderId, purchaseOrderItemId])
   @@index([workOrderId])
   @@index([purchaseOrderItemId])
+  @@index([deviceId])
 }
 
 /// Allocation & Multi-WOL Architecture
@@ -2086,6 +2250,7 @@ model PurchaseOrderItemAllocation {
   qty                 Decimal          @db.Decimal(18, 4)
   status              AllocationStatus @default(ACTIVE)
   createdAt           DateTime         @default(now())
+  updatedByUserId     String?
   updatedAt           DateTime         @updatedAt
 
   purchaseOrderItem PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
@@ -2094,6 +2259,8 @@ model PurchaseOrderItemAllocation {
   // WorkOrderItem is (both created atomically, same lifecycle).
   workOrder         WorkOrder         @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   workOrderItem     WorkOrderItem?
+
+  updatedBy User? @relation("PurchaseOrderItemAllocationUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([purchaseOrderItemId, status])
   @@index([workOrderId])
@@ -2199,19 +2366,11 @@ model QuotationHistory {
   totalAmount          Decimal         @db.Decimal(18, 2)
   currency             String
   approvedAt           DateTime?
-  /// Explicit device lineage: Requisition item -> QuotationItem ->
-  /// PurchaseOrderItem -> WorkOrderItem -> CalibrationJob. Copied verbatim from
-  /// PurchaseOrderItem.deviceId when the WorkOrderItem is created (see
-  /// createAllocationsAndWorkOrderItems) — never re-resolved or inferred later.
-  /// NULL only when identity is not yet known upstream, and for legacy
-  /// pre-lineage rows (never backfilled).
-  deviceId            String?
   approvedByUserId     String?
   customerApprovedAt   DateTime?
   revisedByUserId      String?
   revisedAt            DateTime        @default(now())
 
-  device            Device?                      @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   quotation Quotation              @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   revisedBy User?                  @relation("QuotationHistoryRevisedBy", fields: [revisedByUserId], references: [id])
   items     QuotationItemHistory[]
@@ -2219,7 +2378,6 @@ model QuotationHistory {
   @@unique([quotationId, revisionNumber])
   @@index([quotationId])
 }
-  @@index([deviceId])
 
 /// Complete snapshot of one QuotationItem row. See
 /// CalibrationRequestItemHistory for the `sourceItemId` contract.
@@ -2342,6 +2500,7 @@ model WorkOrderItemHistory {
   historyId           String
   sourceItemId        String
   purchaseOrderItemId String
+  deviceId            String?
   description         String
   qty                 Decimal @db.Decimal(18, 4)
 
@@ -2387,11 +2546,14 @@ model WorkOrderEquipment {
   sortOrder       Int      @default(0)
   notes           String?
   createdAt       DateTime @default(now())
+  updatedByUserId String?
   updatedAt       DateTime @updatedAt
 
   company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+
+  updatedBy User? @relation("WorkOrderEquipmentUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([workOrderId, equipmentId])
   @@index([workOrderId])
@@ -2431,11 +2593,14 @@ model EquipmentDeliveryNote {
   customerAddress String?
   locationText    String?
   createdAt       DateTime                    @default(now())
+  updatedByUserId String?
   updatedAt       DateTime                    @updatedAt
 
   company   Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   workOrder WorkOrder                   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   items     EquipmentDeliveryNoteItem[]
+
+  updatedBy User? @relation("EquipmentDeliveryNoteUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([companyId, number])
   @@index([companyId])
@@ -2501,7 +2666,6 @@ model CalibrationJob {
   unitTotal   Int
 
   // ── Identity snapshot ──────────────────────────────────────────────────────
-  deviceId            String?
   // Frozen ON the job, not read through Device, so later edits to the mutable
   // Device master never rewrite what this calibration actually saw.
   /// Device name as the customer originally described it (snapshot of
@@ -2551,6 +2715,7 @@ model CalibrationJob {
   measurementTestPointsSnapshottedAt DateTime?
   submittedAt                        DateTime?
   createdAt                          DateTime             @default(now())
+  updatedByUserId                    String?
   updatedAt                          DateTime             @updatedAt
 
   workOrder                   WorkOrder                       @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
@@ -2574,6 +2739,8 @@ model CalibrationJob {
   lkDownloadAuthorizations    LkDownloadAuthorization[]
   /// Frozen test-point allowlist copied at start() (or backfill for pre-feature jobs).
   jobTestPoints               JobCalibrationTestPoint[]
+
+  updatedBy User? @relation("CalibrationJobUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([workOrderId, purchaseOrderItemId, unitOrdinal])
   @@index([companyId, status])
@@ -2630,12 +2797,15 @@ model KontrolAlat {
 
   createdByUserId String?
   createdAt       DateTime @default(now())
+  updatedByUserId String?
   updatedAt       DateTime @updatedAt
 
   calibrationJob CalibrationJob         @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
   createdBy      User?                  @relation("KontrolAlatCreatedBy", fields: [createdByUserId], references: [id])
   accessories    KontrolAlatAccessory[]
   signatures     KontrolAlatSignature[]
+
+  updatedBy User? @relation("KontrolAlatUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([companyId, number])
   @@index([companyId])
@@ -2655,9 +2825,12 @@ model KontrolAlatAccessory {
   /// added in lab, or if the WO accessory was later deleted).
   sourceWorkOrderItemAccessoryId String?
   createdAt                      DateTime @default(now())
+  updatedByUserId                String?
   updatedAt                      DateTime @updatedAt
 
   kontrolAlat KontrolAlat @relation(fields: [kontrolAlatId], references: [id], onDelete: Cascade)
+
+  updatedBy User? @relation("KontrolAlatAccessoryUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([kontrolAlatId])
   @@index([sourceWorkOrderItemAccessoryId])
@@ -2667,18 +2840,21 @@ model KontrolAlatAccessory {
 /// (Petugas Teknis). signerName + signerUserId + signedAt only —
 /// signature image / e-sign is deferred. No dedicated Administrasi Membership role.
 model KontrolAlatSignature {
-  id            String                @id @default(cuid())
-  companyId     String
-  kontrolAlatId String
-  signerKind    KontrolAlatSignerKind
-  signerUserId  String?
-  signerName    String
-  signedAt      DateTime?
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  id              String                @id @default(cuid())
+  companyId       String
+  kontrolAlatId   String
+  signerKind      KontrolAlatSignerKind
+  signerUserId    String?
+  signerName      String
+  signedAt        DateTime?
+  createdAt       DateTime              @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime              @updatedAt
 
   kontrolAlat KontrolAlat @relation(fields: [kontrolAlatId], references: [id], onDelete: Cascade)
   signer      User?       @relation("KontrolAlatSigner", fields: [signerUserId], references: [id])
+
+  updatedBy User? @relation("KontrolAlatSignatureUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([kontrolAlatId, signerKind])
   @@index([companyId])
@@ -2713,23 +2889,26 @@ model CalibrationTestPoint {
   settingValue Decimal? @db.Decimal(18, 4)
 
   /// Optional per-point tolerance override. NULL = inherit parent parameter.
-  toleranceMin           Decimal? @db.Decimal(18, 4)
-  toleranceMax           Decimal? @db.Decimal(18, 4)
+  toleranceMin          Decimal? @db.Decimal(18, 4)
+  toleranceMax          Decimal? @db.Decimal(18, 4)
   /// Inclusive (≥) unless false (>). Used only when this point supplies its own
   /// `toleranceMin`. Default true matches the parent parameter's historical bound.
-  toleranceMinInclusive  Boolean  @default(true)
+  toleranceMinInclusive Boolean  @default(true)
   /// Inclusive (≤) unless false (<). Used only when this point supplies its own
   /// `toleranceMax`.
-  toleranceMaxInclusive  Boolean  @default(true)
-  toleranceNote          String?
+  toleranceMaxInclusive Boolean  @default(true)
+  toleranceNote         String?
 
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   parameter          DeviceCalibrationParameter @relation(fields: [deviceCalibrationParameterId], references: [id], onDelete: Cascade)
   measurementResults MeasurementResult[]
   jobSnapshots       JobCalibrationTestPoint[]
+
+  updatedBy User? @relation("CalibrationTestPointUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([deviceCalibrationParameterId, sequence])
   @@unique([deviceCalibrationParameterId, settingLabel])
@@ -2746,29 +2925,32 @@ model JobCalibrationTestPoint {
   deviceCalibrationParameterId String
   sourceCalibrationTestPointId String
 
-  sequence      Int
-  settingLabel  String
-  settingValue  Decimal? @db.Decimal(18, 4)
-  toleranceMin           Decimal? @db.Decimal(18, 4)
-  toleranceMax           Decimal? @db.Decimal(18, 4)
-  toleranceMinInclusive  Boolean  @default(true)
-  toleranceMaxInclusive  Boolean  @default(true)
-  toleranceNote          String?
+  sequence              Int
+  settingLabel          String
+  settingValue          Decimal? @db.Decimal(18, 4)
+  toleranceMin          Decimal? @db.Decimal(18, 4)
+  toleranceMax          Decimal? @db.Decimal(18, 4)
+  toleranceMinInclusive Boolean  @default(true)
+  toleranceMaxInclusive Boolean  @default(true)
+  toleranceNote         String?
 
   /// Set by an authorized "Revisi Worksheet" action. Completeness and Tech-PWA
   /// list only rows where this is null. The snapshot row and any MeasurementResult
   /// history are retained.
-  excludedAt         DateTime?
-  excludedByUserId   String?
-  exclusionReason    String?
+  excludedAt       DateTime?
+  excludedByUserId String?
+  exclusionReason  String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   calibrationJob  CalibrationJob             @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
   parameter       DeviceCalibrationParameter @relation(fields: [deviceCalibrationParameterId], references: [id], onDelete: Restrict)
   sourceTestPoint CalibrationTestPoint       @relation(fields: [sourceCalibrationTestPointId], references: [id], onDelete: Restrict)
   excludedBy      User?                      @relation("JobCalibrationTestPointExcludedBy", fields: [excludedByUserId], references: [id], onDelete: SetNull)
+
+  updatedBy User? @relation("JobCalibrationTestPointUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([calibrationJobId, sourceCalibrationTestPointId])
   @@index([calibrationJobId])
@@ -2849,6 +3031,7 @@ model MeasurementResult {
   note             String?
   recordedAt       DateTime @default(now())
   createdAt        DateTime @default(now())
+  updatedByUserId  String?
   updatedAt        DateTime @updatedAt
 
   calibrationJob CalibrationJob             @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
@@ -2861,6 +3044,9 @@ model MeasurementResult {
   // Natural key (decision #3) + the direction facet (see §3.4 for the caveat).
   // The generated migration is hand-edited to add NULLS NOT DISTINCT so a NULL
   // calibrationTestPointId (Pattern A) still collides on duplicates.
+
+  updatedBy User? @relation("MeasurementResultUpdatedBy", fields: [updatedByUserId], references: [id])
+
   @@unique([calibrationJobId, deviceCalibrationParameterId, calibrationTestPointId, replicateIndex, attemptNumber, direction], name: "measurement_natural_key")
   @@index([calibrationJobId])
   @@index([calibrationJobId, attemptNumber])
@@ -2891,11 +3077,14 @@ model PhysicalCheckResult {
   recordedByUserId          String?
   recordedAt                DateTime             @default(now())
   createdAt                 DateTime             @default(now())
+  updatedByUserId           String?
   updatedAt                 DateTime             @updatedAt
 
   calibrationJob          CalibrationJob          @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
   devicePhysicalCheckItem DevicePhysicalCheckItem @relation(fields: [devicePhysicalCheckItemId], references: [id], onDelete: Restrict)
   recordedBy              User?                   @relation("PhysicalCheckResultRecordedBy", fields: [recordedByUserId], references: [id])
+
+  updatedBy User? @relation("PhysicalCheckResultUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([calibrationJobId, devicePhysicalCheckItemId, attemptNumber], name: "physical_check_natural_key", map: "physical_check_natural_key")
   @@index([calibrationJobId])
@@ -2932,13 +3121,16 @@ model JobReferenceEquipmentUsed {
   overriddenByUserId String?
   overriddenAt       DateTime?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   calibrationJob             CalibrationJob              @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
   equipment                  Equipment                   @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
   equipmentCalibrationRecord EquipmentCalibrationRecord? @relation(fields: [equipmentCalibrationRecordId], references: [id], onDelete: Restrict)
   overriddenBy               User?                       @relation("JobReferenceEquipmentOverrider", fields: [overriddenByUserId], references: [id])
+
+  updatedBy User? @relation("JobReferenceEquipmentUsedUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([calibrationJobId, equipmentId])
   @@index([companyId, equipmentId])
@@ -2961,12 +3153,15 @@ model JobReferenceEquipmentApproval {
   decision          ReviewDecision?
   decisionNote      String?
   createdAt         DateTime                            @default(now())
+  updatedByUserId   String?
   updatedAt         DateTime                            @updatedAt
 
   calibrationJob CalibrationJob                      @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
   submittedBy    User                                @relation("JobReferenceEquipmentApprovalSubmitter", fields: [submittedByUserId], references: [id])
   decidedBy      User?                               @relation("JobReferenceEquipmentApprovalDecider", fields: [decidedByUserId], references: [id], onDelete: SetNull)
   items          JobReferenceEquipmentApprovalItem[]
+
+  updatedBy User? @relation("JobReferenceEquipmentApprovalUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([companyId, status])
   @@index([calibrationJobId])
@@ -2984,10 +3179,14 @@ model JobReferenceEquipmentApprovalItem {
   requiresOverride             Boolean
   overrideReason               String?
   createdAt                    DateTime                              @default(now())
+  updatedByUserId              String?
+  updatedAt                    DateTime                              @updatedAt
 
   approval                   JobReferenceEquipmentApproval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
   equipment                  Equipment                     @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
   equipmentCalibrationRecord EquipmentCalibrationRecord?   @relation(fields: [equipmentCalibrationRecordId], references: [id], onDelete: Restrict)
+
+  updatedBy User? @relation("JobReferenceEquipmentApprovalItemUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([approvalId, equipmentId])
   @@index([companyId])
@@ -3062,8 +3261,9 @@ model IdentityCorrection {
   /// (Decision 5)
   akdAklGateReopened Boolean @default(false)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   calibrationJob CalibrationJob                @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
   prevDevice     Device?                       @relation("IdentityCorrectionPrevDevice", fields: [prevDeviceId], references: [id], onDelete: Restrict)
@@ -3071,6 +3271,8 @@ model IdentityCorrection {
   submittedBy    User                          @relation("IdentityCorrectionSubmitter", fields: [submittedByUserId], references: [id])
   decidedBy      User?                         @relation("IdentityCorrectionDecider", fields: [decidedByUserId], references: [id])
   signatures     IdentityCorrectionSignature[]
+
+  updatedBy User? @relation("IdentityCorrectionUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([companyId, number])
   @@index([companyId, status])
@@ -3097,9 +3299,12 @@ model IdentityCorrectionSignature {
   unavailableReason    String?
   signedAt             DateTime?
   createdAt            DateTime                     @default(now())
+  updatedByUserId      String?
   updatedAt            DateTime                     @updatedAt
 
   identityCorrection IdentityCorrection @relation(fields: [identityCorrectionId], references: [id], onDelete: Cascade)
+
+  updatedBy User? @relation("IdentityCorrectionSignatureUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([identityCorrectionId, signerRole])
   @@index([companyId])
@@ -3115,11 +3320,14 @@ model QualityReview {
   notes            String?
   reviewedAt       DateTime?
   createdAt        DateTime            @default(now())
+  updatedByUserId  String?
   updatedAt        DateTime            @updatedAt
 
   calibrationJob CalibrationJob @relation(fields: [calibrationJobId], references: [id], onDelete: Cascade)
   reviewer       User           @relation("Reviewer", fields: [reviewerUserId], references: [id])
   certificates   Certificate[]
+
+  updatedBy User? @relation("QualityReviewUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@index([calibrationJobId])
   @@index([companyId, status])
@@ -3181,18 +3389,21 @@ model Certificate {
 // =============================================================================
 
 model Tax {
-  id          String   @id @default(cuid())
-  companyId   String
-  taxCode     String
-  taxRate     Decimal  @db.Decimal(5, 4)
-  description String
-  isActive    Boolean  @default(true)
-  isExclude   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  companyId       String
+  taxCode         String
+  taxRate         Decimal  @db.Decimal(5, 4)
+  description     String
+  isActive        Boolean  @default(true)
+  isExclude       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
 
   company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   invoices Invoice[]
+
+  updatedBy User? @relation("TaxUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([companyId, taxCode])
 }
@@ -3290,24 +3501,27 @@ model Payment {
 }
 
 model CreditNote {
-  id            String           @id @default(cuid())
-  companyId     String
-  customerId    String
-  invoiceId     String?
-  certificateId String?
-  number        String
-  status        CreditNoteStatus @default(DRAFT)
-  amount        Decimal          @db.Decimal(18, 2)
-  reason        String
-  issuedAt      DateTime?
-  appliedAt     DateTime?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id              String           @id @default(cuid())
+  companyId       String
+  customerId      String
+  invoiceId       String?
+  certificateId   String?
+  number          String
+  status          CreditNoteStatus @default(DRAFT)
+  amount          Decimal          @db.Decimal(18, 2)
+  reason          String
+  issuedAt        DateTime?
+  appliedAt       DateTime?
+  createdAt       DateTime         @default(now())
+  updatedByUserId String?
+  updatedAt       DateTime         @updatedAt
 
   company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
   invoice     Invoice?     @relation(fields: [invoiceId], references: [id])
   certificate Certificate? @relation(fields: [certificateId], references: [id])
+
+  updatedBy User? @relation("CreditNoteUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([companyId, number])
   @@index([companyId, status])

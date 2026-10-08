@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
+import { APP_INTERCEPTOR } from "@nestjs/core";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { auth } from "@medcal/auth";
+import { ActorContextInterceptor } from "./common/interceptors/actor-context.interceptor";
 import { HealthController } from "./health.controller";
 import { ContactMessagesModule } from "./modules/contact-messages/contact-messages.module";
 import { LeadsModule } from "./modules/leads/leads.module";
@@ -76,5 +78,6 @@ import { DashboardModule } from "./modules/dashboard/dashboard.module";
     PushTokensModule,
   ],
   controllers: [HealthController],
+  providers: [{ provide: APP_INTERCEPTOR, useClass: ActorContextInterceptor }],
 })
 export class AppModule {}
