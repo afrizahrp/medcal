@@ -106,6 +106,22 @@ enum ServiceMode {
   SEND_TO_LAB
 }
 
+/// How a Customer's quotation unit prices are obtained. STANDARD resolves the
+/// company Price List as of the quotation date; MANUAL never consults the Price
+/// List — every generated line is `pricePending` until the user types a price.
+enum CustomerPricingMode {
+  STANDARD
+  MANUAL
+}
+
+/// Which of `headerDiscountPercent` / `headerDiscountAmount` the user entered
+/// (the other is derived from the subtotal). Persisted so a later change of the
+/// subtotal re-derives the OTHER field instead of silently changing the intent.
+enum DiscountInputMode {
+  AMOUNT
+  PERCENT
+}
+
 enum CalibrationRequestStatus {
   DRAFT
   SUBMITTED
@@ -510,6 +526,7 @@ model Company {
   calibrationRequests         CalibrationRequest[]
   serviceTariffs              ServiceTariff[]
   priceListItems              PriceListItem[]
+  additionalItemTypes         AdditionalItemType[]
   taxes                       Tax[]
   quotations                  Quotation[]
   purchaseOrders              PurchaseOrder[]
@@ -654,6 +671,9 @@ model User {
   devicesUpdated                            Device[]                            @relation("DeviceUpdatedBy")
   calibrationRequestItemsUpdated            CalibrationRequestItem[]            @relation("CalibrationRequestItemUpdatedBy")
   serviceTariffsUpdated                     ServiceTariff[]                     @relation("ServiceTariffUpdatedBy")
+  additionalItemTypesUpdated                AdditionalItemType[]                @relation("AdditionalItemTypeUpdatedBy")
+  quotationAdditionalItemsUpdated           QuotationAdditionalItem[]           @relation("QuotationAdditionalItemUpdatedBy")
+  purchaseOrderAdditionalItemsUpdated       PurchaseOrderAdditionalItem[]       @relation("PurchaseOrderAdditionalItemUpdatedBy")
   priceListItemsUpdated                     PriceListItem[]                     @relation("PriceListItemUpdatedBy")
   quotationsUpdated                         Quotation[]                         @relation("QuotationUpdatedBy")
   quotationItemsUpdated                     QuotationItem[]                     @relation("QuotationItemUpdatedBy")
@@ -1146,7 +1166,7 @@ model Email {
 }
 
 model Customer {
-  id              String         @id @default(cuid())
+  id              String              @id @default(cuid())
   companyId       String
   number          String
   name            String
@@ -1156,10 +1176,13 @@ model Customer {
   phone           String?
   mobile          String?
   email           String?
-  status          CustomerStatus @default(ACTIVE)
-  createdAt       DateTime       @default(now())
+  status          CustomerStatus      @default(ACTIVE)
+  /// STANDARD = quotation prices come from the Price List; MANUAL = the Price
+  /// List is not used and the user enters every unit price.
+  pricingMode     CustomerPricingMode @default(STANDARD)
+  createdAt       DateTime            @default(now())
   updatedByUserId String?
-  updatedAt       DateTime       @updatedAt
+  updatedAt       DateTime            @updatedAt
 
   company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   contacts            CustomerContact[]
@@ -1905,37 +1928,54 @@ model PriceListItem {
 }
 
 model Quotation {
-  id                   String          @id @default(cuid())
-  companyId            String
-  customerId           String
-  number               String
-  requestId            String          @unique
-  source               QuotationSource @default(PORTAL)
-  status               QuotationStatus @default(DRAFT)
-  validUntil           DateTime?
-  subtotal             Decimal         @db.Decimal(18, 2)
-  headerDiscountAmount Decimal         @default(0) @db.Decimal(18, 2)
-  taxCode              String
-  taxRate              Decimal         @db.Decimal(5, 4)
-  taxAmount            Decimal         @db.Decimal(18, 2)
-  totalAmount          Decimal         @db.Decimal(18, 2)
-  currency             String          @default("IDR")
-  approvedAt           DateTime?
-  approvedByUserId     String?
-  customerApprovedAt   DateTime?
-  createdAt            DateTime        @default(now())
-  updatedByUserId      String?
-  updatedAt            DateTime        @updatedAt
+  id                      String            @id @default(cuid())
+  companyId               String
+  customerId              String
+  number                  String
+  requestId               String            @unique
+  source                  QuotationSource   @default(PORTAL)
+  status                  QuotationStatus   @default(DRAFT)
+  /// Business date of the quotation (date-only, Asia/Jakarta calendar day). The
+  /// number (QUO/YYYY/MM/NNNNN), the Price List lookup and the printed date all
+  /// follow it. `createdAt` stays the system/audit timestamp and is never
+  /// repurposed. Existing rows were backfilled from `createdAt` (Jakarta day).
+  quotationDate           DateTime          @db.Date
+  validUntil              DateTime?
+  /// Free-text remarks on the quotation (printed on the PDF). Independent of pricing mode.
+  notes                   String?
+  subtotal                Decimal           @db.Decimal(18, 2)
+  headerDiscountAmount    Decimal           @default(0) @db.Decimal(18, 2)
+  /// Header discount as a percentage of `subtotal` (4 dp). Together with
+  /// `headerDiscountAmount` and `headerDiscountInputMode` it is one value, not
+  /// two: the input-mode field is the source of truth and the other is derived
+  /// by resolveHeaderDiscount (packages/shared).
+  headerDiscountPercent   Decimal           @default(0) @db.Decimal(7, 4)
+  headerDiscountInputMode DiscountInputMode @default(AMOUNT)
+  taxCode                 String
+  taxRate                 Decimal           @db.Decimal(5, 4)
+  taxAmount               Decimal           @db.Decimal(18, 2)
+  totalAmount             Decimal           @db.Decimal(18, 2)
+  currency                String            @default("IDR")
+  approvedAt              DateTime?
+  approvedByUserId        String?
+  customerApprovedAt      DateTime?
+  createdAt               DateTime          @default(now())
+  updatedByUserId         String?
+  updatedAt               DateTime          @updatedAt
 
-  company        Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer       Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  request        CalibrationRequest @relation(fields: [requestId], references: [id])
-  approvedBy     User?              @relation("QuotationApprovedBy", fields: [approvedByUserId], references: [id])
-  items          QuotationItem[]
-  purchaseOrders PurchaseOrder[]
-  workOrders     WorkOrder[]
+  company         Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer        Customer                  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  request         CalibrationRequest        @relation(fields: [requestId], references: [id])
+  approvedBy      User?                     @relation("QuotationApprovedBy", fields: [approvedByUserId], references: [id])
+  items           QuotationItem[]
+  /// Commercial (non-calibration) lines — snapshot owned by the quotation.
+  /// Deliberately NOT QuotationItem: they stop at PurchaseOrderAdditionalItem
+  /// and never reach allocation / WorkOrderItem / CalibrationJob.
+  additionalItems QuotationAdditionalItem[]
+  purchaseOrders  PurchaseOrder[]
+  workOrders      WorkOrder[]
   // MOM #1 — Transaction Revision + Immutable History
-  history        QuotationHistory[]
+  history         QuotationHistory[]
 
   updatedBy User? @relation("QuotationUpdatedBy", fields: [updatedByUserId], references: [id])
 
@@ -1982,39 +2022,123 @@ model QuotationItem {
   @@index([quotationId])
 }
 
-model PurchaseOrder {
-  id                   String              @id @default(cuid())
-  companyId            String              @db.Char(3)
-  customerId           String
-  quotationId          String
-  number               String
-  customerPoNumber     String
-  customerPoDate       DateTime
-  status               PurchaseOrderStatus @default(DRAFT)
-  subtotal             Decimal             @db.Decimal(18, 2)
-  headerDiscountAmount Decimal             @default(0) @db.Decimal(18, 2)
-  taxCode              String
-  taxRate              Decimal             @db.Decimal(5, 4)
-  taxAmount            Decimal             @db.Decimal(18, 2)
-  totalAmount          Decimal             @db.Decimal(18, 2)
-  currency             String              @default("IDR")
-  receivedAt           DateTime?
-  confirmedAt          DateTime?
-  confirmedByUserId    String?
-  notes                String?
-  createdAt            DateTime            @default(now())
-  updatedByUserId      String?
-  updatedAt            DateTime            @updatedAt
+/// Reusable catalog of commercial (non-calibration) quotation add-ons — first
+/// use: ON_SITE accommodation. Reference/default source ONLY: a quotation never
+/// reads these values after the line is created (it snapshots them), so editing
+/// or deactivating a type never changes a historical quotation or PO. There is
+/// deliberately NO customer-eligibility model: the user decides per quotation.
+/// Types are deactivated (`isActive = false`), never deleted.
+model AdditionalItemType {
+  id               String       @id @default(cuid())
+  companyId        String
+  code             String
+  name             String
+  /// Display unit of one qty, e.g. "malam", "hari", "trip".
+  unitLabel        String
+  defaultUnitPrice Decimal?     @db.Decimal(18, 2)
+  /// Label of an optional SECOND multiplier for this type (e.g. "hari" for a per-person-per-day
+  /// charge: unitPrice x qty[unitLabel] x multiplier[multiplierLabel]). NULL = simple qty.
+  multiplierLabel  String?
+  /// NULL = applicable to any service mode.
+  serviceMode      ServiceMode?
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedByUserId  String?
+  updatedAt        DateTime     @updatedAt
 
-  company     Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer    Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  quotation   Quotation              @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-  confirmedBy User?                  @relation("PurchaseOrderConfirmedBy", fields: [confirmedByUserId], references: [id])
-  items       PurchaseOrderItem[]
-  workOrders  WorkOrder[]
-  spkParents  SpkParent[]
+  company                      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  quotationAdditionalItems     QuotationAdditionalItem[]
+  purchaseOrderAdditionalItems PurchaseOrderAdditionalItem[]
+
+  updatedBy User? @relation("AdditionalItemTypeUpdatedBy", fields: [updatedByUserId], references: [id])
+
+  @@unique([companyId, code])
+  @@index([companyId, isActive])
+}
+
+/// Commercial (non-calibration) line on a Quotation — a SNAPSHOT: `code`,
+/// `description`, `unitLabel`, `qty`, `multiplier`, `multiplierLabel`, `unitPrice`,
+/// `lineTotal`
+/// and `notes` are copied at add time and never re-read from AdditionalItemType.
+/// Participates in Quotation subtotal / header discount / tax exactly like a
+/// QuotationItem line, but is NOT a QuotationItem: it is never copied into a
+/// PurchaseOrderItem, and so can never be allocated, become a WorkOrderItem or
+/// fan out a CalibrationJob. Pipeline: QuotationAdditionalItem ->
+/// PurchaseOrderAdditionalItem -> STOP.
+///
+/// `isActive` follows the MOM #1 rule for QuotationItem: a row already copied
+/// into a PurchaseOrderAdditionalItem is frozen and, when changed/removed by a
+/// revision, retired (`isActive = false`) rather than edited or deleted.
+model QuotationAdditionalItem {
+  id                   String   @id @default(cuid())
+  companyId            String
+  quotationId          String
+  additionalItemTypeId String
+  code                 String
+  description          String
+  unitLabel            String
+  qty                  Decimal  @default(1) @db.Decimal(18, 4)
+  unitPrice            Decimal  @db.Decimal(18, 2)
+  /// Optional second multiplier (e.g. number of days) and its label. NULL for a simple qty
+  /// line. lineTotal = round(unitPrice x qty x (multiplier ?? 1)), computed by the backend.
+  multiplier           Decimal? @db.Decimal(18, 4)
+  multiplierLabel      String?
+  lineTotal            Decimal  @db.Decimal(18, 2)
+  notes                String?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedByUserId      String?
+  updatedAt            DateTime @updatedAt
+
+  quotation                    Quotation                     @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  additionalItemType           AdditionalItemType            @relation(fields: [additionalItemTypeId], references: [id], onDelete: Restrict)
+  purchaseOrderAdditionalItems PurchaseOrderAdditionalItem[]
+
+  updatedBy User? @relation("QuotationAdditionalItemUpdatedBy", fields: [updatedByUserId], references: [id])
+
+  @@index([quotationId])
+  @@index([additionalItemTypeId])
+}
+
+model PurchaseOrder {
+  id                      String              @id @default(cuid())
+  companyId               String              @db.Char(3)
+  customerId              String
+  quotationId             String
+  number                  String
+  customerPoNumber        String
+  customerPoDate          DateTime
+  status                  PurchaseOrderStatus @default(DRAFT)
+  subtotal                Decimal             @db.Decimal(18, 2)
+  headerDiscountAmount    Decimal             @default(0) @db.Decimal(18, 2)
+  /// Copied verbatim from the Quotation (never recomputed on the PO).
+  headerDiscountPercent   Decimal             @default(0) @db.Decimal(7, 4)
+  headerDiscountInputMode DiscountInputMode   @default(AMOUNT)
+  taxCode                 String
+  taxRate                 Decimal             @db.Decimal(5, 4)
+  taxAmount               Decimal             @db.Decimal(18, 2)
+  totalAmount             Decimal             @db.Decimal(18, 2)
+  currency                String              @default("IDR")
+  receivedAt              DateTime?
+  confirmedAt             DateTime?
+  confirmedByUserId       String?
+  notes                   String?
+  createdAt               DateTime            @default(now())
+  updatedByUserId         String?
+  updatedAt               DateTime            @updatedAt
+
+  company         Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer        Customer                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  quotation       Quotation                     @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  confirmedBy     User?                         @relation("PurchaseOrderConfirmedBy", fields: [confirmedByUserId], references: [id])
+  items           PurchaseOrderItem[]
+  /// PO-level snapshot of the quotation's additional items (copied, never read
+  /// back from the quotation). Terminal: not allocatable, never executed.
+  additionalItems PurchaseOrderAdditionalItem[]
+  workOrders      WorkOrder[]
+  spkParents      SpkParent[]
   // MOM #1 — Transaction Revision + Immutable History
-  history     PurchaseOrderHistory[]
+  history         PurchaseOrderHistory[]
 
   updatedBy User? @relation("PurchaseOrderUpdatedBy", fields: [updatedByUserId], references: [id])
 
@@ -2062,6 +2186,43 @@ model PurchaseOrderItem {
   @@unique([purchaseOrderId, quotationItemId])
   @@index([purchaseOrderId])
   @@index([workOrderId])
+}
+
+/// PO-level snapshot of a QuotationAdditionalItem, copied at PO create / PO
+/// revise. A PO is its own commercial document: it NEVER reads additional items
+/// back from the (mutable) quotation. TERMINAL by design — not a
+/// PurchaseOrderItem, so no allocation, WorkOrderItem or CalibrationJob exists
+/// or can exist for it.
+model PurchaseOrderAdditionalItem {
+  id                        String   @id @default(cuid())
+  companyId                 String   @db.Char(3)
+  purchaseOrderId           String
+  quotationAdditionalItemId String
+  additionalItemTypeId      String
+  code                      String
+  description               String
+  unitLabel                 String
+  qty                       Decimal  @default(1) @db.Decimal(18, 4)
+  unitPrice                 Decimal  @db.Decimal(18, 2)
+  /// Second multiplier (e.g. number of days) and its label; both NULL for a simple qty line.
+  multiplier                Decimal? @db.Decimal(18, 4)
+  multiplierLabel           String?
+  lineTotal                 Decimal  @db.Decimal(18, 2)
+  notes                     String?
+  createdAt                 DateTime @default(now())
+  updatedByUserId           String?
+  updatedAt                 DateTime @updatedAt
+
+  purchaseOrder           PurchaseOrder           @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  quotationAdditionalItem QuotationAdditionalItem @relation(fields: [quotationAdditionalItemId], references: [id], onDelete: Restrict)
+  additionalItemType      AdditionalItemType      @relation(fields: [additionalItemTypeId], references: [id], onDelete: Restrict)
+
+  updatedBy User? @relation("PurchaseOrderAdditionalItemUpdatedBy", fields: [updatedByUserId], references: [id])
+
+  @@unique([purchaseOrderId, quotationAdditionalItemId])
+  @@index([purchaseOrderId])
+  @@index([quotationAdditionalItemId])
+  @@index([additionalItemTypeId])
 }
 
 model WorkOrder {
@@ -2348,32 +2509,37 @@ model CalibrationRequestItemHistory {
 /// Complete snapshot of a Quotation header immediately before a revision was
 /// applied. See CalibrationRequestHistory for the revision-numbering contract.
 model QuotationHistory {
-  id                   String          @id @default(cuid())
-  quotationId          String
-  revisionNumber       Int
-  companyId            String
-  customerId           String
-  number               String
-  requestId            String
-  source               QuotationSource
-  status               QuotationStatus
-  validUntil           DateTime?
-  subtotal             Decimal         @db.Decimal(18, 2)
-  headerDiscountAmount Decimal         @db.Decimal(18, 2)
-  taxCode              String
-  taxRate              Decimal         @db.Decimal(5, 4)
-  taxAmount            Decimal         @db.Decimal(18, 2)
-  totalAmount          Decimal         @db.Decimal(18, 2)
-  currency             String
-  approvedAt           DateTime?
-  approvedByUserId     String?
-  customerApprovedAt   DateTime?
-  revisedByUserId      String?
-  revisedAt            DateTime        @default(now())
+  id                      String            @id @default(cuid())
+  quotationId             String
+  revisionNumber          Int
+  companyId               String
+  customerId              String
+  number                  String
+  requestId               String
+  source                  QuotationSource
+  status                  QuotationStatus
+  quotationDate           DateTime          @db.Date
+  validUntil              DateTime?
+  notes                   String?
+  subtotal                Decimal           @db.Decimal(18, 2)
+  headerDiscountAmount    Decimal           @db.Decimal(18, 2)
+  headerDiscountPercent   Decimal           @default(0) @db.Decimal(7, 4)
+  headerDiscountInputMode DiscountInputMode @default(AMOUNT)
+  taxCode                 String
+  taxRate                 Decimal           @db.Decimal(5, 4)
+  taxAmount               Decimal           @db.Decimal(18, 2)
+  totalAmount             Decimal           @db.Decimal(18, 2)
+  currency                String
+  approvedAt              DateTime?
+  approvedByUserId        String?
+  customerApprovedAt      DateTime?
+  revisedByUserId         String?
+  revisedAt               DateTime          @default(now())
 
-  quotation Quotation              @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  revisedBy User?                  @relation("QuotationHistoryRevisedBy", fields: [revisedByUserId], references: [id])
-  items     QuotationItemHistory[]
+  quotation       Quotation                        @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  revisedBy       User?                            @relation("QuotationHistoryRevisedBy", fields: [revisedByUserId], references: [id])
+  items           QuotationItemHistory[]
+  additionalItems QuotationAdditionalItemHistory[]
 
   @@unique([quotationId, revisionNumber])
   @@index([quotationId])
@@ -2400,37 +2566,62 @@ model QuotationItemHistory {
   @@index([historyId])
 }
 
+/// Complete snapshot of one QuotationAdditionalItem row. See
+/// CalibrationRequestItemHistory for the `sourceItemId` contract.
+model QuotationAdditionalItemHistory {
+  id                   String   @id @default(cuid())
+  historyId            String
+  sourceItemId         String
+  additionalItemTypeId String
+  code                 String
+  description          String
+  unitLabel            String
+  qty                  Decimal  @db.Decimal(18, 4)
+  unitPrice            Decimal  @db.Decimal(18, 2)
+  multiplier           Decimal? @db.Decimal(18, 4)
+  multiplierLabel      String?
+  lineTotal            Decimal  @db.Decimal(18, 2)
+  notes                String?
+
+  history QuotationHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
+
+  @@index([historyId])
+}
+
 /// Complete snapshot of a PurchaseOrder header immediately before a revision
 /// was applied. See CalibrationRequestHistory for the revision-numbering
 /// contract.
 model PurchaseOrderHistory {
-  id                   String              @id @default(cuid())
-  purchaseOrderId      String
-  revisionNumber       Int
-  companyId            String
-  customerId           String
-  quotationId          String
-  number               String
-  customerPoNumber     String
-  customerPoDate       DateTime
-  status               PurchaseOrderStatus
-  subtotal             Decimal             @db.Decimal(18, 2)
-  headerDiscountAmount Decimal             @db.Decimal(18, 2)
-  taxCode              String
-  taxRate              Decimal             @db.Decimal(5, 4)
-  taxAmount            Decimal             @db.Decimal(18, 2)
-  totalAmount          Decimal             @db.Decimal(18, 2)
-  currency             String
-  receivedAt           DateTime?
-  confirmedAt          DateTime?
-  confirmedByUserId    String?
-  notes                String?
-  revisedByUserId      String?
-  revisedAt            DateTime            @default(now())
+  id                      String              @id @default(cuid())
+  purchaseOrderId         String
+  revisionNumber          Int
+  companyId               String
+  customerId              String
+  quotationId             String
+  number                  String
+  customerPoNumber        String
+  customerPoDate          DateTime
+  status                  PurchaseOrderStatus
+  subtotal                Decimal             @db.Decimal(18, 2)
+  headerDiscountAmount    Decimal             @db.Decimal(18, 2)
+  headerDiscountPercent   Decimal             @default(0) @db.Decimal(7, 4)
+  headerDiscountInputMode DiscountInputMode   @default(AMOUNT)
+  taxCode                 String
+  taxRate                 Decimal             @db.Decimal(5, 4)
+  taxAmount               Decimal             @db.Decimal(18, 2)
+  totalAmount             Decimal             @db.Decimal(18, 2)
+  currency                String
+  receivedAt              DateTime?
+  confirmedAt             DateTime?
+  confirmedByUserId       String?
+  notes                   String?
+  revisedByUserId         String?
+  revisedAt               DateTime            @default(now())
 
-  purchaseOrder PurchaseOrder              @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  revisedBy     User?                      @relation("PurchaseOrderHistoryRevisedBy", fields: [revisedByUserId], references: [id])
-  items         PurchaseOrderItemHistory[]
+  purchaseOrder   PurchaseOrder                        @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  revisedBy       User?                                @relation("PurchaseOrderHistoryRevisedBy", fields: [revisedByUserId], references: [id])
+  items           PurchaseOrderItemHistory[]
+  additionalItems PurchaseOrderAdditionalItemHistory[]
 
   @@unique([purchaseOrderId, revisionNumber])
   @@index([purchaseOrderId])
@@ -2451,6 +2642,30 @@ model PurchaseOrderItemHistory {
   discountAmount  Decimal                 @db.Decimal(18, 2)
   lineTotal       Decimal                 @db.Decimal(18, 2)
   status          PurchaseOrderItemStatus
+
+  history PurchaseOrderHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
+
+  @@index([historyId])
+}
+
+/// Complete snapshot of one PurchaseOrderAdditionalItem row. See
+/// CalibrationRequestItemHistory for the `sourceItemId` contract.
+model PurchaseOrderAdditionalItemHistory {
+  id                        String   @id @default(cuid())
+  historyId                 String
+  sourceItemId              String
+  quotationAdditionalItemId String
+  additionalItemTypeId      String
+  code                      String
+  description               String
+  unitLabel                 String
+  qty                       Decimal  @db.Decimal(18, 4)
+  unitPrice                 Decimal  @db.Decimal(18, 2)
+  /// Second multiplier (e.g. number of days) and its label; both NULL for a simple qty line.
+  multiplier                Decimal? @db.Decimal(18, 4)
+  multiplierLabel           String?
+  lineTotal                 Decimal  @db.Decimal(18, 2)
+  notes                     String?
 
   history PurchaseOrderHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
 

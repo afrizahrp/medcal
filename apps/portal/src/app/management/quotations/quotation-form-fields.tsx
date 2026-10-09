@@ -3,14 +3,22 @@
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { cn } from "@/lib/utils";
+import type { AdditionalItemServiceMode } from "../additional-item-types/use-additional-item-types-query";
+import { QuotationAdditionalItemsSection } from "./quotation-additional-items";
 import {
   SOURCE_LABELS,
   SOURCE_OPTIONS,
   QuotationTotals,
+  additionalTotalsLines,
+  discountEditorTexts,
+  discountErrorText,
   formatIdr,
   moneyNumber,
   previewTotals,
   selectClassName,
+  todayIsoJakarta,
+  type DiscountInput,
+  type QuotationFormAdditionalItem,
   type QuotationFormItem,
   type QuotationSource,
   type TaxOption,
@@ -18,11 +26,17 @@ import {
 
 export type QuotationFormValue = {
   source: QuotationSource;
+  /** Business date, `YYYY-MM-DD` (never in the future). */
+  quotationDate: string;
   /** `YYYY-MM-DD`, or `""` when unset. */
   validUntil: string;
+  /** Free-text remarks (Catatan); blank = none. */
+  notes: string;
   taxCode: string;
-  headerDiscountAmount: string;
+  /** The header discount as typed: which field is the source + its text. */
+  discount: DiscountInput;
   items: QuotationFormItem[];
+  additionalItems: QuotationFormAdditionalItem[];
 };
 
 export function QuotationFormFields({
@@ -31,6 +45,8 @@ export function QuotationFormFields({
   taxes,
   taxesLoading,
   readOnlyItems = false,
+  serviceMode,
+  pricingMode = "STANDARD",
 }: {
   value: QuotationFormValue;
   onChange: (next: QuotationFormValue) => void;
@@ -42,9 +58,16 @@ export function QuotationFormFields({
    * preview and the operator adjusts prices afterwards on the DRAFT quotation.
    */
   readOnlyItems?: boolean;
+  /** The requisition's service mode — restricts the additional-item catalog picker. */
+  serviceMode?: AdditionalItemServiceMode;
+  /** The customer's pricing mode (New flow): MANUAL changes the helper text. */
+  pricingMode?: "STANDARD" | "MANUAL";
 }) {
   const selectedTax = taxes.find((tax) => tax.taxCode === value.taxCode) ?? null;
-  const totals = previewTotals(value.items, selectedTax, value.headerDiscountAmount);
+  const totals = previewTotals(value.items, selectedTax, value.discount, value.additionalItems);
+  const discountTexts = discountEditorTexts(value.discount, totals);
+  const today = todayIsoJakarta();
+  const backdated = value.quotationDate !== "" && value.quotationDate < today;
 
   function updateItem(index: number, patch: Partial<QuotationFormItem>) {
     onChange({
@@ -57,7 +80,7 @@ export function QuotationFormFields({
     <div className="space-y-6">
       <section className="space-y-4">
         <h2 className="text-base font-semibold text-slate-900">Quotation Information</h2>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <div className="min-w-0">
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Source</label>
             <select
@@ -75,9 +98,18 @@ export function QuotationFormFields({
             </select>
           </div>
           <DateField
+            label="Quotation Date"
+            value={value.quotationDate}
+            onChange={(quotationDate) => onChange({ ...value, quotationDate })}
+            max={today}
+            required
+            aria-label="Quotation Date"
+          />
+          <DateField
             label="Valid Until"
             value={value.validUntil}
             onChange={(validUntil) => onChange({ ...value, validUntil })}
+            min={value.quotationDate || undefined}
             aria-label="Valid Until"
           />
           <div className="min-w-0">
@@ -99,6 +131,12 @@ export function QuotationFormFields({
             </select>
           </div>
         </div>
+        {backdated ? (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Quotation ini bertanggal mundur — nomor dan harga Price List mengikuti tanggal quotation,
+            bukan tanggal hari ini.
+          </p>
+        ) : null}
       </section>
 
       <section className="space-y-4 border-t border-slate-100 pt-6">
@@ -179,9 +217,21 @@ export function QuotationFormFields({
                     {readOnlyItems && (
                       <td className="px-3 py-3 align-top text-right">
                         {item.pricePending || item.unitPrice === "" ? (
-                          <span className="text-xs font-medium text-amber-600">
-                            Harga belum dikonfigurasi
-                          </span>
+                          // No Price List price for this line (MANUAL customer or no active
+                          // tariff): the user types it right here, no save-then-edit trip.
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="any"
+                            value={item.unitPrice}
+                            placeholder="Isi harga satuan"
+                            onChange={(e) =>
+                              updateItem(index, { unitPrice: e.target.value, pricePending: true })
+                            }
+                            className="text-right"
+                            aria-label={`Harga satuan item ${index + 1}`}
+                          />
                         ) : (
                           <span className="text-sm text-slate-900">
                             {formatIdr(item.unitPrice)}
@@ -191,7 +241,7 @@ export function QuotationFormFields({
                     )}
                     {readOnlyItems && (
                       <td className="px-3 py-3 align-top text-right text-sm font-medium text-slate-900">
-                        {item.pricePending || item.unitPrice === "" ? (
+                        {item.unitPrice === "" ? (
                           <span className="text-slate-400">—</span>
                         ) : (
                           formatIdr(lineTotal)
@@ -237,18 +287,49 @@ export function QuotationFormFields({
 
         {readOnlyItems ? (
           <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800">
-            Tarif akan diterapkan otomatis dari Price List saat quotation dibuat. Baris tanpa tarif
-            aktif akan ditandai &quot;harga belum dikonfigurasi&quot; dan quotation tidak bisa dikirim
-            sebelum harga diisi.
+            {pricingMode === "MANUAL"
+              ? "Customer ini menggunakan harga manual: Price List tidak dipakai. Isi harga satuan setiap baris langsung di tabel ini."
+              : "Tarif diterapkan otomatis dari Price List (per tanggal quotation). Baris tanpa tarif aktif dapat diisi harga satuannya langsung di tabel ini; baris yang dibiarkan kosong tidak bisa dikirim sampai harga diisi."}
           </p>
         ) : null}
 
+        <QuotationAdditionalItemsSection
+          value={value.additionalItems}
+          onChange={(additionalItems) => onChange({ ...value, additionalItems })}
+          serviceMode={serviceMode}
+        />
+
+        <div>
+          <label
+            htmlFor="quotation-notes"
+            className="mb-1.5 block text-sm font-medium text-slate-700"
+          >
+            Catatan / Remarks
+          </label>
+          <textarea
+            id="quotation-notes"
+            value={value.notes}
+            onChange={(e) => onChange({ ...value, notes: e.target.value })}
+            maxLength={2000}
+            rows={3}
+            placeholder="Opsional — dicetak pada quotation (mis. syarat, jadwal, keterangan harga)"
+            className={cn(selectClassName, "w-full min-h-[84px]")}
+          />
+        </div>
+
         <QuotationTotals
           subtotal={totals.subtotal}
-          headerDiscountInput={value.headerDiscountAmount}
-          onHeaderDiscountChange={(headerDiscountAmount) =>
-            onChange({ ...value, headerDiscountAmount })
-          }
+          additionalLines={additionalTotalsLines(value.additionalItems)}
+          discountEditor={{
+            mode: value.discount.mode,
+            percentText: discountTexts.percentText,
+            amountText: discountTexts.amountText,
+            onPercentChange: (text) =>
+              onChange({ ...value, discount: { mode: "PERCENT", value: text } }),
+            onAmountChange: (text) =>
+              onChange({ ...value, discount: { mode: "AMOUNT", value: text } }),
+            error: discountErrorText(totals.discountError),
+          }}
           taxCode={selectedTax?.taxCode ?? null}
           taxRate={selectedTax?.taxRate ?? null}
           taxAmount={totals.taxAmount}

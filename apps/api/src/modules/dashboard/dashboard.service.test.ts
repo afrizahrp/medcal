@@ -474,6 +474,7 @@ async function commercialBase(companyId: string, customerId: string) {
       customerId,
       requestId: request.id,
       number: `QUO/${randomUUID().slice(0, 8)}`,
+      quotationDate: new Date("2026-01-01T00:00:00.000Z"),
       subtotal: 0,
       taxCode: "T0",
       taxRate: 0,

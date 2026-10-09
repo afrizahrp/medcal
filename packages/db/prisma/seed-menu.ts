@@ -319,6 +319,17 @@ const ROWS: MenuSeedRow[] = [
   },
   {
     application: "MANAGEMENT",
+    code: "calibration-management.additional-item-types",
+    parentCode: "calibration-management",
+    label: "Additional Cost",
+    href: "/additional-item-types",
+    icon: "settings",
+    order: 0,
+    viewResource: "priceListItem",
+    viewAction: "read",
+  },
+  {
+    application: "MANAGEMENT",
     code: "calibration-management.quotations",
     parentCode: "calibration-management",
     label: "Quotation",

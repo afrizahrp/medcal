@@ -78,15 +78,16 @@ export function useQuotation(id: string | undefined) {
  * requisition; the tariff does not depend on tax or header discount, so those
  * stay client-side (previewTotals) without a refetch.
  */
-export function useQuotationPreview(requestId: string | undefined) {
+export function useQuotationPreview(requestId: string | undefined, quotationDate?: string) {
   return useQuery({
-    queryKey: [QUOTATIONS_QUERY_KEY, "preview", requestId],
+    queryKey: [QUOTATIONS_QUERY_KEY, "preview", requestId, quotationDate ?? null],
     queryFn: () =>
       apiFetch<QuotationPreviewResponse>("/quotations/preview", {
         method: "POST",
-        body: JSON.stringify({ requestId }),
+        body: JSON.stringify({ requestId, ...(quotationDate ? { quotationDate } : {}) }),
       }),
     enabled: Boolean(requestId),
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -189,8 +190,11 @@ export interface QuotationHistorySummary {
   revisionNumber: number;
   number: string;
   status: QuotationStatus;
+  quotationDate: string;
   subtotal: string;
   headerDiscountAmount: string;
+  headerDiscountPercent: string;
+  headerDiscountInputMode: "AMOUNT" | "PERCENT";
   taxAmount: string;
   totalAmount: string;
   revisedAt: string;
@@ -207,8 +211,22 @@ export interface QuotationHistoryItem {
   lineTotal: string;
 }
 
+export interface QuotationHistoryAdditionalItem {
+  id: string;
+  sourceItemId: string;
+  code: string;
+  description: string;
+  unitLabel: string;
+  qty: string;
+  multiplier: string | null;
+  multiplierLabel: string | null;
+  unitPrice: string;
+  lineTotal: string;
+}
+
 export interface QuotationHistoryRevision extends QuotationHistorySummary {
   items: QuotationHistoryItem[];
+  additionalItems: QuotationHistoryAdditionalItem[];
 }
 
 /** MOM #1 — read-only revision list (header snapshots only). */

@@ -266,17 +266,18 @@ describe("quotationCreateSchema", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("rejects a client-supplied unitPrice on a create item (server is authoritative)", () => {
+  it("accepts a typed unitPrice on a create item (the service only honours it for lines the Price List cannot price)", () => {
     const parsed = quotationCreateSchema.safeParse({
       requestId: "req-1",
       taxCode: "T0",
       items: [{ requestItemId: "item-1", unitPrice: 999 }],
     });
-    // unknown key is stripped by zod; the important guarantee is that the
-    // parsed output never carries a unitPrice.
-    if (parsed.success) {
-      expect(parsed.data.items?.[0]).not.toHaveProperty("unitPrice");
-    }
+    expect(parsed.success).toBe(true);
+    expect(quotationCreateSchema.safeParse({
+      requestId: "req-1",
+      taxCode: "T0",
+      items: [{ requestItemId: "item-1", unitPrice: -1 }],
+    }).success).toBe(false);
   });
 
   it("rejects a missing taxCode", () => {

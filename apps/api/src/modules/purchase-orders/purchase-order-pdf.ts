@@ -5,6 +5,9 @@ import type { Company, Prisma } from "@medcal/db";
 import {
   QUOTATION_LETTERHEAD_ADDRESS_LINES,
   deviceDescriptionLines,
+  renderAdditionalItemsSection,
+  renderTotalsBlock,
+  type PdfAdditionalItem,
   quotationAddresseeLine,
   quotationPdfFilename,
   shouldRenderTaxLine,
@@ -31,6 +34,8 @@ export type PurchaseOrderPdfSource = {
   notes: string | null;
   subtotal: Prisma.Decimal | string | number;
   headerDiscountAmount: Prisma.Decimal | string | number;
+  /** Percent representation of the header discount; printed next to the amount when > 0. */
+  headerDiscountPercent?: Prisma.Decimal | string | number | null;
   taxAmount: Prisma.Decimal | string | number;
   totalAmount: Prisma.Decimal | string | number;
   taxCode: string;
@@ -75,6 +80,8 @@ export type PurchaseOrderPdfSource = {
       } | null;
     } | null;
   }>;
+  /** PO-level snapshot of the commercial additional items. */
+  additionalItems?: PdfAdditionalItem[];
 };
 
 export type PurchaseOrderPdfResult = {
@@ -243,47 +250,35 @@ export function renderPurchaseOrderPdf(input: {
       y += Math.max(descHeight, 16) + 8;
     }
 
+    const additionalItems = purchaseOrder.additionalItems ?? [];
+    y = renderAdditionalItemsSection(doc, additionalItems, y);
+
     y += 4;
     doc.moveTo(320, y).lineTo(545, y).strokeColor("#e2e8f0").stroke();
     y += 10;
 
-    const totalsX = 370;
-    doc.font("Helvetica").fontSize(10).fillColor("#334155");
-    doc.text("Subtotal", totalsX, y, { width: 80 });
-    doc.fillColor("#0f172a").text(formatIdr(purchaseOrder.subtotal), totalsX + 80, y, {
-      width: 95,
-      align: "right",
-    });
-    y = doc.y + 4;
-
-    doc.fillColor("#334155").text("Discount", totalsX, y, { width: 80 });
-    doc.fillColor("#0f172a").text(formatIdr(purchaseOrder.headerDiscountAmount), totalsX + 80, y, {
-      width: 95,
-      align: "right",
-    });
-    y = doc.y + 4;
-
-    if (shouldRenderTaxLine(purchaseOrder)) {
-      const rate = moneyNumber(purchaseOrder.taxRate);
-      const rateLabel =
-        purchaseOrder.taxCode && rate > 0
-          ? ` ${new Intl.NumberFormat("id-ID", { style: "percent", maximumFractionDigits: 2 }).format(rate)}`
-          : "";
-      const taxLabel = purchaseOrder.taxCode ? `Tax (${purchaseOrder.taxCode}${rateLabel})` : "Tax";
-      doc.fillColor("#334155").text(taxLabel, totalsX, y, { width: 80 });
-      doc.fillColor("#0f172a").text(formatIdr(purchaseOrder.taxAmount), totalsX + 80, y, {
-        width: 95,
-        align: "right",
-      });
-      y = doc.y + 4;
-    }
-
-    doc.font("Helvetica-Bold").fontSize(11);
-    doc.text("Total", totalsX, y, { width: 80 });
-    doc.text(formatIdr(purchaseOrder.totalAmount), totalsX + 80, y, {
-      width: 95,
-      align: "right",
-    });
+    const rate = moneyNumber(purchaseOrder.taxRate);
+    const rateLabel =
+      purchaseOrder.taxCode && rate > 0
+        ? ` ${new Intl.NumberFormat("id-ID", { style: "percent", maximumFractionDigits: 2 }).format(rate)}`
+        : "";
+    y = renderTotalsBlock(
+      doc,
+      {
+        subtotal: purchaseOrder.subtotal,
+        headerDiscountPercent: purchaseOrder.headerDiscountPercent,
+        headerDiscountAmount: purchaseOrder.headerDiscountAmount,
+        additionalItems,
+        tax: shouldRenderTaxLine(purchaseOrder)
+          ? {
+              label: purchaseOrder.taxCode ? `Tax (${purchaseOrder.taxCode}${rateLabel})` : "Tax",
+              amount: purchaseOrder.taxAmount,
+            }
+          : null,
+        total: purchaseOrder.totalAmount,
+      },
+      y,
+    );
 
     if (purchaseOrder.notes?.trim()) {
       y = doc.y + 16;

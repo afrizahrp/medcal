@@ -28,7 +28,7 @@ export default function QuotationsPageClient() {
   const { params, setParams } = useUrlQueryState(URL_KEYS);
 
   const status: QuotationStatus | "" = (params.status as QuotationStatus | undefined) ?? "";
-  const sort = useTableSort(params, setParams, "createdAt");
+  const sort = useTableSort(params, setParams, "quotationDate");
   const { sortBy, sortDir } = sort;
   const page = Number(params.page) || 1;
   const pageSize = Number(params.pageSize) || 10;

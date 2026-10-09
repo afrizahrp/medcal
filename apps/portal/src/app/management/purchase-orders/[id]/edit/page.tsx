@@ -191,6 +191,8 @@ export default function EditPurchaseOrderPage() {
               items={snapshotLinesFromPurchaseOrder(purchaseOrder)}
               subtotal={purchaseOrder.subtotal}
               headerDiscountAmount={purchaseOrder.headerDiscountAmount}
+              headerDiscountPercent={purchaseOrder.headerDiscountPercent}
+              additionalItems={purchaseOrder.additionalItems}
               taxCode={purchaseOrder.taxCode}
               taxRate={purchaseOrder.taxRate}
               taxAmount={purchaseOrder.taxAmount}

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import PDFDocument from "pdfkit";
 import type { Company, Prisma } from "@medcal/db";
+import { describeAdditionalCalculation } from "@medcal/shared";
 
 /** Quotation letterhead address — two lines, as used on the printed document. */
 export const QUOTATION_LETTERHEAD_ADDRESS_LINES = [
@@ -22,12 +23,32 @@ function resolveLetterheadLogoPath(): string | null {
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
+/**
+ * Snapshot of one commercial additional item as printed. Everything shown comes
+ * from the quotation's / PO's own snapshot columns - never from the live catalog.
+ */
+export type PdfAdditionalItem = {
+  description: string;
+  unitLabel: string;
+  qty: Prisma.Decimal | string | number;
+  multiplier?: Prisma.Decimal | string | number | null;
+  multiplierLabel?: string | null;
+  unitPrice: Prisma.Decimal | string | number;
+  lineTotal: Prisma.Decimal | string | number;
+  notes?: string | null;
+};
+
 export type QuotationPdfSource = {
   number: string;
-  createdAt: Date;
+  /** Business date (date-only, UTC midnight of the calendar day) — printed as "Tanggal". */
+  quotationDate: Date;
   validUntil: Date | null;
+  /** Free-text remarks, printed under the totals when present. */
+  notes?: string | null;
   subtotal: Prisma.Decimal | string | number;
   headerDiscountAmount: Prisma.Decimal | string | number;
+  /** Percent representation of the header discount; printed next to the amount when > 0. */
+  headerDiscountPercent?: Prisma.Decimal | string | number | null;
   taxAmount: Prisma.Decimal | string | number;
   totalAmount: Prisma.Decimal | string | number;
   taxCode: string;
@@ -67,6 +88,8 @@ export type QuotationPdfSource = {
       deviceType: { name: string };
     } | null;
   }>;
+  /** Commercial additional items (snapshot lines), printed after the calibration lines. */
+  additionalItems?: PdfAdditionalItem[];
 };
 
 export type QuotationPdfResult = {
@@ -89,6 +112,7 @@ function formatIdr(value: Prisma.Decimal | string | number | null | undefined): 
   }).format(moneyNumber(value));
 }
 
+/** Date-only values (quotation date, valid-until) are UTC midnight: format in UTC so the server time zone can never shift the day. */
 function formatDate(value: Date | string | null | undefined): string {
   if (!value) return "—";
   const date = value instanceof Date ? value : new Date(value);
@@ -97,7 +121,16 @@ function formatDate(value: Date | string | null | undefined): string {
     day: "numeric",
     month: "long",
     year: "numeric",
+    timeZone: "UTC",
   });
+}
+
+/** "Discount" or "Discount (12,5%)" when a percentage is recorded. */
+export function discountLabel(percent: Prisma.Decimal | string | number | null | undefined): string {
+  const value = moneyNumber(percent);
+  if (!(value > 0)) return "Discount";
+  const text = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 4 }).format(value);
+  return `Discount (${text}%)`;
 }
 
 function line(value: string | null | undefined): string | null {
@@ -169,6 +202,146 @@ export function shouldRenderTaxLine(quotation: {
   return Boolean(quotation.taxCode) || quotation.taxAmount != null;
 }
 
+/** "Rp100.000 × 3 orang × 2 hari" — the same wording the portal shows. */
+export function additionalCalculationText(item: PdfAdditionalItem): string {
+  return describeAdditionalCalculation(formatIdr(item.unitPrice), {
+    qty: Number(item.qty),
+    unitLabel: item.unitLabel,
+    multiplier: item.multiplier == null ? null : Number(item.multiplier),
+    multiplierLabel: item.multiplierLabel,
+  });
+}
+
+type PdfDoc = InstanceType<typeof PDFDocument>;
+
+const ADDITIONAL_COLS = { desc: 50, total: 450 } as const;
+
+/**
+ * "BIAYA TAMBAHAN" block: each additional item on its own row with its name, its
+ * calculation ("Rp100.000 × 3 orang × 2 hari") and its amount. Returns the new y.
+ */
+export function renderAdditionalItemsSection(
+  doc: PdfDoc,
+  items: PdfAdditionalItem[],
+  startY: number,
+): number {
+  if (items.length === 0) return startY;
+  let y = startY;
+  if (y + 40 > doc.page.height - 80) {
+    doc.addPage();
+    y = 50;
+  }
+  doc.font("Helvetica-Bold").fontSize(8).fillColor("#64748b");
+  doc.text("BIAYA TAMBAHAN", ADDITIONAL_COLS.desc, y, { width: 195 });
+  y = doc.y + 6;
+  doc.fillColor("#0f172a").font("Helvetica").fontSize(9);
+  for (const item of items) {
+    const lines = [item.description, additionalCalculationText(item)];
+    if (item.notes) lines.push(item.notes);
+    const text = lines.join("\n");
+    const height = doc.heightOfString(text, { width: 300 });
+    if (y + height > doc.page.height - 80) {
+      doc.addPage();
+      y = 50;
+    }
+    doc.text(text, ADDITIONAL_COLS.desc, y, { width: 300 });
+    doc.text(formatIdr(item.lineTotal), ADDITIONAL_COLS.total, y, { width: 95, align: "right" });
+    y += Math.max(height, 16) + 8;
+  }
+  return y;
+}
+
+/** Totals layout: ONE label column (left-aligned) and ONE amount column (right-aligned). */
+export const TOTALS_LABEL_X = 320; // lines up with the divider drawn above the totals
+export const TOTALS_LABEL_WIDTH = 125;
+export const TOTALS_VALUE_X = 450;
+export const TOTALS_VALUE_WIDTH = 95;
+
+export interface PdfTotalsInput {
+  subtotal: Prisma.Decimal | string | number;
+  headerDiscountPercent?: Prisma.Decimal | string | number | null;
+  headerDiscountAmount: Prisma.Decimal | string | number;
+  /** Commercial additional items inside `subtotal` (each listed by its own name). */
+  additionalItems: PdfAdditionalItem[];
+  /** null = no tax row (inclusive / no tax). */
+  tax: { label: string; amount: Prisma.Decimal | string | number } | null;
+  total: Prisma.Decimal | string | number;
+}
+
+/**
+ * Cut `text` to fit `width` at the current font, appending "...". PDFKit's own
+ * `ellipsis` option only works together with a fixed `height`, so without this a
+ * long label silently wraps onto extra lines and overlaps the rows below it.
+ */
+function fitToWidth(doc: PdfDoc, text: string, width: number): string {
+  if (doc.widthOfString(text) <= width) return text;
+  let cut = text;
+  while (cut.length > 1 && doc.widthOfString(`${cut}...`) > width) cut = cut.slice(0, -1);
+  return `${cut.trimEnd()}...`;
+}
+
+function renderTotalsRow(
+  doc: PdfDoc,
+  label: string,
+  amount: Prisma.Decimal | string | number,
+  y: number,
+  bold = false,
+): void {
+  doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(bold ? 11 : 10);
+  // Long labels (e.g. an additional-cost name) are truncated to the column, never wrapped, so a
+  // label can neither overlap its amount nor push the following rows down.
+  doc.fillColor(bold ? "#0f172a" : "#334155").text(
+    fitToWidth(doc, label, TOTALS_LABEL_WIDTH),
+    TOTALS_LABEL_X,
+    y,
+    { width: TOTALS_LABEL_WIDTH, lineBreak: false },
+  );
+  doc.fillColor("#0f172a").text(formatIdr(amount), TOTALS_VALUE_X, y, {
+    width: TOTALS_VALUE_WIDTH,
+    align: "right",
+  });
+}
+
+/**
+ * Totals block shared by the quotation and PO PDFs:
+ *
+ *   Subtotal Kalibrasi     (only when there are additional items)
+ *   <additional cost name> (one row per additional item, by its own name)
+ *   Subtotal
+ *   Discount [(10%)]
+ *   Tax (...)              (only when applicable)
+ *   Total                  (bold)
+ *
+ * Presentation only: every figure is passed in (nothing is recalculated except the
+ * calibration-only subtotal, which is the stored subtotal minus the additional lines).
+ * Returns the y just below the Total row.
+ */
+export function renderTotalsBlock(doc: PdfDoc, totals: PdfTotalsInput, startY: number): number {
+  let y = startY;
+  const additionalSum = totals.additionalItems.reduce(
+    (sum, item) => sum + moneyNumber(item.lineTotal),
+    0,
+  );
+  if (totals.additionalItems.length > 0) {
+    renderTotalsRow(doc, "Subtotal Kalibrasi", moneyNumber(totals.subtotal) - additionalSum, y);
+    y = doc.y + 4;
+    for (const item of totals.additionalItems) {
+      renderTotalsRow(doc, item.description, item.lineTotal, y);
+      y = doc.y + 4;
+    }
+  }
+  renderTotalsRow(doc, "Subtotal", totals.subtotal, y);
+  y = doc.y + 4;
+  renderTotalsRow(doc, discountLabel(totals.headerDiscountPercent), totals.headerDiscountAmount, y);
+  y = doc.y + 4;
+  if (totals.tax) {
+    renderTotalsRow(doc, totals.tax.label, totals.tax.amount, y);
+    y = doc.y + 4;
+  }
+  renderTotalsRow(doc, "Total", totals.total, y, true);
+  return doc.y;
+}
+
 export function renderQuotationPdf(input: {
   quotation: QuotationPdfSource;
   company: Company;
@@ -186,7 +359,7 @@ export function renderQuotationPdf(input: {
         filename: quotationPdfFilename({
           number: quotation.number,
           companyId: company.id,
-          issuedAt: quotation.createdAt,
+          issuedAt: quotation.quotationDate,
         }),
       });
     });
@@ -226,7 +399,7 @@ export function renderQuotationPdf(input: {
     doc.font("Helvetica").fontSize(10);
     doc.text(`Nomor: ${quotation.number}`, 50, y);
     y = doc.y;
-    doc.text(`Tanggal: ${formatDate(quotation.createdAt)}`, 50, y);
+    doc.text(`Tanggal: ${formatDate(quotation.quotationDate)}`, 50, y);
     y = doc.y;
     doc.text(`Berlaku hingga: ${formatDate(quotation.validUntil)}`, 50, y);
     y = doc.y + 12;
@@ -284,47 +457,50 @@ export function renderQuotationPdf(input: {
       y += Math.max(descHeight, 16) + 8;
     }
 
+    const additionalItems = quotation.additionalItems ?? [];
+    y = renderAdditionalItemsSection(doc, additionalItems, y);
+
     y += 4;
     doc.moveTo(320, y).lineTo(545, y).strokeColor("#e2e8f0").stroke();
     y += 10;
 
-    const totalsX = 370;
-    doc.font("Helvetica").fontSize(10).fillColor("#334155");
-    doc.text("Subtotal", totalsX, y, { width: 80 });
-    doc.fillColor("#0f172a").text(formatIdr(quotation.subtotal), totalsX + 80, y, {
-      width: 95,
-      align: "right",
-    });
-    y = doc.y + 4;
+    const rate = moneyNumber(quotation.taxRate);
+    const rateLabel =
+      quotation.taxCode && rate > 0
+        ? ` ${new Intl.NumberFormat("id-ID", { style: "percent", maximumFractionDigits: 2 }).format(rate)}`
+        : "";
+    y = renderTotalsBlock(
+      doc,
+      {
+        subtotal: quotation.subtotal,
+        headerDiscountPercent: quotation.headerDiscountPercent,
+        headerDiscountAmount: quotation.headerDiscountAmount,
+        additionalItems,
+        tax: shouldRenderTaxLine(quotation)
+          ? {
+              label: quotation.taxCode ? `Tax (${quotation.taxCode}${rateLabel})` : "Tax",
+              amount: quotation.taxAmount,
+            }
+          : null,
+        total: quotation.totalAmount,
+      },
+      y,
+    );
 
-    doc.fillColor("#334155").text("Discount", totalsX, y, { width: 80 });
-    doc.fillColor("#0f172a").text(formatIdr(quotation.headerDiscountAmount), totalsX + 80, y, {
-      width: 95,
-      align: "right",
-    });
-    y = doc.y + 4;
-
-    if (shouldRenderTaxLine(quotation)) {
-      const rate = moneyNumber(quotation.taxRate);
-      const rateLabel =
-        quotation.taxCode && rate > 0
-          ? ` ${new Intl.NumberFormat("id-ID", { style: "percent", maximumFractionDigits: 2 }).format(rate)}`
-          : "";
-      const taxLabel = quotation.taxCode ? `Tax (${quotation.taxCode}${rateLabel})` : "Tax";
-      doc.fillColor("#334155").text(taxLabel, totalsX, y, { width: 80 });
-      doc.fillColor("#0f172a").text(formatIdr(quotation.taxAmount), totalsX + 80, y, {
-        width: 95,
-        align: "right",
-      });
-      y = doc.y + 4;
+    if (quotation.notes?.trim()) {
+      y = doc.y + 16;
+      if (y + 60 > doc.page.height - 80) {
+        doc.addPage();
+        y = 50;
+      }
+      doc.font("Helvetica-Bold").fontSize(10).fillColor("#0f172a").text("Catatan", 50, y);
+      y = doc.y + 2;
+      doc
+        .font("Helvetica")
+        .fontSize(9)
+        .fillColor("#334155")
+        .text(quotation.notes.trim(), 50, y, { width: pageWidth });
     }
-
-    doc.font("Helvetica-Bold").fontSize(11);
-    doc.text("Total", totalsX, y, { width: 80 });
-    doc.text(formatIdr(quotation.totalAmount), totalsX + 80, y, {
-      width: 95,
-      align: "right",
-    });
 
     doc.end();
   });

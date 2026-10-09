@@ -43,6 +43,7 @@ export class QuotationsController {
   @RequirePermission("quotation", "create")
   async create(
     @CompanyId() companyId: string,
+    @UserId() userId: string,
     @Body() rawBody: unknown,
   ): Promise<QuotationWithItems> {
     const parsed = quotationCreateSchema.safeParse(rawBody);
@@ -53,7 +54,7 @@ export class QuotationsController {
         issues: parsed.error.flatten(),
       });
     }
-    return this.service.create(companyId, parsed.data);
+    return this.service.create(companyId, parsed.data, userId);
   }
 
   @Post("preview")
@@ -116,6 +117,7 @@ export class QuotationsController {
   @RequirePermission("quotation", "update")
   async update(
     @CompanyId() companyId: string,
+    @UserId() userId: string,
     @Param("id") id: string,
     @Body() rawBody: unknown,
   ): Promise<QuotationWithItems> {
@@ -127,7 +129,7 @@ export class QuotationsController {
         issues: parsed.error.flatten(),
       });
     }
-    return this.service.update(companyId, id, parsed.data);
+    return this.service.update(companyId, id, parsed.data, userId);
   }
 
   @Post(":id/send")

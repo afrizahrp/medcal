@@ -9,6 +9,7 @@ import {
   type CustomerUpdateInput,
 } from "@medcal/shared";
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
+import { recordAuditLog } from "../calibration-jobs/audit-log";
 import {
   assertNoDuplicateCustomerEmail,
   assertNoDuplicateCustomerTaxId,
@@ -67,6 +68,7 @@ export class CustomersService {
           phone: input.phone?.trim() || undefined,
           mobile: input.mobile?.trim() || undefined,
           email: input.email ? normalizeEmail(input.email) : undefined,
+          pricingMode: input.pricingMode,
         },
       });
 
@@ -153,6 +155,7 @@ export class CustomersService {
     companyId: string,
     id: string,
     input: CustomerUpdateInput,
+    userId?: string | null,
   ): Promise<CustomerWithContacts> {
     const existing = await prisma.customer.findFirst({ where: { id, companyId } });
     if (!existing) {
@@ -163,7 +166,7 @@ export class CustomersService {
       await assertNoDuplicateCustomerTaxId(companyId, input.taxId, prisma, id);
     }
 
-    return prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx) => {
       await tx.customer.update({
         where: { id },
         data: {
@@ -177,6 +180,7 @@ export class CustomersService {
             ? { email: input.email ? normalizeEmail(input.email) : null }
             : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.pricingMode !== undefined ? { pricingMode: input.pricingMode } : {}),
         },
       });
 
@@ -218,5 +222,20 @@ export class CustomersService {
         include: { contacts: true },
       });
     });
+
+    // The pricing mode decides whether quotations use the Price List, so a change is audited.
+    if (input.pricingMode !== undefined && input.pricingMode !== existing.pricingMode) {
+      await recordAuditLog({
+        companyId,
+        userId: userId ?? null,
+        action: "CUSTOMER_PRICING_MODE_CHANGE",
+        outcome: "SUCCESS",
+        targetType: "Customer",
+        targetId: id,
+        metadata: { from: existing.pricingMode, to: input.pricingMode },
+      });
+    }
+
+    return updated;
   }
 }

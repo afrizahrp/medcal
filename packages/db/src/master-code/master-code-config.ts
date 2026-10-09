@@ -22,7 +22,8 @@ export type MasterCodeEntity =
   | "DEVICE_MODEL"
   | "DEVICE_CAPABILITY"
   | "DEVICE_CALIBRATION_PARAMETER"
-  | "EQUIPMENT_TYPE";
+  | "EQUIPMENT_TYPE"
+  | "ADDITIONAL_ITEM_TYPE";
 
 export interface MasterCodeConfig {
   /** Fixed 3–5 uppercase-letter prefix. Must not collide with DOCUMENT_TYPE_PREFIX. */
@@ -53,6 +54,13 @@ export const MASTER_CODE_CONFIG: Record<MasterCodeEntity, MasterCodeConfig> = {
     table: "DeviceCalibrationParameter",
   },
   EQUIPMENT_TYPE: { prefix: "EQTP", width: 3, scope: "global", table: "EquipmentType" },
+  // Commercial add-on catalog (Additional Cost): per-company, ADC-001, ADC-002, …
+  ADDITIONAL_ITEM_TYPE: {
+    prefix: "ADC",
+    width: 3,
+    scope: "company",
+    table: "AdditionalItemType",
+  },
 };
 
 export function resolveMasterCodeConfig(entity: MasterCodeEntity): MasterCodeConfig {

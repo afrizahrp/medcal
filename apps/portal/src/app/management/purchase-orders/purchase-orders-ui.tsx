@@ -18,7 +18,9 @@ import { deviceDisplayNames } from "@/lib/device-name-display";
 import { PaginationBar, Surface, formatRelativeTime, selectClassName } from "../leads/leads-ui";
 import { ConfirmDialog, DetailField } from "../calibration-requests/calibration-requests-ui";
 import {
+  AdditionalItemsTable,
   PageHeader,
+  additionalTotalsLines,
   QuotationTotals,
   formatDate,
   formatIdr,
@@ -26,10 +28,26 @@ import {
   moneyNumber,
   quotationPdfFilename,
   type MoneyValue,
+  type DiscountInputMode,
   type QuotationCustomer,
   type QuotationItem,
   type QuotationRow,
 } from "../quotations/quotations-ui";
+
+/** PO-level snapshot of a commercial additional item (terminal: never allocated or executed). */
+export interface PurchaseOrderAdditionalItem {
+  id: string;
+  additionalItemTypeId: string;
+  code: string;
+  description: string;
+  unitLabel: string;
+  qty: MoneyValue;
+  multiplier: MoneyValue | null;
+  multiplierLabel: string | null;
+  unitPrice: MoneyValue;
+  lineTotal: MoneyValue;
+  notes: string | null;
+}
 import { formatTaxHeaderLabel, type PurchaseOrderStatus } from "./purchase-order-form-utils";
 import { shouldShowTaxLine } from "../quotations/quotation-tax-display";
 
@@ -89,6 +107,8 @@ export interface PurchaseOrderRow {
   status: PurchaseOrderStatus;
   subtotal: MoneyValue;
   headerDiscountAmount: MoneyValue;
+  headerDiscountPercent: MoneyValue;
+  headerDiscountInputMode: DiscountInputMode;
   taxCode: string;
   taxRate: MoneyValue;
   taxAmount: MoneyValue;
@@ -102,6 +122,7 @@ export interface PurchaseOrderRow {
   createdAt: string;
   updatedAt: string;
   items: PurchaseOrderItem[];
+  additionalItems: PurchaseOrderAdditionalItem[];
   customer: QuotationCustomer;
   quotation: PurchaseOrderQuotationRef;
 }
@@ -399,6 +420,8 @@ export function PurchaseOrderSnapshot({
   items,
   subtotal,
   headerDiscountAmount,
+  headerDiscountPercent,
+  additionalItems = [],
   taxCode,
   taxRate,
   taxAmount,
@@ -417,6 +440,9 @@ export function PurchaseOrderSnapshot({
   items: SnapshotLine[];
   subtotal: MoneyValue;
   headerDiscountAmount: MoneyValue;
+  headerDiscountPercent?: MoneyValue | null;
+  /** Commercial additional items (shown with pricing only; never part of the calibration items). */
+  additionalItems?: PurchaseOrderAdditionalItem[];
   taxCode: string;
   taxRate: MoneyValue;
   taxAmount: MoneyValue;
@@ -523,10 +549,16 @@ export function PurchaseOrderSnapshot({
         </dl>
       ) : null}
 
+      {showPricing && additionalItems.length > 0 ? (
+        <AdditionalItemsTable items={additionalItems} />
+      ) : null}
+
       {showPricing ? (
         <QuotationTotals
           subtotal={subtotal}
+          additionalLines={additionalTotalsLines(additionalItems)}
           headerDiscountAmount={headerDiscountAmount}
+          headerDiscountPercent={headerDiscountPercent}
           taxCode={taxCode}
           taxRate={taxRate}
           taxAmount={taxAmount}

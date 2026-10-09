@@ -16,6 +16,8 @@ export interface QuotationPreviewLine {
 
 export interface QuotationPreviewResponse {
   items: QuotationPreviewLine[];
+  /** The customer's pricing mode: MANUAL = the Price List is not used. */
+  pricingMode: "STANDARD" | "MANUAL";
 }
 
 /**
@@ -34,7 +36,13 @@ export function applyResolvedPrices(
     if (!resolved) return item;
     return {
       ...item,
-      unitPrice: resolved.pricePending ? "" : String(resolved.unitPrice),
+      // A line with no Price List price keeps whatever the user already typed
+      // (a refresh, e.g. after a date change, must not wipe manual input).
+      unitPrice: resolved.pricePending
+        ? item.pricePending
+          ? item.unitPrice
+          : ""
+        : String(resolved.unitPrice),
       pricePending: resolved.pricePending,
     };
   });

@@ -77,3 +77,23 @@ describe("applyResolvedPrices", () => {
     expect(Number(result[0]?.unitPrice) * Number(result[0]?.qty)).toBe(400000);
   });
 });
+
+describe("applyResolvedPrices — manually typed prices", () => {
+  it("keeps a price the user typed on a no-tariff line when the preview refreshes", () => {
+    const typed = [item({ requestItemId: "ri-1", unitPrice: "175000", pricePending: true })];
+    const result = applyResolvedPrices(typed, [
+      line({ requestItemId: "ri-1", unitPrice: 0, pricePending: true }),
+    ]);
+    expect(result[0]?.unitPrice).toBe("175000");
+    expect(result[0]?.pricePending).toBe(true);
+  });
+
+  it("a Price List price still wins over anything typed once a tariff exists for the new date", () => {
+    const typed = [item({ requestItemId: "ri-1", unitPrice: "175000", pricePending: true })];
+    const result = applyResolvedPrices(typed, [
+      line({ requestItemId: "ri-1", unitPrice: "1250000", pricePending: false }),
+    ]);
+    expect(result[0]?.unitPrice).toBe("1250000");
+    expect(result[0]?.pricePending).toBe(false);
+  });
+});

@@ -34,6 +34,8 @@ export interface CustomerRow {
   mobile: string | null;
   email: string | null;
   status: CustomerStatus;
+  /** STANDARD = Price List; MANUAL = the user enters quotation unit prices. */
+  pricingMode: "STANDARD" | "MANUAL";
   createdAt: string;
   updatedAt: string;
   contacts: CustomerContact[];

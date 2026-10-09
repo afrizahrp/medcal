@@ -16,11 +16,18 @@ import {
   formActionsClass,
   formPageClass,
   formSurfaceClass,
+  additionalItemsFromQuotation,
+  additionalItemsPayload,
+  discountErrorText,
+  discountInputFromQuotation,
+  discountPayload,
   formatQuotationApiError,
   itemsFromQuotation,
   isPositiveIntegerQty,
   moneyNumber,
   previewTotals,
+  todayIsoJakarta,
+  validateAdditionalItems,
 } from "../../quotations-ui";
 import { useQuotation, useUpdateQuotation } from "../../use-quotations-query";
 import { useTaxes } from "../../use-taxes-query";
@@ -36,10 +43,13 @@ export default function EditQuotationPage() {
 
   const [form, setForm] = useState<QuotationFormValue>({
     source: "PORTAL",
+    quotationDate: todayIsoJakarta(),
     validUntil: "",
+    notes: "",
     taxCode: "",
-    headerDiscountAmount: "0",
+    discount: { mode: "AMOUNT", value: "0" },
     items: [],
+    additionalItems: [],
   });
   const [error, setError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
@@ -50,10 +60,13 @@ export default function EditQuotationPage() {
     if (quotation && !initialized) {
       setForm({
         source: quotation.source,
+        quotationDate: toDateInputValue(quotation.quotationDate),
         validUntil: toDateInputValue(quotation.validUntil),
+        notes: quotation.notes ?? "",
         taxCode: quotation.taxCode ?? "",
-        headerDiscountAmount: String(quotation.headerDiscountAmount ?? 0),
+        discount: discountInputFromQuotation(quotation),
         items: itemsFromQuotation(quotation),
+        additionalItems: additionalItemsFromQuotation(quotation),
       });
       setInitialized(true);
     }
@@ -145,13 +158,24 @@ export default function EditQuotationPage() {
       }
     }
 
-    const preview = previewTotals(form.items, null, form.headerDiscountAmount);
-    if (moneyNumber(form.headerDiscountAmount) < 0) {
-      setError("Discount tidak boleh negatif.");
+    if (!form.quotationDate || form.quotationDate > todayIsoJakarta()) {
+      setError("Tanggal quotation wajib diisi dan tidak boleh di masa depan.");
       return;
     }
-    if (moneyNumber(form.headerDiscountAmount) > preview.subtotal) {
-      setError("Discount tidak boleh melebihi subtotal.");
+    if (form.validUntil && form.validUntil < form.quotationDate) {
+      setError("Valid Until tidak boleh sebelum tanggal quotation.");
+      return;
+    }
+
+    const preview = previewTotals(form.items, null, form.discount, form.additionalItems);
+    const discountProblem = discountErrorText(preview.discountError);
+    if (discountProblem) {
+      setError(discountProblem);
+      return;
+    }
+    const additionalProblem = validateAdditionalItems(form.additionalItems);
+    if (additionalProblem) {
+      setError(additionalProblem);
       return;
     }
 
@@ -165,9 +189,14 @@ export default function EditQuotationPage() {
         id: quotation!.id,
         input: {
           source: form.source,
+          quotationDate: form.quotationDate,
           validUntil: form.validUntil || null,
+          notes: form.notes.trim() || null,
           taxCode: form.taxCode,
-          headerDiscountAmount: moneyNumber(form.headerDiscountAmount),
+          // Only the field the user typed; the server derives the other.
+          ...discountPayload(form.discount),
+          // The complete set (DRAFT full replace).
+          additionalItems: additionalItemsPayload(form.additionalItems),
           items: form.items.map((item) => ({
             requestItemId: item.requestItemId,
             description: item.description.trim(),
@@ -225,6 +254,7 @@ export default function EditQuotationPage() {
             onChange={setForm}
             taxes={taxesQuery.data?.data ?? []}
             taxesLoading={taxesQuery.isLoading}
+            serviceMode={quotation.request.serviceMode}
           />
 
           <div className={formActionsClass}>

@@ -7,6 +7,8 @@ const fieldClass = "mt-1 w-full";
 const gridClass = "grid gap-4 sm:grid-cols-2";
 const sectionFieldsClass = "space-y-3";
 
+export type CustomerPricingModeValue = "STANDARD" | "MANUAL";
+
 export interface CustomerFormFieldsValue {
   name: string;
   legalName: string;
@@ -19,6 +21,8 @@ export interface CustomerFormFieldsValue {
   contactEmail: string;
   contactPhone: string;
   contactTitle: string;
+  /** STANDARD = quotation prices come from the Price List; MANUAL = the user types every price. */
+  pricingMode: CustomerPricingModeValue;
 }
 
 export interface CustomerFormFieldsProps {
@@ -107,6 +111,29 @@ export function CustomerFormFields({
             onChange={(e) => onChange("email", e.target.value)}
             className={fieldClass}
           />
+        </div>
+      </section>
+
+      <section className={`${sectionFieldsClass} border-t border-slate-100 pt-5`}>
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Pricing</h2>
+          <p className="mt-0.5 text-xs text-slate-400">
+            Menentukan cara harga quotation diisi. Perubahan tidak mengubah quotation yang sudah ada.
+          </p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700" htmlFor="customer-pricing-mode">
+            Pricing mode
+          </label>
+          <select
+            id="customer-pricing-mode"
+            value={value.pricingMode}
+            onChange={(e) => onChange("pricingMode", e.target.value as CustomerPricingModeValue)}
+            className={`${selectClassName} ${fieldClass}`}
+          >
+            <option value="STANDARD">Standard — gunakan Price List</option>
+            <option value="MANUAL">Manual — harga diisi manual, tanpa Price List</option>
+          </select>
         </div>
       </section>
 

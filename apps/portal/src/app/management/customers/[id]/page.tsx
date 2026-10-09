@@ -37,6 +37,7 @@ const emptyForm: CustomerFormFieldsValue = {
   contactEmail: "",
   contactPhone: "",
   contactTitle: "",
+  pricingMode: "STANDARD",
 };
 
 function formFromCustomer(customer: CustomerRow): CustomerFormFieldsValue {
@@ -53,6 +54,7 @@ function formFromCustomer(customer: CustomerRow): CustomerFormFieldsValue {
     contactEmail: contact?.email ?? "",
     contactPhone: contact?.phone ?? "",
     contactTitle: contact?.title ?? "",
+    pricingMode: customer.pricingMode ?? "STANDARD",
   };
 }
 

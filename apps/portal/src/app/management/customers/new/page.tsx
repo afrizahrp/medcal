@@ -24,6 +24,7 @@ const emptyForm: CustomerFormFieldsValue = {
   contactEmail: "",
   contactPhone: "",
   contactTitle: "",
+  pricingMode: "STANDARD",
 };
 
 export default function NewCustomerPage() {

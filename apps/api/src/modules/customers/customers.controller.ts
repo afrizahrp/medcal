@@ -16,6 +16,7 @@ import {
   customerUpdateSchema,
 } from "@medcal/shared";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
+import { UserId } from "../../common/decorators/user-id.decorator";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
 import {
@@ -79,6 +80,7 @@ export class CustomersController {
   @RequirePermission("customer", "update")
   async update(
     @CompanyId() companyId: string,
+    @UserId() userId: string,
     @Param("id") id: string,
     @Body() rawBody: unknown,
   ): Promise<CustomerWithContacts> {
@@ -90,6 +92,6 @@ export class CustomersController {
         issues: parsed.error.flatten(),
       });
     }
-    return this.service.update(companyId, id, parsed.data);
+    return this.service.update(companyId, id, parsed.data, userId);
   }
 }

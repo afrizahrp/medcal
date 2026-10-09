@@ -16,9 +16,15 @@ import {
   formActionsClass,
   formPageClass,
   formSurfaceClass,
+  additionalItemsPayload,
+  discountPayload,
   formatQuotationApiError,
   itemsFromRequest,
   moneyNumber,
+  previewTotals,
+  discountErrorText,
+  todayIsoJakarta,
+  validateAdditionalItems,
 } from "../quotations-ui";
 import { applyResolvedPrices } from "../quotation-preview";
 import { useCreateQuotation, useQuotationPreview, useQuotations } from "../use-quotations-query";
@@ -47,15 +53,18 @@ function NewQuotationPageInner() {
   );
   const createMutation = useCreateQuotation();
   const taxesQuery = useTaxes();
-  const previewQuery = useQuotationPreview(requestId || undefined);
-
   const [form, setForm] = useState<QuotationFormValue>({
     source: "PORTAL",
+    quotationDate: todayIsoJakarta(),
     validUntil: "",
+    notes: "",
     taxCode: "",
-    headerDiscountAmount: "0",
+    discount: { mode: "AMOUNT", value: "0" },
     items: [],
+    additionalItems: [],
   });
+  // The Price List is resolved as of the quotation date, so the preview follows it.
+  const previewQuery = useQuotationPreview(requestId || undefined, form.quotationDate || undefined);
   const [error, setError] = useState<string | null>(null);
   const [existingQuotationId, setExistingQuotationId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
@@ -178,8 +187,24 @@ function NewQuotationPageInner() {
       return;
     }
 
-    if (moneyNumber(form.headerDiscountAmount) < 0) {
-      setError("Discount tidak boleh negatif.");
+    if (!form.quotationDate || form.quotationDate > todayIsoJakarta()) {
+      setError("Tanggal quotation wajib diisi dan tidak boleh di masa depan.");
+      return;
+    }
+    if (form.validUntil && form.validUntil < form.quotationDate) {
+      setError("Valid Until tidak boleh sebelum tanggal quotation.");
+      return;
+    }
+
+    const totals = previewTotals(form.items, null, form.discount, form.additionalItems);
+    const discountProblem = discountErrorText(totals.discountError);
+    if (discountProblem) {
+      setError(discountProblem);
+      return;
+    }
+    const additionalProblem = validateAdditionalItems(form.additionalItems);
+    if (additionalProblem) {
+      setError(additionalProblem);
       return;
     }
 
@@ -195,9 +220,23 @@ function NewQuotationPageInner() {
       const result = await createMutation.mutateAsync({
         requestId: request!.id,
         source: form.source,
+        quotationDate: form.quotationDate,
+        // Prices typed for lines the Price List cannot price (the server rejects a
+        // typed price for any line it can price itself).
+        items: form.items.map((row) => ({
+          requestItemId: row.requestItemId,
+          ...(row.pricePending && moneyNumber(row.unitPrice) > 0
+            ? { unitPrice: moneyNumber(row.unitPrice) }
+            : {}),
+        })),
         validUntil: form.validUntil || undefined,
+        ...(form.notes.trim() ? { notes: form.notes.trim() } : {}),
         taxCode: form.taxCode,
-        headerDiscountAmount: moneyNumber(form.headerDiscountAmount),
+        // Only the field the user typed; the server derives the other.
+        ...discountPayload(form.discount),
+        ...(form.additionalItems.length > 0
+          ? { additionalItems: additionalItemsPayload(form.additionalItems) }
+          : {}),
       });
       router.push(`/quotations/${result.id}?created=1`);
     } catch (err) {
@@ -266,6 +305,12 @@ function NewQuotationPageInner() {
             taxes={taxesQuery.data?.data ?? []}
             taxesLoading={taxesQuery.isLoading}
             readOnlyItems
+            serviceMode={
+              request.serviceMode === "ON_SITE" || request.serviceMode === "SEND_TO_LAB"
+                ? request.serviceMode
+                : undefined
+            }
+            pricingMode={previewQuery.data?.pricingMode ?? "STANDARD"}
           />
 
           <div className={formActionsClass}>

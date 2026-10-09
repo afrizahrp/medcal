@@ -44,6 +44,7 @@ const REVISABLE_PURCHASE_ORDER_STATUSES = ["APPROVED", "RECEIVED", "CONFIRMED"] 
 
 const purchaseOrderHistoryInclude = {
   items: true,
+  additionalItems: true,
   revisedBy: { select: { id: true, name: true, email: true } },
 } as const;
 
@@ -51,7 +52,10 @@ export type PurchaseOrderHistoryWithItems = Prisma.PurchaseOrderHistoryGetPayloa
   include: typeof purchaseOrderHistoryInclude;
 }>;
 
-export type PurchaseOrderHistorySummary = Omit<PurchaseOrderHistoryWithItems, "items">;
+export type PurchaseOrderHistorySummary = Omit<
+  PurchaseOrderHistoryWithItems,
+  "items" | "additionalItems"
+>;
 
 const deviceTypeSelect = {
   id: true,
@@ -75,6 +79,9 @@ const purchaseOrderInclude = {
       device: { select: { id: true, brand: true, model: true, serialNumber: true } },
     },
   },
+  // PO-level snapshot of the quotation's commercial additional items. Terminal
+  // data: never allocated, never executed.
+  additionalItems: { orderBy: { createdAt: "asc" } },
   customer: { include: { contacts: true } },
   quotation: {
     select: {
@@ -196,6 +203,29 @@ async function assertRetirementSafe(
   }
 }
 
+/** Snapshot copy of one active QuotationAdditionalItem into the PO's own table. */
+function toPurchaseOrderAdditionalRow(
+  companyId: string,
+  purchaseOrderId: string,
+  item: Prisma.QuotationAdditionalItemGetPayload<object>,
+): Prisma.PurchaseOrderAdditionalItemCreateManyInput {
+  return {
+    companyId,
+    purchaseOrderId,
+    quotationAdditionalItemId: item.id,
+    additionalItemTypeId: item.additionalItemTypeId,
+    code: item.code,
+    description: item.description,
+    unitLabel: item.unitLabel,
+    qty: item.qty,
+    multiplier: item.multiplier,
+    multiplierLabel: item.multiplierLabel,
+    unitPrice: item.unitPrice,
+    lineTotal: item.lineTotal,
+    notes: item.notes,
+  };
+}
+
 @Injectable()
 export class PurchaseOrdersService {
   async create(
@@ -208,7 +238,10 @@ export class PurchaseOrdersService {
           where: { id: input.quotationId, companyId },
           // MOM #1 — Revision Scope Design: only active quotation scope may
           // ever propagate downstream.
-          include: { items: { where: { isActive: true }, orderBy: { createdAt: "asc" } } },
+          include: {
+            items: { where: { isActive: true }, orderBy: { createdAt: "asc" } },
+            additionalItems: { where: { isActive: true }, orderBy: { createdAt: "asc" } },
+          },
         });
         if (!quotation) {
           throw new NotFoundException({
@@ -285,6 +318,8 @@ export class PurchaseOrdersService {
             status: "DRAFT",
             subtotal: quotation.subtotal,
             headerDiscountAmount: quotation.headerDiscountAmount,
+            headerDiscountPercent: quotation.headerDiscountPercent,
+            headerDiscountInputMode: quotation.headerDiscountInputMode,
             taxCode: quotation.taxCode,
             taxRate: quotation.taxRate,
             taxAmount: quotation.taxAmount,
@@ -309,6 +344,15 @@ export class PurchaseOrdersService {
             status: "OPEN",
           })),
         });
+
+        // Commercial additional items are COPIED into the PO's own snapshot table
+        // (never read back from the quotation later). They are deliberately not
+        // PurchaseOrderItems: no allocation, WorkOrderItem or CalibrationJob.
+        if (quotation.additionalItems.length > 0) {
+          await tx.purchaseOrderAdditionalItem.createMany({
+            data: quotation.additionalItems.map((item) => toPurchaseOrderAdditionalRow(companyId, purchaseOrder.id, item)),
+          });
+        }
 
         return tx.purchaseOrder.findFirstOrThrow({
           where: { id: purchaseOrder.id, companyId },
@@ -654,7 +698,7 @@ export class PurchaseOrdersService {
   ): Promise<PurchaseOrderWithItems> {
     const existing = await prisma.purchaseOrder.findFirst({
       where: { id, companyId },
-      include: { items: true },
+      include: { items: true, additionalItems: true },
     });
     if (!existing) {
       throw new NotFoundException({
@@ -679,7 +723,10 @@ export class PurchaseOrdersService {
 
     const quotation = await prisma.quotation.findFirstOrThrow({
       where: { id: existing.quotationId, companyId },
-      include: { items: { where: { isActive: true } } },
+      include: {
+        items: { where: { isActive: true } },
+        additionalItems: { where: { isActive: true } },
+      },
     });
 
     const activeQuotationItemIds = new Set(quotation.items.map((item) => item.id));
@@ -694,7 +741,28 @@ export class PurchaseOrdersService {
       (item) => item.status !== "CANCELLED" && !activeQuotationItemIds.has(item.quotationItemId),
     );
 
-    if (pendingQuotationItems.length === 0 && itemsToRetire.length === 0) {
+    // Commercial additional items follow the same pull-based reconciliation, but
+    // into the PO's own snapshot table (never PurchaseOrderItem). A PO additional
+    // row whose source quotation row was retired is removed — nothing downstream
+    // (no allocation / WorkOrderItem) can reference it; the history snapshot below
+    // preserves it.
+    const activeQuotationAdditionalIds = new Set(quotation.additionalItems.map((item) => item.id));
+    const representedQuotationAdditionalIds = new Set(
+      existing.additionalItems.map((item) => item.quotationAdditionalItemId),
+    );
+    const pendingAdditionalItems = quotation.additionalItems.filter(
+      (item) => !representedQuotationAdditionalIds.has(item.id),
+    );
+    const additionalItemsToRetire = existing.additionalItems.filter(
+      (item) => !activeQuotationAdditionalIds.has(item.quotationAdditionalItemId),
+    );
+
+    if (
+      pendingQuotationItems.length === 0 &&
+      itemsToRetire.length === 0 &&
+      pendingAdditionalItems.length === 0 &&
+      additionalItemsToRetire.length === 0
+    ) {
       throw new BadRequestException({
         message: "Quotation has no scope change for this purchase order to pick up",
         code: "NO_PENDING_SCOPE_CHANGE",
@@ -726,6 +794,8 @@ export class PurchaseOrdersService {
           status: existing.status,
           subtotal: existing.subtotal,
           headerDiscountAmount: existing.headerDiscountAmount,
+          headerDiscountPercent: existing.headerDiscountPercent,
+          headerDiscountInputMode: existing.headerDiscountInputMode,
           taxCode: existing.taxCode,
           taxRate: existing.taxRate,
           taxAmount: existing.taxAmount,
@@ -748,6 +818,22 @@ export class PurchaseOrdersService {
               discountAmount: item.discountAmount,
               lineTotal: item.lineTotal,
               status: item.status,
+            })),
+          },
+          additionalItems: {
+            create: existing.additionalItems.map((item) => ({
+              sourceItemId: item.id,
+              quotationAdditionalItemId: item.quotationAdditionalItemId,
+              additionalItemTypeId: item.additionalItemTypeId,
+              code: item.code,
+              description: item.description,
+              unitLabel: item.unitLabel,
+              qty: item.qty,
+              multiplier: item.multiplier,
+              multiplierLabel: item.multiplierLabel,
+              unitPrice: item.unitPrice,
+              lineTotal: item.lineTotal,
+              notes: item.notes,
             })),
           },
         },
@@ -789,6 +875,17 @@ export class PurchaseOrdersService {
         });
       }
 
+      if (additionalItemsToRetire.length > 0) {
+        await tx.purchaseOrderAdditionalItem.deleteMany({
+          where: { id: { in: additionalItemsToRetire.map((item) => item.id) } },
+        });
+      }
+      if (pendingAdditionalItems.length > 0) {
+        await tx.purchaseOrderAdditionalItem.createMany({
+          data: pendingAdditionalItems.map((item) => toPurchaseOrderAdditionalRow(companyId, id, item)),
+        });
+      }
+
       // Mirror create()'s "copy the quotation's current commercial totals"
       // rather than re-deriving them independently — the Quotation's own
       // totals are already computed from its active items only.
@@ -797,6 +894,8 @@ export class PurchaseOrdersService {
         data: {
           subtotal: quotation.subtotal,
           headerDiscountAmount: quotation.headerDiscountAmount,
+          headerDiscountPercent: quotation.headerDiscountPercent,
+          headerDiscountInputMode: quotation.headerDiscountInputMode,
           taxCode: quotation.taxCode,
           taxRate: quotation.taxRate,
           taxAmount: quotation.taxAmount,

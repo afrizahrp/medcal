@@ -33,9 +33,11 @@ export function buildCreatePayload(form: {
   contactEmail: string;
   contactPhone: string;
   contactTitle: string;
+  pricingMode: "STANDARD" | "MANUAL";
 }): CustomerCreateInput {
   const payload: CustomerCreateInput = {
     name: form.name.trim(),
+    pricingMode: form.pricingMode,
   };
   if (form.legalName.trim()) payload.legalName = form.legalName.trim();
   if (form.taxId.trim()) payload.taxId = form.taxId.trim();
@@ -63,6 +65,7 @@ export function buildUpdatePayload(form: {
   contactEmail: string;
   contactPhone: string;
   contactTitle: string;
+  pricingMode: "STANDARD" | "MANUAL";
 }): CustomerUpdateInput {
   const payload: CustomerUpdateInput = {
     name: form.name.trim(),
@@ -73,6 +76,7 @@ export function buildUpdatePayload(form: {
     mobile: form.mobile.trim() || null,
     email: form.email.trim() || null,
     status: form.status,
+    pricingMode: form.pricingMode,
   };
 
   const contact = buildContactPayload(form);

@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { AccessDenied } from "../../../../components/access-denied";
 import {
+  AdditionalItemsTable,
   ConfirmDialog,
   DetailField,
   PageHeader,
@@ -31,14 +32,21 @@ import {
   Surface,
   formPageClass,
   formSurfaceClass,
+  additionalItemsFromQuotation,
+  additionalItemsPayload,
+  additionalTotalsLines,
   formatDate,
+  formatDateOnly,
   formatDateTime,
   formatIdr,
   formatQty,
   formatQuotationApiError,
   quotationPdfFilenameForRow,
+  validateAdditionalItems,
+  type QuotationFormAdditionalItem,
   type QuotationRow,
 } from "../quotations-ui";
+import { QuotationAdditionalItemsSection } from "../quotation-additional-items";
 import { deviceDisplayNames } from "@/lib/device-name-display";
 import { useQuotationEmailCompose } from "../use-quotation-email-compose";
 import { useTaxes } from "../use-taxes-query";
@@ -264,8 +272,11 @@ export default function QuotationDetailPage() {
             </Link>
           </DetailField>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <DetailField label="Source">{SOURCE_LABELS[quotation.source]}</DetailField>
+            <DetailField label="Quotation Date">
+              {formatDateOnly(quotation.quotationDate)}
+            </DetailField>
             <DetailField label="Created">{formatDateTime(quotation.createdAt)}</DetailField>
           </div>
 
@@ -273,6 +284,12 @@ export default function QuotationDetailPage() {
             <DetailField label="Valid Until">{formatDate(quotation.validUntil)}</DetailField>
             <DetailField label="Currency">{quotation.currency || "IDR"}</DetailField>
           </div>
+
+          {quotation.notes ? (
+            <DetailField label="Catatan / Remarks">
+              <span className="whitespace-pre-line">{quotation.notes}</span>
+            </DetailField>
+          ) : null}
 
           {quotation.status === "APPROVED" ? (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -337,10 +354,13 @@ export default function QuotationDetailPage() {
               </tbody>
             </table>
           </div>
+          <AdditionalItemsTable items={quotation.additionalItems ?? []} />
           <div className="mt-4">
             <QuotationTotals
               subtotal={quotation.subtotal}
+              additionalLines={additionalTotalsLines(quotation.additionalItems ?? [])}
               headerDiscountAmount={quotation.headerDiscountAmount}
+              headerDiscountPercent={quotation.headerDiscountPercent}
               taxCode={quotation.taxCode}
               taxRate={quotation.taxRate}
               taxAmount={quotation.taxAmount}
@@ -544,6 +564,12 @@ function ReviseQuotationDialog({
   const reviseMutation = useReviseQuotation();
   const originalById = new Map(quotation.items.map((item) => [item.id, item]));
   const [rows, setRows] = useState<DesiredQuotationRow[]>(() => quotationRowsFromCurrent(quotation));
+  // Commercial additional items: the COMPLETE desired set, like the calibration rows.
+  const [additionalRows, setAdditionalRows] = useState<QuotationFormAdditionalItem[]>(() =>
+    additionalItemsFromQuotation(quotation),
+  );
+  const initialAdditionalJson = JSON.stringify(additionalItemsPayload(additionalItemsFromQuotation(quotation)));
+  const [notes, setNotes] = useState(quotation.notes ?? "");
   const [error, setError] = useState<string | null>(null);
 
   // The Requisition behind this Quotation — its active lines not yet
@@ -603,8 +629,13 @@ function ReviseQuotationDialog({
   }
 
   const activeRows = rows.filter((row) => !row.removed);
+  const additionalChanged =
+    JSON.stringify(additionalItemsPayload(additionalRows)) !== initialAdditionalJson;
   const hasChanges =
-    activeRows.length !== quotation.items.length || rows.some((row) => rowStatus(row) !== "unchanged");
+    activeRows.length !== quotation.items.length ||
+    rows.some((row) => rowStatus(row) !== "unchanged") ||
+    additionalChanged ||
+    notes.trim() !== (quotation.notes ?? "").trim();
 
   async function submit() {
     setError(null);
@@ -616,10 +647,17 @@ function ReviseQuotationDialog({
       setError("Isi unit price untuk setiap baris (termasuk baris baru) sebelum menyimpan.");
       return;
     }
+    const additionalProblem = validateAdditionalItems(additionalRows);
+    if (additionalProblem) {
+      setError(additionalProblem);
+      return;
+    }
     try {
       await reviseMutation.mutateAsync({
         id: quotation.id,
         input: {
+          notes: notes.trim() || null,
+          additionalItems: additionalItemsPayload(additionalRows),
           items: activeRows.map((row) => ({
             id: row.id,
             requestItemId: row.requestItemId,
@@ -767,6 +805,28 @@ function ReviseQuotationDialog({
           </Button>
         </div>
 
+        <div className="mt-4">
+          <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="revise-notes">
+            Catatan / Remarks
+          </label>
+          <textarea
+            id="revise-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            maxLength={2000}
+            rows={3}
+            className={cn(selectClassName, "w-full min-h-[84px]")}
+          />
+        </div>
+
+        <div className="mt-4">
+          <QuotationAdditionalItemsSection
+            value={additionalRows}
+            onChange={setAdditionalRows}
+            serviceMode={quotation.request.serviceMode}
+          />
+        </div>
+
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
         <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
           <Button
@@ -881,6 +941,28 @@ function QuotationHistoryDialog({
                       ))}
                     </tbody>
                   </table>
+                  {(revisionQuery.data.additionalItems ?? []).length > 0 ? (
+                    <table className="mt-3 w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs uppercase text-slate-500">
+                          <th className="py-1">Biaya Tambahan</th>
+                          <th className="py-1 text-right">Qty</th>
+                          <th className="py-1 text-right">Line Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {revisionQuery.data.additionalItems.map((item) => (
+                          <tr key={item.id}>
+                            <td className="py-1.5">{item.description}</td>
+                            <td className="py-1.5 text-right">
+                              {formatQty(item.qty)} {item.unitLabel}
+                            </td>
+                            <td className="py-1.5 text-right">{formatIdr(item.lineTotal)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : null}
                   <p className="mt-2 text-right text-sm font-semibold text-slate-900">
                     Total: {formatIdr(revisionQuery.data.totalAmount)}
                   </p>

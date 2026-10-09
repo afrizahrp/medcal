@@ -37,6 +37,7 @@ import { EquipmentCalibrationRecordsModule } from "./modules/equipment-calibrati
 import { FilesModule } from "./modules/files/files.module";
 import { TaxesModule } from "./modules/taxes/taxes.module";
 import { PriceListItemsModule } from "./modules/price-list-items/price-list-items.module";
+import { AdditionalItemTypesModule } from "./modules/additional-item-types/additional-item-types.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
 
 @Module({
@@ -67,6 +68,7 @@ import { DashboardModule } from "./modules/dashboard/dashboard.module";
     EquipmentCalibrationRecordsModule,
     TaxesModule,
     PriceListItemsModule,
+    AdditionalItemTypesModule,
     DashboardModule,
     WhitelistModule,
     MeModule,

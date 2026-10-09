@@ -220,6 +220,8 @@ export type EmailUpdateInput = z.infer<typeof emailUpdateSchema>;
 // =============================================================================
 
 const customerStatusValues = ["ACTIVE", "INACTIVE"] as const;
+export const customerPricingModeValues = ["STANDARD", "MANUAL"] as const;
+export type CustomerPricingMode = (typeof customerPricingModeValues)[number];
 
 const customerContactInputSchema = z.object({
   name: z.string().min(1).max(100),
@@ -238,6 +240,8 @@ export const customerCreateSchema = z.object({
   mobile: z.string().max(50).optional(),
   email: z.string().email().max(100).optional(),
   contact: customerContactInputSchema.optional(),
+  /** STANDARD (default) uses the Price List; MANUAL never does. */
+  pricingMode: z.enum(customerPricingModeValues).optional(),
 });
 
 export type CustomerCreateInput = z.infer<typeof customerCreateSchema>;
@@ -263,6 +267,7 @@ export const customerUpdateSchema = z.object({
   email: z.string().email().max(100).nullable().optional(),
   status: z.enum(customerStatusValues).optional(),
   contact: customerContactInputSchema.optional(),
+  pricingMode: z.enum(customerPricingModeValues).optional(),
 });
 
 export type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;
@@ -463,6 +468,63 @@ const quotationStatusValues = [
 
 const quotationDecimalSchema = z.coerce.number().finite();
 
+/**
+ * Header discount wire contract: the client sends EXACTLY ONE of
+ * `headerDiscountPercent` / `headerDiscountAmount` — the field the user typed.
+ * The server derives the other (resolveHeaderDiscount) and persists both plus
+ * the input mode. Sending both would make two independent sources of truth, so
+ * it is rejected. Omitting both keeps the stored discount (re-applied to the
+ * new subtotal). The 0..100 / <= subtotal range checks live in the service so
+ * they return the stable error codes.
+ */
+const quotationDiscountFields = {
+  headerDiscountAmount: quotationDecimalSchema.nonnegative().optional(),
+  headerDiscountPercent: quotationDecimalSchema.nonnegative().optional(),
+};
+
+function hasSingleDiscountField(value: {
+  headerDiscountAmount?: number;
+  headerDiscountPercent?: number;
+}): boolean {
+  return !(value.headerDiscountAmount !== undefined && value.headerDiscountPercent !== undefined);
+}
+
+/** Free-text remarks on the quotation. Blank is stored as no remarks. */
+const quotationNotesField = z.string().max(2000).nullable().optional();
+
+const SINGLE_DISCOUNT_FIELD_ISSUE = {
+  message: "Send either headerDiscountPercent or headerDiscountAmount, not both",
+  path: ["headerDiscountPercent"],
+  params: { code: "DISCOUNT_FIELDS_CONFLICT" },
+};
+
+/**
+ * Commercial additional item (e.g. ON_SITE accommodation / transport) as sent by
+ * the client. The server snapshots code, unit label and multiplier label from the
+ * catalog entry; the description defaults to the catalog name and the unit price
+ * to the catalog default price.
+ *
+ * The line total is NEVER accepted from the client — the backend computes
+ *   lineTotal = round(unitPrice x qty x (multiplier ?? 1)).
+ * `qty` and `multiplier` are whole numbers; `multiplier` is required for a catalog
+ * type that defines a multiplier label (e.g. "hari") and rejected for one that does
+ * not. There is intentionally no per-line discount on additional items; the
+ * quotation-level (header) discount applies instead.
+ */
+const quotationAdditionalItemInputSchema = z.object({
+  additionalItemTypeId: z.string().min(1),
+  description: z.string().min(1).max(500).optional(),
+  qty: z.coerce.number().int().positive(),
+  multiplier: z.coerce.number().int().positive().optional(),
+  unitPrice: quotationDecimalSchema.positive().optional(),
+  notes: z.string().max(1000).nullable().optional(),
+});
+
+/** Revise: same shape plus the id of the existing current row it targets. */
+const quotationReviseAdditionalItemInputSchema = quotationAdditionalItemInputSchema.extend({
+  id: z.string().min(1).optional(),
+});
+
 const quotationItemInputSchema = z.object({
   requestItemId: z.string().min(1),
   deviceId: z.string().min(1).optional(),
@@ -475,14 +537,17 @@ const quotationItemInputSchema = z.object({
 
 /**
  * Per-line input accepted at CREATE time only. The server is the sole authority
- * for `qty` (copied from CalibrationRequestItem.qty) and `unitPrice` (resolved
- * from the Price List) — the client may only tweak the description and an
- * optional line discount. Manual unit-price edits happen afterwards on the
- * DRAFT quotation via PATCH.
+ * for `qty` (copied from CalibrationRequestItem.qty) and for any price that the
+ * Price List can supply. The client may tweak the description and an optional
+ * line discount, and may type a `unitPrice` ONLY for a line the Price List has
+ * no price for (every line of a MANUAL-pricing customer, or a STANDARD line with
+ * no active tariff) — the server rejects a typed price for a line it can price
+ * itself (UNIT_PRICE_NOT_ALLOWED), so the Price List cannot be bypassed.
  */
 const quotationCreateItemSchema = z.object({
   requestItemId: z.string().min(1),
   description: z.string().min(1).max(500).optional(),
+  unitPrice: quotationDecimalSchema.positive().optional(),
   discountAmount: quotationDecimalSchema.nonnegative().optional(),
 });
 
@@ -493,14 +558,20 @@ const quotationCreateItemSchema = z.object({
  * provided it must still cover the full requisition scope (see
  * assertFullScopeItems).
  */
-export const quotationCreateSchema = z.object({
-  requestId: z.string().min(1),
-  source: z.enum(quotationSourceValues).optional(),
-  validUntil: wireDate.optional(),
-  taxCode: z.string().min(1).max(50),
-  headerDiscountAmount: quotationDecimalSchema.nonnegative().optional(),
-  items: z.array(quotationCreateItemSchema).min(1).optional(),
-});
+export const quotationCreateSchema = z
+  .object({
+    requestId: z.string().min(1),
+    source: z.enum(quotationSourceValues).optional(),
+    /** Business date (date-only). Omitted = today (Asia/Jakarta). Future dates are rejected by the service. */
+    quotationDate: wireDate.optional(),
+    validUntil: wireDate.optional(),
+    notes: quotationNotesField,
+    taxCode: z.string().min(1).max(50),
+    ...quotationDiscountFields,
+    items: z.array(quotationCreateItemSchema).min(1).optional(),
+    additionalItems: z.array(quotationAdditionalItemInputSchema).optional(),
+  })
+  .refine(hasSingleDiscountField, SINGLE_DISCOUNT_FIELD_ISSUE);
 
 /** Post-parse shape (service layer): `validUntil` is a `Date`. */
 export type QuotationCreateInput = z.infer<typeof quotationCreateSchema>;
@@ -515,6 +586,8 @@ export type QuotationCreateBody = z.input<typeof quotationCreateSchema>;
  */
 export const quotationPreviewSchema = z.object({
   requestId: z.string().min(1),
+  /** Same date the quotation would be created with (drives the Price List lookup). */
+  quotationDate: wireDate.optional(),
 });
 
 export type QuotationPreviewInput = z.infer<typeof quotationPreviewSchema>;
@@ -529,16 +602,22 @@ export const quotationListQuerySchema = baseListQuerySchema.extend({
 export type QuotationListQuery = z.infer<typeof quotationListQuerySchema>;
 
 /** Whitelisted `sortBy` values for GET /quotations — see resolveSortOrder. */
-export const QUOTATION_SORTABLE_FIELDS = ["createdAt", "number", "status"] as const;
+export const QUOTATION_SORTABLE_FIELDS = ["createdAt", "quotationDate", "number", "status"] as const;
 
 /** PATCH /quotations/:id body (only allowed while DRAFT) */
-export const quotationUpdateSchema = z.object({
-  source: z.enum(quotationSourceValues).optional(),
-  validUntil: wireDate.nullable().optional(),
-  taxCode: z.string().min(1).max(50).optional(),
-  headerDiscountAmount: quotationDecimalSchema.nonnegative().optional(),
-  items: z.array(quotationItemInputSchema).min(1).optional(),
-});
+export const quotationUpdateSchema = z
+  .object({
+    source: z.enum(quotationSourceValues).optional(),
+    quotationDate: wireDate.optional(),
+    validUntil: wireDate.nullable().optional(),
+    notes: quotationNotesField,
+    taxCode: z.string().min(1).max(50).optional(),
+    ...quotationDiscountFields,
+    items: z.array(quotationItemInputSchema).min(1).optional(),
+    /** Omitted = unchanged; present = the complete set (DRAFT only, full replace). */
+    additionalItems: z.array(quotationAdditionalItemInputSchema).optional(),
+  })
+  .refine(hasSingleDiscountField, SINGLE_DISCOUNT_FIELD_ISSUE);
 
 /** Post-parse shape (service layer): `validUntil` is a `Date`. */
 export type QuotationUpdateInput = z.infer<typeof quotationUpdateSchema>;
@@ -570,11 +649,16 @@ const quotationReviseItemInputSchema = z.object({
  * POST /quotations/:id/revise body — only reachable once the quotation has
  * left DRAFT (use PATCH instead while DRAFT).
  */
-export const quotationReviseSchema = z.object({
-  taxCode: z.string().min(1).max(50).optional(),
-  headerDiscountAmount: quotationDecimalSchema.nonnegative().optional(),
-  items: z.array(quotationReviseItemInputSchema).min(1),
-});
+export const quotationReviseSchema = z
+  .object({
+    notes: quotationNotesField,
+    taxCode: z.string().min(1).max(50).optional(),
+    ...quotationDiscountFields,
+    items: z.array(quotationReviseItemInputSchema).min(1),
+    /** Omitted = unchanged; present = the COMPLETE desired set, matched by row `id`. */
+    additionalItems: z.array(quotationReviseAdditionalItemInputSchema).optional(),
+  })
+  .refine(hasSingleDiscountField, SINGLE_DISCOUNT_FIELD_ISSUE);
 
 export type QuotationReviseInput = z.infer<typeof quotationReviseSchema>;
 export type QuotationReviseBody = z.input<typeof quotationReviseSchema>;
@@ -1585,6 +1669,53 @@ export const priceListItemUpdateSchema = z.object({
 export type PriceListItemUpdateInput = z.infer<typeof priceListItemUpdateSchema>;
 /** Request-body shape (client): `effective*` are `YYYY-MM-DD` strings. */
 export type PriceListItemUpdateBody = z.input<typeof priceListItemUpdateSchema>;
+
+// =============================================================================
+// AdditionalItemType — catalog of commercial quotation add-ons (company-scoped)
+// =============================================================================
+
+/**
+ * POST /additional-item-types body. `code` is not accepted — it is a system-issued,
+ * immutable business identifier (ADC-001) allocated by MasterCodeService.
+ */
+export const additionalItemTypeCreateSchema = z.object({
+  name: z.string().trim().min(1).max(150),
+  unitLabel: z.string().trim().min(1).max(30),
+  /** Label of an optional second multiplier (e.g. "hari"); omitted/NULL = simple qty. */
+  multiplierLabel: z.string().trim().min(1).max(30).nullable().optional(),
+  defaultUnitPrice: priceDecimalSchema.positive().nullable().optional(),
+  /** NULL / omitted = applicable to any service mode. */
+  serviceMode: z.enum(serviceModeValues).nullable().optional(),
+});
+
+export type AdditionalItemTypeCreateInput = z.infer<typeof additionalItemTypeCreateSchema>;
+
+/** GET /additional-item-types query params */
+export const additionalItemTypeListQuerySchema = baseListQuerySchema.extend({
+  isActive: z
+    .string()
+    .transform((v) => v === "true")
+    .optional(),
+  /** Types usable for a requisition of this mode (matching mode or unrestricted). */
+  serviceMode: z.enum(serviceModeValues).optional(),
+});
+
+export type AdditionalItemTypeListQuery = z.infer<typeof additionalItemTypeListQuerySchema>;
+
+/** Whitelisted `sortBy` values for GET /additional-item-types — see resolveSortOrder. */
+export const ADDITIONAL_ITEM_TYPE_SORTABLE_FIELDS = ["createdAt", "code", "name"] as const;
+
+/** PATCH /additional-item-types/:id body. `code` is immutable. */
+export const additionalItemTypeUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(150).optional(),
+  unitLabel: z.string().trim().min(1).max(30).optional(),
+  multiplierLabel: z.string().trim().min(1).max(30).nullable().optional(),
+  defaultUnitPrice: priceDecimalSchema.positive().nullable().optional(),
+  serviceMode: z.enum(serviceModeValues).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type AdditionalItemTypeUpdateInput = z.infer<typeof additionalItemTypeUpdateSchema>;
 
 // =============================================================================
 // DeviceCategory & DeviceType Master Data

@@ -257,6 +257,8 @@ function NewPurchaseOrderPageInner() {
               items={snapshotLinesFromQuotation(quotation)}
               subtotal={quotation.subtotal}
               headerDiscountAmount={quotation.headerDiscountAmount}
+              headerDiscountPercent={quotation.headerDiscountPercent}
+              additionalItems={quotation.additionalItems}
               taxCode={quotation.taxCode}
               taxRate={quotation.taxRate}
               taxAmount={quotation.taxAmount}
