@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { AccessDenied } from "../../../../components/access-denied";
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
-import { todayDateOnly } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
 import {
   PageHeader,
@@ -222,7 +221,6 @@ export default function NewCalibrationRequestPage() {
                   label="Expected Date"
                   value={expectedDate}
                   onChange={setExpectedDate}
-                  min={todayDateOnly()}
                 />
               </div>
 
