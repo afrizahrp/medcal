@@ -198,6 +198,9 @@ const ac = createAccessControl({
   tax: ["manage"],
   // Commercial price master (DeviceType-keyed tariff, feeds Quotation generation)
   priceListItem: ["read", "create", "update", "delete"],
+  // Additional Cost catalog (commercial quotation add-ons, e.g. ON_SITE accommodation / transport).
+  // No "delete": types are deactivated, never deleted (documents keep a Restrict FK).
+  additionalItemType: ["read", "create", "update"],
 } as const);
 
 /**

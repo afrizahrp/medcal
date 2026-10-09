@@ -73,6 +73,10 @@ const PRESERVED_BASELINE: GrantRow[] = [
   { role: "ADMIN", resource: "priceListItem", action: "create" },
   { role: "ADMIN", resource: "priceListItem", action: "update" },
   { role: "ADMIN", resource: "priceListItem", action: "delete" },
+  // Additional Cost catalog (2026-10-10) — maintained by ADMIN like the Price List.
+  { role: "ADMIN", resource: "additionalItemType", action: "read" },
+  { role: "ADMIN", resource: "additionalItemType", action: "create" },
+  { role: "ADMIN", resource: "additionalItemType", action: "update" },
   // UOM Master Data (2026-08-26)
   { role: "ADMIN", resource: "uom", action: "read" },
   { role: "ADMIN", resource: "uom", action: "create" },
@@ -356,6 +360,7 @@ const SUPERADMIN_PERMISSION_CATALOG: Record<string, readonly string[]> = {
   payment: ["read", "create", "update", "reconcile"],
   tax: ["manage"],
   priceListItem: ["read", "create", "update", "delete"],
+  additionalItemType: ["read", "create", "update"],
 };
 
 const USER_MANAGEMENT_EXCLUSIONS: Record<string, readonly string[]> = {

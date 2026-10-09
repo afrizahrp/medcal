@@ -126,6 +126,9 @@ export type MeCapabilities = {
   priceListItemCreate: boolean;
   priceListItemUpdate: boolean;
   priceListItemDelete: boolean;
+  additionalItemTypeRead: boolean;
+  additionalItemTypeCreate: boolean;
+  additionalItemTypeUpdate: boolean;
 };
 
 export type MeUser = {

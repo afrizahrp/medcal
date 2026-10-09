@@ -25,11 +25,11 @@ import {
 } from "./additional-item-types.service";
 
 /**
- * The catalog is a commercial price master, so maintenance is governed by the
- * existing `priceListItem` permissions (no new RBAC resource). The LIST is
+ * Maintenance is governed by the dedicated `additionalItemType` permissions
+ * (read / create / update — no delete: types are deactivated). The LIST is
  * readable with `quotation:read` — the same precedent as
  * GET /price-list-items/resolve — because quotation staff must load the active
- * types to add a line even when they cannot maintain the Price List.
+ * types to add a line even when they cannot maintain the catalog.
  */
 @Controller("additional-item-types")
 @UseGuards(CompanyRoleGuard)
@@ -40,7 +40,7 @@ export class AdditionalItemTypesController {
   ) {}
 
   @Post()
-  @RequirePermission("priceListItem", "create")
+  @RequirePermission("additionalItemType", "create")
   async create(
     @CompanyId() companyId: string,
     @Body() rawBody: unknown,
@@ -74,7 +74,7 @@ export class AdditionalItemTypesController {
   }
 
   @Get(":id")
-  @RequirePermission("priceListItem", "read")
+  @RequirePermission("additionalItemType", "read")
   async findOne(
     @CompanyId() companyId: string,
     @Param("id") id: string,
@@ -83,7 +83,7 @@ export class AdditionalItemTypesController {
   }
 
   @Patch(":id")
-  @RequirePermission("priceListItem", "update")
+  @RequirePermission("additionalItemType", "update")
   async update(
     @CompanyId() companyId: string,
     @Param("id") id: string,

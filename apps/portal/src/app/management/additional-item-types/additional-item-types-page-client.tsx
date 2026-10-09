@@ -93,7 +93,7 @@ export default function AdditionalItemTypesPageClient() {
 
   const sort = useTableSort(params, setParams, "code");
   const { sortBy, sortDir } = sort;
-  const canManage = Boolean(capabilities?.priceListItemCreate);
+  const canManage = Boolean(capabilities?.additionalItemTypeCreate);
 
   const query = useAdditionalItemTypes({
     search: committedSearch,
@@ -112,7 +112,7 @@ export default function AdditionalItemTypesPageClient() {
     onClamp: (lastPage) => setParams({ page: lastPage <= 1 ? undefined : String(lastPage) }),
   });
 
-  if (!capabilities?.priceListItemRead) return <AccessDenied />;
+  if (!capabilities?.additionalItemTypeRead) return <AccessDenied />;
   if (isForbidden(query.error)) return <AccessDenied />;
 
   const result = query.data;

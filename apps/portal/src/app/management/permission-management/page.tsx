@@ -78,6 +78,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   payment: "Payment",
   tax: "Tax",
   priceListItem: "Tariff",
+  additionalItemType: "Additional Cost",
   uom: "UOM",
   equipmentType: "Reference Equipment Type",
   equipmentRequirement: "Reference Equipment Requirement",

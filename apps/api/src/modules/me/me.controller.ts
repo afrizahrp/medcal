@@ -279,6 +279,9 @@ export class MeController {
       priceListItemCreate: hasPermission(membership.role, "priceListItem", "create"),
       priceListItemUpdate: hasPermission(membership.role, "priceListItem", "update"),
       priceListItemDelete: hasPermission(membership.role, "priceListItem", "delete"),
+      additionalItemTypeRead: hasPermission(membership.role, "additionalItemType", "read"),
+      additionalItemTypeCreate: hasPermission(membership.role, "additionalItemType", "create"),
+      additionalItemTypeUpdate: hasPermission(membership.role, "additionalItemType", "update"),
     };
 
     return {

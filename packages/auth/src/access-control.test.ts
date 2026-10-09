@@ -117,6 +117,9 @@ const FIXTURE: GrantRow[] = [
   { role: "ADMIN", resource: "priceListItem", action: "create" },
   { role: "ADMIN", resource: "priceListItem", action: "update" },
   { role: "ADMIN", resource: "priceListItem", action: "delete" },
+  { role: "ADMIN", resource: "additionalItemType", action: "read" },
+  { role: "ADMIN", resource: "additionalItemType", action: "create" },
+  { role: "ADMIN", resource: "additionalItemType", action: "update" },
 ];
 
 let backup: GrantRow[] = [];
@@ -482,5 +485,29 @@ describe("hasPermission — priceListItem master data (Price List Phase 1, 2026-
 
   it("grants SUPERADMIN everything via bypass", () => {
     expect(hasPermission("SUPERADMIN", "priceListItem", "delete")).toBe(true);
+  });
+});
+
+describe("hasPermission — additionalItemType (Additional Cost catalog, 2026-10-10)", () => {
+  it("grants ADMIN read/create/update", () => {
+    expect(hasPermission("ADMIN", "additionalItemType", "read")).toBe(true);
+    expect(hasPermission("ADMIN", "additionalItemType", "create")).toBe(true);
+    expect(hasPermission("ADMIN", "additionalItemType", "update")).toBe(true);
+  });
+
+  it("has no delete action (types are deactivated, never deleted) except via the SUPERADMIN bypass", () => {
+    expect(hasPermission("ADMIN", "additionalItemType", "delete")).toBe(false);
+  });
+
+  it("denies roles without a grant", () => {
+    expect(hasPermission("SUPERVISOR", "additionalItemType", "read")).toBe(false);
+    expect(hasPermission("TECHNICIAN", "additionalItemType", "read")).toBe(false);
+    expect(hasPermission("CUSTOMER_SERVICE", "additionalItemType", "create")).toBe(false);
+    expect(hasPermission("CUSTOMER", "additionalItemType", "read")).toBe(false);
+  });
+
+  it("is independent of the Price List grants", () => {
+    expect(hasPermission("ADMIN", "priceListItem", "read")).toBe(true);
+    expect(hasPermission("SUPERADMIN", "additionalItemType", "update")).toBe(true);
   });
 });

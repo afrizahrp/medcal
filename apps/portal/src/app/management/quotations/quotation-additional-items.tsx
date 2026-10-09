@@ -58,7 +58,7 @@ export function QuotationAdditionalItemsSection({
   const [enabled, setEnabled] = useState(value.length > 0);
   const [pendingTypeId, setPendingTypeId] = useState("");
   const { capabilities } = useAuthz();
-  const canCreateType = Boolean(capabilities?.priceListItemCreate);
+  const canCreateType = Boolean(capabilities?.additionalItemTypeCreate);
   const createType = useCreateAdditionalItemType();
   const [showNewType, setShowNewType] = useState(false);
   const [newType, setNewType] = useState({

@@ -325,7 +325,7 @@ const ROWS: MenuSeedRow[] = [
     href: "/additional-item-types",
     icon: "settings",
     order: 0,
-    viewResource: "priceListItem",
+    viewResource: "additionalItemType",
     viewAction: "read",
   },
   {
