@@ -11,10 +11,16 @@ const companyId = "PKM";
 const createdEmailIds: string[] = [];
 const createdLeadIds: string[] = [];
 
+// Always set (never `??=`): a defined-but-empty IMAP_* value in the developer's
+// .env would otherwise survive `??=` and make syncInbox throw "IMAP is not
+// configured". The fetch is injected, so these fake values never reach a server.
+const IMAP_KEYS = ["IMAP_HOST", "IMAP_USER", "IMAP_PASS"] as const;
+const originalImapEnv = Object.fromEntries(IMAP_KEYS.map((key) => [key, process.env[key]]));
+
 function imapEnv() {
-  process.env.IMAP_HOST ??= "imap.example.com";
-  process.env.IMAP_USER ??= "inbox@example.com";
-  process.env.IMAP_PASS ??= "test-pass-not-real";
+  process.env.IMAP_HOST = "imap.example.com";
+  process.env.IMAP_USER = "inbox@example.com";
+  process.env.IMAP_PASS = "test-pass-not-real";
 }
 
 function msg(overrides: Partial<FetchedImapMessage> = {}): FetchedImapMessage {
@@ -36,6 +42,10 @@ function msg(overrides: Partial<FetchedImapMessage> = {}): FetchedImapMessage {
 }
 
 afterAll(async () => {
+  for (const key of IMAP_KEYS) {
+    if (originalImapEnv[key] === undefined) delete process.env[key];
+    else process.env[key] = originalImapEnv[key];
+  }
   await prisma.email.deleteMany({ where: { id: { in: createdEmailIds } } });
   await prisma.lead.deleteMany({ where: { id: { in: createdLeadIds } } });
 });
