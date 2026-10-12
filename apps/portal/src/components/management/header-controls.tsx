@@ -2,9 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useAuth } from "@medcal/auth/client";
 import { SignOutButton } from "../sign-out-button";
-import { usePushNotifications } from "../../lib/fcm";
+import { usePushNotificationsState } from "../../lib/fcm/push-notifications-provider";
 import { useUnreadChatSessionsCount, useUnreadContactMessagesCount } from "../../lib/use-unread-count";
 import { ChatIcon, EmailIcon, MessagesIcon } from "./icons";
 
@@ -71,11 +70,7 @@ export function NotificationControls({
 }
 
 function PushNotificationsMenuItem() {
-  const { user, isAuthenticated } = useAuth();
-  const { status, errorMessage, enable } = usePushNotifications({
-    authenticated: isAuthenticated,
-    userId: user?.id,
-  });
+  const { status, errorMessage, enable } = usePushNotificationsState();
 
   if (status === "unconfigured" || status === "unsupported" || status === "idle") {
     return null;

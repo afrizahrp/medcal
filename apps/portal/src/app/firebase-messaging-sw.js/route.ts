@@ -2,7 +2,10 @@
  * Firebase Messaging service worker for Portal.
  * Served dynamically so NEXT_PUBLIC_FIREBASE_* values are injected at runtime.
  * Contains only public web config — never Firebase Admin credentials.
+ * The script itself (incl. notification click routing) lives in lib/fcm/sw-script.ts.
  */
+import { buildMessagingServiceWorkerScript } from "../../lib/fcm/sw-script";
+
 export const dynamic = "force-dynamic";
 
 const FIREBASE_COMPAT_VERSION = "12.18.0";
@@ -22,28 +25,11 @@ export function GET() {
     process.env.NEXT_PUBLIC_PUSH_ICON_URL?.trim() ||
     "/short-logo.png";
 
-  const body = `/* firebase-messaging-sw.js — Portal FCM background handler */
-importScripts('https://www.gstatic.com/firebasejs/${FIREBASE_COMPAT_VERSION}/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/${FIREBASE_COMPAT_VERSION}/firebase-messaging-compat.js');
-firebase.initializeApp(${JSON.stringify(firebaseConfig)});
-const messaging = firebase.messaging();
-messaging.onBackgroundMessage((payload) => {
-  // FCM auto-displays notification payload on web — skip manual show to avoid duplicates.
-  if (payload.notification?.title) {
-    return Promise.resolve();
-  }
-  const data = payload.data || {};
-  const title = data.title || "MedCal";
-  const icon = data.icon || ${JSON.stringify(defaultIcon)};
-  const options = {
-    body: data.body || "",
-    icon,
-    badge: icon,
-    data,
-  };
-  return self.registration.showNotification(title, options);
-});
-`;
+  const body = buildMessagingServiceWorkerScript({
+    firebaseConfig,
+    defaultIcon,
+    compatVersion: FIREBASE_COMPAT_VERSION,
+  });
 
   return new Response(body, {
     headers: {

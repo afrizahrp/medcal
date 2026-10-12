@@ -3,13 +3,16 @@
  * Do not import this module from Server Components.
  */
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
-import { getMessaging, getToken, isSupported, type Messaging } from "firebase/messaging";
+import { deleteToken, getMessaging, getToken, isSupported, type Messaging } from "firebase/messaging";
 import { getFirebaseWebConfig, getFirebaseVapidKey } from "./config";
+import { getNotificationPermissionState } from "./permission";
 
 const SW_PATH = "/firebase-messaging-sw.js";
 const LAST_TOKEN_KEY = "medcal:tech-pwa:fcm:lastRegisteredToken";
 const LAST_TOKEN_ID_KEY = "medcal:tech-pwa:fcm:lastRegisteredTokenId";
 const LAST_USER_ID_KEY = "medcal:tech-pwa:fcm:lastRegisteredUserId";
+// Persistent (localStorage): survives tab/browser restarts, unlike the keys above.
+const PENDING_TOKEN_DELETE_KEY = "medcal:tech-pwa:fcm:pendingBrowserTokenDelete";
 
 let messagingInstance: Messaging | null = null;
 
@@ -105,6 +108,78 @@ export function detectDeviceType(): string {
   return `${browser}/${os}`;
 }
 
+export function hasPendingBrowserTokenDelete(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  try {
+    return localStorage.getItem(PENDING_TOKEN_DELETE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markPendingBrowserTokenDelete(): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(PENDING_TOKEN_DELETE_KEY, "1");
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+export function clearPendingBrowserTokenDelete(): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.removeItem(PENDING_TOKEN_DELETE_KEY);
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+/**
+ * Delete this browser's FCM token (invalidates it at FCM and unsubscribes push).
+ * Never throws. Resolves true when the browser holds no usable token afterwards
+ * (including "nothing to delete"), false when deletion was attempted and failed.
+ *
+ * getToken() runs first only to bind the SDK to our service-worker registration:
+ * after a page reload deleteToken() would otherwise register a second default
+ * worker and unsubscribe the wrong (empty) registration.
+ */
+export async function deleteBrowserFcmToken(): Promise<boolean> {
+  try {
+    if (typeof window === "undefined") return true;
+    // A token can only exist after permission was granted.
+    if (getNotificationPermissionState() !== "granted") return true;
+    const vapidKey = getFirebaseVapidKey();
+    const messaging = await getFirebaseMessaging();
+    if (!vapidKey || !messaging) return true;
+
+    const registration = await registerMessagingServiceWorker();
+    if (!registration) return false;
+
+    await navigator.serviceWorker.ready;
+    await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
+    await deleteToken(messaging);
+    return true;
+  } catch (error) {
+    console.error(
+      "[fcm] Browser token deletion failed:",
+      error instanceof Error ? error.message : "Unknown error",
+    );
+    return false;
+  }
+}
+
+/**
+ * Retry a browser-token deletion that failed during sign-out.
+ * Safe to call at any time and when nothing is pending.
+ */
+export async function recoverPendingBrowserTokenDelete(): Promise<void> {
+  if (!hasPendingBrowserTokenDelete()) return;
+  if (await deleteBrowserFcmToken()) {
+    clearPendingBrowserTokenDelete();
+  }
+}
+
 export async function obtainFcmToken(): Promise<string | null> {
   lastFcmTokenErrorKind = null;
   const vapidKey = getFirebaseVapidKey();
@@ -115,6 +190,10 @@ export async function obtainFcmToken(): Promise<string | null> {
 
   const messaging = await getFirebaseMessaging();
   if (!messaging) return null;
+
+  // A previous sign-out could not delete this browser's token: finish that
+  // first so a different user never inherits the old user's token.
+  await recoverPendingBrowserTokenDelete();
 
   const registration = await registerMessagingServiceWorker();
   if (!registration) return null;

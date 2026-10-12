@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { signIn, useSession } from "@medcal/auth/client";
 import { AuthCard } from "../../components/auth/auth-card";
+import { recoverPendingBrowserTokenDelete } from "../../lib/fcm/messaging";
 
 const fieldClass =
   "mt-1 h-11 w-full rounded-shell border border-slate-300 bg-white px-3 text-slate-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand-600";
@@ -21,6 +22,12 @@ export default function SignInPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Finish a browser FCM-token deletion that failed at the previous sign-out,
+  // before anyone signs in on this device.
+  useEffect(() => {
+    void recoverPendingBrowserTokenDelete();
+  }, []);
 
   useEffect(() => {
     if (session) {
