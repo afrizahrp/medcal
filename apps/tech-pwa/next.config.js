@@ -8,5 +8,10 @@ require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@medcal/ui", "@medcal/shared", "@medcal/auth"],
+  // Tech-pwa is sign-in only: technician accounts are created in the Management
+  // Portal. The former self-registration route now redirects to sign-in.
+  async redirects() {
+    return [{ source: "/sign-in/register", destination: "/sign-in", permanent: false }];
+  },
 };
 module.exports = nextConfig;

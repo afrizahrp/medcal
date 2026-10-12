@@ -16,9 +16,10 @@ export function AuthCard({
   title: string;
   subtitle?: string;
   children: ReactNode;
-  footerLabel: string;
-  footerHref: string;
-  footerLinkText: string;
+  /** Optional footer link; tech-pwa's sign-in page passes none (accounts are created in the Management Portal). */
+  footerLabel?: string;
+  footerHref?: string;
+  footerLinkText?: string;
 }) {
   return (
     <div className="w-full max-w-sm rounded-2xl bg-white px-5 py-7 shadow-sm sm:px-7">
@@ -35,12 +36,14 @@ export function AuthCard({
         {subtitle && <p className="mt-1 text-sm text-slate-600">{subtitle}</p>}
       </div>
       {children}
-      <p className="mt-6 text-center text-sm text-slate-600">
-        {footerLabel}{" "}
-        <Link href={footerHref} className="font-medium text-brand-700 active:underline">
-          {footerLinkText}
-        </Link>
-      </p>
+      {footerLabel && footerHref && footerLinkText ? (
+        <p className="mt-6 text-center text-sm text-slate-600">
+          {footerLabel}{" "}
+          <Link href={footerHref} className="font-medium text-brand-700 active:underline">
+            {footerLinkText}
+          </Link>
+        </p>
+      ) : null}
     </div>
   );
 }

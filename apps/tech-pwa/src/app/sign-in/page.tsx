@@ -41,12 +41,7 @@ export default function SignInPage() {
   }
 
   return (
-    <AuthCard
-      title="PT. Presisi Kalibrasi Medika"
-      footerLabel="Don't have an account?"
-      footerHref="/sign-in/register"
-      footerLinkText="Sign up"
-    >
+    <AuthCard title="PT. Presisi Kalibrasi Medika">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-slate-700" htmlFor="email">
