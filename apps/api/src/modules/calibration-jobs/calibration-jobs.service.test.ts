@@ -2673,8 +2673,13 @@ describe("CalibrationJobsService — findAllGroupedByWorkOrder (SPK grouping)", 
 
   it("company-scopes the grouped list", async () => {
     const otherCompanyId = `S${randomUUID().slice(0, 2).toUpperCase()}`;
-    await prisma.company.create({
-      data: { id: otherCompanyId, name: "Foreign Grouped Co", status: "ACTIVE" },
+    // upsert, not create: Company.id is 3 chars, so this file's random `S??` id
+    // space (256 values) is shared by many fixtures and a collision was observed
+    // (same remedy as the getWorkOrderItemSummaries test below).
+    await prisma.company.upsert({
+      where: { id: otherCompanyId },
+      create: { id: otherCompanyId, name: "Foreign Grouped Co", status: "ACTIVE" },
+      update: {},
     });
     createdCompanyIds.push(otherCompanyId);
     const { workOrder } = await startedWorkOrderJobs(otherCompanyId);
