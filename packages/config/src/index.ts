@@ -12,6 +12,11 @@ export const envSchema = z.object({
   // Comma-separated browser origins allowed to call apps/api with credentials
   // (locked: cookie-scoped to .kalibrasimedika.co.id in production).
   TRUSTED_ORIGINS: z.string().optional(),
+  // Comma-separated subsets of TRUSTED_ORIGINS that are the management portal /
+  // the technician PWA. apps/api derives PushApp (PORTAL vs TECH_PWA) from the
+  // request Origin using these explicit lists; an origin in neither is rejected.
+  PORTAL_ORIGINS: z.string().optional(),
+  TECH_PWA_ORIGINS: z.string().optional(),
   // Cookie domain for Better Auth's session cookie — unset for localhost dev,
   // ".kalibrasimedika.co.id" in production so it's shared across subdomains.
   COOKIE_DOMAIN: z.string().optional(),

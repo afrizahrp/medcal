@@ -1,27 +1,38 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Logger } from "@nestjs/common";
 import { push } from "@medcal/notifications";
 import { prisma } from "@medcal/db";
 import { ContactMessagesService } from "./contact-messages.service";
 import type { NotificationDispatchService } from "../push-tokens/notification-dispatch.service";
 
 describe("formatContactMessagePush", () => {
-  it("formats title and body like Bumi Indah", () => {
-    const payload = push.formatContactMessagePush({
-      senderName: "Budi Santoso",
-      topicName: "Kalibrasi",
-      message: "Butuh kalibrasi alat lab minggu depan.",
-      companyName: "PT Kalibrasi Medika",
-      contactMessageId: "msg-1",
-      leadId: "lead-1",
-      companyId: "PKM",
-    });
+  it("is generic: only the event type and an opaque lead id", () => {
+    const payload = push.formatContactMessagePush({ leadId: "lead-1" });
 
-    expect(payload.notification.title).toBe("📢 Pesan Baru dari Budi Santoso");
-    expect(payload.notification.body).toBe("Kalibrasi: Butuh kalibrasi alat lab minggu depan.");
-    expect(payload.data.type).toBe("CONTACT_MESSAGE_NEW");
-    expect(payload.data.sender).toBe("Budi Santoso");
-    expect(payload.data.company).toBe("PT Kalibrasi Medika");
-    expect(payload.data.topic).toBe("Kalibrasi");
+    expect(payload.notification).toEqual({
+      title: "Pesan baru",
+      body: "Anda menerima pesan baru. Buka untuk melihat detailnya.",
+    });
+    expect(payload.data).toEqual({ type: "CONTACT_MESSAGE_NEW", leadId: "lead-1" });
+  });
+
+  it("uses an empty lead id (route to the list) for an unmatched message", () => {
+    expect(push.formatContactMessagePush({ leadId: null }).data).toEqual({
+      type: "CONTACT_MESSAGE_NEW",
+      leadId: "",
+    });
+  });
+});
+
+describe("formatLeadAssignedPush", () => {
+  it("is generic: only the event type and an opaque lead id", () => {
+    const payload = push.formatLeadAssignedPush({ leadId: "lead-9" });
+
+    expect(payload.notification).toEqual({
+      title: "Lead baru untuk Anda",
+      body: "Sebuah lead ditugaskan kepada Anda. Buka untuk melihat detailnya.",
+    });
+    expect(payload.data).toEqual({ type: "LEAD_ASSIGNED", leadId: "lead-9" });
   });
 });
 
@@ -59,13 +70,13 @@ vi.mock("@medcal/db", async (importOriginal) => {
 });
 
 describe("ContactMessagesService.notifyNewContactMessage", () => {
-  // The prisma mock is module-level; without this the call recorded by the
-  // first test leaks into the "not injected" assertion below.
+  // The prisma mock above is module-level and shared by every test in this
+  // file; reset its call history so assertions only see the current test.
   beforeEach(() => {
     vi.mocked(prisma.contactMessage.findFirst).mockReset();
   });
 
-  it("dispatches formatted push to all company recipients", async () => {
+  it("dispatches a generic, portal-scoped push to all company recipients", async () => {
     const sendToCompanyRecipients = vi.fn().mockResolvedValue({
       tokens: 1,
       sent: 1,
@@ -76,32 +87,100 @@ describe("ContactMessagesService.notifyNewContactMessage", () => {
       sendToCompanyRecipients,
     } as unknown as NotificationDispatchService;
 
-    vi.mocked(prisma.contactMessage.findFirst).mockResolvedValue({
-      id: "msg-1",
-      name: "Budi",
-      message: "Butuh kalibrasi",
-      leadId: "lead-1",
-      topic: { name: "Kalibrasi" },
-      company: { name: "PT Kalibrasi Medika" },
-    } as never);
+    vi.mocked(prisma.contactMessage.findFirst).mockResolvedValue({ leadId: "lead-1" } as never);
 
     const service = new ContactMessagesService(notificationDispatch);
     await service.notifyNewContactMessage("PKM", "msg-1");
 
     expect(sendToCompanyRecipients).toHaveBeenCalledWith({
       companyId: "PKM",
+      apps: ["PORTAL", "WEB"],
       notification: {
-        title: "📢 Pesan Baru dari Budi",
-        body: "Kalibrasi: Butuh kalibrasi",
+        title: "Pesan baru",
+        body: "Anda menerima pesan baru. Buka untuk melihat detailnya.",
       },
-      data: expect.objectContaining({
-        type: "CONTACT_MESSAGE_NEW",
-        contactMessageId: "msg-1",
-        leadId: "lead-1",
-        sender: "Budi",
-        company: "PT Kalibrasi Medika",
-        topic: "Kalibrasi",
-      }),
+      data: { type: "CONTACT_MESSAGE_NEW", leadId: "lead-1" },
+    });
+    expect(sendToCompanyRecipients.mock.calls[0][0].apps).not.toContain("TECH_PWA");
+  });
+
+  it("never loads or sends sender name, company, topic or message text", async () => {
+    const sendToCompanyRecipients = vi.fn().mockResolvedValue({ tokens: 0, sent: 0, failed: 0, deactivated: 0 });
+    // Even if the row carried personal details, only leadId is selected and used.
+    vi.mocked(prisma.contactMessage.findFirst).mockResolvedValue({
+      leadId: "lead-1",
+      name: "Budi Santoso",
+      message: "Butuh kalibrasi alat lab minggu depan.",
+      topic: { name: "Kalibrasi" },
+      company: { name: "PT Kalibrasi Medika" },
+    } as never);
+
+    const service = new ContactMessagesService({
+      sendToCompanyRecipients,
+    } as unknown as NotificationDispatchService);
+    await service.notifyNewContactMessage("PKM", "msg-1");
+
+    const query = vi.mocked(prisma.contactMessage.findFirst).mock.calls[0][0];
+    expect(query).toMatchObject({ where: { id: "msg-1", companyId: "PKM" }, select: { leadId: true } });
+
+    const serialized = JSON.stringify(sendToCompanyRecipients.mock.calls[0][0]);
+    for (const secret of ["Budi Santoso", "Butuh kalibrasi", "Kalibrasi", "PT Kalibrasi Medika"]) {
+      expect(serialized).not.toContain(secret);
+    }
+  });
+
+  describe("failure isolation (best-effort, fire-and-forget)", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("resolves and logs a non-sensitive error when the database lookup fails", async () => {
+      const errorLog = vi.spyOn(Logger.prototype, "error").mockImplementation(() => {});
+      const sendToCompanyRecipients = vi.fn();
+      const dbError = Object.assign(new Error("connection to db failed for user=secret@example.com"), {
+        code: "P1001",
+        name: "PrismaClientInitializationError",
+      });
+      vi.mocked(prisma.contactMessage.findFirst).mockRejectedValue(dbError);
+
+      const service = new ContactMessagesService({ sendToCompanyRecipients } as unknown as NotificationDispatchService);
+      await expect(service.notifyNewContactMessage("PKM", "msg-1")).resolves.toBeUndefined();
+
+      expect(sendToCompanyRecipients).not.toHaveBeenCalled();
+      expect(errorLog).toHaveBeenCalledTimes(1);
+      const logged = String(errorLog.mock.calls[0][0]);
+      expect(logged).toContain("CONTACT_MESSAGE_NEW");
+      expect(logged).toContain("PrismaClientInitializationError:P1001");
+      expect(logged).not.toContain("secret@example.com");
+    });
+
+    it("resolves and logs when the dispatch itself rejects", async () => {
+      const errorLog = vi.spyOn(Logger.prototype, "error").mockImplementation(() => {});
+      vi.mocked(prisma.contactMessage.findFirst).mockResolvedValue({ leadId: "lead-1" } as never);
+      const sendToCompanyRecipients = vi.fn().mockRejectedValue(new Error("token abc123 leaked in message"));
+
+      const service = new ContactMessagesService({ sendToCompanyRecipients } as unknown as NotificationDispatchService);
+      await expect(service.notifyNewContactMessage("PKM", "msg-1")).resolves.toBeUndefined();
+
+      expect(errorLog).toHaveBeenCalledTimes(1);
+      expect(String(errorLog.mock.calls[0][0])).not.toContain("abc123");
+    });
+
+    it("a `void`-ed call (as in create()) raises no unhandled rejection", async () => {
+      vi.spyOn(Logger.prototype, "error").mockImplementation(() => {});
+      vi.mocked(prisma.contactMessage.findFirst).mockRejectedValue(new Error("boom"));
+      const unhandled = vi.fn();
+      process.on("unhandledRejection", unhandled);
+      try {
+        const service = new ContactMessagesService({
+          sendToCompanyRecipients: vi.fn(),
+        } as unknown as NotificationDispatchService);
+        void service.notifyNewContactMessage("PKM", "msg-1");
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(unhandled).not.toHaveBeenCalled();
+      } finally {
+        process.off("unhandledRejection", unhandled);
+      }
     });
   });
 

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Logger, NotFoundException } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@medcal/db";
 import { ContactMessagesService } from "../contact-messages/contact-messages.service";
@@ -1101,5 +1101,37 @@ describe("ChatSessionsService.findAll — per-session unreadCount (Chat Inbox)",
     const list = await service.findAll(countCompanyId);
     const sum = list.reduce((total, row) => total + row.unreadCount, 0);
     expect(sum).toBe(await service.countUnread(countCompanyId));
+  });
+});
+
+describe("ChatSessionsService.createSession — push dispatch failure", () => {
+  it("still creates the session and raises no unhandled rejection when push dispatch fails", async () => {
+    const sendToCompanyRecipients = vi.fn().mockRejectedValue(new Error("fcm unavailable"));
+    const failingService = new ChatSessionsService(
+      new ContactMessagesService({ sendToCompanyRecipients } as never),
+    );
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    vi.spyOn(Logger.prototype, "error").mockImplementation(() => {});
+
+    try {
+      const result = await failingService.createSession(realCompanyId, {
+        name: "Chat Visitor",
+        email: `chat-${randomUUID().slice(0, 8)}@example.com`,
+        message: "Halo, saya butuh info kalibrasi.",
+      });
+      createdSessionIds.push(result.id);
+      if (result.contactMessageId) createdContactMessageIds.push(result.contactMessageId);
+
+      expect(result.id).toBeTruthy();
+      expect(result.contactMessageId).toBeTruthy();
+      // The fire-and-forget dispatch runs after createSession returns.
+      await vi.waitFor(() => expect(sendToCompanyRecipients).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+      vi.restoreAllMocks();
+    }
   });
 });

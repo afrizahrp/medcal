@@ -21,7 +21,11 @@ import type { ContactMessageLeadResolution, ContactMessageListQuery } from "@med
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { classifyLeadMatch, findLeadMatchCandidates } from "../leads/lead-matching";
 import type { Db } from "../leads/lead-matching";
-import { NotificationDispatchService } from "../push-tokens/notification-dispatch.service";
+import {
+  NotificationDispatchService,
+  PORTAL_EVENT_PUSH_APPS,
+} from "../push-tokens/notification-dispatch.service";
+import { describeDispatchError } from "../push-tokens/dispatch-error";
 import { publishContactMessageCreated } from "./contact-message-events";
 
 // Canonical default (Management List pattern, 2026-08-18) — matches the
@@ -217,49 +221,35 @@ export class ContactMessagesService {
    * rejection that can terminate the process).
    */
   async notifyNewContactMessage(companyId: string, messageId: string): Promise<void> {
-    try {
-      await this.dispatchNewContactMessageNotification(companyId, messageId);
-    } catch (err) {
-      this.logger.error(
-        `New contact message notification failed (messageId=${messageId}): ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-        err instanceof Error ? err.stack : undefined,
-      );
-    }
-  }
-
-  private async dispatchNewContactMessageNotification(companyId: string, messageId: string): Promise<void> {
     if (!this.notificationDispatch) {
       return;
     }
 
-    const message = await prisma.contactMessage.findFirst({
-      where: { id: messageId, companyId },
-      include: {
-        topic: { select: { name: true } },
-        company: { select: { name: true } },
-      },
-    });
-    if (!message) {
-      return;
+    // Failures are logged with error class/code only (no message content, no
+    // driver/FCM error text, which can embed query parameters or tokens).
+    try {
+      const message = await prisma.contactMessage.findFirst({
+        where: { id: messageId, companyId },
+        select: { leadId: true },
+      });
+      if (!message) {
+        return;
+      }
+
+      // Generic payload only (no sender/topic/message text) — see formatContactMessagePush.
+      const { notification, data } = push.formatContactMessagePush({ leadId: message.leadId });
+
+      await this.notificationDispatch.sendToCompanyRecipients({
+        companyId,
+        apps: PORTAL_EVENT_PUSH_APPS,
+        notification,
+        data,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Push dispatch failed event=CONTACT_MESSAGE_NEW companyId=${companyId} messageId=${messageId} error=${describeDispatchError(error)}`,
+      );
     }
-
-    const { notification, data } = push.formatContactMessagePush({
-      senderName: message.name,
-      topicName: message.topic?.name ?? null,
-      message: message.message,
-      companyName: message.company.name,
-      contactMessageId: message.id,
-      leadId: message.leadId,
-      companyId,
-    });
-
-    await this.notificationDispatch.sendToCompanyRecipients({
-      companyId,
-      notification,
-      data,
-    });
   }
 
   /**

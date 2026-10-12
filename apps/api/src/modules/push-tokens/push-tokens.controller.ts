@@ -3,7 +3,9 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
+  Headers,
   HttpCode,
   Inject,
   Param,
@@ -14,6 +16,7 @@ import { z } from "zod";
 import { CompanyId } from "../../common/decorators/company-id.decorator";
 import { UserId } from "../../common/decorators/user-id.decorator";
 import { CompanyRoleGuard } from "../../common/guards/company-role.guard";
+import { resolvePushAppFromOrigin } from "./push-app-origin";
 import { PushTokensService, type RegisterTokenResult } from "./push-tokens.service";
 import type { FCMToken } from "@medcal/db";
 
@@ -72,12 +75,15 @@ export class PushTokensController {
    * - Requires authenticated ACTIVE user with membership
    * - userId/companyId derived server-side, never from client
    * - Token ownership enforced — cannot hijack another user's token
+   * - The application (PORTAL vs TECH_PWA) is derived from the request Origin
+   *   (see push-app-origin.ts); the body's `app` is only cross-checked against it
    */
   @Post()
   async register(
     @CompanyId() companyId: string,
     @UserId() userId: string,
     @Body() rawBody: unknown,
+    @Headers("origin") origin?: string,
   ): Promise<RegisterTokenResult> {
     const parsed = registerTokenSchema.safeParse(rawBody);
     if (!parsed.success) {
@@ -88,7 +94,21 @@ export class PushTokensController {
       });
     }
 
-    return this.service.registerToken(companyId, userId, parsed.data);
+    const derivedApp = resolvePushAppFromOrigin(origin);
+    if (!derivedApp) {
+      throw new ForbiddenException({
+        message: "Push registration origin is not recognized",
+        code: "PUSH_APP_ORIGIN_UNRECOGNIZED",
+      });
+    }
+    if (parsed.data.app !== derivedApp) {
+      throw new BadRequestException({
+        message: "Declared app does not match the request origin",
+        code: "PUSH_APP_MISMATCH",
+      });
+    }
+
+    return this.service.registerToken(companyId, userId, { ...parsed.data, app: derivedApp });
   }
 
   /**

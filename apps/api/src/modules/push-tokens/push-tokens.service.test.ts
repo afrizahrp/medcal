@@ -79,6 +79,77 @@ describe("PushTokensService.registerToken", () => {
     expect(dbToken!.app).toBe("PORTAL");
     expect(dbToken!.deviceType).toBe("chrome/windows");
 
+  });
+
+  it("does not enable receiveNotifications when registering a new token", async () => {
+    const user = await makeUser();
+    await makeMembership(user.id);
+
+    const result = await service.registerToken(realCompanyId, user.id, {
+      token: generateFCMToken(),
+      deviceType: "chrome/windows",
+      app: "PORTAL",
+    });
+    createdTokenIds.push(result.id);
+
+    const membership = await prisma.userMembership.findFirst({
+      where: { userId: user.id, companyId: realCompanyId },
+    });
+    expect(membership?.receiveNotifications).toBe(false);
+  });
+
+  it("does not override an explicit opt-out when the token is refreshed or reactivated", async () => {
+    const user = await makeUser();
+    await makeMembership(user.id);
+    const fcmToken = generateFCMToken();
+
+    const first = await service.registerToken(realCompanyId, user.id, {
+      token: fcmToken,
+      deviceType: "chrome/windows",
+      app: "PORTAL",
+    });
+    createdTokenIds.push(first.id);
+
+    await prisma.userMembership.updateMany({
+      where: { userId: user.id, companyId: realCompanyId },
+      data: { receiveNotifications: false },
+    });
+
+    // Refresh (same token, still active), then revoke + reactivate.
+    await service.registerToken(realCompanyId, user.id, {
+      token: fcmToken,
+      deviceType: "chrome/windows",
+      app: "PORTAL",
+    });
+    await service.revokeToken(user.id, first.id);
+    const reactivated = await service.registerToken(realCompanyId, user.id, {
+      token: fcmToken,
+      deviceType: "chrome/windows",
+      app: "PORTAL",
+    });
+    expect(reactivated.reactivated).toBe(true);
+
+    const membership = await prisma.userMembership.findFirst({
+      where: { userId: user.id, companyId: realCompanyId },
+    });
+    expect(membership?.receiveNotifications).toBe(false);
+  });
+
+  it("does not disable receiveNotifications that an admin already enabled", async () => {
+    const user = await makeUser();
+    await makeMembership(user.id);
+    await prisma.userMembership.updateMany({
+      where: { userId: user.id, companyId: realCompanyId },
+      data: { receiveNotifications: true },
+    });
+
+    const result = await service.registerToken(realCompanyId, user.id, {
+      token: generateFCMToken(),
+      deviceType: "chrome/windows",
+      app: "PORTAL",
+    });
+    createdTokenIds.push(result.id);
+
     const membership = await prisma.userMembership.findFirst({
       where: { userId: user.id, companyId: realCompanyId },
     });
@@ -431,13 +502,51 @@ describe("PushTokensService.getActiveTokensForUserIds", () => {
     });
     createdTokenIds.push(rA.id, rB.id);
 
-    const tokens = await service.getActiveTokensForUserIds(realCompanyId, [userA.id]);
+    const tokens = await service.getActiveTokensForUserIds(realCompanyId, [userA.id], ["PORTAL"]);
     expect(tokens.length).toBe(1);
     expect(tokens[0].userId).toBe(userA.id);
   });
 
+  it("returns only tokens of the requested applications for a user with mixed PORTAL and TECH_PWA tokens", async () => {
+    const user = await makeUser();
+    await makeMembership(user.id);
+    const portalToken = await service.registerToken(realCompanyId, user.id, {
+      token: generateFCMToken(),
+      deviceType: "chrome/windows",
+      app: "PORTAL",
+    });
+    const techToken = await service.registerToken(realCompanyId, user.id, {
+      token: generateFCMToken(),
+      deviceType: "chrome/android",
+      app: "TECH_PWA",
+    });
+    createdTokenIds.push(portalToken.id, techToken.id);
+
+    const portalOnly = await service.getActiveTokensForUserIds(realCompanyId, [user.id], ["PORTAL"]);
+    expect(portalOnly.map((t) => t.id)).toEqual([portalToken.id]);
+
+    const techOnly = await service.getActiveTokensForUserIds(realCompanyId, [user.id], ["TECH_PWA"]);
+    expect(techOnly.map((t) => t.id)).toEqual([techToken.id]);
+
+    const both = await service.getActiveTokensForUserIds(realCompanyId, [user.id], ["PORTAL", "TECH_PWA"]);
+    expect(both.map((t) => t.id).sort()).toEqual([portalToken.id, techToken.id].sort());
+  });
+
+  it("matches nothing when the application list is empty", async () => {
+    const user = await makeUser();
+    await makeMembership(user.id);
+    const registered = await service.registerToken(realCompanyId, user.id, {
+      token: generateFCMToken(),
+      deviceType: "chrome/windows",
+      app: "PORTAL",
+    });
+    createdTokenIds.push(registered.id);
+
+    expect(await service.getActiveTokensForUserIds(realCompanyId, [user.id], [])).toEqual([]);
+  });
+
   it("returns an empty array when no user ids are provided", async () => {
-    const tokens = await service.getActiveTokensForUserIds(realCompanyId, []);
+    const tokens = await service.getActiveTokensForUserIds(realCompanyId, [], ["PORTAL"]);
     expect(tokens).toEqual([]);
   });
 });

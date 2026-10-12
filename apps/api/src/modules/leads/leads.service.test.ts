@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { BadRequestException, Logger, NotFoundException } from "@nestjs/common";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@medcal/db";
 import type { NotificationDispatchService } from "../push-tokens/notification-dispatch.service";
 import { CustomersService } from "../customers/customers.service";
@@ -168,6 +168,82 @@ describe("LeadsService.assignToUser", () => {
 
     await prisma.userMembership.deleteMany({ where: { userId: assignee.id } });
     await prisma.user.delete({ where: { id: assignee.id } });
+  });
+
+  it("notifies the assignee with a generic, portal-scoped payload (no lead name)", async () => {
+    const assignee = await prisma.user.create({
+      data: {
+        email: `assignee-${randomUUID().slice(0, 8)}@kalibrasimedika.co.id`,
+        name: "Assignee",
+        status: "ACTIVE",
+      },
+    });
+    await prisma.userMembership.create({
+      data: { userId: assignee.id, companyId: realCompanyId, role: "ADMIN", isDefault: false },
+    });
+    const sendToUsers = vi.fn().mockResolvedValue({ tokens: 0, sent: 0, failed: 0, deactivated: 0 });
+    const spyService = new LeadsService(
+      { sendToUsers } as unknown as NotificationDispatchService,
+      customersService,
+    );
+
+    const lead = await makeLead({ name: "Sensitive Customer Name", organizationName: "Secret Org" });
+    await spyService.assignToUser(realCompanyId, lead.id, assignee.id);
+
+    expect(sendToUsers).toHaveBeenCalledTimes(1);
+    const input = sendToUsers.mock.calls[0][0];
+    expect(input.companyId).toBe(realCompanyId);
+    expect(input.userIds).toEqual([assignee.id]);
+    expect(input.apps).toEqual(["PORTAL", "WEB"]);
+    expect(input.apps).not.toContain("TECH_PWA");
+    expect(input.data).toEqual({ type: "LEAD_ASSIGNED", leadId: lead.id });
+    const serialized = JSON.stringify([input.notification, input.data]);
+    expect(serialized).not.toContain("Sensitive Customer Name");
+    expect(serialized).not.toContain("Secret Org");
+    expect(serialized).not.toContain(lead.email);
+
+    await prisma.userMembership.deleteMany({ where: { userId: assignee.id } });
+    await prisma.user.delete({ where: { id: assignee.id } });
+  });
+
+  it("keeps the committed assignment and returns success when push dispatch fails", async () => {
+    const assignee = await prisma.user.create({
+      data: {
+        email: `assignee-${randomUUID().slice(0, 8)}@kalibrasimedika.co.id`,
+        name: "Assignee",
+        status: "ACTIVE",
+      },
+    });
+    await prisma.userMembership.create({
+      data: { userId: assignee.id, companyId: realCompanyId, role: "ADMIN", isDefault: false },
+    });
+    const errorLog = vi.spyOn(Logger.prototype, "error").mockImplementation(() => {});
+    const failingService = new LeadsService(
+      {
+        sendToUsers: vi.fn().mockRejectedValue(new Error("fcm down; token=abc123")),
+      } as unknown as NotificationDispatchService,
+      customersService,
+    );
+
+    try {
+      const lead = await makeLead({ name: "Sensitive Customer Name" });
+      const updated = await failingService.assignToUser(realCompanyId, lead.id, assignee.id);
+
+      expect(updated.assignedToUserId).toBe(assignee.id);
+      const persisted = await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } });
+      expect(persisted.assignedToUserId).toBe(assignee.id);
+
+      expect(errorLog).toHaveBeenCalledTimes(1);
+      const logged = String(errorLog.mock.calls[0][0]);
+      expect(logged).toContain("LEAD_ASSIGNED");
+      expect(logged).not.toContain("abc123");
+      expect(logged).not.toContain("Sensitive Customer Name");
+    } finally {
+      errorLog.mockRestore();
+      await prisma.userMembership.deleteMany({ where: { userId: assignee.id } });
+      await prisma.lead.updateMany({ where: { assignedToUserId: assignee.id }, data: { assignedToUserId: null } });
+      await prisma.user.delete({ where: { id: assignee.id } });
+    }
   });
 
   it("clears assignment when assignedToUserId is null", async () => {

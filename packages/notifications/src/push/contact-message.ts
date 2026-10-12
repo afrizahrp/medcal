@@ -3,17 +3,11 @@ import type { PushData, PushNotification } from "./index";
 /** Relative path served from portal/tech-pwa public assets. */
 export const PUSH_ICON_PATH = "/short-logo.png";
 
-const BODY_MAX = 120;
-const TOPIC_FALLBACK = "General";
+export const PUSH_EVENT_CONTACT_MESSAGE_NEW = "CONTACT_MESSAGE_NEW";
 
 export interface ContactMessagePushInput {
-  senderName: string;
-  topicName: string | null;
-  message: string;
-  companyName: string;
-  contactMessageId: string;
+  /** Opaque Lead id used only to route the click; null when the message is unmatched. */
   leadId: string | null;
-  companyId: string;
 }
 
 export interface ContactMessagePushPayload {
@@ -22,30 +16,23 @@ export interface ContactMessagePushPayload {
 }
 
 /**
- * Format a new contact message push notification (Bumi Indah parity):
- * - Title: 📢 Pesan Baru dari {sender}
- * - Body: {topic}: {message preview}
- * - Data: sender, company, topic, ids for deep-link
+ * Format a new contact message push notification.
+ *
+ * Privacy (approved decision 3): the payload is generic. It carries no customer
+ * name, company, topic, message text or preview — those would show on lock
+ * screens and transit Google FCM. The only metadata is the event type and an
+ * opaque lead id for click routing; the destination page loads the real details
+ * from the authenticated API.
  */
 export function formatContactMessagePush(input: ContactMessagePushInput): ContactMessagePushPayload {
-  const topic = input.topicName?.trim() || TOPIC_FALLBACK;
-  const preview = input.message.trim().replace(/\s+/g, " ");
-  const truncated =
-    preview.length > BODY_MAX ? `${preview.slice(0, BODY_MAX - 1)}…` : preview;
-
   return {
     notification: {
-      title: `📢 Pesan Baru dari ${input.senderName}`,
-      body: `${topic}: ${truncated}`,
+      title: "Pesan baru",
+      body: "Anda menerima pesan baru. Buka untuk melihat detailnya.",
     },
     data: {
-      type: "CONTACT_MESSAGE_NEW",
-      contactMessageId: input.contactMessageId,
+      type: PUSH_EVENT_CONTACT_MESSAGE_NEW,
       leadId: input.leadId ?? "",
-      sender: input.senderName,
-      company: input.companyName,
-      companyId: input.companyId,
-      topic,
     },
   };
 }

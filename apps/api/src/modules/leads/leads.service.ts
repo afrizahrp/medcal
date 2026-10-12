@@ -3,16 +3,22 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { prisma } from "@medcal/db";
+import { push } from "@medcal/notifications";
 import type { ContactMessage, Customer, Lead, LeadStatus, Prisma } from "@medcal/db";
 import { LEAD_SORTABLE_FIELDS, type LeadConvertInput } from "@medcal/shared";
 import type { LeadListQuery } from "@medcal/shared";
 import { resolveSortOrder, withIdTieBreaker } from "../../common/sort-query";
 import { CustomersService } from "../customers/customers.service";
 import { findLeadMatchCandidates } from "./lead-matching";
-import { NotificationDispatchService } from "../push-tokens/notification-dispatch.service";
+import { describeDispatchError } from "../push-tokens/dispatch-error";
+import {
+  NotificationDispatchService,
+  PORTAL_EVENT_PUSH_APPS,
+} from "../push-tokens/notification-dispatch.service";
 
 // Canonical default (Management List pattern, 2026-08-18) — see the matching
 // comment in contact-messages.service.ts; kept identical across siblings.
@@ -51,6 +57,8 @@ export interface NeedsReviewItem {
 
 @Injectable()
 export class LeadsService {
+  private readonly logger = new Logger(LeadsService.name);
+
   constructor(
     @Inject(NotificationDispatchService)
     private readonly notificationDispatch: NotificationDispatchService,
@@ -205,18 +213,24 @@ export class LeadsService {
     });
 
     if (assignedToUserId) {
-      await this.notificationDispatch.sendToUsers({
-        companyId,
-        userIds: [assignedToUserId],
-        notification: {
-          title: "Lead assigned to you",
-          body: `${updated.name} has been assigned to you`,
-        },
-        data: {
-          type: "LEAD_ASSIGNED",
-          leadId: updated.id,
-        },
-      });
+      // The assignment is already committed: a notification failure must not turn
+      // it into an error response (which would invite a duplicate retry). Log it
+      // without lead details and return the successful result.
+      try {
+        // Generic payload only (no lead name) — see formatLeadAssignedPush.
+        const { notification, data } = push.formatLeadAssignedPush({ leadId: updated.id });
+        await this.notificationDispatch.sendToUsers({
+          companyId,
+          userIds: [assignedToUserId],
+          apps: PORTAL_EVENT_PUSH_APPS,
+          notification,
+          data,
+        });
+      } catch (error) {
+        this.logger.error(
+          `Push dispatch failed event=LEAD_ASSIGNED companyId=${companyId} leadId=${updated.id} error=${describeDispatchError(error)}`,
+        );
+      }
     }
 
     return updated;

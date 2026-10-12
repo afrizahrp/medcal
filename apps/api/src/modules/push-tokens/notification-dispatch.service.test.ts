@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { NotificationDispatchService } from "./notification-dispatch.service";
+import { NotificationDispatchService, PORTAL_EVENT_PUSH_APPS } from "./notification-dispatch.service";
 import type { NotificationRecipientService } from "./notification-recipient.service";
 import type { PushTokensService } from "./push-tokens.service";
 
 vi.mock("@medcal/notifications", () => ({
   push: {
     sendPushBatch: vi.fn(),
+    resolvePushIconUrl: vi.fn(() => undefined),
   },
 }));
 
@@ -28,6 +29,7 @@ describe("NotificationDispatchService", () => {
     const result = await service.sendToUsers({
       companyId: "PKM",
       userIds: ["user-1"],
+      apps: PORTAL_EVENT_PUSH_APPS,
       notification: { title: "Test", body: "Body" },
     });
 
@@ -52,6 +54,7 @@ describe("NotificationDispatchService", () => {
     const result = await service.sendToUsers({
       companyId: "PKM",
       userIds: ["user-1"],
+      apps: PORTAL_EVENT_PUSH_APPS,
       notification: { title: "Test", body: "Body" },
     });
 
@@ -83,6 +86,7 @@ describe("NotificationDispatchService", () => {
     const result = await service.sendToUsers({
       companyId: "PKM",
       userIds: ["user-1"],
+      apps: PORTAL_EVENT_PUSH_APPS,
       notification: { title: "Lead assigned to you", body: "Example Lead" },
     });
 
@@ -115,11 +119,51 @@ describe("NotificationDispatchService", () => {
     const result = await service.sendToUsers({
       companyId: "PKM",
       userIds: ["user-1"],
+      apps: PORTAL_EVENT_PUSH_APPS,
       notification: { title: "Lead assigned to you", body: "Example Lead" },
       data: { type: "LEAD_ASSIGNED", leadId: "lead-1" },
     });
 
     expect(result).toEqual({ tokens: 1, sent: 0, failed: 1, deactivated: 1 });
     expect(pushTokensService.deactivateByToken).toHaveBeenCalledWith("fcm-token-1");
+  });
+
+  it("limits the token lookup to the requested applications (portal events never include TECH_PWA)", async () => {
+    const getActiveTokensForUserIds = vi.fn().mockResolvedValue([]);
+    const service = new NotificationDispatchService(
+      { getActiveTokensForUserIds, deactivateByToken: vi.fn() } as unknown as PushTokensService,
+      {
+        resolveEligibleUserIds: vi.fn().mockResolvedValue(["user-1"]),
+      } as unknown as NotificationRecipientService,
+    );
+
+    await service.sendToUsers({
+      companyId: "PKM",
+      userIds: ["user-1"],
+      apps: PORTAL_EVENT_PUSH_APPS,
+      notification: { title: "Test", body: "Body" },
+    });
+
+    expect(getActiveTokensForUserIds).toHaveBeenCalledWith("PKM", ["user-1"], ["PORTAL", "WEB"]);
+    expect(PORTAL_EVENT_PUSH_APPS).not.toContain("TECH_PWA");
+  });
+
+  it("sendToCompanyRecipients forwards the app scope to the per-user dispatch", async () => {
+    const getActiveTokensForUserIds = vi.fn().mockResolvedValue([]);
+    const service = new NotificationDispatchService(
+      { getActiveTokensForUserIds, deactivateByToken: vi.fn() } as unknown as PushTokensService,
+      {
+        findCompanyNotificationRecipientUserIds: vi.fn().mockResolvedValue(["user-1", "user-2"]),
+        resolveEligibleUserIds: vi.fn().mockResolvedValue(["user-1", "user-2"]),
+      } as unknown as NotificationRecipientService,
+    );
+
+    await service.sendToCompanyRecipients({
+      companyId: "PKM",
+      apps: ["PORTAL"],
+      notification: { title: "Test", body: "Body" },
+    });
+
+    expect(getActiveTokensForUserIds).toHaveBeenCalledWith("PKM", ["user-1", "user-2"], ["PORTAL"]);
   });
 });

@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { push } from "@medcal/notifications";
-import type { FCMToken } from "@medcal/db";
+import type { FCMToken, PushApp } from "@medcal/db";
 import { NotificationRecipientService } from "./notification-recipient.service";
 import { PushTokensService } from "./push-tokens.service";
 
@@ -13,9 +13,17 @@ interface PushDataPayload {
   [key: string]: string;
 }
 
+/**
+ * Applications that receive management-portal business events
+ * (CONTACT_MESSAGE_NEW, LEAD_ASSIGNED). TECH_PWA tokens are deliberately excluded.
+ */
+export const PORTAL_EVENT_PUSH_APPS: readonly PushApp[] = ["PORTAL", "WEB"];
+
 export interface SendToUsersInput {
   companyId: string;
   userIds: string[];
+  /** Which applications' tokens may receive this notification. Required, no default. */
+  apps: readonly PushApp[];
   notification: PushNotificationPayload;
   data?: PushDataPayload;
   /** Override default short-logo icon URL for webpush. */
@@ -35,7 +43,7 @@ export interface SendToUsersResult {
  * Pipeline:
  * 1. Recipient resolution (caller-provided userIds)
  * 2. Notification eligibility (UserMembership.receiveNotifications)
- * 3. FCM token lookup (active tokens per eligible user)
+ * 3. FCM token lookup (active tokens per eligible user, limited to `apps`)
  * 4. FCM send + invalid token cleanup
  */
 @Injectable()
@@ -60,6 +68,7 @@ export class NotificationDispatchService {
     const tokens = await this.pushTokensService.getActiveTokensForUserIds(
       input.companyId,
       eligibleUserIds,
+      [...input.apps],
     );
 
     if (tokens.length === 0) {

@@ -47,8 +47,11 @@ export {
   formatContactMessagePush,
   resolvePushIconUrl,
   PUSH_ICON_PATH,
+  PUSH_EVENT_CONTACT_MESSAGE_NEW,
 } from "./contact-message";
 export type { ContactMessagePushInput, ContactMessagePushPayload } from "./contact-message";
+export { formatLeadAssignedPush, PUSH_EVENT_LEAD_ASSIGNED } from "./lead-assigned";
+export type { LeadAssignedPushInput, LeadAssignedPushPayload } from "./lead-assigned";
 
 function buildFcmMessage(input: SendPushInput): Message {
   const webpushNotification: NonNullable<Message["webpush"]>["notification"] = {
