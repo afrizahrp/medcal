@@ -24,9 +24,20 @@ function smtpEnv() {
   process.env.SMTP_SECURE = "true";
 }
 
+let senderUserCreated = false;
+
 beforeAll(async () => {
-  const user = await prisma.user.findFirst({ where: { status: "ACTIVE" }, select: { id: true } });
-  if (!user) throw new Error("Expected an ACTIVE user");
+  // The test DB is truncated before each run and fixtures create no users, so
+  // create a dedicated ACTIVE sender instead of relying on another file's leftovers.
+  const user = await prisma.user.create({
+    data: {
+      email: `emails-test-${randomUUID().slice(0, 8)}@example.com`,
+      name: "Emails Test Sender",
+      status: "ACTIVE",
+    },
+    select: { id: true },
+  });
+  senderUserCreated = true;
   senderUserId = user.id;
   smtpEnv();
 });
@@ -34,6 +45,11 @@ beforeAll(async () => {
 afterAll(async () => {
   await prisma.email.deleteMany({ where: { id: { in: createdEmailIds } } });
   await prisma.lead.deleteMany({ where: { id: { in: createdLeadIds } } });
+  if (senderUserCreated) {
+    // Emails sent by this user (not tracked in createdEmailIds) reference it.
+    await prisma.email.deleteMany({ where: { sentByUserId: senderUserId } });
+    await prisma.user.delete({ where: { id: senderUserId } });
+  }
 });
 
 async function makeEmail(overrides: Record<string, unknown> = {}) {
